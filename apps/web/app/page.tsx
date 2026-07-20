@@ -1,5 +1,6 @@
-import { api } from '@/lib/api'
-import { CreateUserForm } from './create-user-form'
+import { api } from "@/lib/api";
+
+import { CreateUserForm } from "./create-user-form";
 
 /**
  * Next 16 does not cache `fetch` per request, but it still prerenders this
@@ -7,14 +8,14 @@ import { CreateUserForm } from './create-user-form'
  * `next build` (or the error state, if the API was not running). A user list
  * has to be read per request.
  */
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Server Component. The Eden call runs on the server, so the API does not need
  * to be reachable from the browser for this page to render.
  */
 export default async function Home() {
-  const { data: users, error } = await api.v1.users.get()
+  const { data: users, error } = await api.v1.users.get();
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
@@ -25,12 +26,16 @@ export default async function Home() {
 
       {error ? (
         <p className="mt-8 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          Could not reach the API ({error.status}). Is <code>bun run dev</code> running?
+          Could not reach the API ({error.status}). Is <code>bun run dev</code>{" "}
+          running?
         </p>
       ) : (
         <ul className="mt-8 divide-y divide-neutral-200 dark:divide-neutral-800">
           {users.map((user) => (
-            <li key={user.id} className="flex items-center justify-between py-3">
+            <li
+              key={user.id}
+              className="flex items-center justify-between py-3"
+            >
               <div>
                 <p className="text-sm font-medium">{user.name}</p>
                 <p className="text-sm text-neutral-500">{user.email}</p>
@@ -45,5 +50,5 @@ export default async function Home() {
 
       <CreateUserForm />
     </main>
-  )
+  );
 }

@@ -1,0 +1,15 @@
+# Dependencies & lockfiles
+node_modules
+bun.lock
+
+# Build output
+.next
+out
+build
+dist
+.turbo
+
+# Generated — do not reformat
+apps/api/drizzle
+next-env.d.ts
+*.tsbuildinfo

@@ -25,6 +25,37 @@ bun run dev          # turbo runs api + web together
 - API: http://localhost:3001/health — reports `database` and `cache` separately, 503 if either is down
 - OpenAPI: http://localhost:3001/openapi
 
+## Code style & tooling
+
+Prettier formats, ESLint lints, and a Husky `pre-commit` hook runs `lint-staged`
+so nothing unformatted or unlinted lands in a commit. The hook only touches
+staged files; it is not a substitute for `bun run lint` in CI.
+
+```bash
+bun run format         # prettier --write across the repo
+bun run format:check   # verify formatting (use this in CI)
+bun run lint           # eslint every package
+bun run lint:fix       # eslint --fix every package
+```
+
+- **One ESLint config at the root** (`eslint.config.mjs`), scoped per package
+  with `files`. It has to live at the root, not per package, because the
+  pre-commit hook runs `eslint` from the repo root — a config nested in
+  `apps/web` would be invisible to it. `typescript-eslint` covers `apps/api` and
+  `packages/*`; `eslint-config-next` covers `apps/web`; `eslint-config-prettier`
+  runs last so lint rules never fight the formatter.
+- **All lint/format tooling is a root devDependency**, not per package. Bun's
+  isolated linker only exposes a package's deps inside that package, so a plugin
+  declared in `apps/web` cannot be resolved when the tool runs from the root.
+  Keep new shared tooling at the root for the same reason.
+- **Prettier style is `semi: true`, double quotes, `printWidth: 80`** — the same
+  as the sibling `universe` repo, on purpose, so code reads the same across both.
+  `apps/web` extends it with import sorting and the Tailwind class sorter.
+- **No arbitrary hex colors in `className`** (`bg-[#fff]`) — ESLint rejects them;
+  use a design token from `app/globals.css`.
+- **`.editorconfig` + `.vscode/`** are committed: install the recommended
+  extensions and format-on-save matches the hook, so you rarely hit it.
+
 ## Database
 
 Postgres via Drizzle, Redis via ioredis. Both live in the shared dev containers
@@ -53,11 +84,11 @@ into a 500.
 Eden Treaty:
 
 ```ts
-import { treaty } from '@elysiajs/eden'
-import type { App } from '@universe/api'
+import { treaty } from "@elysiajs/eden";
+import type { App } from "@universe/api";
 
-export const api = treaty<App>(API_URL)
-await api.v1.users.get()          // return type inferred from the route
+export const api = treaty<App>(API_URL);
+await api.v1.users.get(); // return type inferred from the route
 ```
 
 Type-only, so no server code reaches the browser bundle, and there is no codegen
@@ -79,7 +110,7 @@ node builtins — it is imported by the client bundle. Server-only code, includi
 `src/db`, belongs in `apps/api`.
 
 **Never put a privilege field in a request body.** Beyond the obvious reason,
-`t.Optional(t.UnionEnum([...]))` injects the *first* enum value when the field
+`t.Optional(t.UnionEnum([...]))` injects the _first_ enum value when the field
 is absent — an optional `role` on the create route silently made every signup an
 admin. Plain `t.Optional(t.String())` and `t.Optional(t.Union([t.Literal…]))` do
 not do this; `UnionEnum` needs an explicit `{ default: … }` if you must use it.
@@ -91,7 +122,7 @@ types from Eden and OpenAPI instead.
 ## Not done yet
 
 - **Auth** — decide before writing more endpoints. Web can use httpOnly cookies,
-  mobile cannot; you want one session store serving cookies *and* bearer tokens,
+  mobile cannot; you want one session store serving cookies _and_ bearer tokens,
   not two auth systems. Retrofitting this touches every route.
 - **Redis is unauthenticated.** The shared dev container has no password and no
   ACL, so the db index in `REDIS_URL` is a convention between projects, not a
