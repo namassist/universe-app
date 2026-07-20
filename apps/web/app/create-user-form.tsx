@@ -1,26 +1,35 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
+import { usersQueryOptions } from "@/lib/queries/users";
+
+type CreateInput = { name: string; email: string };
+// Eden types the response per status code. Pull the error union straight off
+// the call's return type so the branches below stay checked against the route.
+type PostResult = Awaited<ReturnType<typeof api.v1.users.post>>;
+type PostError = NonNullable<PostResult["error"]>;
 
 export function CreateUserForm() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
 
-  async function onSubmit(formData: FormData) {
-    setMessage(null);
-
-    const { error } = await api.v1.users.post({
-      email: String(formData.get("email")),
-      name: String(formData.get("name")),
-    });
-
-    if (error) {
-      // `error.value` is narrowed per status code by Eden — 409 and 422 have
-      // different shapes, and TypeScript knows which one it is in each branch.
+  const mutation = useMutation<void, PostError, CreateInput>({
+    mutationFn: async (input) => {
+      const { error } = await api.v1.users.post(input);
+      // Eden returns errors instead of throwing; rethrow so TanStack Query
+      // routes them to onError while keeping the discriminated union intact.
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setMessage(null);
+      // Targeted: refetch just the users query, not the whole RSC tree the way
+      // router.refresh() did.
+      queryClient.invalidateQueries({ queryKey: usersQueryOptions.queryKey });
+    },
+    onError: (error) => {
       switch (error.status) {
         case 409:
           setMessage(error.value.message);
@@ -28,12 +37,15 @@ export function CreateUserForm() {
         default:
           setMessage("Something went wrong. Try again.");
       }
-      return;
-    }
+    },
+  });
 
-    // The list lives in a Server Component, so re-run it to pick up the new row.
-    startTransition(() => router.refresh());
+  function onSubmit(formData: FormData) {
     setMessage(null);
+    mutation.mutate({
+      name: String(formData.get("name")),
+      email: String(formData.get("email")),
+    });
   }
 
   return (
@@ -57,10 +69,10 @@ export function CreateUserForm() {
         />
         <button
           type="submit"
-          disabled={pending}
+          disabled={mutation.isPending}
           className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
         >
-          {pending ? "Adding…" : "Add user"}
+          {mutation.isPending ? "Adding…" : "Add user"}
         </button>
       </div>
 

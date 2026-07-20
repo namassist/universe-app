@@ -94,6 +94,45 @@ await api.v1.users.get(); // return type inferred from the route
 Type-only, so no server code reaches the browser bundle, and there is no codegen
 step. Rename a field in an Elysia route and the web app fails to typecheck.
 
+## Data fetching on the web (TanStack Query)
+
+Two paradigms live side by side, on purpose:
+
+- **Server Components fetch on the server.** The first paint of a route runs the
+  Eden call server-side (the API need not be reachable from the browser).
+- **Client Components read from TanStack Query.** Anything interactive —
+  mutations, refetch-on-focus, polling, optimistic updates — goes through the
+  cache, not another `await`.
+
+The two are bridged by prefetch + hydration, so the client renders with data on
+the first frame and never double-fetches:
+
+```tsx
+// page.tsx (Server Component)
+const queryClient = getQueryClient();
+await queryClient.prefetchQuery(usersQueryOptions);
+return (
+  <HydrationBoundary state={dehydrate(queryClient)}>
+    <UsersList /> {/* useQuery(usersQueryOptions) — data already there */}
+  </HydrationBoundary>
+);
+```
+
+Rules that keep this safe:
+
+- **A query is defined once, in `lib/queries/*`, via `queryOptions`.** Server
+  prefetch and client `useQuery` import the same object, so the key and the
+  fetcher cannot drift. Its `queryFn` is `unwrap(api…)` — Eden's typed client
+  behind the value-or-throw shape `queryFn` expects.
+- **`getQueryClient()` makes a fresh client per request on the server** and
+  reuses a singleton in the browser. A server-side singleton would leak one
+  user's cache into another's.
+- **Mutations invalidate, they do not `router.refresh()`.** `useMutation` throws
+  Eden's error so it lands in `onError` with the status union intact, and
+  `onSuccess` calls `invalidateQueries` to refetch just the affected key.
+- **Server data never goes into client state (Zustand, etc.).** TanStack Query
+  is the cache; a second copy is a sync bug waiting to happen.
+
 ## Conventions worth keeping
 
 **Every route declares `body`, `params`, and `response` schemas.** Not
