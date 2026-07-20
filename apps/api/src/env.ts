@@ -12,6 +12,12 @@ export const env = {
   PORT: Number(required('PORT', '3001')),
   /** Comma-separated. Mobile clients send no Origin, so they bypass CORS entirely. */
   CORS_ORIGINS: required('CORS_ORIGINS', 'http://localhost:3000').split(','),
+
+  /** No fallback on purpose — a default here would silently point at the wrong
+   *  database. Postgres and Redis are shared dev containers, so a typo would
+   *  land in another project's data rather than failing. */
+  DATABASE_URL: required('DATABASE_URL'),
+  REDIS_URL: required('REDIS_URL'),
 } as const
 
 export const isProd = env.NODE_ENV === 'production'

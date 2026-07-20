@@ -16,12 +16,36 @@ packages/
 bun install
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
+# fill in DATABASE_URL, then:
+bun run --cwd apps/api db:migrate
 bun run dev          # turbo runs api + web together
 ```
 
 - Web: http://localhost:3000
-- API: http://localhost:3001/health
+- API: http://localhost:3001/health — reports `database` and `cache` separately, 503 if either is down
 - OpenAPI: http://localhost:3001/openapi
+
+## Database
+
+Postgres via Drizzle, Redis via ioredis. Both live in the shared dev containers
+under `~/Workspaces/databases`, but this project owns its own Postgres role and
+database (`universe_app`) and its own Redis db index (2) — `universe` is a
+different project's database, do not point at it.
+
+```bash
+bun run --cwd apps/api db:generate   # schema change -> SQL migration
+bun run --cwd apps/api db:migrate    # apply pending migrations
+bun run --cwd apps/api db:studio     # browse data
+```
+
+Schema lives in `apps/api/src/db/schema.ts`, migrations are committed under
+`apps/api/drizzle/`. Enum values come from `@universe/contracts` so the database,
+the API schema, and the client cannot drift apart.
+
+Use `isUniqueViolation(error, 'constraint_name')` from `src/db` rather than
+checking `error.code` — Drizzle wraps driver errors, so the Postgres error code
+sits on `.cause`, and a bare `error.code` check silently turns every duplicate
+into a 500.
 
 ## How the type safety works
 
@@ -51,8 +75,14 @@ mobile build does not. Users sit on old versions for weeks, so the API has to
 stay backward compatible and versioned from the start.
 
 **`packages/contracts` must stay browser-safe.** No db client, no secrets, no
-node builtins — it is imported by the client bundle. Server-only code belongs in
-`apps/api`, and a future `packages/db` should only ever be imported there.
+node builtins — it is imported by the client bundle. Server-only code, including
+`src/db`, belongs in `apps/api`.
+
+**Never put a privilege field in a request body.** Beyond the obvious reason,
+`t.Optional(t.UnionEnum([...]))` injects the *first* enum value when the field
+is absent — an optional `role` on the create route silently made every signup an
+admin. Plain `t.Optional(t.String())` and `t.Optional(t.Union([t.Literal…]))` do
+not do this; `UnionEnum` needs an explicit `{ default: … }` if you must use it.
 
 **TypeBox schemas stay in `apps/api`.** They are runtime values; putting them in
 `contracts` would pull Elysia into the browser bundle. Web and mobile get their
@@ -63,7 +93,10 @@ types from Eden and OpenAPI instead.
 - **Auth** — decide before writing more endpoints. Web can use httpOnly cookies,
   mobile cannot; you want one session store serving cookies *and* bearer tokens,
   not two auth systems. Retrofitting this touches every route.
-- **Database** — `packages/db`, imported only by `apps/api`.
+- **Redis is unauthenticated.** The shared dev container has no password and no
+  ACL, so the db index in `REDIS_URL` is a convention between projects, not a
+  boundary — anything on this machine can read or flush our keys. Fine for dev,
+  never for production.
 - **Mobile** — if React Native/Expo, it goes in `apps/mobile` and uses Eden like
   web does. If Flutter/native, it lives outside this repo and consumes the
   OpenAPI spec instead.

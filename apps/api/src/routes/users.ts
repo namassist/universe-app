@@ -1,16 +1,15 @@
 import { Elysia, t } from 'elysia'
+import { eq } from 'drizzle-orm'
 import { USER_ROLES, type User } from '@universe/contracts'
+
+import { db, schema, isUniqueViolation, type UserRow } from '../db'
 
 /**
  * TypeBox schemas live here, not in @universe/contracts — they are runtime
  * values, and shipping them to the browser would drag Elysia into the bundle.
- * The web/mobile side gets its types from Eden instead.
- */
-/**
- * `t.UnionEnum` keeps the literal union ('admin' | 'member') intact.
- * `t.Union(USER_ROLES.map(t.Literal))` looks equivalent but is not — `.map`
- * widens the tuple to an array, TypeBox loses the literals, and every `role`
- * downstream infers as `never`.
+ *
+ * `t.UnionEnum` keeps the literal union intact; `t.Union(USER_ROLES.map(t.Literal))`
+ * widens the tuple to an array and every `role` downstream infers as `never`.
  */
 const UserRoleSchema = t.UnionEnum(USER_ROLES)
 
@@ -27,35 +26,26 @@ const ErrorSchema = t.Object({
   message: t.String(),
 })
 
-// Placeholder store. Swap for a real db in packages/db later.
-const users = new Map<string, User>([
-  [
-    'u_1',
-    {
-      id: 'u_1',
-      email: 'ada@example.com',
-      name: 'Ada Lovelace',
-      role: 'admin',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-  ],
-])
+/** Postgres returns Date; the wire contract is an ISO string. */
+function toUser(row: UserRow): User {
+  return { ...row, createdAt: row.createdAt.toISOString() }
+}
 
 export const usersRoutes = new Elysia({ prefix: '/users', tags: ['users'] })
-  .get('/', () => [...users.values()], {
+  .get('/', async () => (await db.select().from(schema.users)).map(toUser), {
     response: { 200: t.Array(UserSchema) },
     detail: { summary: 'List all users' },
   })
 
   .get(
     '/:id',
-    ({ params, status }) => {
-      const user = users.get(params.id)
-      if (!user) return status(404, { code: 'user_not_found', message: `No user with id ${params.id}` })
-      return user
+    async ({ params, status }) => {
+      const [row] = await db.select().from(schema.users).where(eq(schema.users.id, params.id)).limit(1)
+      if (!row) return status(404, { code: 'user_not_found', message: `No user with id ${params.id}` })
+      return toUser(row)
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({ id: t.String({ format: 'uuid' }) }),
       response: { 200: UserSchema, 404: ErrorSchema },
       detail: { summary: 'Get one user by id' },
     },
@@ -63,25 +53,30 @@ export const usersRoutes = new Elysia({ prefix: '/users', tags: ['users'] })
 
   .post(
     '/',
-    ({ body, status }) => {
-      const duplicate = [...users.values()].some((u) => u.email === body.email)
-      if (duplicate) return status(409, { code: 'email_taken', message: `${body.email} is already registered` })
-
-      const user: User = {
-        id: `u_${users.size + 1}`,
-        email: body.email,
-        name: body.name,
-        role: body.role ?? 'member',
-        createdAt: new Date().toISOString(),
+    async ({ body, status }) => {
+      try {
+        const [row] = await db.insert(schema.users).values(body).returning()
+        return status(201, toUser(row!))
+      } catch (error) {
+        // Let the unique index decide instead of checking first — a
+        // select-then-insert races two concurrent signups on the same email.
+        if (isUniqueViolation(error, 'users_email_unique')) {
+          return status(409, { code: 'email_taken', message: `${body.email} is already registered` })
+        }
+        throw error
       }
-      users.set(user.id, user)
-      return status(201, user)
     },
     {
+      // `role` is deliberately not accepted here: a caller must never pick its
+      // own privilege level. New users get the column default ('member');
+      // promoting someone belongs behind an authenticated admin-only route.
+      //
+      // Note also that `t.Optional(t.UnionEnum([...]))` injects the *first*
+      // enum value when the field is absent, so an optional `role` here would
+      // have silently made every signup an admin.
       body: t.Object({
         email: t.String({ format: 'email' }),
         name: t.String({ minLength: 1 }),
-        role: t.Optional(UserRoleSchema),
       }),
       response: { 201: UserSchema, 409: ErrorSchema },
       detail: { summary: 'Create a user' },

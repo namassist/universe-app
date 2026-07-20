@@ -4,6 +4,8 @@ import { openapi } from '@elysiajs/openapi'
 import { API_VERSION } from '@universe/contracts'
 
 import { env, isProd } from './env'
+import { pingDb } from './db'
+import { pingRedis } from './redis'
 import { usersRoutes } from './routes/users'
 
 /**
@@ -54,7 +56,12 @@ export const app = new Elysia()
       message: isProd ? 'Something went wrong' : String(error),
     })
   })
-  .get('/health', () => ({ ok: true, version: API_VERSION }))
+  .get('/health', async ({ status }) => {
+    const [database, cache] = await Promise.all([pingDb(), pingRedis()])
+    const body = { ok: database && cache, version: API_VERSION, database, cache }
+    // 503 so a load balancer or container healthcheck actually reacts.
+    return body.ok ? body : status(503, body)
+  })
   .use(api)
   .listen(env.PORT)
 
