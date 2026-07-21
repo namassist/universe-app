@@ -57,11 +57,3 @@ Compound examples already in the system — follow this shape:
    `rgba(0,212,255,…)` literals ported from the reference; reuse those exact
    values when matching that accent, and never introduce any other literal
    color.
-4. **Access is data, not code.** Menu visibility and read-only vs read-write
-   come from `lib/access.ts` (`ROLE_ACCESS`) via `useRole()`/`mode` — never
-   branch on a role name inside a component, and always gate write affordances
-   on `mode === "manage"`.
-5. **Static-only data.** No fetch, no API clients, no server state. Sample
-   data lives inline in the menu component or in a `lib/*-data.ts` module when
-   shared across pages; mutations act on local state or show a toast. Copy in
-   sidebar/pages goes through `useI18n()` (`t.*`), not string literals.
