@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Search } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
@@ -186,6 +188,7 @@ const ROWS: Row[] = [
 
 export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
+  const { role } = useRole();
   void mode; // log FTW bersifat baca; pelaporan ada di alur operator
 
   const [q, setQ] = React.useState("");
@@ -355,6 +358,12 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                             {bad === 0 ? t.histStable : `${bad}${t.histBad}`}
                           </span>
                         </div>
+                        <Link
+                          href={`/${role}/fit-to-work/history?nik=${r.nik}`}
+                          className="mt-1 inline-block text-xs"
+                        >
+                          {t.ftwSeeAll}
+                        </Link>
                       </TableCell>
                     </TableRow>
                   );
