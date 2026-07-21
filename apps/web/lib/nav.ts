@@ -6,6 +6,7 @@ import {
   Monitor,
   Settings,
   Truck,
+  UserPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -97,6 +98,13 @@ export const NAV: NavEntry[] = [
       leaf("lokasi-excavator"),
       leaf("running-text"),
     ],
+  },
+  {
+    kind: "group",
+    key: "um",
+    label: "User Management",
+    icon: UserPlus,
+    children: [leaf("users"), leaf("roles")],
   },
   item("setting", Settings),
 ];

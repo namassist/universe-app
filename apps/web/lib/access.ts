@@ -49,6 +49,8 @@ export const MENU_SLUGS = [
   "bus",
   "lokasi-excavator",
   "running-text",
+  "users",
+  "roles",
   "setting",
 ] as const;
 export type MenuSlug = (typeof MENU_SLUGS)[number];
@@ -81,6 +83,8 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   bus: "Bus",
   "lokasi-excavator": "Lokasi Excavator",
   "running-text": "Running Text",
+  users: "User",
+  roles: "Role",
   setting: "Setting",
 };
 

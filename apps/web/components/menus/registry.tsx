@@ -16,6 +16,8 @@ import { RosterApprovalMenu } from "./roster-approval";
 import { RosterDataMenu } from "./roster-data";
 import { RosterRevisionMenu } from "./roster-revision";
 import { SettingMenu } from "./setting";
+import { UmRolesMenu } from "./um-roles";
+import { UmUsersMenu } from "./um-users";
 import { UnitStatusMenu } from "./unit-status";
 
 type MenuComponent = ComponentType<{ mode: AccessMode }>;
@@ -49,6 +51,8 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   bus: (p) => <MasterMenu {...p} cat="bus" />,
   "lokasi-excavator": (p) => <MasterMenu {...p} cat="lokasi-excavator" />,
   "running-text": (p) => <MasterMenu {...p} cat="running-text" />,
+  users: UmUsersMenu,
+  roles: UmRolesMenu,
   setting: SettingMenu,
 };
 
