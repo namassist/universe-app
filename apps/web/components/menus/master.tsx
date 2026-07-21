@@ -41,13 +41,21 @@ import {
 import { useToast } from "@/components/ui/toast";
 
 export type MasterCat =
-  "area-kerja" | "bus" | "lokasi-excavator" | "running-text";
+  | "jenis-unit"
+  | "model-unit"
+  | "merk-unit"
+  | "kelas-unit"
+  | "simper"
+  | "area-kerja"
+  | "bus"
+  | "lokasi-excavator"
+  | "running-text";
 
 type ColKey = "name" | "a" | "b";
 type Col = {
   key: ColKey;
   label: string;
-  kind?: "text" | "time" | "select" | "color";
+  kind?: "text" | "time" | "select" | "color" | "multi";
   opts?: string[];
 };
 type Entry = {
@@ -57,6 +65,9 @@ type Entry = {
   b: string;
   active: boolean;
 };
+
+/* kualifikasi SIMPER dipilih dari Jenis Unit (EGI) — statis */
+const EGI_OPTS = ["HD785", "PC2000", "D375A", "GD825A", "LV", "Bus"];
 
 const RUNTEXT_TARGETS = ["Semua kiosk", "Display Attendance", "Display Fleet"];
 const RUNTEXT_COLORS = ["Cyan", "Oranye", "Putih", "Merah"];
@@ -74,6 +85,21 @@ function colsFor(
   mdJam: string
 ): Col[] {
   switch (cat) {
+    case "jenis-unit":
+    case "model-unit":
+    case "merk-unit":
+      return [{ key: "name", label: mdNama }];
+    case "kelas-unit":
+      return [
+        { key: "name", label: "Kode" },
+        { key: "a", label: "Deskripsi" },
+      ];
+    case "simper":
+      return [
+        { key: "name", label: "Jenis SIMPER" },
+        { key: "a", label: "Kualifikasi (Jenis Unit)", kind: "multi" },
+        { key: "b", label: "Deskripsi" },
+      ];
     case "area-kerja":
       return [
         { key: "name", label: mdNama },
@@ -100,6 +126,53 @@ function colsFor(
 }
 
 const SAMPLE: Record<MasterCat, Entry[]> = {
+  "jenis-unit": [
+    { id: "g1", name: "HD785", a: "", b: "", active: true },
+    { id: "g2", name: "PC2000", a: "", b: "", active: true },
+    { id: "g3", name: "D375A", a: "", b: "", active: true },
+    { id: "g4", name: "GD825A", a: "", b: "", active: true },
+    { id: "g5", name: "LV", a: "", b: "", active: false },
+  ],
+  "model-unit": [
+    { id: "m1", name: "HD785-7", a: "", b: "", active: true },
+    { id: "m2", name: "PC2000-8", a: "", b: "", active: true },
+    { id: "m3", name: "D375A-6", a: "", b: "", active: true },
+    { id: "m4", name: "GD825A", a: "", b: "", active: true },
+  ],
+  "merk-unit": [
+    { id: "p1", name: "Komatsu", a: "", b: "", active: true },
+    { id: "p2", name: "Hino", a: "", b: "", active: true },
+    { id: "p3", name: "Mercedes-Benz", a: "", b: "", active: true },
+  ],
+  "kelas-unit": [
+    { id: "k1", name: "HD", a: "Dump truck kelas berat", b: "", active: true },
+    { id: "k2", name: "BIGDIGGER", a: "Excavator besar", b: "", active: true },
+    { id: "k3", name: "BUS", a: "Bus antar-jemput", b: "", active: true },
+    { id: "k4", name: "LV", a: "Light vehicle", b: "", active: true },
+  ],
+  simper: [
+    {
+      id: "s1",
+      name: "BII",
+      a: "HD785, PC2000",
+      b: "Unit tambang besar",
+      active: true,
+    },
+    {
+      id: "s2",
+      name: "BI",
+      a: "LV, Bus",
+      b: "Kendaraan ringan & bus",
+      active: true,
+    },
+    {
+      id: "s3",
+      name: "KIMPER",
+      a: "D375A, GD825A",
+      b: "Alat berat pendukung",
+      active: true,
+    },
+  ],
   "area-kerja": [
     { id: "a1", name: "Pit 3", a: "Tambang", active: true, b: "" },
     { id: "a2", name: "Disposal Utara", a: "Disposal", active: true, b: "" },
@@ -283,6 +356,18 @@ export function MasterMenu({
                           />
                           {r[c.key]}
                         </span>
+                      ) : c.kind === "multi" ? (
+                        <span className="flex flex-wrap gap-1.5">
+                          {r[c.key]
+                            .split(",")
+                            .map((v) => v.trim())
+                            .filter(Boolean)
+                            .map((v) => (
+                              <Badge key={v} variant="info">
+                                {v}
+                              </Badge>
+                            ))}
+                        </span>
                       ) : c.key === "name" ? (
                         <span className="font-semibold">{r.name}</span>
                       ) : (
@@ -377,6 +462,38 @@ export function MasterMenu({
                     </option>
                   ))}
                 </Select>
+              ) : c.kind === "multi" ? (
+                /* kualifikasi Jenis Unit — grid checkbox, nilai csv */
+                (() => {
+                  const vals = fieldValue(c.key)
+                    .split(",")
+                    .map((v) => v.trim())
+                    .filter(Boolean);
+                  return (
+                    <div className="grid max-h-44 grid-cols-2 gap-x-3 gap-y-1.5 overflow-y-auto rounded-control border border-(--glass-1-border) bg-(--fill-subtle) p-3">
+                      {EGI_OPTS.map((o) => {
+                        const checked = vals.includes(o);
+                        return (
+                          <label
+                            key={o}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onChange={() => {
+                                const next = checked
+                                  ? vals.filter((x) => x !== o)
+                                  : [...vals, o];
+                                setFieldValue(c.key, next.join(", "));
+                              }}
+                            />
+                            {o}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
               ) : c.kind === "time" ? (
                 <Input
                   id={`md-f-${c.key}`}

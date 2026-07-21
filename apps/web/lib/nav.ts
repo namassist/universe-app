@@ -86,6 +86,12 @@ export const NAV: NavEntry[] = [
     label: "Master",
     icon: Database,
     children: [
+      leaf("database-unit"),
+      leaf("jenis-unit"),
+      leaf("model-unit"),
+      leaf("merk-unit"),
+      leaf("kelas-unit"),
+      leaf("simper"),
       leaf("area-kerja"),
       leaf("bus"),
       leaf("lokasi-excavator"),

@@ -4,6 +4,7 @@ import type { AccessMode, MenuSlug } from "@/lib/access";
 
 import { AttendanceMenu } from "./attendance";
 import { DashboardMenu } from "./dashboard";
+import { DatabaseUnitMenu } from "./database-unit";
 import { DisplayAdminMenu } from "./display-admin";
 import { EmployeesMenu } from "./employees";
 import { FitToWorkMenu } from "./fit-to-work";
@@ -38,6 +39,12 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "unit-status": UnitStatusMenu,
   "fleet-allocation": FleetAllocationMenu,
   "fleet-setting": FleetSettingMenu,
+  "database-unit": DatabaseUnitMenu,
+  "jenis-unit": (p) => <MasterMenu {...p} cat="jenis-unit" />,
+  "model-unit": (p) => <MasterMenu {...p} cat="model-unit" />,
+  "merk-unit": (p) => <MasterMenu {...p} cat="merk-unit" />,
+  "kelas-unit": (p) => <MasterMenu {...p} cat="kelas-unit" />,
+  simper: (p) => <MasterMenu {...p} cat="simper" />,
   "area-kerja": (p) => <MasterMenu {...p} cat="area-kerja" />,
   bus: (p) => <MasterMenu {...p} cat="bus" />,
   "lokasi-excavator": (p) => <MasterMenu {...p} cat="lokasi-excavator" />,
