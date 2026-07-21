@@ -17,6 +17,7 @@ next-env.d.ts
 # Vendored agent skills — owned upstream, and reformatting breaks their hash
 .claude
 
-# Personal agent instruction files, not project deliverables
-AGENTS.md
-CLAUDE.md
+# Personal global-workflow files at the root only (leading slash = repo root).
+# Per-app apps/*/AGENTS.md are project files and stay formatted.
+/AGENTS.md
+/CLAUDE.md
