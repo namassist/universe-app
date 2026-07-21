@@ -48,6 +48,7 @@ export type MasterCat =
   | "simper"
   | "area-kerja"
   | "bus"
+  | "mess"
   | "lokasi-excavator"
   | "running-text";
 
@@ -110,6 +111,11 @@ function colsFor(
         { key: "name", label: "Kode" },
         { key: "a", label: "Tipe" },
         { key: "b", label: mdJam, kind: "time" },
+      ];
+    case "mess":
+      return [
+        { key: "name", label: mdNama },
+        { key: "a", label: "Blok" },
       ];
     case "lokasi-excavator":
       return [
@@ -181,6 +187,11 @@ const SAMPLE: Record<MasterCat, Entry[]> = {
   bus: [
     { id: "b1", name: "BUS-01", a: "Hino RK8", b: "05:30", active: true },
     { id: "b2", name: "BUS-02", a: "Mercedes OH", b: "17:30", active: true },
+  ],
+  mess: [
+    { id: "ms1", name: "Mess A", a: "Blok 1", b: "", active: true },
+    { id: "ms2", name: "Mess A", a: "Blok 2", b: "", active: true },
+    { id: "ms3", name: "Mess B", a: "Blok 1", b: "", active: true },
   ],
   "lokasi-excavator": [
     { id: "e1", name: "EX-22", a: "Pit 3", b: "", active: true },

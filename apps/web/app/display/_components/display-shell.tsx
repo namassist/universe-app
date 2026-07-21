@@ -4,6 +4,7 @@ import * as React from "react";
 import { Megaphone, Monitor, WifiOff } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { LogoBadge } from "@/components/ui/logo";
 
 /* Shell layar kiosk TV (dilihat ±6 m) — kanvas lebar tetap 1920, TINGGI
    mengikuti rasio layar (tanpa letterbox) via transform:scale(); jam
@@ -131,9 +132,7 @@ export function DisplayShell({
         <div className="display-stage relative z-1 flex h-full animate-[pxshift_480s_steps(1)_infinite] flex-col gap-7 px-14 pt-10 pb-22">
           {/* header */}
           <header className="flex flex-none items-center gap-7">
-            <div className="grid size-16 flex-none place-items-center rounded-full border border-(--glass-2-border) bg-(image:--gradient-logo) text-3xl font-bold text-(--color-on-cta) shadow-[0_0_0_3px_var(--ring-avatar),0_0_28px_rgba(0,212,255,.4)]">
-              U
-            </div>
+            <LogoBadge className="size-16" logoClassName="size-8" />
             <div className="min-w-0">
               <h1 className="truncate text-[40px] leading-tight font-bold">
                 {title}

@@ -173,3 +173,40 @@ export function emptyPerms(): Record<MenuSlug, UmPerm> {
 
 export { MENU_LABELS, MENU_SLUGS };
 export type { MenuSlug };
+
+/** Akun contoh per role — identitas topbar & halaman Profil. */
+export const ROLE_ACCOUNTS: Record<
+  Role,
+  { name: string; email: string; nik: string | null }
+> = {
+  superadmin: {
+    name: "Super Admin",
+    email: "superadmin@unggul.co.id",
+    nik: null,
+  },
+  admin: {
+    name: "Sari Lestari",
+    email: "admin.hauling@unggul.co.id",
+    nik: "OPS-0233",
+  },
+  manajer: {
+    name: "Hendra Gunawan",
+    email: "manajer.ops@unggul.co.id",
+    nik: "OPS-0367",
+  },
+  manpower: {
+    name: "Dewi Anggraini",
+    email: "dispatcher@unggul.co.id",
+    nik: "OPS-0290",
+  },
+  medic: {
+    name: "Rina Marlina",
+    email: "medic.site@unggul.co.id",
+    nik: "OPS-0602",
+  },
+  user: {
+    name: "Budi Santoso",
+    email: "budi.santoso@unggul.co.id",
+    nik: "OPS-0421",
+  },
+};

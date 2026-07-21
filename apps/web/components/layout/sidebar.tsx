@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -175,9 +176,13 @@ export function Sidebar() {
             collapsed && "justify-center px-0 max-xl:justify-start max-xl:px-2"
           )}
         >
-          <div className="grid size-10 flex-none place-items-center rounded-icon bg-(image:--gradient-logo) text-lg font-bold text-(--color-on-cta)">
-            U
-          </div>
+          <Image
+            src="/logoV1.svg"
+            alt="UNIVERSE"
+            width={40}
+            height={40}
+            className="size-10 flex-none"
+          />
           <div className={cn(collapsed && "hidden max-xl:block")}>
             <b className="block text-base">UNIVERSE</b>
             <span className="text-xs text-(--text-tertiary)">

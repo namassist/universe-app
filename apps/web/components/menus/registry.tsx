@@ -49,6 +49,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   simper: (p) => <MasterMenu {...p} cat="simper" />,
   "area-kerja": (p) => <MasterMenu {...p} cat="area-kerja" />,
   bus: (p) => <MasterMenu {...p} cat="bus" />,
+  mess: (p) => <MasterMenu {...p} cat="mess" />,
   "lokasi-excavator": (p) => <MasterMenu {...p} cat="lokasi-excavator" />,
   "running-text": (p) => <MasterMenu {...p} cat="running-text" />,
   users: UmUsersMenu,
