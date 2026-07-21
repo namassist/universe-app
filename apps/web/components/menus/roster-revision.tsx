@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { CalendarDays, Plus, Search } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
+import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +38,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useToast } from "@/components/ui/toast";
 
 type Status = "pending" | "approved" | "rejected";
 type Row = {
@@ -131,7 +132,8 @@ const ROWS: Row[] = [
 
 export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
-  const { pushToast } = useToast();
+  const { role } = useRole();
+  const router = useRouter();
   const en = lang === "en";
   const canW = mode === "manage";
 
@@ -174,9 +176,7 @@ export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
     <div className="flex flex-col gap-6">
       <PageTitle title={t.navR2} sub={t.revListSub}>
         {canW ? (
-          <Button
-            onClick={() => pushToast("success", t.revNewBtn, t.revListSub)}
-          >
+          <Button onClick={() => router.push(`/${role}/roster-revision/new`)}>
             <Plus />
             {t.revNewBtn}
           </Button>

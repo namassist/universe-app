@@ -286,3 +286,10 @@ export function upErrorRows(lang: Lang): UpError[] {
     },
   ];
 }
+
+/* ===== Kode pilihan form revisi ===== */
+export function revCodeList(lang: Lang): string[] {
+  return legendGroupsFor(lang).flatMap((g) =>
+    g.codes.map((c) => `${c.k} — ${c.v}`)
+  );
+}
