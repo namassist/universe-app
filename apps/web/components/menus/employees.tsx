@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Download,
   Eye,
@@ -12,7 +13,13 @@ import {
 } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import {
+  EMPLOYEES,
+  type Employee as Emp,
+  type EmpStatus,
+} from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
+import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -53,17 +60,6 @@ import { useToast } from "@/components/ui/toast";
 
 const DEPTS = ["Operation", "SDI", "HRGA", "Plant"] as const;
 
-type Komp = { jenis: string; exp: string };
-type EmpStatus = "aktif" | "cuti" | "nonaktif";
-type Emp = {
-  nik: string;
-  name: string;
-  dept: string;
-  pos: string;
-  komp: Komp[];
-  status: EmpStatus;
-};
-
 function kompVariant(exp: string): BadgeVariant {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -73,96 +69,15 @@ function kompVariant(exp: string): BadgeVariant {
   return days <= 60 ? "warning" : "info";
 }
 
-/* ---- static sample content ---- */
-const INITIAL: Emp[] = [
-  {
-    nik: "OPS-0421",
-    name: "Budi Santoso",
-    dept: "Operation",
-    pos: "Driver OHT",
-    komp: [{ jenis: "BII", exp: "2027-03-14" }],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0388",
-    name: "Andi Wijaya",
-    dept: "Operation",
-    pos: "Operator Excavator",
-    komp: [{ jenis: "BII", exp: "2026-08-02" }],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0510",
-    name: "Rudi Hartono",
-    dept: "Operation",
-    pos: "Driver OHT",
-    komp: [{ jenis: "BII", exp: "2026-07-18" }],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0233",
-    name: "Sari Lestari",
-    dept: "HRGA",
-    pos: "Admin Site",
-    komp: [],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0111",
-    name: "Joko Prasetyo",
-    dept: "Operation",
-    pos: "Driver OHT",
-    komp: [{ jenis: "BII", exp: "2026-06-30" }],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0290",
-    name: "Dewi Anggraini",
-    dept: "SDI",
-    pos: "Dispatcher",
-    komp: [],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0367",
-    name: "Hendra Gunawan",
-    dept: "Operation",
-    pos: "Operator Dozer",
-    komp: [{ jenis: "BII", exp: "2027-01-22" }],
-    status: "cuti",
-  },
-  {
-    nik: "OPS-0455",
-    name: "Fitri Handayani",
-    dept: "Operation",
-    pos: "Checker",
-    komp: [],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0129",
-    name: "Agus Salim",
-    dept: "Plant",
-    pos: "Mekanik",
-    komp: [{ jenis: "KIMPER", exp: "2027-05-08" }],
-    status: "aktif",
-  },
-  {
-    nik: "OPS-0602",
-    name: "Rina Marlina",
-    dept: "SDI",
-    pos: "Safety Officer",
-    komp: [],
-    status: "nonaktif",
-  },
-];
-
 export function EmployeesMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const router = useRouter();
+  const { role } = useRole();
+  const base = `/${role}/employees`;
   const canW = mode === "manage";
 
-  const [emps, setEmps] = React.useState<Emp[]>(INITIAL);
+  const [emps, setEmps] = React.useState<Emp[]>(EMPLOYEES);
   const [q, setQ] = React.useState("");
   const [fOpen, setFOpen] = React.useState(false);
   const [fStatus, setFStatus] = React.useState("");
@@ -244,7 +159,7 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
     <div className="flex flex-col gap-6">
       <PageTitle title={t.navEmployees} sub={t.empSub}>
         {canW ? (
-          <Button onClick={() => pushToast("success", t.empAdd, t.empSub)}>
+          <Button onClick={() => router.push(`${base}/new`)}>
             <Plus />
             {t.empAdd}
           </Button>
@@ -345,7 +260,13 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
                     />
                   </TableCell>
                   <TableCell>
-                    <span className="font-semibold">{r.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`${base}/${r.nik}`)}
+                      className="cursor-pointer font-semibold text-inherit hover:underline"
+                    >
+                      {r.name}
+                    </button>
                   </TableCell>
                   <TableCell className="font-mono text-(--text-secondary) tabular-nums">
                     {r.nik}
@@ -374,7 +295,7 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
                     <div className="flex gap-1.5">
                       <IconButton
                         aria-label={t.empSee}
-                        onClick={() => pushToast("success", t.empSee, r.name)}
+                        onClick={() => router.push(`${base}/${r.nik}`)}
                       >
                         <Eye />
                       </IconButton>
@@ -382,9 +303,7 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
                         <>
                           <IconButton
                             aria-label={t.empChange}
-                            onClick={() =>
-                              pushToast("success", t.empChange, r.name)
-                            }
+                            onClick={() => router.push(`${base}/${r.nik}/edit`)}
                           >
                             <Pencil />
                           </IconButton>
