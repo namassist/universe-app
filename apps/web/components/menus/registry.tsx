@@ -2,11 +2,15 @@ import type { ComponentType } from "react";
 
 import type { AccessMode, MenuSlug } from "@/lib/access";
 
+import { AttendanceMenu } from "./attendance";
 import { DashboardMenu } from "./dashboard";
 import { DisplayAdminMenu } from "./display-admin";
+import { FitToWorkMenu } from "./fit-to-work";
 import { MasterMenu } from "./master";
 import { MenuPlaceholder } from "./placeholder";
+import { RosterApprovalMenu } from "./roster-approval";
 import { RosterDataMenu } from "./roster-data";
+import { RosterRevisionMenu } from "./roster-revision";
 import { SettingMenu } from "./setting";
 
 type MenuComponent = ComponentType<{ mode: AccessMode }>;
@@ -18,6 +22,10 @@ type MenuComponent = ComponentType<{ mode: AccessMode }>;
 const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   dashboard: DashboardMenu,
   "roster-data": RosterDataMenu,
+  "roster-revision": RosterRevisionMenu,
+  "roster-approval": RosterApprovalMenu,
+  attendance: AttendanceMenu,
+  "fit-to-work": FitToWorkMenu,
   "display-attendance": (p) => <DisplayAdminMenu {...p} kind="att" />,
   "display-fleet": (p) => <DisplayAdminMenu {...p} kind="fleet" />,
   /* display-fitwork & monitoring-fingerprint have no in-shell page: the
