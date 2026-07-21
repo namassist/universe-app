@@ -4,7 +4,6 @@ import type { AccessMode, MenuSlug } from "@/lib/access";
 
 import { DashboardMenu } from "./dashboard";
 import { DisplayAdminMenu } from "./display-admin";
-import { DisplayKioskMenu } from "./display-kiosk";
 import { MasterMenu } from "./master";
 import { MenuPlaceholder } from "./placeholder";
 import { RosterDataMenu } from "./roster-data";
@@ -21,8 +20,8 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "roster-data": RosterDataMenu,
   "display-attendance": (p) => <DisplayAdminMenu {...p} kind="att" />,
   "display-fleet": (p) => <DisplayAdminMenu {...p} kind="fleet" />,
-  "display-fitwork": () => <DisplayKioskMenu kind="fitwork" />,
-  "monitoring-fingerprint": () => <DisplayKioskMenu kind="fingerprint" />,
+  /* display-fitwork & monitoring-fingerprint have no in-shell page: the
+     sidebar buttons open their fullscreen kiosks (/display/*) in a new tab */
   "area-kerja": (p) => <MasterMenu {...p} cat="area-kerja" />,
   bus: (p) => <MasterMenu {...p} cat="bus" />,
   "lokasi-excavator": (p) => <MasterMenu {...p} cat="lokasi-excavator" />,

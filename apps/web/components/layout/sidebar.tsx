@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { NAV, type NavEntry } from "@/lib/nav";
+import { openDisplay } from "@/lib/open-display";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
 
@@ -119,18 +120,32 @@ export function Sidebar() {
             collapsed && "hidden max-xl:block"
           )}
         >
-          {kids.map((c) => (
-            <Link
-              key={c.slug}
-              href={hrefOf(c.slug)}
-              className={cn(
-                "relative ml-7.5 flex h-10 w-[calc(100%-30px)] items-center gap-2 rounded-control border border-transparent px-3 text-left text-[13px] text-(--text-secondary) no-underline transition-colors duration-100 hover:bg-(--fill-hover) hover:text-(--text-primary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-primary) [&+a]:mt-2",
-                isActive(c.slug) && activeClass
-              )}
-            >
-              {c.label}
-            </Link>
-          ))}
+          {kids.map((c) => {
+            const kidClass = cn(
+              "relative ml-7.5 flex h-10 w-[calc(100%-30px)] items-center gap-2 rounded-control border border-transparent px-3 text-left text-[13px] text-(--text-secondary) no-underline transition-colors duration-100 hover:bg-(--fill-hover) hover:text-(--text-primary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-primary) [&+a]:mt-2 [&+button]:mt-2"
+            );
+            /* kiosk screen: button opens a fullscreen new tab, no in-shell route */
+            if (c.displayUrl) {
+              return (
+                <button
+                  key={c.slug}
+                  onClick={() => openDisplay(c.displayUrl!)}
+                  className={cn(kidClass, "cursor-pointer")}
+                >
+                  {c.label}
+                </button>
+              );
+            }
+            return (
+              <Link
+                key={c.slug}
+                href={hrefOf(c.slug)}
+                className={cn(kidClass, isActive(c.slug) && activeClass)}
+              >
+                {c.label}
+              </Link>
+            );
+          })}
         </div>
       </React.Fragment>
     );

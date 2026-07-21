@@ -12,7 +12,12 @@ import {
 
 import { MENU_LABELS, type MenuSlug } from "./access";
 
-export type NavLeaf = { slug: MenuSlug; label: string };
+export type NavLeaf = {
+  slug: MenuSlug;
+  label: string;
+  /* kiosk screens open in a new tab (openDisplay) instead of routing */
+  displayUrl?: string;
+};
 export type NavEntry =
   | { kind: "item"; slug: MenuSlug; label: string; icon: LucideIcon }
   | {
@@ -46,8 +51,8 @@ export const NAV: NavEntry[] = [
     children: [
       leaf("display-attendance"),
       leaf("display-fleet"),
-      leaf("display-fitwork"),
-      leaf("monitoring-fingerprint"),
+      { ...leaf("display-fitwork"), displayUrl: "/display/fitwork" },
+      { ...leaf("monitoring-fingerprint"), displayUrl: "/display/fingerprint" },
     ],
   },
   item("employees", Users),
