@@ -24,3 +24,5 @@ build/
 # not shared. Per-app apps/*/AGENTS.md are project files and remain tracked.
 /AGENTS.md
 /CLAUDE.md
+docs
+CONTEXT.md
