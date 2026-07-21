@@ -4,6 +4,7 @@ import type { AccessMode, MenuSlug } from "@/lib/access";
 
 import { DashboardMenu } from "./dashboard";
 import { MenuPlaceholder } from "./placeholder";
+import { RosterDataMenu } from "./roster-data";
 
 type MenuComponent = ComponentType<{ mode: AccessMode }>;
 
@@ -13,6 +14,7 @@ type MenuComponent = ComponentType<{ mode: AccessMode }>;
  */
 const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   dashboard: DashboardMenu,
+  "roster-data": RosterDataMenu,
 };
 
 export function MenuPage({ slug, mode }: { slug: MenuSlug; mode: AccessMode }) {
