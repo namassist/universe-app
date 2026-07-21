@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Download, Eye, Search, Upload } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
+import { ROSTER_DOCS } from "@/lib/roster-data";
 import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
@@ -33,80 +35,12 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
-type DocRow = {
-  key: string;
-  label: string;
-  file: string;
-  dept: string;
-  by: string;
-  date: string;
-  dateISO: string;
-  emp: number;
-  rows: number;
-  month: string; // YYYY-MM
-  status: "aktif" | "arsip";
-};
-
-/* ---- static sample content (no data layer) ---- */
-const SAMPLE: DocRow[] = [
-  {
-    key: "r1",
-    label: "Roster Juli 2026",
-    file: "roster-hauling-2607.xlsx",
-    dept: "Hauling",
-    by: "Admin Hauling",
-    date: "01 Jul 2026",
-    dateISO: "2026-07-01",
-    emp: 64,
-    rows: 1984,
-    month: "2026-07",
-    status: "aktif",
-  },
-  {
-    key: "r2",
-    label: "Roster Juli 2026",
-    file: "roster-loading-2607.xlsx",
-    dept: "Loading",
-    by: "Admin Loading",
-    date: "01 Jul 2026",
-    dateISO: "2026-07-01",
-    emp: 28,
-    rows: 868,
-    month: "2026-07",
-    status: "aktif",
-  },
-  {
-    key: "r3",
-    label: "Roster Juni 2026",
-    file: "roster-hauling-2606.xlsx",
-    dept: "Hauling",
-    by: "Admin Hauling",
-    date: "01 Jun 2026",
-    dateISO: "2026-06-01",
-    emp: 62,
-    rows: 1860,
-    month: "2026-06",
-    status: "arsip",
-  },
-  {
-    key: "r4",
-    label: "Roster Juni 2026",
-    file: "roster-support-2606.xlsx",
-    dept: "Support",
-    by: "Admin Support",
-    date: "02 Jun 2026",
-    dateISO: "2026-06-02",
-    emp: 18,
-    rows: 540,
-    month: "2026-06",
-    status: "arsip",
-  },
-];
-
 export function RosterDataMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
   const { role } = useRole();
+  const router = useRouter();
+  const base = `/${role}/roster-data`;
   const canW = mode === "manage";
 
   const [month, setMonth] = React.useState("");
@@ -114,7 +48,7 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
   const [q, setQ] = React.useState("");
   const [st, setSt] = React.useState("");
 
-  const depts = Array.from(new Set(SAMPLE.map((r) => r.dept))).sort();
+  const depts = Array.from(new Set(ROSTER_DOCS.map((r) => r.dept))).sort();
   const monthNames = React.useMemo(() => {
     const loc = lang === "en" ? "en-GB" : "id-ID";
     return Array.from({ length: 12 }, (_, i) =>
@@ -122,7 +56,7 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
     );
   }, [lang]);
 
-  const rows = SAMPLE.filter((r) => {
+  const rows = ROSTER_DOCS.filter((r) => {
     if (st && r.status !== st) return false;
     if (dept && r.dept !== dept) return false;
     if (month && r.month.slice(5) !== month) return false;
@@ -141,7 +75,7 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
     <div className="flex flex-col gap-6">
       <PageTitle title={t.navRD} sub={t.rdSub}>
         {canW ? (
-          <Button onClick={() => pushToast("success", t.rdUpload, t.rdSub)}>
+          <Button onClick={() => router.push(`${base}/upload`)}>
             <Upload />
             {t.rdUpload}
           </Button>
