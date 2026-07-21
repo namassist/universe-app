@@ -5,6 +5,7 @@ import { Eye, Monitor, Pencil, Plus, Trash2 } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
+import { openDisplay } from "@/lib/open-display";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
@@ -341,7 +342,12 @@ export function DisplayAdminMenu({
                   <div className="flex gap-2">
                     <IconButton
                       aria-label={t.dspPreview}
-                      onClick={() => pushToast("success", t.dspPreview, d.name)}
+                      onClick={() =>
+                        /* layar kiosk sungguhan (dark-only) — tab baru, fullscreen */
+                        openDisplay(
+                          `/display/${kind === "att" ? "attendance" : "fleet"}?name=${encodeURIComponent(d.name)}`
+                        )
+                      }
                     >
                       <Eye />
                     </IconButton>
