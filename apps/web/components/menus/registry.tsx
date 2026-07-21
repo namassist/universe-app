@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 
 import type { AccessMode, MenuSlug } from "@/lib/access";
 
+import { DashboardMenu } from "./dashboard";
 import { MenuPlaceholder } from "./placeholder";
 
 type MenuComponent = ComponentType<{ mode: AccessMode }>;
@@ -11,7 +12,7 @@ type MenuComponent = ComponentType<{ mode: AccessMode }>;
  * falls back to <MenuPlaceholder>. Each role's `page.tsx` renders <MenuPage>.
  */
 const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
-  // filled per domain as static pages are built
+  dashboard: DashboardMenu,
 };
 
 export function MenuPage({ slug, mode }: { slug: MenuSlug; mode: AccessMode }) {
