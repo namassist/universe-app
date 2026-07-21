@@ -178,9 +178,7 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
                       </Link>
                       <IconButton
                         aria-label={t.rdDetail}
-                        onClick={() =>
-                          pushToast("success", t.rdDetail, r.label)
-                        }
+                        onClick={() => router.push(`${base}/detail?p=${r.key}`)}
                       >
                         <Eye />
                       </IconButton>
