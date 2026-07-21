@@ -3,7 +3,8 @@ import type { ComponentType } from "react";
 import type { AccessMode, MenuSlug } from "@/lib/access";
 
 import { DashboardMenu } from "./dashboard";
-import { DisplayBoardMenu } from "./display-board";
+import { DisplayAdminMenu } from "./display-admin";
+import { DisplayKioskMenu } from "./display-kiosk";
 import { MasterMenu } from "./master";
 import { MenuPlaceholder } from "./placeholder";
 import { RosterDataMenu } from "./roster-data";
@@ -18,12 +19,10 @@ type MenuComponent = ComponentType<{ mode: AccessMode }>;
 const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   dashboard: DashboardMenu,
   "roster-data": RosterDataMenu,
-  "display-attendance": () => <DisplayBoardMenu kind="display-attendance" />,
-  "display-fleet": () => <DisplayBoardMenu kind="display-fleet" />,
-  "display-fitwork": () => <DisplayBoardMenu kind="display-fitwork" />,
-  "monitoring-fingerprint": () => (
-    <DisplayBoardMenu kind="monitoring-fingerprint" />
-  ),
+  "display-attendance": (p) => <DisplayAdminMenu {...p} kind="att" />,
+  "display-fleet": (p) => <DisplayAdminMenu {...p} kind="fleet" />,
+  "display-fitwork": () => <DisplayKioskMenu kind="fitwork" />,
+  "monitoring-fingerprint": () => <DisplayKioskMenu kind="fingerprint" />,
   "area-kerja": (p) => <MasterMenu {...p} cat="area-kerja" />,
   bus: (p) => <MasterMenu {...p} cat="bus" />,
   "lokasi-excavator": (p) => <MasterMenu {...p} cat="lokasi-excavator" />,
