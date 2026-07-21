@@ -1,0 +1,91 @@
+import {
+  CalendarDays,
+  Database,
+  Heart,
+  LayoutDashboard,
+  Monitor,
+  Settings,
+  Truck,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+
+import { MENU_LABELS, type MenuSlug } from "./access";
+
+export type NavLeaf = { slug: MenuSlug; label: string };
+export type NavEntry =
+  | { kind: "item"; slug: MenuSlug; label: string; icon: LucideIcon }
+  | {
+      kind: "group";
+      key: string;
+      label: string;
+      icon: LucideIcon;
+      children: NavLeaf[];
+    };
+
+const leaf = (slug: MenuSlug): NavLeaf => ({ slug, label: MENU_LABELS[slug] });
+const item = (slug: MenuSlug, icon: LucideIcon): NavEntry => ({
+  kind: "item",
+  slug,
+  label: MENU_LABELS[slug],
+  icon,
+});
+
+/**
+ * The full navigation tree (grouped like the reference). The sidebar filters
+ * this by the current role's access and hides empty groups; hrefs are made
+ * role-relative (`/{role}/{slug}`) at render time.
+ */
+export const NAV: NavEntry[] = [
+  item("dashboard", LayoutDashboard),
+  {
+    kind: "group",
+    key: "display",
+    label: "Display",
+    icon: Monitor,
+    children: [
+      leaf("display-attendance"),
+      leaf("display-fleet"),
+      leaf("display-fitwork"),
+      leaf("monitoring-fingerprint"),
+    ],
+  },
+  item("employees", Users),
+  {
+    kind: "group",
+    key: "roster",
+    label: "Roster & Attendance",
+    icon: CalendarDays,
+    children: [
+      leaf("roster-data"),
+      leaf("roster-revision"),
+      leaf("roster-approval"),
+      leaf("attendance"),
+    ],
+  },
+  item("fit-to-work", Heart),
+  {
+    kind: "group",
+    key: "asset",
+    label: "Asset & Fleet",
+    icon: Truck,
+    children: [
+      leaf("unit-status"),
+      leaf("fleet-allocation"),
+      leaf("fleet-setting"),
+    ],
+  },
+  {
+    kind: "group",
+    key: "master",
+    label: "Master",
+    icon: Database,
+    children: [
+      leaf("area-kerja"),
+      leaf("bus"),
+      leaf("lokasi-excavator"),
+      leaf("running-text"),
+    ],
+  },
+  item("setting", Settings),
+];

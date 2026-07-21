@@ -1,38 +1,37 @@
-import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import Link from "next/link";
 
-import { usersQueryOptions } from "@/lib/queries/users";
-import { getQueryClient } from "@/lib/query-client";
+import { ROLE_LABELS, ROLES } from "@/lib/access";
 
-import { CreateUserForm } from "./create-user-form";
-import { UsersList } from "./users-list";
+export const metadata = { title: "Pilih Role" };
 
 /**
- * Next 16 does not cache `fetch` per request, but it still prerenders this
- * route at build time — which would bake in whatever the API returned during
- * `next build`. The prefetch below must run per request, so opt out of static.
+ * Minimal index. Per the static-only design there is no auth or role switcher —
+ * open a role's URL directly. These links are a convenience for that.
  */
-export const dynamic = "force-dynamic";
-
-/**
- * Server Component. It runs the users query on the server (the API does not
- * need to be reachable from the browser for the first paint), then dehydrates
- * that cache into the client so <UsersList /> renders with data immediately.
- */
-export default async function Home() {
-  const queryClient = getQueryClient();
-  await queryClient.prefetchQuery(usersQueryOptions);
-
+export default function Home() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-      <p className="mt-1 text-sm text-neutral-500">
-        Served by Elysia on :3001, rendered by Next.js on :3000.
+      <h1 className="text-2xl font-semibold tracking-tight text-(--text-primary)">
+        UNIVERSE — Static Preview
+      </h1>
+      <p className="mt-1 text-sm text-(--text-secondary)">
+        Pilih role untuk masuk ke shell-nya. URL langsung:{" "}
+        <code>/{"{role}"}/dashboard</code>.
       </p>
 
-      <HydrationBoundary state={dehydrate(queryClient)}>
-        <UsersList />
-        <CreateUserForm />
-      </HydrationBoundary>
+      <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+        {ROLES.map((role) => (
+          <li key={role}>
+            <Link
+              href={`/${role}/dashboard`}
+              className="flex items-center justify-between rounded-card px-5 py-4 text-sm font-medium text-(--text-primary) glass-card transition hover:bg-(--fill-hover)"
+            >
+              {ROLE_LABELS[role]}
+              <span className="text-(--text-tertiary)">/{role}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }

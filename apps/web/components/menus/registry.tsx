@@ -1,0 +1,21 @@
+import type { ComponentType } from "react";
+
+import type { AccessMode, MenuSlug } from "@/lib/access";
+
+import { MenuPlaceholder } from "./placeholder";
+
+type MenuComponent = ComponentType<{ mode: AccessMode }>;
+
+/**
+ * slug → faithful static page. Filled in incrementally; any slug not present
+ * falls back to <MenuPlaceholder>. Each role's `page.tsx` renders <MenuPage>.
+ */
+const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
+  // filled per domain as static pages are built
+};
+
+export function MenuPage({ slug, mode }: { slug: MenuSlug; mode: AccessMode }) {
+  const Comp = REGISTRY[slug];
+  if (Comp) return <Comp mode={mode} />;
+  return <MenuPlaceholder slug={slug} mode={mode} />;
+}
