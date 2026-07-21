@@ -56,6 +56,24 @@ bun run lint:fix       # eslint --fix every package
 - **`.editorconfig` + `.vscode/`** are committed: install the recommended
   extensions and format-on-save matches the hook, so you rarely hit it.
 
+## AI coding skills
+
+The project pins the official [ElysiaJS agent skill](https://github.com/elysiajs/skills)
+so an AI agent (Claude Code, OpenCode) reasons about Elysia from its real docs —
+routing, validation, lifecycle, plugins, and Eden — instead of guessing.
+
+The skill files themselves are per-machine (materialized under `.claude/`, which
+is gitignored like `node_modules`). The shared, tracked artifact is
+`skills-lock.json` at the root — a pinned source + content hash. To set it up on
+your machine:
+
+```bash
+bunx skills add elysiajs/skills   # installs into .claude/skills/elysiajs
+```
+
+A newly installed skill is picked up by the _next_ agent session, not the one
+that installed it. Bump it later with `bunx skills update`.
+
 ## Database
 
 Postgres via Drizzle, Redis via ioredis. Both live in the shared dev containers

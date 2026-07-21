@@ -13,3 +13,10 @@ dist
 apps/api/drizzle
 next-env.d.ts
 *.tsbuildinfo
+
+# Vendored agent skills — owned upstream, and reformatting breaks their hash
+.claude
+
+# Personal agent instruction files, not project deliverables
+AGENTS.md
+CLAUDE.md

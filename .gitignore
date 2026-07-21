@@ -11,3 +11,10 @@ build/
 
 *.log
 .DS_Store
+# WSL/Windows "mark of the web" artifacts that appear next to downloaded files
+*:Zone.Identifier
+
+# Agent skills are materialized per machine (like node_modules); the shareable
+# artifact is skills-lock.json, which stays tracked. Run `bunx skills add
+# elysiajs/skills` to restore them.
+.claude
