@@ -34,6 +34,9 @@ export function Sidebar() {
   const pathname = usePathname();
   const { role, access } = useRole();
   const { collapsed, setCollapsed, sideOpen, setSideOpen } = useShell();
+  const settingEntry = NAV.find(
+    (e) => e.kind === "item" && e.slug === "setting"
+  );
 
   const base = `/${role}`;
   const currentGroup = groupOfPath(pathname);
@@ -51,7 +54,8 @@ export function Sidebar() {
   }, [pathname, setSideOpen]);
 
   const hrefOf = (slug: string) => `${base}/${slug}`;
-  const isActive = (slug: string) => pathname === hrefOf(slug);
+  /* startsWith: sub-halaman (detail/edit/upload) tetap menyalakan induknya */
+  const isActive = (slug: string) => pathname.startsWith(hrefOf(slug));
 
   function renderTop(entry: NavEntry) {
     if (entry.kind === "item") {
@@ -123,7 +127,7 @@ export function Sidebar() {
         >
           {kids.map((c) => {
             const kidClass = cn(
-              "relative ml-7.5 flex h-10 w-[calc(100%-30px)] items-center gap-2 rounded-control border border-transparent px-3 text-left text-[13px] text-(--text-secondary) no-underline transition-colors duration-100 hover:bg-(--fill-hover) hover:text-(--text-primary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-primary) [&+a]:mt-2 [&+button]:mt-2"
+              "relative ml-7.5 flex h-10 w-[calc(100%-30px)] items-center gap-2 rounded-control border border-transparent px-3 text-left text-[13px] text-(--text-secondary) no-underline transition-colors duration-100 hover:bg-(--fill-hover) hover:text-(--text-primary) hover:no-underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-primary) [&+a]:mt-2 [&+button]:mt-2"
             );
             /* kiosk screen: button opens a fullscreen new tab, no in-shell route */
             if (c.displayUrl) {
@@ -192,6 +196,7 @@ export function Sidebar() {
           <button
             onClick={() => setCollapsed(true)}
             aria-label="Ciutkan sidebar"
+            title="Ciutkan sidebar"
             className={cn(
               "ml-auto grid size-7 flex-none cursor-pointer place-items-center rounded-lg border border-(--glass-1-border) bg-(--fill-subtle) hover:border-[rgba(0,212,255,.4)] hover:bg-[rgba(0,212,255,.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-primary) max-xl:hidden",
               collapsed && "hidden"
@@ -203,6 +208,7 @@ export function Sidebar() {
         <button
           onClick={() => setCollapsed(false)}
           aria-label="Perluas sidebar"
+          title="Perluas sidebar"
           className={cn(
             "mx-auto mb-3 grid size-7 flex-none cursor-pointer place-items-center rounded-lg border border-(--glass-1-border) bg-(--fill-subtle) hover:border-[rgba(0,212,255,.4)] hover:bg-[rgba(0,212,255,.14)] max-xl:hidden",
             !collapsed && "hidden"
@@ -211,8 +217,17 @@ export function Sidebar() {
           <ChevronRight className="size-3.5 text-(--text-secondary)" />
         </button>
         <nav className="scrollbar-none flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto">
-          {NAV.map(renderTop)}
+          {NAV.filter((e) => !(e.kind === "item" && e.slug === "setting")).map(
+            renderTop
+          )}
         </nav>
+        {/* Setting selalu terlihat di dasar sidebar — di luar area scroll */}
+        {settingEntry && access("setting") ? (
+          <>
+            <div className="mx-2 my-4 border-t border-(--divider)" />
+            {renderTop(settingEntry)}
+          </>
+        ) : null}
       </aside>
     </>
   );
