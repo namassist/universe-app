@@ -1,10 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Plus, Trash2, Truck, X } from "lucide-react";
+import { Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import { AREA_MINING_NAMES } from "@/lib/area-data";
 import { useI18n } from "@/lib/i18n";
+import {
+  BUS_UNITS,
+  DIGGER_UNITS,
+  FLEET_MEMBER_UNITS,
+  unitTypeLabel,
+} from "@/lib/unit-data";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -52,44 +59,36 @@ type Fleet = {
   active: boolean;
 };
 
-/* ---- static sample content ---- */
-const DIGGERS: Record<string, string> = {
-  "EX-22": "PC2000-8 · Komatsu",
-  "EX-07": "PC2000-8 · Komatsu",
-  "EX-31": "PC1250-11 · Komatsu",
-};
-const BUS_OPTS = ["BUS-01", "BUS-02"];
-const AREA_OPTS = ["Pit 3 — Panel Utara", "Disposal Utara", "Workshop"];
-const OHT_POOL = [
-  "DT-101",
-  "DT-102",
-  "DT-104",
-  "DT-105",
-  "DT-106",
-  "DT-107",
-  "DT-201",
-  "DT-202",
-  "DT-203",
-  "DT-204",
-  "DT-301",
-  "DT-302",
-];
+/* ---- semua dropdown di-derive dari master (unit + area kerja) ---- */
+/* Digger = unit jenis EXCAVATOR / kelas BIGDIGGER-MEDIUMDIGGER-SMALLDIGGER */
+const DIGGERS: Record<string, string> = Object.fromEntries(
+  DIGGER_UNITS.map((u) => [u.code, unitTypeLabel(u)])
+);
+/* Kode bus dari unit berjenis BUS — kosong sampai unit BUS ada di master */
+const BUS_OPTS = BUS_UNITS.map((u) => u.code);
+/* Lokasi kerja = area kerja bertipe Mining (lokasi operasi fleet) */
+const AREA_OPTS = AREA_MINING_NAMES;
+/* Anggota fleet = unit non-digger (hauler/support), label "model · merk" */
+const OHT_TYPE: Record<string, string> = Object.fromEntries(
+  FLEET_MEMBER_UNITS.map((u) => [u.code, unitTypeLabel(u)])
+);
+const OHT_POOL = Object.keys(OHT_TYPE);
 
 const INITIAL: Fleet[] = [
   {
     id: "fl1",
-    digger: "EX-22",
-    loc: "Pit 3 — Panel Utara",
-    bus: "BUS-01",
-    units: ["DT-101", "DT-102", "DT-104", "DT-105", "DT-106", "DT-107"],
+    digger: "EX8001",
+    loc: "Panel East Puncak Utara",
+    bus: "",
+    units: ["RD5001", "RD5002", "RD4001", "RD4002"],
     active: true,
   },
   {
     id: "fl2",
-    digger: "EX-07",
-    loc: "Disposal Utara",
-    bus: "BUS-02",
-    units: ["DT-201", "DT-202", "DT-203", "DT-204"],
+    digger: "EX7001",
+    loc: "Disposal T4",
+    bus: "",
+    units: ["DT4017", "DT4018", "DT3013"],
     active: true,
   },
 ];
@@ -102,6 +101,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [fleets, setFleets] = React.useState<Fleet[]>(INITIAL);
 
   // add/edit dialog
+  const importRef = React.useRef<HTMLInputElement>(null);
   const [dlgOpen, setDlgOpen] = React.useState(false);
   const [editId, setEditId] = React.useState<string | null>(null);
   const [fDigger, setFDigger] = React.useState("");
@@ -156,8 +156,8 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   function openAdd() {
     setEditId(null);
     setFDigger(diggerOpts[0] || "");
-    setFBus(BUS_OPTS[0]!);
-    setFLoc(AREA_OPTS[0]!);
+    setFBus(BUS_OPTS[0] ?? "");
+    setFLoc(AREA_OPTS[0] ?? "");
     setFUnits([]);
     setUnitQ("");
     setFActive(true);
@@ -245,6 +245,28 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
               value={listQ}
               onChange={(e) => setListQ(e.target.value)}
             />
+            {canW ? (
+              <>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".csv,.xlsx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) pushToast("success", `${t.udbImport} Fleet`, f.name);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => importRef.current?.click()}
+                >
+                  <Upload />
+                  {t.udbImport}
+                </Button>
+              </>
+            ) : null}
           </ToolbarGroup>
         </Toolbar>
         <Table>
@@ -266,7 +288,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 </TableCell>
                 <TableCell>{f.loc}</TableCell>
                 <TableCell className="font-mono max-xl:hidden">
-                  {f.bus}
+                  {f.bus || "—"}
                 </TableCell>
                 <TableCell>
                   <div className="flex max-w-[320px] flex-wrap gap-1">
@@ -367,6 +389,9 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 value={fBus}
                 onChange={(e) => setFBus(e.target.value)}
               >
+                <option value="">
+                  {BUS_OPTS.length ? "— pilih bus —" : "— belum ada bus —"}
+                </option>
                 {BUS_OPTS.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -438,7 +463,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                           {code}
                         </span>
                         <span className="text-xs text-(--text-tertiary)">
-                          HD785-7 · Komatsu
+                          {OHT_TYPE[code] ?? "—"}
                         </span>
                       </label>
                     ))

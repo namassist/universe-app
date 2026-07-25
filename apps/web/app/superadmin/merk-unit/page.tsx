@@ -1,6 +1,6 @@
 import { MenuPage } from "@/components/menus/registry";
 
-export const metadata = { title: "Product / Merek" };
+export const metadata = { title: "Merek" };
 
 export default function Page() {
   return <MenuPage slug="merk-unit" mode="manage" />;

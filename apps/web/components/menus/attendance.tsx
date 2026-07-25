@@ -4,6 +4,7 @@ import * as React from "react";
 import { Download, Search } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import { DEPARTEMEN_NAMES } from "@/lib/departemen-data";
 import { useI18n } from "@/lib/i18n";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,7 +60,7 @@ const ROWS: Row[] = [
     nik: "OPS-0421",
     name: "Budi Santoso",
     date: "2026-07-21",
-    dept: "Operation",
+    dept: "Mining Operation",
     code: "P-2",
     checkin: "05:42",
     checkout: undefined,
@@ -69,7 +70,7 @@ const ROWS: Row[] = [
     nik: "OPS-0388",
     name: "Andi Wijaya",
     date: "2026-07-21",
-    dept: "Operation",
+    dept: "Mining Operation",
     code: "P-1",
     checkin: "06:05",
     checkout: undefined,
@@ -79,7 +80,7 @@ const ROWS: Row[] = [
     nik: "OPS-0510",
     name: "Rudi Hartono",
     date: "2026-07-21",
-    dept: "Operation",
+    dept: "Mining Operation",
     code: "P-2",
     status: "belum",
   },
@@ -97,7 +98,7 @@ const ROWS: Row[] = [
     nik: "OPS-0367",
     name: "Hendra Gunawan",
     date: "2026-07-21",
-    dept: "Operation",
+    dept: "Mining Operation",
     code: "P-1",
     status: "unfit",
   },
@@ -123,7 +124,7 @@ const ROWS: Row[] = [
     nik: "OPS-0455",
     name: "Fitri Handayani",
     date: "2026-07-20",
-    dept: "Operation",
+    dept: "Mining Operation",
     code: "M-1",
     checkin: "17:20",
     checkout: "05:55",
@@ -143,7 +144,7 @@ const ROWS: Row[] = [
     nik: "OPS-0111",
     name: "Joko Prasetyo",
     date: "2026-07-20",
-    dept: "Operation",
+    dept: "Mining Operation",
     code: "P-2",
     checkin: "05:38",
     checkout: "16:40",
@@ -255,10 +256,9 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setDept(e.target.value)}
             >
               <option value="">{t.allDepts}</option>
-              <option>Operation</option>
-              <option>SDI</option>
-              <option>HRGA</option>
-              <option>Plant</option>
+              {DEPARTEMEN_NAMES.map((d) => (
+                <option key={d}>{d}</option>
+              ))}
             </Select>
             <div className="flex items-center gap-2">
               <label

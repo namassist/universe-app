@@ -267,7 +267,7 @@ export const id = {
   udbImport: "Import",
   udbImpT: "Import unit massal",
   udbImpB:
-    "Unggah file .xlsx sesuai template — kolom kode unit, kelas unit, jenis unit, product.",
+    "Unggah file .xlsx sesuai template — kolom kode unit, kelas unit, jenis unit, merk, kode simper, departemen, machine S/N, engine brand, description.",
   udbImpDzTitle: "Seret file unit ke sini, atau klik untuk memilih",
   udbImpSummary: "12 baris terbaca — 10 valid · 2 duplikat dilewati.",
   udbImpDoBtn: "Impor 10 unit",
@@ -317,8 +317,11 @@ export const id = {
   dspContent: "Konten",
   dspRuntext: "Running text",
   dspConn: "Koneksi",
-  dspRuntextHelp: "Diambil dari Master → Running Text (hanya yang aktif).",
-  dspRuntextDefault: "Default sistem",
+  dspRuntextHelp:
+    "Kosong = ikut Master → Running Text (semua yang aktif). Tambah untuk override khusus display ini.",
+  dspRuntextDefault: "Ikut master",
+  dspRtAdd: "Tambah teks",
+  dspRtEmpty: "Belum ada — display ini ikut running text master.",
   dspFleetHelp:
     "Diambil dari Setting Fleet — pilih ≥1; lebih dari satu = layar TV berotasi antar fleet.",
   dspFleetsCol: "Fleet yang ditayangkan",
@@ -532,7 +535,7 @@ export const id = {
   faGenBtn: "Generate",
   faGenToastT: "ACTUAL digenerate",
   faGenToastD:
-    "Operator gugur (cuti / belum absen / tidak fit) digantikan spare sesuai urutan prioritas & SIMPER.",
+    "Operator gugur (cuti / belum absen / tidak fit) digantikan spare ber-SIMPER cocok.",
   faAddActual: "Generate",
   faNoActualT: "Belum ada ACTUAL untuk tanggal + shift ini",
   faNoActualB:
@@ -552,9 +555,6 @@ export const id = {
   faGugurCuti: "Cuti",
   faGugurAbsen: "Belum absen",
   faGugurFtw: "Tidak fit",
-  faSpareOrderHint: "Urutan = prioritas substitusi (senioritas).",
-  faSpareUp: "naikkan prioritas",
-  faSpareDown: "turunkan prioritas",
   fahTitle: "Riwayat ACTUAL",
   fahBack: "Kembali ke daftar",
   fahDetail: "Detail",
@@ -580,7 +580,7 @@ export const id = {
   faSupportGrp: "Unit support",
   faNoteT: "Cara kerja papan dua lapis (PLAN → ACTUAL)",
   faNoteB:
-    "PLAN memasangkan tiap unit dengan maksimal 2 operator tetap (crew shift berbeda) — tanpa tanggal & shift; roster harian menentukan siapa yang jalan pagi/malam. Tambah ACTUAL (per tanggal + shift) menandai lineup & FTW ter-lock dan menyalin PLAN sesuai roster; Generate lalu mengganti operator yang cuti / belum absen / tidak fit dengan spare se-roster berurutan prioritas ber-SIMPER cocok — unit tanpa pengganti valid tercatat downtime. Setelah tergenerate, ACTUAL bersifat final (view-only). Display TV fleet menampilkan ACTUAL.",
+    "PLAN memasangkan tiap unit dengan maksimal 2 operator tetap (crew shift berbeda) — tanpa tanggal & shift; roster harian menentukan siapa yang jalan pagi/malam. Tambah ACTUAL (per tanggal + shift) menandai lineup & FTW ter-lock dan menyalin PLAN sesuai roster; Generate lalu mengganti operator yang cuti / belum absen / tidak fit dengan spare se-roster ber-SIMPER cocok — unit tanpa pengganti valid tercatat downtime. Setelah tergenerate, ACTUAL bersifat final (view-only). Display TV fleet menampilkan ACTUAL.",
   udbSerial: "No. seri",
   udbErrCode: "Kode wajib diisi dan belum terpakai.",
   udbErrType: "Wajib diisi.",

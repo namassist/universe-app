@@ -4,6 +4,15 @@ import * as React from "react";
 import { Eye, Monitor, Pencil, Plus, Trash2 } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import {
+  COLOR_VAL,
+  DISPLAYS,
+  FLEETS,
+  RUNTEXT_COLORS,
+  type CustomRunText,
+  type Display as Disp,
+  type FleetPick,
+} from "@/lib/display-data";
 import { useI18n } from "@/lib/i18n";
 import { openDisplay } from "@/lib/open-display";
 import { cn } from "@/lib/utils";
@@ -43,76 +52,6 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
-type FleetPick = { id: string; digger: string; unitCount: number };
-type Disp = {
-  id: string;
-  name: string;
-  fleets?: FleetPick[];
-  online: boolean;
-  hb: string;
-  runtext: string;
-  active: boolean;
-  rotateSec?: number;
-};
-
-const FLEETS: FleetPick[] = [
-  { id: "fl1", digger: "EX-22", unitCount: 6 },
-  { id: "fl2", digger: "EX-07", unitCount: 5 },
-  { id: "fl3", digger: "PC-11", unitCount: 4 },
-  { id: "fl4", digger: "WA-03", unitCount: 3 },
-];
-
-const SAMPLE: Record<"att" | "fleet", Disp[]> = {
-  att: [
-    {
-      id: "DSP-A01",
-      name: "TV Gate Utara",
-      online: true,
-      hb: "baru saja",
-      runtext: "",
-      active: true,
-    },
-    {
-      id: "DSP-A02",
-      name: "TV Mess A",
-      online: true,
-      hb: "1m lalu",
-      runtext: "Utamakan keselamatan",
-      active: true,
-    },
-    {
-      id: "DSP-A03",
-      name: "TV Gate Barat",
-      online: false,
-      hb: "6m lalu",
-      runtext: "",
-      active: false,
-    },
-  ],
-  fleet: [
-    {
-      id: "DSP-F01",
-      name: "Fleet EX-22",
-      fleets: [FLEETS[0]!],
-      online: true,
-      hb: "baru saja",
-      runtext: "",
-      active: true,
-      rotateSec: 12,
-    },
-    {
-      id: "DSP-F02",
-      name: "Fleet EX-07 +1",
-      fleets: [FLEETS[1]!, FLEETS[2]!],
-      online: true,
-      hb: "2m lalu",
-      runtext: "",
-      active: true,
-      rotateSec: 15,
-    },
-  ],
-};
-
 export function DisplayAdminMenu({
   mode,
   kind,
@@ -124,7 +63,7 @@ export function DisplayAdminMenu({
   const { pushToast } = useToast();
   const canW = mode === "manage";
 
-  const [displays, setDisplays] = React.useState<Disp[]>(() => SAMPLE[kind]);
+  const [displays, setDisplays] = React.useState<Disp[]>(() => DISPLAYS[kind]);
   const [q, setQ] = React.useState("");
   const [statusF, setStatusF] = React.useState("");
 
@@ -153,8 +92,15 @@ export function DisplayAdminMenu({
   const [editing, setEditing] = React.useState<Disp | null>(null);
   const [fName, setFName] = React.useState("");
   const [fSel, setFSel] = React.useState<FleetPick[]>([]);
-  const [fRuntext, setFRuntext] = React.useState("");
+  const [fRuntexts, setFRuntexts] = React.useState<CustomRunText[]>([]);
   const [fActive, setFActive] = React.useState(true);
+
+  const addRT = () =>
+    setFRuntexts((p) => [...p, { text: "", color: RUNTEXT_COLORS[0]! }]);
+  const updateRT = (i: number, patch: Partial<CustomRunText>) =>
+    setFRuntexts((p) => p.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const removeRT = (i: number) =>
+    setFRuntexts((p) => p.filter((_, j) => j !== i));
   const [nameErr, setNameErr] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<Disp | null>(null);
 
@@ -162,7 +108,7 @@ export function DisplayAdminMenu({
     setEditing(null);
     setFName("");
     setFSel([]);
-    setFRuntext("");
+    setFRuntexts([]);
     setFActive(true);
     setNameErr(false);
     setDlgOpen(true);
@@ -171,7 +117,7 @@ export function DisplayAdminMenu({
     setEditing(d);
     setFName(d.name);
     setFSel([...(d.fleets ?? [])]);
-    setFRuntext(d.runtext);
+    setFRuntexts(d.runtexts.map((r) => ({ ...r })));
     setFActive(d.active);
     setNameErr(false);
     setDlgOpen(true);
@@ -197,6 +143,7 @@ export function DisplayAdminMenu({
           ? `Fleet ${fSel[0]!.digger}`
           : `Fleet ${fSel[0]!.digger} +${fSel.length - 1}`
         : fName.trim();
+    const runtexts = fRuntexts.filter((r) => r.text.trim());
     if (editing) {
       setDisplays((prev) =>
         prev.map((d) =>
@@ -205,7 +152,7 @@ export function DisplayAdminMenu({
                 ...d,
                 name,
                 fleets: kind === "fleet" ? fSel : undefined,
-                runtext: fRuntext,
+                runtexts,
                 active: fActive,
               }
             : d
@@ -218,10 +165,11 @@ export function DisplayAdminMenu({
         {
           id,
           name,
+          kind,
           fleets: kind === "fleet" ? fSel : undefined,
           online: true,
           hb: "baru saja",
-          runtext: fRuntext,
+          runtexts,
           active: fActive,
           rotateSec: 12,
         },
@@ -318,8 +266,25 @@ export function DisplayAdminMenu({
                     <NameCell name={d.name} sub={subOf(d)} />
                   )}
                 </TableCell>
-                <TableCell className="max-w-[360px] text-(--text-secondary)">
-                  {d.runtext || (
+                <TableCell className="text-(--text-secondary)">
+                  {d.runtexts.length ? (
+                    <div className="flex max-w-[360px] flex-wrap gap-1.5">
+                      {d.runtexts.map((r, i) => (
+                        <span
+                          key={`${r.text}-${i}`}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-(--glass-1-border) bg-(--fill-subtle) px-2.5 py-1 text-xs"
+                        >
+                          <i
+                            className="inline-block size-2 flex-none rounded-full"
+                            style={{ background: COLOR_VAL[r.color] }}
+                          />
+                          <span className="max-w-[160px] truncate">
+                            {r.text}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
                     <span className="text-(--text-tertiary) italic">
                       {t.dspRuntextDefault}
                     </span>
@@ -465,17 +430,53 @@ export function DisplayAdminMenu({
                 />
               </Field>
             )}
-            <Field
-              label={t.dspRuntext}
-              htmlFor="dsp-runtext"
-              helper={t.dspRuntextHelp}
-            >
-              <Input
-                id="dsp-runtext"
-                placeholder={t.dspRuntextDefault}
-                value={fRuntext}
-                onChange={(e) => setFRuntext(e.target.value)}
-              />
+            <Field label={t.dspRuntext} helper={t.dspRuntextHelp}>
+              <div className="flex flex-col gap-2">
+                {fRuntexts.length === 0 ? (
+                  <p className="rounded-control border border-dashed border-(--border-input) px-3 py-2.5 text-xs text-(--text-tertiary) italic">
+                    {t.dspRtEmpty}
+                  </p>
+                ) : (
+                  fRuntexts.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        aria-label={`${t.dspRuntext} ${i + 1}`}
+                        placeholder={t.dspRuntext}
+                        value={r.text}
+                        onChange={(e) => updateRT(i, { text: e.target.value })}
+                      />
+                      <Select
+                        wrapperClassName="w-[130px] flex-none"
+                        aria-label={`Warna ${i + 1}`}
+                        value={r.color}
+                        onChange={(e) => updateRT(i, { color: e.target.value })}
+                      >
+                        {RUNTEXT_COLORS.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </Select>
+                      <IconButton
+                        danger
+                        aria-label={t.empDel}
+                        onClick={() => removeRT(i)}
+                      >
+                        <Trash2 />
+                      </IconButton>
+                    </div>
+                  ))
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="self-start"
+                  onClick={addRT}
+                >
+                  <Plus />
+                  {t.dspRtAdd}
+                </Button>
+              </div>
             </Field>
             <ToggleRow htmlFor="dsp-active">
               <Checkbox

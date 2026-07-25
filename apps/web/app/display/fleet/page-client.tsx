@@ -112,6 +112,7 @@ export default function DisplayFleetPage() {
   return (
     <DisplayShell
       title={`Fleet ${fleet.digger}`}
+      deviceName={params.get("name") ?? undefined}
       meta={
         <>
           <span className="truncate">{fleet.loc}</span>
@@ -144,7 +145,6 @@ export default function DisplayFleetPage() {
           </div>
         ) : undefined
       }
-      runtext="Fleet berikutnya tampil otomatis — perhatikan unit dan bus antar-jemput Anda."
       stats={[
         {
           icon: <Truck className="text-(--color-primary-bright)" />,

@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Megaphone, Monitor, WifiOff } from "lucide-react";
+import { Monitor, WifiOff } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { LogoBadge } from "@/components/ui/logo";
+
+import { RunningTicker } from "./running-ticker";
 
 /* Shell layar kiosk TV (dilihat ±6 m) — kanvas lebar tetap 1920, TINGGI
    mengikuti rasio layar (tanpa letterbox) via transform:scale(); jam
@@ -30,7 +32,6 @@ export function DisplayShell({
   meta,
   deviceName,
   stats,
-  runtext,
   topBar,
   children,
 }: {
@@ -38,7 +39,6 @@ export function DisplayShell({
   meta?: React.ReactNode;
   deviceName?: string;
   stats: DisplayStat[];
-  runtext?: string;
   topBar?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -217,19 +217,8 @@ export function DisplayShell({
           {children}
         </div>
 
-        {/* running text — nempel dasar layar */}
-        {runtext ? (
-          <div className="absolute inset-x-0 bottom-0 z-1 flex h-16 items-center gap-5 border-t border-(--glass-1-border) bg-(--glass-1-fill) px-14 backdrop-blur-md">
-            <span className="grid size-10 flex-none place-items-center rounded-full border border-(--badge-info-border) bg-(--badge-info-fill)">
-              <Megaphone className="size-5 text-primary-bright" />
-            </span>
-            <div className="relative min-w-0 flex-1 overflow-hidden">
-              <div className="display-marquee w-max animate-[kmarquee_28s_linear_infinite] text-2xl whitespace-nowrap text-(--text-secondary)">
-                {runtext}
-              </div>
-            </div>
-          </div>
-        ) : null}
+        {/* running text — sabuk berjalan (kustom display / master), nempel dasar layar */}
+        <RunningTicker displayName={deviceName} />
       </div>
 
       {/* demo switch (bukan bagian desain kiosk) */}

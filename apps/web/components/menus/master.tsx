@@ -1,10 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Plus, Rows3, Search, Trash2 } from "lucide-react";
+import {
+  Download,
+  Pencil,
+  Play,
+  Plus,
+  Rows3,
+  Search,
+  Trash2,
+  Upload,
+  Volume2,
+} from "lucide-react";
 
 import { MENU_LABELS, type AccessMode, type MenuSlug } from "@/lib/access";
+import { AREA_KERJA, AREA_TIPE } from "@/lib/area-data";
+import { DEPARTEMEN } from "@/lib/departemen-data";
+import {
+  COLOR_VAL,
+  RUNNING_TEXTS,
+  RUNTEXT_COLORS,
+  soundFileByName,
+  SOUNDS,
+  soundSrc,
+  TIMELINE,
+} from "@/lib/display-data";
 import { useI18n } from "@/lib/i18n";
+import { UNITS } from "@/lib/unit-data";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -46,17 +68,19 @@ export type MasterCat =
   | "merk-unit"
   | "kelas-unit"
   | "simper"
+  | "departemen"
   | "area-kerja"
   | "bus"
   | "mess"
-  | "lokasi-excavator"
-  | "running-text";
+  | "running-text"
+  | "sound"
+  | "timeline";
 
-type ColKey = "name" | "a" | "b";
+type ColKey = "name" | "a" | "b" | "c";
 type Col = {
   key: ColKey;
   label: string;
-  kind?: "text" | "time" | "select" | "color" | "multi";
+  kind?: "text" | "time" | "select" | "color" | "file";
   opts?: string[];
 };
 type Entry = {
@@ -64,20 +88,148 @@ type Entry = {
   name: string;
   a: string;
   b: string;
+  c?: string;
   active: boolean;
 };
 
-/* kualifikasi SIMPER dipilih dari Jenis Unit (EGI) — statis */
-const EGI_OPTS = ["HD785", "PC2000", "D375A", "GD825A", "LV", "Bus"];
+/* kode bus = unit dgn jenis BUS (belum ada di fleet saat ini) */
+const BUS_UNIT_CODES = UNITS.filter((u) => u.egiType === "BUS").map(
+  (u) => u.code
+);
 
-const RUNTEXT_TARGETS = ["Semua kiosk", "Display Attendance", "Display Fleet"];
-const RUNTEXT_COLORS = ["Cyan", "Oranye", "Putih", "Merah"];
-const COLOR_VAL: Record<string, string> = {
-  Cyan: "#00D4FF",
-  Oranye: "#E99B2A",
-  Putih: "#FFFFFF",
-  Merah: "#FC3C3B",
+const SAMPLE: Record<MasterCat, Entry[]> = {
+  "jenis-unit": [
+    { id: "g1", name: "EXCAVATOR", a: "", b: "", active: true },
+    { id: "g2", name: "WHEEL EXCAVATOR", a: "", b: "", active: true },
+    { id: "g3", name: "RIGID", a: "", b: "", active: true },
+    { id: "g4", name: "DUMPTRUCK", a: "", b: "", active: true },
+  ],
+  "model-unit": [
+    { id: "m1", name: "EX2600-7BH", a: "", b: "", active: true },
+    { id: "m2", name: "EX2000-7BH", a: "", b: "", active: true },
+    { id: "m3", name: "ZX870LCH-5G", a: "", b: "", active: true },
+    { id: "m4", name: "ZX470LC-5G", a: "", b: "", active: true },
+    { id: "m5", name: "SY215W", a: "", b: "", active: true },
+    { id: "m6", name: "777E", a: "", b: "", active: true },
+    { id: "m7", name: "773E", a: "", b: "", active: true },
+    { id: "m8", name: "SYZ440C", a: "", b: "", active: true },
+    { id: "m9", name: "SYZ320C-8W(R)", a: "", b: "", active: true },
+  ],
+  "merk-unit": [
+    { id: "p1", name: "HITACHI", a: "", b: "", active: true },
+    { id: "p2", name: "SANY", a: "", b: "", active: true },
+    { id: "p3", name: "CATERPILLAR", a: "", b: "", active: true },
+  ],
+  "kelas-unit": [
+    {
+      id: "k1",
+      name: "BIGDIGGER",
+      a: "Excavator besar (250T)",
+      b: "",
+      active: true,
+    },
+    {
+      id: "k2",
+      name: "MEDIUMDIGGER",
+      a: "Excavator sedang (80T)",
+      b: "",
+      active: true,
+    },
+    {
+      id: "k3",
+      name: "SMALLDIGGER",
+      a: "Excavator kecil (40T)",
+      b: "",
+      active: true,
+    },
+    {
+      id: "k4",
+      name: "WHEEL EXCAVATOR",
+      a: "Excavator roda (20T)",
+      b: "",
+      active: true,
+    },
+    {
+      id: "k5",
+      name: "DUMPTRUCKCAT100T",
+      a: "Rigid dump truck 100T",
+      b: "",
+      active: true,
+    },
+    {
+      id: "k6",
+      name: "DUMPTRUCK60T",
+      a: "Rigid dump truck 60T",
+      b: "",
+      active: true,
+    },
+    {
+      id: "k7",
+      name: "DUMPTRUCK40T",
+      a: "Dump truck 40T",
+      b: "",
+      active: true,
+    },
+    {
+      id: "k8",
+      name: "DUMPTRUCK30T",
+      a: "Dump truck 30T",
+      b: "",
+      active: true,
+    },
+  ],
+  simper: [
+    { id: "sp1", name: "F", a: "Full permit", b: "", active: true },
+    { id: "sp2", name: "P", a: "Probation", b: "", active: true },
+  ],
+  departemen: DEPARTEMEN.map((d, i) => ({
+    id: `dp${i + 1}`,
+    name: d.name,
+    a: d.desc,
+    b: "",
+    active: true,
+  })),
+  "area-kerja": AREA_KERJA.map((a) => ({
+    id: a.id,
+    name: a.name,
+    a: a.tipe,
+    b: "",
+    active: true,
+  })),
+  bus: [],
+  mess: [
+    { id: "ms1", name: "Mess A", a: "", b: "", active: true },
+    { id: "ms2", name: "Mess B", a: "", b: "", active: true },
+    { id: "ms3", name: "Mess C", a: "", b: "", active: true },
+  ],
+  /* Running Text, Sound & Timeline berbagi sumber dgn kiosk (lib/display-data) */
+  "running-text": RUNNING_TEXTS.map((r) => ({
+    id: r.id,
+    name: r.text,
+    a: "",
+    b: r.color,
+    active: r.active,
+  })),
+  sound: SOUNDS.map((s) => ({
+    id: s.id,
+    name: s.name,
+    a: s.file,
+    b: "",
+    active: s.active,
+  })),
+  timeline: TIMELINE.map((e) => ({
+    id: e.id,
+    name: e.name,
+    a: e.time,
+    b: e.runningText,
+    c: e.sound,
+    active: e.active,
+  })),
 };
+
+/* opsi dropdown timeline ditarik dari master Running Text & Sound */
+const RUNTEXT_OPTS = RUNNING_TEXTS.map((r) => r.text);
+const SOUND_OPTS = SOUNDS.map((s) => s.name);
 
 function colsFor(
   cat: MasterCat,
@@ -97,123 +249,45 @@ function colsFor(
       ];
     case "simper":
       return [
-        { key: "name", label: "Jenis SIMPER" },
-        { key: "a", label: "Kualifikasi (Jenis Unit)", kind: "multi" },
-        { key: "b", label: "Deskripsi" },
+        { key: "name", label: "Kode" },
+        { key: "a", label: "Tipe SIMPER" },
+      ];
+    case "departemen":
+      return [
+        { key: "name", label: "Departemen" },
+        { key: "a", label: "Deskripsi" },
       ];
     case "area-kerja":
       return [
         { key: "name", label: mdNama },
-        { key: "a", label: thCat },
+        { key: "a", label: thCat, kind: "select", opts: AREA_TIPE },
       ];
     case "bus":
       return [
-        { key: "name", label: "Kode" },
-        { key: "a", label: "Tipe" },
+        { key: "name", label: "Kode", kind: "select", opts: BUS_UNIT_CODES },
         { key: "b", label: mdJam, kind: "time" },
       ];
     case "mess":
-      return [
-        { key: "name", label: mdNama },
-        { key: "a", label: "Blok" },
-      ];
-    case "lokasi-excavator":
-      return [
-        { key: "name", label: mdNama },
-        { key: "a", label: "Area" },
-      ];
+      return [{ key: "name", label: mdNama }];
     case "running-text":
       return [
         { key: "name", label: "Teks" },
-        { key: "a", label: "Target", kind: "select", opts: RUNTEXT_TARGETS },
         { key: "b", label: "Warna", kind: "color", opts: RUNTEXT_COLORS },
+      ];
+    case "sound":
+      return [
+        { key: "name", label: mdNama },
+        { key: "a", label: "File", kind: "file" },
+      ];
+    case "timeline":
+      return [
+        { key: "name", label: mdNama },
+        { key: "a", label: mdJam, kind: "time" },
+        { key: "b", label: "Running Text", kind: "select", opts: RUNTEXT_OPTS },
+        { key: "c", label: "Sound", kind: "select", opts: SOUND_OPTS },
       ];
   }
 }
-
-const SAMPLE: Record<MasterCat, Entry[]> = {
-  "jenis-unit": [
-    { id: "g1", name: "HD785", a: "", b: "", active: true },
-    { id: "g2", name: "PC2000", a: "", b: "", active: true },
-    { id: "g3", name: "D375A", a: "", b: "", active: true },
-    { id: "g4", name: "GD825A", a: "", b: "", active: true },
-    { id: "g5", name: "LV", a: "", b: "", active: false },
-  ],
-  "model-unit": [
-    { id: "m1", name: "HD785-7", a: "", b: "", active: true },
-    { id: "m2", name: "PC2000-8", a: "", b: "", active: true },
-    { id: "m3", name: "D375A-6", a: "", b: "", active: true },
-    { id: "m4", name: "GD825A", a: "", b: "", active: true },
-  ],
-  "merk-unit": [
-    { id: "p1", name: "Komatsu", a: "", b: "", active: true },
-    { id: "p2", name: "Hino", a: "", b: "", active: true },
-    { id: "p3", name: "Mercedes-Benz", a: "", b: "", active: true },
-  ],
-  "kelas-unit": [
-    { id: "k1", name: "HD", a: "Dump truck kelas berat", b: "", active: true },
-    { id: "k2", name: "BIGDIGGER", a: "Excavator besar", b: "", active: true },
-    { id: "k3", name: "BUS", a: "Bus antar-jemput", b: "", active: true },
-    { id: "k4", name: "LV", a: "Light vehicle", b: "", active: true },
-  ],
-  simper: [
-    {
-      id: "s1",
-      name: "BII",
-      a: "HD785, PC2000",
-      b: "Unit tambang besar",
-      active: true,
-    },
-    {
-      id: "s2",
-      name: "BI",
-      a: "LV, Bus",
-      b: "Kendaraan ringan & bus",
-      active: true,
-    },
-    {
-      id: "s3",
-      name: "KIMPER",
-      a: "D375A, GD825A",
-      b: "Alat berat pendukung",
-      active: true,
-    },
-  ],
-  "area-kerja": [
-    { id: "a1", name: "Pit 3", a: "Tambang", active: true, b: "" },
-    { id: "a2", name: "Disposal Utara", a: "Disposal", active: true, b: "" },
-    { id: "a3", name: "Workshop", a: "Support", active: false, b: "" },
-  ],
-  bus: [
-    { id: "b1", name: "BUS-01", a: "Hino RK8", b: "05:30", active: true },
-    { id: "b2", name: "BUS-02", a: "Mercedes OH", b: "17:30", active: true },
-  ],
-  mess: [
-    { id: "ms1", name: "Mess A", a: "Blok 1", b: "", active: true },
-    { id: "ms2", name: "Mess A", a: "Blok 2", b: "", active: true },
-    { id: "ms3", name: "Mess B", a: "Blok 1", b: "", active: true },
-  ],
-  "lokasi-excavator": [
-    { id: "e1", name: "EX-22", a: "Pit 3", b: "", active: true },
-    { id: "e2", name: "EX-07", a: "Disposal Utara", b: "", active: true },
-  ],
-  "running-text": [
-    {
-      id: "t1",
-      name: "Selamat datang di UNIVERSE",
-      a: "Semua kiosk",
-      b: "Cyan",
-      active: true,
-    },
-    {
-      id: "t2",
-      name: "Utamakan keselamatan kerja",
-      a: "Display Fleet",
-      b: "Oranye",
-      active: true,
-    },
-  ],
-};
 
 export function MasterMenu({
   mode,
@@ -238,26 +312,37 @@ export function MasterMenu({
   const [fName, setFName] = React.useState("");
   const [fA, setFA] = React.useState("");
   const [fB, setFB] = React.useState("");
+  const [fC, setFC] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
   const [errName, setErrName] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<Entry | null>(null);
+  // upload file (Sound): input tersembunyi + object URL utk preview file baru
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [fFileUrl, setFFileUrl] = React.useState<string | null>(null);
+  // import/export Excel (stub — logika parsing menyusul)
+  const importRef = React.useRef<HTMLInputElement>(null);
+  const exportStub = () => pushToast("info", t.toastExportT, `${cat}.xlsx`);
 
   const rows = entries.filter((r) => {
     if (stF === "1" && !r.active) return false;
     if (stF === "0" && r.active) return false;
     const needle = q.trim().toLowerCase();
     if (!needle) return true;
-    return `${r.name} ${r.a} ${r.b}`.toLowerCase().includes(needle);
+    return `${r.name} ${r.a} ${r.b} ${r.c ?? ""}`
+      .toLowerCase()
+      .includes(needle);
   });
   const pg = usePagination(rows);
 
   function openAdd() {
     setEditId(null);
-    setFName("");
+    setFName(cols.find((c) => c.key === "name")?.opts?.[0] ?? "");
     setFA(cols.find((c) => c.key === "a")?.opts?.[0] ?? "");
     setFB(cols.find((c) => c.key === "b")?.opts?.[0] ?? "");
+    setFC(cols.find((c) => c.key === "c")?.opts?.[0] ?? "");
     setFActive(true);
     setErrName(false);
+    setFFileUrl(null);
     setDlgOpen(true);
   }
   function openEdit(r: Entry) {
@@ -265,8 +350,10 @@ export function MasterMenu({
     setFName(r.name);
     setFA(r.a);
     setFB(r.b);
+    setFC(r.c ?? "");
     setFActive(r.active);
     setErrName(false);
+    setFFileUrl(null);
     setDlgOpen(true);
   }
   function save(e: React.FormEvent) {
@@ -277,7 +364,9 @@ export function MasterMenu({
     if (editId) {
       setEntries((prev) =>
         prev.map((r) =>
-          r.id === editId ? { ...r, name, a: fA, b: fB, active: fActive } : r
+          r.id === editId
+            ? { ...r, name, a: fA, b: fB, c: fC, active: fActive }
+            : r
         )
       );
       pushToast("success", t.mdEditToastT, name);
@@ -288,6 +377,7 @@ export function MasterMenu({
           name,
           a: fA,
           b: fB,
+          c: fC,
           active: fActive,
         },
         ...prev,
@@ -304,9 +394,15 @@ export function MasterMenu({
   }
 
   const fieldValue = (key: ColKey) =>
-    key === "name" ? fName : key === "a" ? fA : fB;
+    key === "name" ? fName : key === "a" ? fA : key === "b" ? fB : fC;
   const setFieldValue = (key: ColKey, v: string) =>
-    key === "name" ? setFName(v) : key === "a" ? setFA(v) : setFB(v);
+    key === "name"
+      ? setFName(v)
+      : key === "a"
+        ? setFA(v)
+        : key === "b"
+          ? setFB(v)
+          : setFC(v);
 
   return (
     <div className="flex flex-col gap-6">
@@ -340,6 +436,33 @@ export function MasterMenu({
               <option value="1">{t.stAktif}</option>
               <option value="0">{t.stNonaktif}</option>
             </Select>
+            {/* Import/Export Excel — sejajar toolbar spt Database Unit (stub) */}
+            <Button variant="secondary" onClick={exportStub}>
+              <Download />
+              {t.export}
+            </Button>
+            {canW ? (
+              <>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".csv,.xlsx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) pushToast("success", `Import ${catLabel}`, f.name);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => importRef.current?.click()}
+                >
+                  <Upload />
+                  {t.udbImport}
+                </Button>
+              </>
+            ) : null}
           </ToolbarGroup>
         </Toolbar>
 
@@ -363,21 +486,9 @@ export function MasterMenu({
                         <span className="inline-flex items-center gap-2">
                           <i
                             className="inline-block size-3 rounded"
-                            style={{ background: COLOR_VAL[r[c.key]] }}
+                            style={{ background: COLOR_VAL[r[c.key] ?? ""] }}
                           />
                           {r[c.key]}
-                        </span>
-                      ) : c.kind === "multi" ? (
-                        <span className="flex flex-wrap gap-1.5">
-                          {r[c.key]
-                            .split(",")
-                            .map((v) => v.trim())
-                            .filter(Boolean)
-                            .map((v) => (
-                              <Badge key={v} variant="info">
-                                {v}
-                              </Badge>
-                            ))}
                         </span>
                       ) : c.key === "name" ? (
                         <span className="font-semibold">{r.name}</span>
@@ -394,23 +505,50 @@ export function MasterMenu({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {canW ? (
-                      <div className="flex gap-2">
+                    <div className="flex gap-2">
+                      {cat === "sound" && r.a ? (
                         <IconButton
-                          aria-label={t.mdEditT}
-                          onClick={() => openEdit(r)}
+                          aria-label="Putar"
+                          onClick={() =>
+                            void new Audio(soundSrc(r.a)).play().catch(() => {})
+                          }
                         >
-                          <Pencil />
+                          <Volume2 />
                         </IconButton>
+                      ) : null}
+                      {cat === "timeline" ? (
                         <IconButton
-                          danger
-                          aria-label={t.empDel}
-                          onClick={() => setDelTarget(r)}
+                          aria-label="Preview"
+                          onClick={() => {
+                            const file = soundFileByName(r.c ?? "");
+                            if (file)
+                              void new Audio(soundSrc(file))
+                                .play()
+                                .catch(() => {});
+                            pushToast("success", r.b, r.name);
+                          }}
                         >
-                          <Trash2 />
+                          <Play />
                         </IconButton>
-                      </div>
-                    ) : null}
+                      ) : null}
+                      {canW ? (
+                        <>
+                          <IconButton
+                            aria-label={t.mdEditT}
+                            onClick={() => openEdit(r)}
+                          >
+                            <Pencil />
+                          </IconButton>
+                          <IconButton
+                            danger
+                            aria-label={t.empDel}
+                            onClick={() => setDelTarget(r)}
+                          >
+                            <Trash2 />
+                          </IconButton>
+                        </>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -473,38 +611,56 @@ export function MasterMenu({
                     </option>
                   ))}
                 </Select>
-              ) : c.kind === "multi" ? (
-                /* kualifikasi Jenis Unit — grid checkbox, nilai csv */
-                (() => {
-                  const vals = fieldValue(c.key)
-                    .split(",")
-                    .map((v) => v.trim())
-                    .filter(Boolean);
-                  return (
-                    <div className="grid max-h-44 grid-cols-2 gap-x-3 gap-y-1.5 overflow-y-auto rounded-control border border-(--glass-1-border) bg-(--fill-subtle) p-3">
-                      {EGI_OPTS.map((o) => {
-                        const checked = vals.includes(o);
-                        return (
-                          <label
-                            key={o}
-                            className="flex cursor-pointer items-center gap-2 text-sm"
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onChange={() => {
-                                const next = checked
-                                  ? vals.filter((x) => x !== o)
-                                  : [...vals, o];
-                                setFieldValue(c.key, next.join(", "));
-                              }}
-                            />
-                            {o}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  );
-                })()
+              ) : c.kind === "file" ? (
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={fileRef}
+                    id={`md-f-${c.key}`}
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setFieldValue(c.key, f.name);
+                        setFFileUrl(URL.createObjectURL(f));
+                      }
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload />
+                    Pilih file
+                  </Button>
+                  {fieldValue(c.key) ? (
+                    <>
+                      <span className="min-w-0 flex-1 truncate text-sm text-(--text-secondary)">
+                        {fieldValue(c.key)}
+                      </span>
+                      <IconButton
+                        type="button"
+                        aria-label="Putar"
+                        onClick={() =>
+                          void new Audio(
+                            fFileUrl ?? soundSrc(fieldValue(c.key))
+                          )
+                            .play()
+                            .catch(() => {})
+                        }
+                      >
+                        <Volume2 />
+                      </IconButton>
+                    </>
+                  ) : (
+                    <span className="flex-1 text-sm text-(--text-tertiary) italic">
+                      Belum ada file
+                    </span>
+                  )}
+                </div>
               ) : c.kind === "time" ? (
                 <Input
                   id={`md-f-${c.key}`}

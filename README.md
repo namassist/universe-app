@@ -48,8 +48,7 @@ bun run lint:fix       # eslint --fix every package
   isolated linker only exposes a package's deps inside that package, so a plugin
   declared in `apps/web` cannot be resolved when the tool runs from the root.
   Keep new shared tooling at the root for the same reason.
-- **Prettier style is `semi: true`, double quotes, `printWidth: 80`** — the same
-  as the sibling `universe` repo, on purpose, so code reads the same across both.
+- **Prettier style is `semi: true`, double quotes, `printWidth: 80`.**
   `apps/web` extends it with import sorting and the Tailwind class sorter.
 - **No arbitrary hex colors in `className`** (`bg-[#fff]`) — ESLint rejects them;
   use a design token from `app/globals.css`.
@@ -77,9 +76,9 @@ that installed it. Bump it later with `bunx skills update`.
 ## Database
 
 Postgres via Drizzle, Redis via ioredis. Both live in the shared dev containers
-under `~/Workspaces/databases`, but this project owns its own Postgres role and
-database (`universe_app`) and its own Redis db index (2) — `universe` is a
-different project's database, do not point at it.
+under `~/Workspaces/databases`, which host several projects. This one owns the
+Postgres role and database `universe_app` and Redis db index 2 — never point at
+another database or index on those containers.
 
 ```bash
 bun run --cwd apps/api db:generate   # schema change -> SQL migration

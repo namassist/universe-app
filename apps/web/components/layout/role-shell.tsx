@@ -6,7 +6,7 @@ import { Topbar } from "./topbar";
 
 /**
  * The authenticated app shell (blob glow + sidebar + topbar + content), minus
- * the reference's session gate/route-guard — role is fixed per route. Wrap in a
+ * any session gate/route-guard — role is fixed per route. Wrap in a
  * RoleProvider (done by each `app/{role}/layout.tsx`).
  */
 export function RoleShell({ children }: { children: React.ReactNode }) {

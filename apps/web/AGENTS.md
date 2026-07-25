@@ -53,7 +53,6 @@ Compound examples already in the system — follow this shape:
    `bg-(--fill-subtle)`, `border-(--divider)`, badge tokens, etc. Arbitrary
    hex in className (`bg-[#fff]`) is already an ESLint error. If a color you
    need does not exist, **add a token to `globals.css` (both dark and light
-   blocks)** — never inline it. Sole inherited exception: the cyan brand-glow
-   `rgba(0,212,255,…)` literals ported from the reference; reuse those exact
-   values when matching that accent, and never introduce any other literal
-   color.
+   blocks)** — never inline it. Sole exception: the cyan brand-glow
+   `rgba(0,212,255,…)` literals; reuse those exact values when matching that
+   accent, and never introduce any other literal color.

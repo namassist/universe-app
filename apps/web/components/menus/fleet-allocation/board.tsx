@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, UserPlus } from "lucide-react";
+import { Upload, UserPlus } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -218,6 +218,7 @@ export function AllocBoard({
 }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const importRef = React.useRef<HTMLInputElement>(null);
   const { role } = useRole();
   const router = useRouter();
 
@@ -227,7 +228,7 @@ export function AllocBoard({
       slots: [...u.slots],
     }))
   );
-  const [spare, setSpare] = React.useState(SPARE_INIT);
+  const [spare] = React.useState(SPARE_INIT);
   const [spareQ, setSpareQ] = React.useState("");
 
   const [filter, setFilter] = React.useState<Filter>("all");
@@ -326,17 +327,6 @@ export function AllocBoard({
     pushToast("info", `${name} ${t.faToastRelT} ${unit.code}`, t.faToastRelD);
   }
 
-  function moveSpare(nik: string, dir: "up" | "down") {
-    setSpare((prev) => {
-      const i = prev.findIndex((s) => s.nik === nik);
-      const j = dir === "up" ? i - 1 : i + 1;
-      if (i < 0 || j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j]!, next[i]!];
-      return next;
-    });
-  }
-
   const spareNeedle = spareQ.trim().toLowerCase();
   const spareShown = spare.filter(
     (s) =>
@@ -382,6 +372,28 @@ export function AllocBoard({
           )}
         </span>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {canEdit ? (
+            <>
+              <input
+                ref={importRef}
+                type="file"
+                accept=".csv,.xlsx"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) pushToast("success", `${t.udbImport} PLAN`, f.name);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                variant="secondary"
+                onClick={() => importRef.current?.click()}
+              >
+                <Upload />
+                {t.udbImport}
+              </Button>
+            </>
+          ) : null}
           <Select
             aria-label="Filter fleet"
             wrapperClassName="w-auto"
@@ -658,7 +670,7 @@ export function AllocBoard({
         </div>
       </Panel>
 
-      {/* pool spare berurutan — urutan = prioritas substitusi */}
+      {/* pool spare — operator kompeten yang belum dapat unit shift ini */}
       <Panel>
         <Toolbar className="mb-2">
           <ToolbarTitle>
@@ -675,7 +687,7 @@ export function AllocBoard({
           </ToolbarGroup>
         </Toolbar>
         <p className="mb-4 text-xs text-(--text-tertiary)">
-          {t.faSpareOrderHint} {t.faSpareSub} {t.faSpareAuto}
+          {t.faSpareSub} {t.faSpareAuto}
         </p>
         {!spareShown.length ? (
           <p className="text-sm text-(--text-tertiary)">
@@ -683,55 +695,27 @@ export function AllocBoard({
           </p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-            {spareShown.map((r) => {
-              const position = spare.indexOf(r);
-              return (
-                <div
-                  key={r.nik}
-                  className="flex items-center gap-3 rounded-icon border border-(--divider) bg-(--fill-subtle) p-3"
-                >
-                  <span className="w-6 flex-none text-center font-mono text-xs font-bold text-(--text-tertiary)">
-                    {position + 1}
+            {spareShown.map((r) => (
+              <div
+                key={r.nik}
+                className="flex items-center gap-3 rounded-icon border border-(--divider) bg-(--fill-subtle) p-3"
+              >
+                <Avatar className="flex-none text-xs">
+                  {initialsOf(r.name)}
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <b
+                    className="block truncate text-[13px] font-semibold"
+                    title={r.name}
+                  >
+                    {r.name}
+                  </b>
+                  <span className="block truncate font-mono text-xs text-(--text-tertiary)">
+                    {r.nik}
                   </span>
-                  <Avatar className="flex-none text-xs">
-                    {initialsOf(r.name)}
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <b
-                      className="block truncate text-[13px] font-semibold"
-                      title={r.name}
-                    >
-                      {r.name}
-                    </b>
-                    <span className="block truncate font-mono text-xs text-(--text-tertiary)">
-                      {r.nik}
-                    </span>
-                  </div>
-                  {canManage && !spareQ.trim() ? (
-                    <span className="flex flex-none flex-col">
-                      <button
-                        type="button"
-                        aria-label={`${r.name} ${t.faSpareUp}`}
-                        disabled={position === 0}
-                        onClick={() => moveSpare(r.nik, "up")}
-                        className="grid size-5 cursor-pointer place-items-center rounded-sm text-(--text-tertiary) hover:bg-(--fill-hover) disabled:cursor-default disabled:opacity-30"
-                      >
-                        <ArrowUp className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`${r.name} ${t.faSpareDown}`}
-                        disabled={position === spare.length - 1}
-                        onClick={() => moveSpare(r.nik, "down")}
-                        className="grid size-5 cursor-pointer place-items-center rounded-sm text-(--text-tertiary) hover:bg-(--fill-hover) disabled:cursor-default disabled:opacity-30"
-                      >
-                        <ArrowDown className="size-3.5" />
-                      </button>
-                    </span>
-                  ) : null}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </Panel>

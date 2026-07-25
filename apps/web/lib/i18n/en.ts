@@ -269,7 +269,7 @@ export const en: Dict = {
   udbImport: "Import",
   udbImpT: "Mass unit import",
   udbImpB:
-    "Upload an .xlsx file per the template — unit code, unit class, unit type, product columns.",
+    "Upload an .xlsx file per the template — unit code, unit class, unit type, brand, simper code, department, machine S/N, engine brand, description columns.",
   udbImpDzTitle: "Drag the unit file here, or click to browse",
   udbImpSummary: "12 rows read — 10 valid · 2 duplicates skipped.",
   udbImpDoBtn: "Import 10 units",
@@ -318,8 +318,11 @@ export const en: Dict = {
   dspContent: "Content",
   dspRuntext: "Running text",
   dspConn: "Connection",
-  dspRuntextHelp: "Taken from Master → Running Text (active entries only).",
-  dspRuntextDefault: "System default",
+  dspRuntextHelp:
+    "Empty = follows Master → Running Text (all active). Add to override for this display only.",
+  dspRuntextDefault: "Follows master",
+  dspRtAdd: "Add text",
+  dspRtEmpty: "None — this display follows master running text.",
   dspFleetHelp:
     "Taken from Fleet Setting — pick ≥1; more than one makes the TV rotate between fleets.",
   dspFleetsCol: "Fleets on screen",
@@ -533,7 +536,7 @@ export const en: Dict = {
   faGenBtn: "Generate",
   faGenToastT: "ACTUAL generated",
   faGenToastD:
-    "Unavailable operators (leave / not checked in / not fit) replaced by spares by priority order & SIMPER.",
+    "Unavailable operators (leave / not checked in / not fit) replaced by spares with matching SIMPER.",
   faAddActual: "Generate",
   faNoActualT: "No ACTUAL for this date + shift yet",
   faNoActualB:
@@ -553,9 +556,6 @@ export const en: Dict = {
   faGugurCuti: "On leave",
   faGugurAbsen: "Not checked in",
   faGugurFtw: "Not fit",
-  faSpareOrderHint: "Order = substitution priority (seniority).",
-  faSpareUp: "move up",
-  faSpareDown: "move down",
   fahTitle: "ACTUAL history",
   fahBack: "Back to list",
   fahDetail: "Details",
@@ -581,7 +581,7 @@ export const en: Dict = {
   faSupportGrp: "Support units",
   faNoteT: "How the two-layer board works (PLAN → ACTUAL)",
   faNoteB:
-    "PLAN pairs each unit with at most 2 fixed operators (different shift crews) — no date & shift; the daily roster decides who runs day/night. Adding the ACTUAL (per date + shift) marks the lineup & FTW as locked and copies PLAN resolved by roster; Generate then replaces operators on leave / not checked in / not fit with same-roster spares by priority order and SIMPER match — units without a valid substitute are recorded as downtime. Once generated, the ACTUAL is final (view-only). The fleet TV display shows ACTUAL.",
+    "PLAN pairs each unit with at most 2 fixed operators (different shift crews) — no date & shift; the daily roster decides who runs day/night. Adding the ACTUAL (per date + shift) marks the lineup & FTW as locked and copies PLAN resolved by roster; Generate then replaces operators on leave / not checked in / not fit with same-roster spares that have a matching SIMPER — units without a valid substitute are recorded as downtime. Once generated, the ACTUAL is final (view-only). The fleet TV display shows ACTUAL.",
   udbSerial: "Serial no.",
   udbErrCode: "Code is required and must be unique.",
   udbErrType: "Required.",

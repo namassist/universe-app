@@ -38,7 +38,7 @@ const item = (slug: MenuSlug, icon: LucideIcon): NavEntry => ({
 });
 
 /**
- * The full navigation tree (grouped like the reference). The sidebar filters
+ * The full navigation tree. The sidebar filters
  * this by the current role's access and hides empty groups; hrefs are made
  * role-relative (`/{role}/{slug}`) at render time.
  */
@@ -93,11 +93,13 @@ export const NAV: NavEntry[] = [
       leaf("merk-unit"),
       leaf("kelas-unit"),
       leaf("simper"),
+      leaf("departemen"),
       leaf("area-kerja"),
       leaf("bus"),
       leaf("mess"),
-      leaf("lokasi-excavator"),
       leaf("running-text"),
+      leaf("sound"),
+      leaf("timeline"),
     ],
   },
   {

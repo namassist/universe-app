@@ -36,7 +36,6 @@ export default function DisplayFingerprintPage() {
     <DisplayShell
       title="Mesin Fingerprint"
       deviceName={deviceName}
-      runtext="Lapor ke IT bila mesin offline lebih dari 5 menit."
       stats={[
         {
           icon: <LayoutGrid className="text-(--color-primary-bright)" />,

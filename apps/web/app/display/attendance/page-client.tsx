@@ -110,7 +110,6 @@ export default function DisplayAttendancePage() {
     <DisplayShell
       title="Attendance — Shift Pagi"
       deviceName={deviceName}
-      runtext="Selamat bekerja — patuhi golden rules dan utamakan keselamatan."
       stats={[
         {
           icon: <Users className="text-(--color-primary-bright)" />,

@@ -3,7 +3,12 @@
  * same person looks identical everywhere. Data-only module, no state.
  */
 
-export type Komp = { jenis: string; exp: string; egis?: string[] };
+export type Simper = {
+  kategori: string; // F (Full permit) / P (Probation) — dari master SIMPER
+  nomor: string;
+  exp: string;
+  skills: string[]; // kode_simper unit yang dikuasai (multi)
+};
 export type EmpStatus = "aktif" | "cuti" | "nonaktif";
 export type Employee = {
   nik: string;
@@ -11,30 +16,32 @@ export type Employee = {
   company: string;
   dept: string;
   pos: string;
-  equip?: string;
   join?: string;
-  exp?: string;
   license?: string;
+  /* medis (ringkas) */
   mcu?: string;
-  medis?: string;
+  mcuExp?: string; // MCU berlaku s/d
+  blood?: string;
+  medis?: string; // riwayat penyakit
+  /* mess & kontak */
   mess?: string;
   kamar?: string;
-  blood?: string;
-  bpjs?: string;
   hp?: string;
   emg?: string;
-  komp: Komp[];
+  simper?: Simper; // satu SIMPER per karyawan (opsional)
   status: EmpStatus;
 };
 
 const UDU = "PT Unggul Dinamika Utama";
 
-/* SIMPER master (static): jenis → kualifikasi Type EGI */
-export const SIMPER_MASTER: Record<string, string[]> = {
-  BII: ["HD785", "PC2000"],
-  BI: ["LV", "Bus"],
-  KIMPER: ["Dozer", "Grader"],
-};
+/* Master SIMPER (statis): tipe F/P */
+export const SIMPER_TYPES = [
+  { kode: "F", nama: "Full permit" },
+  { kode: "P", nama: "Probation" },
+];
+export const SIMPER_LABEL: Record<string, string> = Object.fromEntries(
+  SIMPER_TYPES.map((s) => [s.kode, s.nama])
+);
 
 export const MESS_OPTS = [
   "Mess A — Blok 1",
@@ -47,47 +54,63 @@ export const EMPLOYEES: Employee[] = [
     nik: "OPS-0421",
     name: "Budi Santoso",
     company: UDU,
-    dept: "Operation",
+    dept: "Mining Operation",
     pos: "Driver OHT",
-    equip: "HD785-7",
     join: "2022-03-01",
-    exp: "2027-02-28",
     license: "SIM BII Umum",
     mcu: "Fit",
+    mcuExp: "2027-01-15",
+    blood: "O",
     medis: "—",
     mess: "Mess A — Blok 1",
     kamar: "A-12",
-    blood: "O",
-    bpjs: "0001234567890",
     hp: "0812-3456-7890",
     emg: "Siti Santoso (istri) — 0813-1111-2222",
-    komp: [{ jenis: "BII", exp: "2027-03-14", egis: SIMPER_MASTER["BII"] }],
+    simper: {
+      kategori: "F",
+      nomor: "F-2022-0421",
+      exp: "2027-03-14",
+      skills: ["OHT 777", "OHT 773"],
+    },
     status: "aktif",
   },
   {
     nik: "OPS-0388",
     name: "Andi Wijaya",
     company: UDU,
-    dept: "Operation",
+    dept: "Mining Operation",
     pos: "Operator Excavator",
-    equip: "PC2000-8",
     join: "2021-08-15",
     mcu: "Fit dengan catatan",
+    mcuExp: "2026-09-30",
+    blood: "B",
+    medis: "Hipertensi ringan",
     mess: "Mess A — Blok 2",
     kamar: "A-27",
-    komp: [{ jenis: "BII", exp: "2026-08-02", egis: SIMPER_MASTER["BII"] }],
+    simper: {
+      kategori: "F",
+      nomor: "F-2021-0388",
+      exp: "2026-08-02",
+      skills: ["EXC 2600", "EXC ZX870"],
+    },
     status: "aktif",
   },
   {
     nik: "OPS-0510",
     name: "Rudi Hartono",
     company: UDU,
-    dept: "Operation",
+    dept: "Mining Operation",
     pos: "Driver OHT",
-    equip: "HD785-7",
     join: "2023-01-10",
     mcu: "Fit",
-    komp: [{ jenis: "BII", exp: "2026-07-18", egis: SIMPER_MASTER["BII"] }],
+    mcuExp: "2027-03-01",
+    blood: "A",
+    simper: {
+      kategori: "P",
+      nomor: "P-2023-0510",
+      exp: "2026-07-18",
+      skills: ["OHT 773"],
+    },
     status: "aktif",
   },
   {
@@ -98,19 +121,26 @@ export const EMPLOYEES: Employee[] = [
     pos: "Admin Site",
     join: "2020-05-04",
     mcu: "Fit",
-    komp: [],
+    mcuExp: "2027-02-20",
+    blood: "O",
     status: "aktif",
   },
   {
     nik: "OPS-0111",
     name: "Joko Prasetyo",
     company: UDU,
-    dept: "Operation",
+    dept: "Mining Operation",
     pos: "Driver OHT",
-    equip: "HD785-7",
     join: "2019-11-20",
     mcu: "Fit",
-    komp: [{ jenis: "BII", exp: "2026-06-30", egis: SIMPER_MASTER["BII"] }],
+    mcuExp: "2026-12-10",
+    blood: "AB",
+    simper: {
+      kategori: "F",
+      nomor: "F-2019-0111",
+      exp: "2026-06-30",
+      skills: ["OHT 777"],
+    },
     status: "aktif",
   },
   {
@@ -121,32 +151,38 @@ export const EMPLOYEES: Employee[] = [
     pos: "Dispatcher",
     join: "2022-09-01",
     mcu: "Fit",
-    komp: [],
+    mcuExp: "2027-04-05",
+    blood: "B",
     status: "aktif",
   },
   {
     nik: "OPS-0367",
     name: "Hendra Gunawan",
     company: UDU,
-    dept: "Operation",
-    pos: "Operator Dozer",
-    equip: "D375A-6",
+    dept: "Mining Operation",
+    pos: "Operator Excavator",
     join: "2021-02-08",
     mcu: "Fit",
-    komp: [
-      { jenis: "KIMPER", exp: "2027-01-22", egis: SIMPER_MASTER["KIMPER"] },
-    ],
+    mcuExp: "2026-11-22",
+    blood: "O",
+    simper: {
+      kategori: "F",
+      nomor: "F-2021-0367",
+      exp: "2027-01-22",
+      skills: ["EXC ZX470"],
+    },
     status: "cuti",
   },
   {
     nik: "OPS-0455",
     name: "Fitri Handayani",
     company: UDU,
-    dept: "Operation",
+    dept: "Mining Operation",
     pos: "Checker",
     join: "2023-06-12",
     mcu: "Fit",
-    komp: [],
+    mcuExp: "2027-05-30",
+    blood: "A",
     status: "aktif",
   },
   {
@@ -157,9 +193,14 @@ export const EMPLOYEES: Employee[] = [
     pos: "Mekanik",
     join: "2018-04-02",
     mcu: "Fit",
-    komp: [
-      { jenis: "KIMPER", exp: "2027-05-08", egis: SIMPER_MASTER["KIMPER"] },
-    ],
+    mcuExp: "2027-03-18",
+    blood: "B",
+    simper: {
+      kategori: "F",
+      nomor: "F-2018-0129",
+      exp: "2027-05-08",
+      skills: ["DT R12", "DT R10"],
+    },
     status: "aktif",
   },
   {
@@ -170,7 +211,8 @@ export const EMPLOYEES: Employee[] = [
     pos: "Safety Officer",
     join: "2020-10-19",
     mcu: "Fit",
-    komp: [],
+    mcuExp: "2026-10-19",
+    blood: "O",
     status: "nonaktif",
   },
 ];

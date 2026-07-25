@@ -10,9 +10,11 @@ import {
   Plus,
   Search,
   Trash2,
+  Upload,
 } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import { DEPARTEMEN_NAMES } from "@/lib/departemen-data";
 import {
   EMPLOYEES,
   type Employee as Emp,
@@ -58,7 +60,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
-const DEPTS = ["Operation", "SDI", "HRGA", "Plant"] as const;
+const DEPTS = DEPARTEMEN_NAMES;
 
 function kompVariant(exp: string): BadgeVariant {
   const today = new Date();
@@ -88,6 +90,7 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
     name: string;
   } | null>(null);
   const selAllRef = React.useRef<HTMLInputElement>(null);
+  const importRef = React.useRef<HTMLInputElement>(null);
 
   const fN = DEPTS.filter((d) => fDepts[d]).length;
   const needle = q.trim().toLowerCase();
@@ -223,6 +226,33 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
               <Download />
               {t.export}
             </Button>
+            {canW ? (
+              <>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".csv,.xlsx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f)
+                      pushToast(
+                        "success",
+                        `${t.udbImport} ${t.navEmployees}`,
+                        f.name
+                      );
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => importRef.current?.click()}
+                >
+                  <Upload />
+                  {t.udbImport}
+                </Button>
+              </>
+            ) : null}
           </ToolbarGroup>
         </Toolbar>
 
@@ -274,18 +304,13 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
                   <TableCell className="max-xl:hidden">{r.dept}</TableCell>
                   <TableCell>{r.pos}</TableCell>
                   <TableCell>
-                    {r.komp.length ? (
-                      <div className="flex max-w-[220px] flex-wrap gap-1">
-                        {r.komp.map((k) => (
-                          <Badge
-                            key={k.jenis}
-                            variant={kompVariant(k.exp)}
-                            title={`s/d ${k.exp}`}
-                          >
-                            {k.jenis}
-                          </Badge>
-                        ))}
-                      </div>
+                    {r.simper ? (
+                      <Badge
+                        variant={kompVariant(r.simper.exp)}
+                        title={`${r.simper.nomor} · s/d ${r.simper.exp}`}
+                      >
+                        {r.simper.kategori}
+                      </Badge>
                     ) : (
                       <span className="text-(--text-tertiary)">—</span>
                     )}

@@ -137,7 +137,6 @@ export default function DisplayFitworkPage() {
     <DisplayShell
       title="Fit To Work — Shift Pagi"
       deviceName={deviceName}
-      runtext="Pastikan istirahat cukup sebelum bertugas — keselamatan nomor satu."
       stats={[
         {
           icon: <ClipboardCheck className="text-(--color-primary-bright)" />,

@@ -121,7 +121,7 @@ export function Sidebar() {
         <div
           className={cn(
             "flex-none overflow-hidden transition-[max-height] duration-250 ease-in-out",
-            expanded ? "max-h-[520px] py-2 pb-3" : "max-h-0",
+            expanded ? "max-h-[760px] py-2 pb-3" : "max-h-0",
             collapsed && "hidden max-xl:block"
           )}
         >

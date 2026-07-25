@@ -5,25 +5,21 @@ import { useRouter } from "next/navigation";
 import {
   Briefcase,
   Camera,
+  Heart,
   House,
   IdCard,
-  Plus,
-  Trash2,
   TriangleAlert,
   Upload,
 } from "lucide-react";
 
-import {
-  findEmployee,
-  MESS_OPTS,
-  SIMPER_MASTER,
-  type Komp,
-} from "@/lib/employees-data";
+import { DEPARTEMEN_NAMES } from "@/lib/departemen-data";
+import { findEmployee, MESS_OPTS, SIMPER_TYPES } from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
+import { SIMPER_CODES } from "@/lib/unit-data";
 import { useRole } from "@/components/providers/role-context";
 import { initialsOf } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogActions,
@@ -44,11 +40,14 @@ type Fields = {
   company: string;
   dept: string;
   pos: string;
-  equip: string;
   join: string;
-  exp: string;
   license: string;
+  simperKat: string;
+  simperNomor: string;
+  simperExp: string;
   mcu: string;
+  mcuExp: string;
+  blood: string;
   medis: string;
   mess: string;
   kamar: string;
@@ -58,13 +57,16 @@ const EMPTY: Fields = {
   nama: "",
   nik: "",
   company: "PT Unggul Dinamika Utama",
-  dept: "Operation",
+  dept: "Mining Operation",
   pos: "",
-  equip: "",
   join: "",
-  exp: "",
   license: "",
+  simperKat: "",
+  simperNomor: "",
+  simperExp: "",
   mcu: "Fit",
+  mcuExp: "",
+  blood: "",
   medis: "",
   mess: "",
   kamar: "",
@@ -90,19 +92,22 @@ export function EmployeeForm({ nik }: { nik?: string }) {
           company: record.company,
           dept: record.dept,
           pos: record.pos,
-          equip: record.equip ?? "",
           join: record.join ?? "",
-          exp: record.exp ?? "",
           license: record.license ?? "",
+          simperKat: record.simper?.kategori ?? "",
+          simperNomor: record.simper?.nomor ?? "",
+          simperExp: record.simper?.exp ?? "",
           mcu: record.mcu ?? "Fit",
+          mcuExp: record.mcuExp ?? "",
+          blood: record.blood ?? "",
           medis: record.medis ?? "",
           mess: record.mess ?? "",
           kamar: record.kamar ?? "",
         }
       : EMPTY
   );
-  const [kompRows, setKompRows] = React.useState<Komp[]>(() =>
-    (record?.komp ?? []).map((k) => ({ ...k }))
+  const [skills, setSkills] = React.useState<string[]>(
+    () => record?.simper?.skills ?? []
   );
 
   const [dzLabel, setDzLabel] = React.useState<string | null>(null);
@@ -111,7 +116,6 @@ export function EmployeeForm({ nik }: { nik?: string }) {
   const [errors, setErrors] = React.useState<{
     nama?: boolean;
     nik?: boolean;
-    exp?: boolean;
   }>({});
   const [dirtyDlg, setDirtyDlg] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -121,26 +125,10 @@ export function EmployeeForm({ nik }: { nik?: string }) {
     setDirty(true);
   }
 
-  function kompChange(i: number, key: "jenis" | "exp", value: string) {
-    setKompRows((rows) =>
-      rows.map((r, idx) =>
-        idx === i
-          ? {
-              ...r,
-              [key]: value,
-              ...(key === "jenis" ? { egis: SIMPER_MASTER[value] ?? [] } : {}),
-            }
-          : r
-      )
+  function toggleSkill(code: string) {
+    setSkills((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
     );
-    setDirty(true);
-  }
-  function kompAdd() {
-    setKompRows((rows) => [...rows, { jenis: "", exp: "" }]);
-    setDirty(true);
-  }
-  function kompDel(i: number) {
-    setKompRows((rows) => rows.filter((_, idx) => idx !== i));
     setDirty(true);
   }
 
@@ -159,10 +147,9 @@ export function EmployeeForm({ nik }: { nik?: string }) {
     const errs = {
       nama: !f.nama.trim(),
       nik: !f.nik.trim(),
-      exp: !!(f.exp && f.join && f.exp <= f.join),
     };
     setErrors(errs);
-    if (errs.nama || errs.nik || errs.exp) {
+    if (errs.nama || errs.nik) {
       pushToast("error", t.toastFormErrT, t.toastFormErrD);
       return;
     }
@@ -270,10 +257,9 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   value={f.dept}
                   onChange={(e) => up("dept", e.target.value)}
                 >
-                  <option>Operation</option>
-                  <option>SDI</option>
-                  <option>HRGA</option>
-                  <option>Plant</option>
+                  {DEPARTEMEN_NAMES.map((d) => (
+                    <option key={d}>{d}</option>
+                  ))}
                 </Select>
               </Field>
               <Field label={t.thPos} htmlFor="ef-pos" required>
@@ -281,13 +267,6 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   id="ef-pos"
                   value={f.pos}
                   onChange={(e) => up("pos", e.target.value)}
-                />
-              </Field>
-              <Field label="Equipment type" htmlFor="ef-equip">
-                <Input
-                  id="ef-equip"
-                  value={f.equip}
-                  onChange={(e) => up("equip", e.target.value)}
                 />
               </Field>
               <Field label={t.kJoin} htmlFor="ef-join" required>
@@ -299,92 +278,64 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   onChange={(e) => up("join", e.target.value)}
                 />
               </Field>
-              <Field
-                label={t.kExp}
-                htmlFor="ef-exp"
-                helper={t.helpExp}
-                error={errors.exp}
-                errorMessage={t.errExp}
-              >
-                <Input
-                  id="ef-exp"
-                  type="date"
-                  className="font-mono"
-                  value={f.exp}
-                  onChange={(e) => up("exp", e.target.value)}
-                />
-              </Field>
             </FormGrid>
           </Panel>
 
           <Panel>
             <SectionTitle>
               <IdCard />
-              SIMPER &amp; {t.secMedical}
+              SIMPER &amp; {t.kLicense}
             </SectionTitle>
             <FormGrid>
+              <Field label="Kategori SIMPER" htmlFor="ef-simkat">
+                <Select
+                  id="ef-simkat"
+                  value={f.simperKat}
+                  onChange={(e) => up("simperKat", e.target.value)}
+                >
+                  <option value="">—</option>
+                  {SIMPER_TYPES.map((s) => (
+                    <option key={s.kode} value={s.kode}>
+                      {s.kode} — {s.nama}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Nomor SIMPER" htmlFor="ef-simno">
+                <Input
+                  id="ef-simno"
+                  className="font-mono"
+                  value={f.simperNomor}
+                  onChange={(e) => up("simperNomor", e.target.value)}
+                />
+              </Field>
+              <Field label={t.kValidity} htmlFor="ef-simexp">
+                <Input
+                  id="ef-simexp"
+                  type="date"
+                  className="font-mono"
+                  value={f.simperExp}
+                  onChange={(e) => up("simperExp", e.target.value)}
+                />
+              </Field>
               <Field
-                label={t.efKompT}
-                helper={t.efKompHelp}
+                label="Skill (unit)"
+                helper="Kode simper unit yang dikuasai operator"
                 className="col-span-full"
               >
-                <div className="flex flex-col gap-3">
-                  {kompRows.map((k, i) => (
-                    <div
-                      key={i}
-                      className="grid grid-cols-[220px_1fr_170px_40px] items-center gap-3"
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-control border border-(--glass-1-border) bg-(--fill-subtle) p-3 sm:grid-cols-3">
+                  {SIMPER_CODES.map((code) => (
+                    <label
+                      key={code}
+                      className="flex cursor-pointer items-center gap-2 text-sm"
                     >
-                      <Select
-                        value={k.jenis}
-                        onChange={(e) => kompChange(i, "jenis", e.target.value)}
-                        aria-label="SIMPER"
-                      >
-                        <option value="">—</option>
-                        {Object.keys(SIMPER_MASTER).map((j) => (
-                          <option key={j} value={j}>
-                            {j}
-                          </option>
-                        ))}
-                      </Select>
-                      <div className="flex min-h-9 flex-wrap items-center gap-1.5">
-                        {(k.egis ?? []).length ? (
-                          (k.egis ?? []).map((c) => (
-                            <Badge key={c} variant="info">
-                              {c}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-xs text-(--text-tertiary)">
-                            {t.efKompDerived}
-                          </span>
-                        )}
-                      </div>
-                      <Input
-                        type="date"
-                        className="font-mono"
-                        value={k.exp}
-                        onChange={(e) => kompChange(i, "exp", e.target.value)}
-                        aria-label={t.kValidity}
+                      <Checkbox
+                        checked={skills.includes(code)}
+                        onChange={() => toggleSkill(code)}
                       />
-                      <IconButton
-                        type="button"
-                        danger
-                        onClick={() => kompDel(i)}
-                        aria-label={t.empDel}
-                      >
-                        <Trash2 />
-                      </IconButton>
-                    </div>
+                      {code}
+                    </label>
                   ))}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="self-start"
-                    onClick={kompAdd}
-                  >
-                    <Plus />
-                    {t.efKompAdd}
-                  </Button>
                 </div>
               </Field>
               <Field label="License type" htmlFor="ef-lisensi">
@@ -394,6 +345,15 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   onChange={(e) => up("license", e.target.value)}
                 />
               </Field>
+            </FormGrid>
+          </Panel>
+
+          <Panel>
+            <SectionTitle>
+              <Heart />
+              {t.secMedical}
+            </SectionTitle>
+            <FormGrid>
               <Field label={t.kMcu} htmlFor="ef-mcu">
                 <Select
                   id="ef-mcu"
@@ -403,6 +363,28 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   <option>Fit</option>
                   <option>Fit dengan catatan</option>
                   <option>Unfit sementara</option>
+                </Select>
+              </Field>
+              <Field label="MCU berlaku s/d" htmlFor="ef-mcuexp">
+                <Input
+                  id="ef-mcuexp"
+                  type="date"
+                  className="font-mono"
+                  value={f.mcuExp}
+                  onChange={(e) => up("mcuExp", e.target.value)}
+                />
+              </Field>
+              <Field label={t.kBlood} htmlFor="ef-blood">
+                <Select
+                  id="ef-blood"
+                  value={f.blood}
+                  onChange={(e) => up("blood", e.target.value)}
+                >
+                  <option value="">—</option>
+                  <option>A</option>
+                  <option>B</option>
+                  <option>AB</option>
+                  <option>O</option>
                 </Select>
               </Field>
               <Field

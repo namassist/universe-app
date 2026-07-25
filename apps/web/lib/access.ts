@@ -1,8 +1,7 @@
 /**
  * Static role → menu access matrix. This is the single source of truth for the
  * whole app: which menus a role sees, and read-only ("view") vs read-write
- * ("manage") per menu. Transcribed from the reference seed roles
- * (universe/packages/seed-data/src/users.ts → initialUmRoles). No data layer.
+ * ("manage") per menu. No data layer.
  */
 
 export const ROLES = [
@@ -45,11 +44,13 @@ export const MENU_SLUGS = [
   "merk-unit",
   "kelas-unit",
   "simper",
+  "departemen",
   "area-kerja",
   "bus",
   "mess",
-  "lokasi-excavator",
   "running-text",
+  "sound",
+  "timeline",
   "users",
   "roles",
   "setting",
@@ -58,7 +59,7 @@ export type MenuSlug = (typeof MENU_SLUGS)[number];
 
 export type AccessMode = "view" | "manage";
 
-/** Menu labels (Indonesian), matching the reference nav. */
+/** Menu labels (Indonesian). */
 export const MENU_LABELS: Record<MenuSlug, string> = {
   dashboard: "Dashboard",
   "display-attendance": "Display Attendance",
@@ -77,14 +78,16 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   "database-unit": "Database Unit",
   "jenis-unit": "Jenis Unit",
   "model-unit": "Model Unit",
-  "merk-unit": "Product / Merek",
+  "merk-unit": "Merek",
   "kelas-unit": "Kelas Unit",
   simper: "SIMPER",
+  departemen: "Departemen",
   "area-kerja": "Area Kerja",
   bus: "Bus",
   mess: "Mess",
-  "lokasi-excavator": "Lokasi Excavator",
   "running-text": "Running Text",
+  sound: "Sound",
+  timeline: "Timeline",
   users: "User",
   roles: "Role",
   setting: "Setting",
@@ -150,8 +153,9 @@ export const ROLE_ACCESS: Record<Role, AccessRow> = {
       "fleet-setting",
       "area-kerja",
       "bus",
-      "lokasi-excavator",
       "running-text",
+      "sound",
+      "timeline",
       "setting",
     ]
   ),

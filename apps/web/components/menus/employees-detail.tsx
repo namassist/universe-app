@@ -12,7 +12,11 @@ import {
   Search,
 } from "lucide-react";
 
-import { findEmployee, type Employee } from "@/lib/employees-data";
+import {
+  findEmployee,
+  SIMPER_LABEL,
+  type Employee,
+} from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
@@ -88,7 +92,7 @@ export function EmployeeDetail({ nik }: { nik: string }) {
     );
   }
 
-  const komps = emp.komp;
+  const sim = emp.simper;
   const statusMap: Record<Employee["status"], { v: BadgeVariant; l: string }> =
     {
       aktif: { v: "success", l: "Aktif" },
@@ -113,9 +117,9 @@ export function EmployeeDetail({ nik }: { nik: string }) {
               <Badge variant={st.v} dot>
                 {st.l}
               </Badge>
-              {komps[0] ? (
+              {sim ? (
                 <Badge variant="info" dot>
-                  SIMPER {komps[0].jenis}
+                  SIMPER {sim.kategori}
                 </Badge>
               ) : null}
             </div>
@@ -147,12 +151,8 @@ export function EmployeeDetail({ nik }: { nik: string }) {
             <KvRow label={t.kCompany}>{emp.company}</KvRow>
             <KvRow label={t.thDept}>{emp.dept}</KvRow>
             <KvRow label={t.thPos}>{emp.pos}</KvRow>
-            <KvRow label="Equipment type">{emp.equip}</KvRow>
             <KvRow label={t.kJoin} mono>
               {emp.join}
-            </KvRow>
-            <KvRow label={t.kExp} mono>
-              {emp.exp}
             </KvRow>
           </Kv>
         </Panel>
@@ -162,27 +162,44 @@ export function EmployeeDetail({ nik }: { nik: string }) {
             <IdCard />
             SIMPER &amp; {t.kLicense}
           </SectionTitle>
-          <div className="mb-4 flex flex-col gap-3">
-            {komps.length ? (
-              komps.map((k) => (
-                <div key={k.jenis} className="flex items-center gap-3">
-                  <Badge variant="info">{k.jenis}</Badge>
-                  <span className="text-sm text-(--text-secondary)">
-                    {(k.egis ?? []).join(", ")}
-                  </span>
-                  <span
-                    className={cn("ml-auto font-mono text-xs", expTone(k.exp))}
-                  >
-                    s/d {k.exp}
-                  </span>
+          {sim ? (
+            <>
+              <div className="mb-4 flex items-center gap-3">
+                <Badge variant="info">{sim.kategori}</Badge>
+                <span className="text-sm text-(--text-secondary)">
+                  {SIMPER_LABEL[sim.kategori] ?? sim.kategori} ·{" "}
+                  <span className="font-mono">{sim.nomor}</span>
+                </span>
+                <span
+                  className={cn("ml-auto font-mono text-xs", expTone(sim.exp))}
+                >
+                  s/d {sim.exp}
+                </span>
+              </div>
+              <div className="mb-4">
+                <div className="mb-2 text-xs text-(--text-tertiary)">
+                  Skill (unit)
                 </div>
-              ))
-            ) : (
+                {sim.skills.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {sim.skills.map((sk) => (
+                      <Badge key={sk} variant="neutral">
+                        {sk}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-sm text-(--text-tertiary)">—</span>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="mb-4">
               <span className="text-sm text-(--text-tertiary)">
                 {t.edKompNone}
               </span>
-            )}
-          </div>
+            </div>
+          )}
           <Kv>
             <KvRow label="License type">{emp.license}</KvRow>
           </Kv>
@@ -195,11 +212,11 @@ export function EmployeeDetail({ nik }: { nik: string }) {
           </SectionTitle>
           <Kv>
             <KvRow label={t.kMcu}>{emp.mcu}</KvRow>
-            <KvRow label={t.kMedHistory}>{emp.medis}</KvRow>
-            <KvRow label={t.kBlood}>{emp.blood}</KvRow>
-            <KvRow label="BPJS Kesehatan" mono>
-              {emp.bpjs}
+            <KvRow label="MCU berlaku s/d" mono>
+              {emp.mcuExp}
             </KvRow>
+            <KvRow label={t.kBlood}>{emp.blood}</KvRow>
+            <KvRow label={t.kMedHistory}>{emp.medis}</KvRow>
           </Kv>
         </Panel>
 
