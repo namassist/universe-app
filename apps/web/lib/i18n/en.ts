@@ -345,9 +345,6 @@ export const en: Dict = {
   dspToastAdd: "Display added",
   dspToastEdit: "Display updated",
   dspToastDel: "Display deleted",
-  dspNoteT: "Kiosk = standalone screen",
-  dspNoteB:
-    'Kiosk screens run dark-only fullscreen following the screen aspect ratio (no theme resolver), with a real-time clock, auto-scroll, anti-burn-in pixel-shift, and a connection-lost banner. "Open kiosk screen" shows the real screen fullscreen (Esc to exit).',
   umSub:
     "Application login accounts — invite, link to an employee, and assign roles.",
   umRoleSub: "Per-module RBAC — menus without permission are not rendered.",
@@ -525,9 +522,6 @@ export const en: Dict = {
   flToastAdd: "Fleet added",
   flToastEdit: "Fleet updated",
   flToastDel: "Fleet deleted",
-  flNoteT: "From spreadsheet to formation",
-  flNoteB:
-    "This formation replaces the FLEET + PIT/AREA + BUS NO columns of the old allocation spreadsheet: trucks follow their digger's fleet, and location & bus are set once here. The Fleet Allocation board groups units per fleet and auto-allocation fills in the operators.",
   faKompNone: "Competency does not match this unit",
   faModePlan: "Plan",
   faModeActual: "Actual",
@@ -579,9 +573,6 @@ export const en: Dict = {
   faSpareEmpty: "All competent operators are allocated.",
   faFleetAll: "All fleets",
   faSupportGrp: "Support units",
-  faNoteT: "How the two-layer board works (PLAN → ACTUAL)",
-  faNoteB:
-    "PLAN pairs each unit with at most 2 fixed operators (different shift crews) — no date & shift; the daily roster decides who runs day/night. Adding the ACTUAL (per date + shift) marks the lineup & FTW as locked and copies PLAN resolved by roster; Generate then replaces operators on leave / not checked in / not fit with same-roster spares that have a matching SIMPER — units without a valid substitute are recorded as downtime. Once generated, the ACTUAL is final (view-only). The fleet TV display shows ACTUAL.",
   udbSerial: "Serial no.",
   udbErrCode: "Code is required and must be unique.",
   udbErrType: "Required.",

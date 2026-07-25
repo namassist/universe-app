@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import type { AccessMode } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { DNote, PageTitle } from "@/components/ui/panel";
+import { PageTitle } from "@/components/ui/panel";
 import { Segmented, SegmentedButton } from "@/components/ui/segmented";
 
 import { ActualTable } from "./fleet-allocation/actual-table";
@@ -46,7 +46,6 @@ function FleetAllocationInner({ mode: access }: { mode: AccessMode }) {
       {mode === "plan" ? (
         <>
           <AllocBoard mode="plan" canManage={canManage} />
-          <DNote title={t.faNoteT}>{t.faNoteB}</DNote>
         </>
       ) : (
         <ActualTable canManage={canManage} />

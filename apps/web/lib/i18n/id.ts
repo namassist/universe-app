@@ -345,9 +345,7 @@ export const id = {
   dspToastAdd: "Display ditambahkan",
   dspToastEdit: "Display diperbarui",
   dspToastDel: "Display dihapus",
-  dspNoteT: "Kiosk = layar standalone",
-  dspNoteB:
-    'Layar kiosk berjalan dark-only fullscreen mengikuti rasio layar (tanpa resolver tema), dengan jam real-time, auto-scroll, pixel-shift anti burn-in, dan banner koneksi terputus. Tombol "Buka layar kiosk" menampilkan layar sungguhan fullscreen (Esc untuk keluar).',
+
   umSub:
     "Akun login aplikasi — undang, tautkan ke karyawan, dan atur role-nya.",
   umRoleSub: "RBAC per modul — menu tanpa permission tidak dirender.",
@@ -524,9 +522,6 @@ export const id = {
   flToastAdd: "Fleet ditambahkan",
   flToastEdit: "Fleet diperbarui",
   flToastDel: "Fleet dihapus",
-  flNoteT: "Dari spreadsheet ke formasi",
-  flNoteB:
-    "Formasi ini menggantikan kolom FLEET + PIT/AREA + NO BUS di spreadsheet alokasi lama: truk mengikuti fleet digger-nya, lokasi & bus cukup diatur sekali di sini. Papan Fleet Allocation mengelompokkan unit per fleet dan alokasi otomatis mengisi operatornya.",
   faKompNone: "Kompetensi tidak sesuai unit ini",
   faModePlan: "Plan",
   faModeActual: "Actual",
@@ -578,9 +573,6 @@ export const id = {
   faSpareEmpty: "Semua operator berkompetensi sudah teralokasi.",
   faFleetAll: "Semua fleet",
   faSupportGrp: "Unit support",
-  faNoteT: "Cara kerja papan dua lapis (PLAN → ACTUAL)",
-  faNoteB:
-    "PLAN memasangkan tiap unit dengan maksimal 2 operator tetap (crew shift berbeda) — tanpa tanggal & shift; roster harian menentukan siapa yang jalan pagi/malam. Tambah ACTUAL (per tanggal + shift) menandai lineup & FTW ter-lock dan menyalin PLAN sesuai roster; Generate lalu mengganti operator yang cuti / belum absen / tidak fit dengan spare se-roster ber-SIMPER cocok — unit tanpa pengganti valid tercatat downtime. Setelah tergenerate, ACTUAL bersifat final (view-only). Display TV fleet menampilkan ACTUAL.",
   udbSerial: "No. seri",
   udbErrCode: "Kode wajib diisi dan belum terpakai.",
   udbErrType: "Wajib diisi.",

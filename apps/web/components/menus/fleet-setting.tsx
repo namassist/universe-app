@@ -343,8 +343,6 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
         </PanelFoot>
       </Panel>
 
-      <DNote title={t.flNoteT}>{t.flNoteB}</DNote>
-
       {/* Dialog tambah/edit fleet */}
       <Dialog
         open={dlgOpen}

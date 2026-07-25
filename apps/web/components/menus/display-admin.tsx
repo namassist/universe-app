@@ -30,7 +30,6 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
-  DNote,
   FootSum,
   PageTitle,
   Panel,
@@ -205,7 +204,7 @@ export function DisplayAdminMenu({
           <ToolbarTitle>{t.dspListTitle}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
-              className="w-[240px]"
+              className="w-60"
               placeholder={t.dspSearchPh}
               aria-label={t.dspSearchPh}
               value={q}
@@ -232,7 +231,7 @@ export function DisplayAdminMenu({
               <TableHead>{t.dspRuntext}</TableHead>
               <TableHead>{t.dspConn}</TableHead>
               <TableHead>{t.thStatus}</TableHead>
-              <TableHead className="w-[110px]">{t.thAct}</TableHead>
+              <TableHead className="w-27.5">{t.thAct}</TableHead>
             </tr>
           </TableHeader>
           <TableBody>
@@ -241,7 +240,7 @@ export function DisplayAdminMenu({
                 <TableCell>
                   {kind === "fleet" ? (
                     <div className="flex flex-col gap-1.5">
-                      <div className="flex max-w-[300px] flex-wrap gap-1">
+                      <div className="flex max-w-75 flex-wrap gap-1">
                         {fleetsOf(d)
                           .slice(0, 4)
                           .map((f) => (
@@ -268,7 +267,7 @@ export function DisplayAdminMenu({
                 </TableCell>
                 <TableCell className="text-(--text-secondary)">
                   {d.runtexts.length ? (
-                    <div className="flex max-w-[360px] flex-wrap gap-1.5">
+                    <div className="flex max-w-90 flex-wrap gap-1.5">
                       {d.runtexts.map((r, i) => (
                         <span
                           key={`${r.text}-${i}`}
@@ -278,9 +277,7 @@ export function DisplayAdminMenu({
                             className="inline-block size-2 flex-none rounded-full"
                             style={{ background: COLOR_VAL[r.color] }}
                           />
-                          <span className="max-w-[160px] truncate">
-                            {r.text}
-                          </span>
+                          <span className="max-w-40 truncate">{r.text}</span>
                         </span>
                       ))}
                     </div>
@@ -355,8 +352,6 @@ export function DisplayAdminMenu({
         </PanelFoot>
       </Panel>
 
-      <DNote title={t.dspNoteT}>{t.dspNoteB}</DNote>
-
       <Dialog
         open={dlgOpen}
         onClose={() => setDlgOpen(false)}
@@ -378,7 +373,7 @@ export function DisplayAdminMenu({
                   <span className="flex w-full items-center gap-2">
                     <span>
                       Fleet
-                      <span className="text-(--color-danger-text)"> *</span>
+                      <span className="text-danger-text"> *</span>
                     </span>
                     <Badge variant={fSel.length ? "info" : "neutral"}>
                       {fSel.length} {t.dspPicked}
