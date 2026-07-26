@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   Download,
   Pencil,
-  Play,
   Plus,
   Rows3,
   Search,
@@ -20,10 +19,11 @@ import {
   COLOR_VAL,
   RUNNING_TEXTS,
   RUNTEXT_COLORS,
-  soundFileByName,
   SOUNDS,
   soundSrc,
   TIMELINE,
+  TIMELINE_ACTION_LABELS,
+  timelineActionLabel,
 } from "@/lib/display-data";
 import { useI18n } from "@/lib/i18n";
 import { UNITS } from "@/lib/unit-data";
@@ -221,15 +221,11 @@ const SAMPLE: Record<MasterCat, Entry[]> = {
     id: e.id,
     name: e.name,
     a: e.time,
-    b: e.runningText,
-    c: e.sound,
+    b: timelineActionLabel(e.action),
+    c: "",
     active: e.active,
   })),
 };
-
-/* opsi dropdown timeline ditarik dari master Running Text & Sound */
-const RUNTEXT_OPTS = RUNNING_TEXTS.map((r) => r.text);
-const SOUND_OPTS = SOUNDS.map((s) => s.name);
 
 function colsFor(
   cat: MasterCat,
@@ -281,10 +277,14 @@ function colsFor(
       ];
     case "timeline":
       return [
-        { key: "name", label: mdNama },
+        { key: "name", label: "Nama Tahap" },
         { key: "a", label: mdJam, kind: "time" },
-        { key: "b", label: "Running Text", kind: "select", opts: RUNTEXT_OPTS },
-        { key: "c", label: "Sound", kind: "select", opts: SOUND_OPTS },
+        {
+          key: "b",
+          label: "Aksi",
+          kind: "select",
+          opts: TIMELINE_ACTION_LABELS,
+        },
       ];
   }
 }
@@ -514,21 +514,6 @@ export function MasterMenu({
                           }
                         >
                           <Volume2 />
-                        </IconButton>
-                      ) : null}
-                      {cat === "timeline" ? (
-                        <IconButton
-                          aria-label="Preview"
-                          onClick={() => {
-                            const file = soundFileByName(r.c ?? "");
-                            if (file)
-                              void new Audio(soundSrc(file))
-                                .play()
-                                .catch(() => {});
-                            pushToast("success", r.b, r.name);
-                          }}
-                        >
-                          <Play />
                         </IconButton>
                       ) : null}
                       {canW ? (

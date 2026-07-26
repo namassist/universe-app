@@ -1,7 +1,7 @@
 /**
- * Sumber tunggal untuk konten kiosk/display: Running Text, Sound, dan Timeline.
- * Dipakai bersama oleh master menu (`components/menus/master.tsx`) dan layar
- * kiosk (`app/display/*`). Ubah di sini → master & display ikut berubah.
+ * Sumber tunggal data master terkait display & alokasi: Running Text, Sound,
+ * dan Timeline (= jadwal alokasi awal shift). Dipakai bersama oleh master menu
+ * (`components/menus/master.tsx`) dan layar kiosk (`app/display/*`).
  * (App statis tanpa persistence — ini data contoh.)
  */
 
@@ -20,15 +20,37 @@ export type SoundClip = {
   active: boolean;
 };
 
-export type TimelineEvent = {
+/* Timeline = JADWAL ALOKASI (bukan pengumuman display): tahapan proses
+   pengisian unit di awal shift, editable & bisa ditambah. */
+export type TimelineAction =
+  | "ftw-deadline"
+  | "finger-in"
+  | "finger-ingest"
+  | "spare-validate"
+  | "bus-depart"
+  | "other";
+
+export const TIMELINE_ACTIONS: { value: TimelineAction; label: string }[] = [
+  { value: "ftw-deadline", label: "Batas upload FTW" },
+  { value: "finger-in", label: "Batas finger in" },
+  { value: "finger-ingest", label: "Ambil data finger" },
+  { value: "spare-validate", label: "Validasi spare ke unit" },
+  { value: "bus-depart", label: "Bus berangkat" },
+  { value: "other", label: "Lainnya" },
+];
+
+export const TIMELINE_ACTION_LABELS = TIMELINE_ACTIONS.map((a) => a.label);
+
+export const timelineActionLabel = (v: TimelineAction): string =>
+  TIMELINE_ACTIONS.find((a) => a.value === v)?.label ?? v;
+
+export type TimelineStage = {
   id: string;
+  /** nama tahap */
   name: string;
   /** "HH:MM" 24 jam */
   time: string;
-  /** cocok dengan RunningText.text */
-  runningText: string;
-  /** cocok dengan SoundClip.name */
-  sound: string;
+  action: TimelineAction;
   active: boolean;
 };
 
@@ -65,29 +87,40 @@ export const soundSrc = (file: string): string => `/sounds/${file}`;
 export const soundFileByName = (name: string): string | undefined =>
   SOUNDS.find((s) => s.active && s.name === name)?.file;
 
-export const TIMELINE: TimelineEvent[] = [
+export const TIMELINE: TimelineStage[] = [
   {
     id: "tl1",
-    name: "Masuk Kerja",
-    time: "07:00",
-    runningText: "Selamat datang di UNIVERSE",
-    sound: "Bel Masuk",
+    name: "Batas Upload FTW",
+    time: "04:45",
+    action: "ftw-deadline",
     active: true,
   },
   {
     id: "tl2",
-    name: "Istirahat",
-    time: "12:00",
-    runningText: "Utamakan keselamatan kerja",
-    sound: "Sirene",
+    name: "Batas Finger In",
+    time: "05:20",
+    action: "finger-in",
     active: true,
   },
   {
     id: "tl3",
-    name: "Pulang Kerja",
-    time: "17:00",
-    runningText: "Selamat datang di UNIVERSE",
-    sound: "Bel Pulang",
+    name: "Ambil Data Finger",
+    time: "05:21",
+    action: "finger-ingest",
+    active: true,
+  },
+  {
+    id: "tl4",
+    name: "Validasi Spare",
+    time: "05:25",
+    action: "spare-validate",
+    active: true,
+  },
+  {
+    id: "tl5",
+    name: "Bus Berangkat",
+    time: "05:30",
+    action: "bus-depart",
     active: true,
   },
 ];
@@ -95,10 +128,6 @@ export const TIMELINE: TimelineEvent[] = [
 /** Running text aktif — bahan sabuk ticker di kiosk. */
 export const activeRunningTexts = (): RunningText[] =>
   RUNNING_TEXTS.filter((r) => r.active);
-
-/** Event timeline aktif yang jatuh tepat pada jam "HH:MM", bila ada. */
-export const timelineAt = (hhmm: string): TimelineEvent | undefined =>
-  TIMELINE.find((e) => e.active && e.time === hhmm);
 
 /* ------------------------------------------------------------------ *
  * Daftar display (dikelola di menu Display admin, ditonton di kiosk).
