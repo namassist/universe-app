@@ -76,8 +76,39 @@ the data once it lands.
 
 ### Roles
 
-Access is a static role→menu matrix (`apps/web/lib/access.ts`); each role is
-scoped to how much of the workforce it can see:
+Access is server-enforced. Roles are database rows, seeded with the six below
+and editable at runtime through the Roles screen; permissions are rows of
+(role, menu slug, mode) where mode is `view` or `manage`, and the absence of a
+row means no access. `MENU_SLUGS` stays static in `@universe/contracts` — a
+slug names a page that exists in code — so menus are a code change while roles
+are data.
+
+Every role also carries a data **scope** (`all` / `dept` / `self`) that filters
+what it may see. `dept` and `self` both resolve through the caller's NIK to its
+employee record, so both require the account to carry one; departemen is
+deliberately not duplicated onto the account.
+
+Sessions are opaque ids in Redis, delivered as an httpOnly cookie to the web
+app or as an `Authorization: Bearer` header to a mobile client — one session
+store, two transports. Nothing about identity or permissions travels in the
+token, which is what lets a permission revoked through the Roles screen apply
+on the caller's very next request rather than at token expiry. A web session
+slides on a 4-hour idle window but expires 12 hours after issuance regardless:
+one shift's length, so a session left open on a shared terminal does not carry
+into the next crew's shift.
+
+Display TVs are a third kind of principal: paired once through a single-use
+link, read-only, confined to `/display/*`, and revocable individually. They
+carry no role, no scope, and no NIK. Their `online` state is derived from a
+heartbeat that nothing sends yet — see "Not done yet" before reading anything
+into a TV that reports `Offline`.
+
+The web middleware and shell are user experience, not the boundary — every API
+route re-checks session, permission, and scope independently. Accounts are
+provisioned in bulk by uploading a spreadsheet; initial and reset passwords
+come from configuration and cannot survive first login.
+
+The six seeded roles, each scoped to how much of the workforce it can see:
 
 - **Superadmin** — workforce across every division; read/write on all menus.
 - **Admin** — own division only. Writes Employees, Roster Data, Roster Revision,
@@ -107,7 +138,7 @@ leave room to grow past it:
   sample of it.
 - **Secure.** The data is workforce PII and attendance — who is fit, who showed
   up, who is on leave. Role scoping (the matrix above) is an access boundary, not
-  a UI convenience, and it rides on real auth once endpoints exist; FTW and
+  a UI convenience, and it is enforced on every API route; FTW and
   fingerprint data crossing from external apps is read-only and never widened by
   UNIVERSE.
 - **Fast.** The whole allocation runs against a five-minute window — spares are
@@ -115,10 +146,11 @@ leave room to grow past it:
   have to settle in seconds, because every minute of delay is a minute a fit
   operator waits for a unit assignment.
 
-> The web app is currently a **static design port** — sample data, no
-> persistence, mutations are toast-only. The allocation engine, the configurable
-> timeline, and the external FTW/fingerprint integrations above are the target
-> the design is built toward, not yet wired to the API.
+> Authentication, RBAC, and User Management are wired to the API. Every other
+> menu is still a **static design port** — sample data, no persistence,
+> mutations are toast-only. The allocation engine, the configurable timeline,
+> and the external FTW/fingerprint integrations above are the target the design
+> is built toward, not yet wired to the API.
 
 ## Getting started
 
@@ -126,10 +158,16 @@ leave room to grow past it:
 bun install
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
-# fill in DATABASE_URL, then:
+# fill in DATABASE_URL, SUPERADMIN_PASSWORD and DEFAULT_USER_PASSWORD, then:
 bun run --cwd apps/api db:migrate
+bun run --cwd apps/api db:seed   # six roles + a bootstrap superadmin
 bun run dev          # turbo runs api + web together
 ```
+
+Sign in at http://localhost:3000/login with `SUPERADMIN_IDENTIFIER` and
+`SUPERADMIN_PASSWORD`. The seed is idempotent, so re-running it is safe — it
+recreates the bootstrap account if it is ever lost, and leaves roles an
+administrator has edited alone.
 
 - Web: http://localhost:3000
 - API: http://localhost:3001/health — reports `database` and `cache` separately, 503 if either is down
@@ -193,6 +231,7 @@ another database or index on those containers.
 ```bash
 bun run --cwd apps/api db:generate   # schema change -> SQL migration
 bun run --cwd apps/api db:migrate    # apply pending migrations
+bun run --cwd apps/api db:seed       # roles, permissions, bootstrap superadmin
 bun run --cwd apps/api db:studio     # browse data
 ```
 
@@ -287,9 +326,24 @@ types from Eden and OpenAPI instead.
 
 ## Not done yet
 
-- **Auth** — decide before writing more endpoints. Web can use httpOnly cookies,
-  mobile cannot; you want one session store serving cookies _and_ bearer tokens,
-  not two auth systems. Retrofitting this touches every route.
+- **TLS, and the deployment target it depends on.** On-site LAN or cloud is
+  still open, and TLS with it. This is what `COOKIE_SECURE` is waiting on: the
+  flag is explicit configuration rather than a derivation of `NODE_ENV`,
+  because a browser silently discards a `Secure` cookie over plain HTTP, so
+  tying it to the environment would break login in exactly the setup that
+  needs it most. Until TLS terminates in front of the API, passwords cross the
+  network in the clear at login and a session cookie can be copied and
+  replayed by anyone on the same network. An internal CA is sufficient on a
+  closed network; this should land before real accounts exist.
+- **A paired TV never reports in, so it always reads Offline.** The heartbeat
+  endpoint exists and works — `GET /v1/display/:kind` stamps `last_seen_at` and
+  the device registry derives `online` and a last-seen label from it — but no
+  client calls it. The four kiosk pages under `app/display/` are still the
+  static design port and make no API request at all, so `last_seen_at` stays
+  null in real use and every device shows `Offline · belum pernah` even while
+  its screen is on. This is a missing caller, not a broken feature: one poll
+  from each kiosk page brings it to life. It lands with the display
+  configuration change, which is when those pages stop being static anyway.
 - **Redis is unauthenticated.** The shared dev container has no password and no
   ACL, so the db index in `REDIS_URL` is a convention between projects, not a
   boundary — anything on this machine can read or flush our keys. Fine for dev,
@@ -298,8 +352,8 @@ types from Eden and OpenAPI instead.
   web does. If Flutter/native, it lives outside this repo and consumes the
   OpenAPI spec instead.
 
-## Deploy
+## Deploy server on-site
 
-`apps/api` is a long-lived Bun process — Fly.io, Railway, or Docker on a VPS.
-Not serverless: mobile clients need a stable endpoint, and cold starts hurt.
-`apps/web` goes to Vercel. They deploy separately.
+<!-- `apps/api`  is a long-lived Bun process — Fly.io, Railway, or Docker on a VPS. -->
+<!-- Not serverless: mobile clients need a stable endpoint, and cold starts hurt. -->
+<!-- `apps/web` goes to Vercel. They deploy separately. -->

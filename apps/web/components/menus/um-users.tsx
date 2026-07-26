@@ -1,10 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
   CheckCircle2,
   Download,
+  KeyRound,
   Pencil,
   Plus,
   Search,
@@ -13,11 +16,11 @@ import {
 } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import { api, errorMessage } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv";
-import { EMPLOYEES } from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
-import { ROLES_INIT, USERS_INIT, type UmUser } from "@/lib/um-data";
-import { AsyncSelect, type AsyncOption } from "@/components/ui/async-select";
+import { rolesQueryOptions } from "@/lib/queries/roles";
+import { usersKey, usersQueryOptions, type UserRow } from "@/lib/queries/users";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -51,127 +54,177 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
-
-type EmpRow = { nik: string; name: string };
-
-/* pencarian karyawan tertaut — lokal atas data contoh */
-async function loadEmployees(search: string): Promise<AsyncOption<EmpRow>[]> {
-  const needle = search.trim().toLowerCase();
-  return EMPLOYEES.filter(
-    (e) =>
-      !needle ||
-      e.name.toLowerCase().includes(needle) ||
-      e.nik.toLowerCase().includes(needle)
-  )
-    .slice(0, 20)
-    .map((e) => ({
-      value: e.nik,
-      label: e.name,
-      row: { nik: e.nik, name: e.name },
-    }));
-}
 
 export function UmUsersMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const canW = mode === "manage";
-  const impRef = React.useRef<HTMLInputElement>(null);
 
-  const [users, setUsers] = React.useState<UmUser[]>(USERS_INIT);
+  const users = useQuery(usersQueryOptions);
+  const roles = useQuery(rolesQueryOptions);
+
   const [q, setQ] = React.useState("");
   const [statusF, setStatusF] = React.useState("all");
   const [roleF, setRoleF] = React.useState("all");
 
   const roleName = (id: string) =>
-    ROLES_INIT.find((r) => r.id === id)?.name ?? id;
+    roles.data?.find((r) => r.id === id)?.name ?? id;
 
-  const needle = q.trim().toLowerCase();
-  const rows = users.filter((u) => {
+  const rows = (users.data ?? []).filter((u) => {
     if (statusF === "on" && !u.active) return false;
     if (statusF === "off" && u.active) return false;
-    if (roleF !== "all" && !u.roleIds.includes(roleF)) return false;
+    if (roleF !== "all" && u.roleId !== roleF) return false;
+    const needle = q.trim().toLowerCase();
     if (!needle) return true;
     return (
-      u.email.toLowerCase().includes(needle) ||
-      (u.name ?? "").toLowerCase().includes(needle) ||
+      (u.email ?? "").toLowerCase().includes(needle) ||
+      u.name.toLowerCase().includes(needle) ||
       (u.nik ?? "").toLowerCase().includes(needle)
     );
   });
   const pg = usePagination(rows);
-  const activeN = users.filter((u) => u.active).length;
+  const activeN = (users.data ?? []).filter((u) => u.active).length;
+
+  /* Mutations invalidate their key rather than router.refresh(): the refetch
+     is scoped to the affected query instead of re-rendering the whole route. */
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: usersKey });
+
+  const save = useMutation({
+    mutationFn: async (input: {
+      id: string | null;
+      email: string | null;
+      nik: string | null;
+      name: string;
+      roleId: string;
+      active: boolean;
+    }) => {
+      const { id, ...body } = input;
+      const result = id
+        ? await api.v1.users({ id }).patch(body)
+        : await api.v1.users.post({
+            email: body.email ?? undefined,
+            nik: body.nik ?? undefined,
+            name: body.name,
+            roleId: body.roleId,
+            active: body.active,
+          });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (_data, input) => {
+      await invalidate();
+      const label = input.email ?? input.nik ?? input.name;
+      if (input.id) pushToast("success", t.umToastUserEdit, label);
+      else
+        pushToast("success", t.umToastInvite, `${label} — ${t.umToastInviteD}`);
+      setDlgOpen(false);
+    },
+    onError: (error) =>
+      pushToast("error", t.umToastUserEdit, errorMessage(error, t.loginErr)),
+  });
+
+  const setActiveM = useMutation({
+    mutationFn: async (input: { user: UserRow; active: boolean }) => {
+      const { error } = await api.v1
+        .users({ id: input.user.id })
+        .patch({ active: input.active });
+      if (error) throw error;
+    },
+    onSuccess: async (_d, input) => {
+      await invalidate();
+      const label = input.user.email ?? input.user.nik ?? input.user.name;
+      if (input.active)
+        pushToast("success", t.umToastOn, `${label} — ${t.umToastOnD}`);
+      else pushToast("info", t.umToastOff, `${label} — ${t.umToastOffD}`);
+    },
+    onError: (error) =>
+      pushToast("error", t.umOff, errorMessage(error, t.loginErr)),
+  });
+
+  const resetPw = useMutation({
+    mutationFn: async (user: UserRow) => {
+      const { error } = await api.v1
+        .users({ id: user.id })
+        ["reset-password"].post();
+      if (error) throw error;
+    },
+    onSuccess: async (_d, user) => {
+      await invalidate();
+      pushToast(
+        "success",
+        t.umResetDoneT,
+        `${user.email ?? user.nik ?? user.name} — ${t.umResetDoneD}`
+      );
+      setResetTarget(null);
+    },
+    onError: (error) =>
+      pushToast("error", t.umResetT, errorMessage(error, t.loginErr)),
+  });
 
   /* dialog tambah/edit */
   const [dlgOpen, setDlgOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<UmUser | null>(null);
+  const [editing, setEditing] = React.useState<UserRow | null>(null);
   const [fEmail, setFEmail] = React.useState("");
-  const [fKar, setFKar] = React.useState("");
-  const [fRoles, setFRoles] = React.useState<Record<string, boolean>>({});
+  const [fNik, setFNik] = React.useState("");
+  const [fName, setFName] = React.useState("");
+  const [fRole, setFRole] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
-  const [err, setErr] = React.useState(false);
-  const [offTarget, setOffTarget] = React.useState<UmUser | null>(null);
+  const [err, setErr] = React.useState<string | null>(null);
+  const [offTarget, setOffTarget] = React.useState<UserRow | null>(null);
+  const [resetTarget, setResetTarget] = React.useState<UserRow | null>(null);
 
   function openAdd() {
     setEditing(null);
     setFEmail("");
-    setFKar("");
-    setFRoles({});
+    setFNik("");
+    setFName("");
+    setFRole(roles.data?.[0]?.id ?? "");
     setFActive(true);
-    setErr(false);
+    setErr(null);
     setDlgOpen(true);
   }
-  function openEdit(u: UmUser) {
+  function openEdit(u: UserRow) {
     setEditing(u);
-    setFEmail(u.email);
-    setFKar(u.name ? `${u.name} — ${u.nik}` : "");
-    setFRoles(Object.fromEntries(u.roleIds.map((r) => [r, true])));
+    setFEmail(u.email ?? "");
+    setFNik(u.nik ?? "");
+    setFName(u.name);
+    setFRole(u.roleId);
     setFActive(u.active);
-    setErr(false);
+    setErr(null);
     setDlgOpen(true);
   }
-  function save(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
-    const roleIds = Object.keys(fRoles).filter((r) => fRoles[r]);
     const email = fEmail.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || roleIds.length === 0) {
-      setErr(true);
-      return;
-    }
-    const [name, nik] = fKar ? fKar.split(" — ") : [null, null];
-    if (editing) {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === editing.id
-            ? { ...u, email, name, nik, roleIds, active: fActive }
-            : u
-        )
-      );
-      pushToast("success", t.umToastUserEdit, email);
-    } else {
-      setUsers((prev) => [
-        { id: `n-${email}`, email, name, nik, roleIds, active: fActive },
-        ...prev,
-      ]);
-      pushToast("success", t.umToastInvite, `${email} — ${t.umToastInviteD}`);
-    }
-    setDlgOpen(false);
-  }
-  function setActive(u: UmUser, active: boolean) {
-    setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, active } : x)));
-    if (active)
-      pushToast("success", t.umToastOn, `${u.email} — ${t.umToastOnD}`);
-    else pushToast("info", t.umToastOff, `${u.email} — ${t.umToastOffD}`);
+    const nik = fNik.trim();
+    if (!fName.trim() || !fRole) return setErr(t.umErrRequired);
+    // An account is credentialed by email or NIK; the database enforces this
+    // too, but saying so here beats a 422 round trip.
+    if (!email && !nik) return setErr(t.umErrIdentifier);
+    save.mutate({
+      id: editing?.id ?? null,
+      email: email || null,
+      nik: nik || null,
+      name: fName.trim(),
+      roleId: fRole,
+      active: fActive,
+    });
   }
 
   function exportCsv() {
-    const head = "email;karyawan;nik;roles;status";
-    const body = users
+    const head = "email;nik;nama;role;status";
+    const body = (users.data ?? [])
       .map((u) =>
         [
-          u.email,
-          u.name ?? "",
+          u.email ?? "",
           u.nik ?? "",
-          u.roleIds.map(roleName).join(","),
+          u.name,
+          roleName(u.roleId),
           u.active ? "aktif" : "nonaktif",
         ].join(";")
       )
@@ -179,12 +232,6 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
     const name = `users_${new Date().toISOString().slice(0, 10)}.csv`;
     downloadCsv(name, `${head}\n${body}`);
     pushToast("success", t.umToastExp, name);
-  }
-  function importChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    pushToast("success", t.umToastImp, `${file.name} — 3 ${t.umToastImpD}`);
-    e.target.value = "";
   }
 
   return (
@@ -226,16 +273,18 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setRoleF(e.target.value)}
             >
               <option value="all">{t.umFAllRoles}</option>
-              {ROLES_INIT.map((r) => (
+              {(roles.data ?? []).map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
             </Select>
+            {/* A page of its own: the import is a multi-step flow with two
+                tables, and it should not push this list off the screen. */}
             {canW ? (
               <Button
                 variant="secondary"
-                onClick={() => impRef.current?.click()}
+                onClick={() => router.push("/users/import")}
               >
                 <Upload />
                 Import
@@ -245,26 +294,21 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
               <Download />
               Export
             </Button>
-            <input
-              ref={impRef}
-              type="file"
-              accept=".csv,.xlsx"
-              className="hidden"
-              onChange={importChange}
-            />
           </ToolbarGroup>
         </Toolbar>
 
-        {pg.rows.length ? (
+        {users.isPending ? (
+          <TableSkeleton rows={6} />
+        ) : pg.rows.length ? (
           <Table>
             <TableHeader>
               <tr>
                 <TableHead>Email</TableHead>
-                <TableHead className="max-xl:hidden">{t.umLinked}</TableHead>
+                <TableHead className="max-xl:hidden">{t.thNama}</TableHead>
                 <TableHead className="max-xl:hidden">NIK</TableHead>
-                <TableHead>Roles</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
-                <TableHead className="w-[110px]">{t.thAct}</TableHead>
+                <TableHead className="w-[150px]">{t.thAct}</TableHead>
               </tr>
             </TableHeader>
             <TableBody>
@@ -274,26 +318,25 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
                   className={u.active ? undefined : "opacity-60"}
                 >
                   <TableCell>
-                    <b className="font-semibold">{u.email}</b>
+                    <b className="font-semibold">
+                      {u.email ?? (
+                        <span className="text-(--text-tertiary)">—</span>
+                      )}
+                    </b>
                   </TableCell>
                   <TableCell className="max-xl:hidden">
-                    {u.name ? (
-                      <span className="font-semibold">{u.name}</span>
-                    ) : (
-                      <span className="text-(--text-tertiary)">—</span>
-                    )}
+                    <span className="font-semibold">{u.name}</span>
+                    {u.mustChangePassword ? (
+                      <Badge variant="warning" className="ml-2">
+                        {t.umMustChange}
+                      </Badge>
+                    ) : null}
                   </TableCell>
                   <TableCell className="font-mono text-(--text-secondary) tabular-nums max-xl:hidden">
                     {u.nik ?? <span className="text-(--text-tertiary)">—</span>}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1.5">
-                      {u.roleIds.map((rid) => (
-                        <Badge key={rid} variant="info">
-                          {roleName(rid)}
-                        </Badge>
-                      ))}
-                    </div>
+                    <Badge variant="info">{roleName(u.roleId)}</Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant={u.active ? "success" : "danger"} dot>
@@ -309,6 +352,12 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
                         >
                           <Pencil />
                         </IconButton>
+                        <IconButton
+                          aria-label={t.umResetT}
+                          onClick={() => setResetTarget(u)}
+                        >
+                          <KeyRound />
+                        </IconButton>
                         {u.active ? (
                           <IconButton
                             danger
@@ -320,7 +369,9 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
                         ) : (
                           <IconButton
                             aria-label={t.umOn}
-                            onClick={() => setActive(u, true)}
+                            onClick={() =>
+                              setActiveM.mutate({ user: u, active: true })
+                            }
                           >
                             <CheckCircle2 />
                           </IconButton>
@@ -367,55 +418,70 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
           <UserPlus />
         </DialogIcon>
         <DialogTitle id="umu-t">
-          {editing ? `${t.umUserEditT} — ${editing.email}` : t.umUserAdd}
+          {editing
+            ? `${t.umUserEditT} — ${editing.email ?? editing.nik}`
+            : t.umUserAdd}
         </DialogTitle>
         <DialogBody>{t.umUserDlgB}</DialogBody>
-        <form onSubmit={save} noValidate>
+        <form onSubmit={submit} noValidate>
+          <Field className="mt-4" label={t.thNama} htmlFor="um-name" required>
+            <Input
+              id="um-name"
+              value={fName}
+              onChange={(e) => {
+                setFName(e.target.value);
+                setErr(null);
+              }}
+            />
+          </Field>
           <Field
             className="mt-4"
             label="Email"
             htmlFor="um-email"
-            required
-            error={err}
-            errorMessage={t.umErrEmail}
+            helper={t.umIdentHelp}
           >
             <Input
               id="um-email"
               type="email"
               placeholder="nama@unggul.co.id"
               value={fEmail}
-              onChange={(e) => setFEmail(e.target.value)}
+              onChange={(e) => {
+                setFEmail(e.target.value);
+                setErr(null);
+              }}
             />
           </Field>
-          <Field className="mt-4" label={t.umLinked} htmlFor="um-kar">
-            <AsyncSelect
-              id="um-kar"
-              value={fKar}
-              onChange={(o) => setFKar(o ? `${o.label} — ${o.value}` : "")}
-              load={loadEmployees}
-              placeholder={t.umNoLink}
-              searchPlaceholder={t.mdSearchPh}
-              emptyText={t.noResTitle}
-              clearLabel={t.umNoLink}
+          <Field className="mt-4" label="NIK" htmlFor="um-nik">
+            <Input
+              id="um-nik"
+              placeholder="OPS-0421"
+              value={fNik}
+              onChange={(e) => {
+                setFNik(e.target.value);
+                setErr(null);
+              }}
             />
           </Field>
-          <Field className="mt-4" label="Roles" required>
-            <div className="grid grid-cols-2 gap-2">
-              {ROLES_INIT.map((r) => (
-                <ToggleRow key={r.id}>
-                  <Checkbox
-                    checked={!!fRoles[r.id]}
-                    onChange={(e) =>
-                      setFRoles((prev) => ({
-                        ...prev,
-                        [r.id]: e.target.checked,
-                      }))
-                    }
-                  />
-                  {r.name}
-                </ToggleRow>
+          {/* Single-select: an account holds exactly one role. Two roles could
+              disagree about scope, so the question has no coherent answer. */}
+          <Field className="mt-4" label="Role" htmlFor="um-role" required>
+            <Select
+              id="um-role"
+              value={fRole}
+              onChange={(e) => {
+                setFRole(e.target.value);
+                setErr(null);
+              }}
+            >
+              <option value="" disabled>
+                {t.umPickRole}
+              </option>
+              {(roles.data ?? []).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} · {r.scope}
+                </option>
               ))}
-            </div>
+            </Select>
           </Field>
           <ToggleRow className="mt-4" htmlFor="um-active">
             <Checkbox
@@ -425,6 +491,14 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
             />
             {t.stAktif}
           </ToggleRow>
+          {err ? (
+            <p className="mt-3 text-xs text-(--color-danger-text)">{err}</p>
+          ) : null}
+          {!editing ? (
+            <p className="mt-3 text-xs text-(--text-tertiary)">
+              {t.umDefaultPwNote}
+            </p>
+          ) : null}
           <DialogActions>
             <Button
               type="button"
@@ -433,7 +507,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
             >
               {t.btnCancel}
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={save.isPending}>
               {editing ? t.udbSaveEdit : t.umUserSaveAdd}
             </Button>
           </DialogActions>
@@ -449,7 +523,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
         <DialogIcon variant="warning">
           <Ban />
         </DialogIcon>
-        <DialogTitle id="umoff-t">{`${t.umOff} ${offTarget?.email ?? ""}?`}</DialogTitle>
+        <DialogTitle id="umoff-t">{`${t.umOff} ${offTarget?.email ?? offTarget?.nik ?? ""}?`}</DialogTitle>
         <DialogBody>{t.umOffB}</DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setOffTarget(null)}>
@@ -458,11 +532,37 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
           <Button
             variant="destructive"
             onClick={() => {
-              if (offTarget) setActive(offTarget, false);
+              if (offTarget)
+                setActiveM.mutate({ user: offTarget, active: false });
               setOffTarget(null);
             }}
           >
             {t.umOff}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* dialog reset password */}
+      <Dialog
+        open={resetTarget !== null}
+        onClose={() => setResetTarget(null)}
+        labelledBy="umrst-t"
+      >
+        <DialogIcon variant="warning">
+          <KeyRound />
+        </DialogIcon>
+        <DialogTitle id="umrst-t">{`${t.umResetT} — ${resetTarget?.email ?? resetTarget?.nik ?? ""}`}</DialogTitle>
+        <DialogBody>{t.umResetB}</DialogBody>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setResetTarget(null)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={resetPw.isPending}
+            onClick={() => resetTarget && resetPw.mutate(resetTarget)}
+          >
+            {t.umResetDo}
           </Button>
         </DialogActions>
       </Dialog>

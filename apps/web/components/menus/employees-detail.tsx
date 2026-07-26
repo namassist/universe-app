@@ -64,10 +64,10 @@ function expTone(exp: string): string {
 
 export function EmployeeDetail({ nik }: { nik: string }) {
   const { t } = useI18n();
-  const { role, access } = useRole();
+  const { access } = useRole();
   const router = useRouter();
   const canW = access("employees") === "manage";
-  const listHref = `/${role}/employees`;
+  const listHref = `/employees`;
 
   const emp = findEmployee(nik);
 

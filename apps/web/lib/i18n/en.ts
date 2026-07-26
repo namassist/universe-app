@@ -630,9 +630,8 @@ export const en: Dict = {
   dzHint:
     ".xlsx format per the template — NIK, name, day columns 1–31 hold roster codes",
   upUploading: "Uploading…",
-  upValidating: "Validating 2,148 rows…",
+  upValidating: "Validating rows…",
   upResults: "Validation results",
-  n2140: "2,140",
   vValid: "valid rows — ready to import",
   vDup: "duplicates — last row used",
   vErr: "errors — will not be imported",
@@ -640,11 +639,12 @@ export const en: Dict = {
   upFootNote:
     "Import only processes valid rows; download the error rows, fix them, then re-upload.",
   upDlErrors: "Download 5 error rows",
-  upImport: "Import 2,140 valid rows",
+  upImport: "Import",
+  upRowsValid: "valid rows",
   upImporting: "Importing…",
   toastImportT: "July roster imported",
   toastImportD:
-    "2,140 rows imported. 5 error rows awaiting fixes — download the details.",
+    "Valid rows imported. Error rows awaiting fixes — download the details.",
   toastTemplateT: "Template downloaded",
   toastTemplateD: "roster_template.xlsx — NIK, name, day columns 1–31.",
   toastErrT: "5 error rows downloaded",
@@ -654,7 +654,7 @@ export const en: Dict = {
   upPrevHint: "Roster code per employee per date — scroll to see all dates",
   thNama: "Name",
   upPrevA: "Previewing",
-  upPrevB: "of 247 employees — all rows are checked during validation.",
+  upPrevB: "employees — all rows are checked during validation.",
   legendTitle: "Roster code legend — 28 codes",
   legendNote:
     "The same codes are used in the Excel file, revisions, and the attendance view",
@@ -806,4 +806,71 @@ export const en: Dict = {
   pfPwErrConf: "Confirmation does not match the new password.",
   pfPwSavedT: "Password changed",
   pfPwSavedD: "use the new password the next time you sign in.",
+
+  /* --- auth: identifier + forced password change --- */
+  authIdentLabel: "Email or NIK",
+  authIdentPh: "name@unggul.co.id or OPS-0421",
+  authIdentHelp: "Office staff use an email, field operators use their NIK.",
+  authLoginErr:
+    "Incorrect identifier or password. Check again, or contact an admin if your account has been deactivated.",
+  cpTitle: "Change password",
+  cpSub:
+    "This account is still using the password an administrator issued. Set your own to continue.",
+  cpTitlePlain: "New password",
+  cpCurrent: "Current password",
+  cpNew: "New password",
+  cpConfirm: "Repeat new password",
+  cpMismatch: "Password confirmation does not match.",
+  cpSubmit: "Save password",
+  cpSaving: "Saving…",
+  cpDone: "Password updated",
+  cpBackToLogin: "Sign out and use a different account",
+
+  /* --- user management: single role, reset, import --- */
+  umErrRequired: "Name and role are required.",
+  umErrIdentifier: "An account must have an email or a NIK.",
+  umIdentHelp: "Fill in an email, a NIK, or both — at least one is required.",
+  umPickRole: "Select a role",
+  umMustChange: "Must change password",
+  umDefaultPwNote:
+    "A new account uses the configured initial password and must set its own on first login.",
+  umResetT: "Reset password",
+  umResetB:
+    "The account's password returns to the configured initial one, and the account must set a new password on its next login.",
+  umResetDo: "Reset password",
+  umResetDoneT: "Password reset",
+  umResetDoneD: "must change password on next sign-in.",
+  umImpTitle: "Import accounts from a spreadsheet",
+  umImpHint:
+    "An .xlsx with the columns nik, nama, email, role. No password column.",
+  umImpNew: "New",
+  umImpUpd: "Updated",
+  umImpChanges: "Changes",
+  umImpCreated: "created",
+  umImpUpdated: "updated",
+  umImpSub: "Create and update accounts in bulk from an .xlsx file.",
+  umImpBack: "Back to user list",
+  umImpDzTitle: "Drag the account file here, or click to browse",
+  umImpValidating: "Validating rows…",
+  umImpPrevB: "rows",
+  umImpErr: "errors — import is blocked",
+  umImpAccounts: "accounts",
+  umImpDoneT: "Accounts imported",
+  umImpTplD: "template_akun.xlsx — nik, nama, email, role columns.",
+  umImpFoot:
+    "Every row is checked on the server before anything is written to the database.",
+  umImpBlocked: "Fix the failing rows before importing.",
+  umRoleScopeNote:
+    "The dept and self scopes require the account to carry a NIK.",
+
+  /* --- display devices: identity, pairing, heartbeat --- */
+  dspId: "Device ID",
+  dspIdHelp: "The tag on the TV itself — used for pairing and revocation.",
+  dspContentNote:
+    "Display content configuration is not persisted yet; it lands with the next change.",
+  dspPairT: "Pairing link",
+  dspPairB:
+    "Open this link once on the TV in question. Single-use, and it expires in 15 minutes.",
+  dspPairCopy: "Copy",
+  dspPairCopied: "Copied",
 };

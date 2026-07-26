@@ -6,7 +6,6 @@ import { ArrowLeft, Search } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -190,10 +189,9 @@ function WindowPagination({
 
 export function FitToWorkHistory() {
   const { t, lang } = useI18n();
-  const { role } = useRole();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const listHref = `/${role}/fit-to-work`;
+  const listHref = `/fit-to-work`;
 
   const todayIso = "2026-07-21";
   const startIso = "2026-04-22";

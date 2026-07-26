@@ -117,9 +117,9 @@ const SAMPLE = {
 
 export function DashboardMenu() {
   const { t, lang } = useI18n();
-  const { role, roleLabel, access } = useRole();
+  const { roleLabel, access } = useRole();
   const en = lang === "en";
-  const link = (slug: MenuSlug) => `/${role}/${slug}`;
+  const link = (slug: MenuSlug) => `/${slug}`;
   const has = (slug: MenuSlug) => Boolean(access(slug));
 
   const [q, setQ] = React.useState("");
@@ -421,57 +421,41 @@ export function DashboardMenu() {
       action: en ? "Open displays" : "Buka display",
     }));
 
-  /* ---- per-role composition ---- */
+  /* ---- composition ---- */
+  /* Driven by the caller's grants rather than by a role name. Roles are
+     created at runtime now, so a branch per role would have nothing to match
+     the moment somebody adds one — and every card here was already gated on a
+     permission anyway. Order is fixed: most urgent first. */
   const cards: React.ReactNode[] = [];
-  let allRows: AttentionRow[] = [];
-  if (role === "user") {
-    if (has("fit-to-work")) cards.push(cardUnfit());
-    if (has("attendance")) cards.push(cardAbsen(), cardPresent());
-    if (has("roster-revision")) cards.push(cardRevPending());
-    allRows = [
-      ...(has("attendance") ? absenRows() : []),
-      ...(has("roster-revision") ? revRows("roster-revision") : []),
-    ];
-  } else if (role === "admin") {
-    if (has("attendance")) cards.push(cardAbsen());
-    if (has("roster-revision")) cards.push(cardRevPending());
-    if (has("fit-to-work")) cards.push(cardUnfit());
-    if (has("employees")) cards.push(cardSimper());
-    allRows = [
-      ...(has("attendance") ? absenRows() : []),
-      ...(has("roster-revision") ? revRows("roster-revision") : []),
-      ...(has("fit-to-work") ? unfitRows() : []),
-      ...(has("employees") ? simperRows() : []),
-    ];
-  } else if (role === "manajer") {
-    if (has("attendance")) cards.push(cardPresent(), cardAbsen());
-    if (has("roster-approval")) cards.push(cardApproval());
-    allRows = [
-      ...(has("attendance") ? absenRows() : []),
-      ...(has("roster-approval") ? revRows("roster-approval") : []),
-    ];
-  } else if (role === "manpower") {
-    if (has("display-attendance") || has("display-fleet"))
-      cards.push(cardDisplays());
-    if (has("fleet-allocation")) cards.push(cardAlloc(), cardActualToday());
-    if (has("unit-status")) cards.push(cardBreakdown());
-    allRows = [
-      ...(has("unit-status") ? bdRows() : []),
-      ...(has("display-attendance") || has("display-fleet") ? dispRows() : []),
-    ];
-  } else if (role === "medic") {
-    if (has("fit-to-work")) cards.push(cardUnfit(), cardBelumFtw(), cardFit());
-    allRows = [...(has("fit-to-work") ? unfitRows() : []), ...dispRows()];
-  } else {
-    // superadmin
-    cards.push(cardUnfit(), cardAbsen(), cardBreakdown(), cardApproval());
-    allRows = [
-      ...bdRows(),
-      ...unfitRows(),
-      ...absenRows(),
-      ...revRows("roster-approval"),
-      ...dispRows(),
-    ];
+  const allRows: AttentionRow[] = [];
+
+  if (has("fit-to-work")) {
+    cards.push(cardUnfit(), cardBelumFtw(), cardFit());
+    allRows.push(...unfitRows());
+  }
+  if (has("attendance")) {
+    cards.push(cardAbsen(), cardPresent());
+    allRows.push(...absenRows());
+  }
+  if (has("unit-status")) {
+    cards.push(cardBreakdown());
+    allRows.push(...bdRows());
+  }
+  if (has("roster-approval")) {
+    cards.push(cardApproval());
+    allRows.push(...revRows("roster-approval"));
+  } else if (has("roster-revision")) {
+    cards.push(cardRevPending());
+    allRows.push(...revRows("roster-revision"));
+  }
+  if (has("fleet-allocation")) cards.push(cardAlloc(), cardActualToday());
+  if (has("employees")) {
+    cards.push(cardSimper());
+    allRows.push(...simperRows());
+  }
+  if (has("display-attendance") || has("display-fleet")) {
+    cards.push(cardDisplays());
+    allRows.push(...dispRows());
   }
 
   const badgeOpts = Array.from(new Set(allRows.map((r) => r.badge)));

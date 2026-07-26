@@ -6,7 +6,6 @@ import { ArrowLeft, Download } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import { findRosterDoc, rosterGrid } from "@/lib/roster-data";
-import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination, usePagination } from "@/components/ui/pagination";
@@ -36,9 +35,8 @@ import { RosterLegend } from "./roster-legend";
 export function RosterDetail() {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
-  const listHref = `/${role}/roster-data`;
+  const listHref = `/roster-data`;
 
   const key = useSearchParams().get("p");
   const doc = findRosterDoc(key);

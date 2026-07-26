@@ -16,7 +16,6 @@ import { DEPARTEMEN_NAMES } from "@/lib/departemen-data";
 import { findEmployee, MESS_OPTS, SIMPER_TYPES } from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
 import { SIMPER_CODES } from "@/lib/unit-data";
-import { useRole } from "@/components/providers/role-context";
 import { initialsOf } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -79,9 +78,8 @@ const EMPTY: Fields = {
 export function EmployeeForm({ nik }: { nik?: string }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
-  const listHref = `/${role}/employees`;
+  const listHref = `/employees`;
 
   const record = nik ? findEmployee(nik) : undefined;
   const [f, setF] = React.useState<Fields>(() =>

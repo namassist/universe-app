@@ -1,37 +1,16 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { ROLE_LABELS, ROLES } from "@/lib/access";
-
-export const metadata = { title: "Pilih Role" };
+import { serverApi } from "@/lib/api";
 
 /**
- * Minimal index. Per the static-only design there is no auth or role switcher —
- * open a role's URL directly. These links are a convenience for that.
+ * The index used to be an open role switcher — pick a role, get its view of the
+ * product. That cannot survive real authorization: a role is now a database row
+ * resolved from the session, not something a visitor selects.
  */
-export default function Home() {
-  return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight text-(--text-primary)">
-        UNIVERSE — Static Preview
-      </h1>
-      <p className="mt-1 text-sm text-(--text-secondary)">
-        Pilih role untuk masuk ke shell-nya. URL langsung:{" "}
-        <code>/{"{role}"}/dashboard</code>.
-      </p>
-
-      <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-        {ROLES.map((role) => (
-          <li key={role}>
-            <Link
-              href={`/${role}/dashboard`}
-              className="flex items-center justify-between rounded-card px-5 py-4 text-sm font-medium text-(--text-primary) glass-card transition hover:bg-(--fill-hover)"
-            >
-              {ROLE_LABELS[role]}
-              <span className="text-(--text-tertiary)">/{role}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
+export default async function Home() {
+  const api = await serverApi();
+  const { data, error } = await api.v1.auth.session.get();
+  if (error || !data || data.principal.kind !== "user") redirect("/login");
+  if (data.principal.mustChangePassword) redirect("/change-password");
+  redirect("/dashboard");
 }

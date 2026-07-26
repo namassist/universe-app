@@ -8,7 +8,6 @@ import { Download, Eye, Search, Upload } from "lucide-react";
 import type { AccessMode } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { ROSTER_DOCS } from "@/lib/roster-data";
-import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Pagination, usePagination } from "@/components/ui/pagination";
@@ -38,9 +37,8 @@ import { useToast } from "@/components/ui/toast";
 export function RosterDataMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
-  const base = `/${role}/roster-data`;
+  const base = `/roster-data`;
   const canW = mode === "manage";
 
   const [month, setMonth] = React.useState("");
@@ -171,7 +169,7 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/${role}/attendance`}
+                        href={`/attendance`}
                         className="text-sm whitespace-nowrap"
                       >
                         {t.rdView}

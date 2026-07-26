@@ -1,20 +1,36 @@
 "use client";
 
 import * as React from "react";
-import { Eye, Monitor, Pencil, Plus, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Check,
+  Copy,
+  Eye,
+  Link2,
+  Monitor,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
+
+import type { DeviceKind } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
+import { api, errorMessage } from "@/lib/api";
 import {
   COLOR_VAL,
-  DISPLAYS,
   FLEETS,
   RUNTEXT_COLORS,
   type CustomRunText,
-  type Display as Disp,
   type FleetPick,
 } from "@/lib/display-data";
 import { useI18n } from "@/lib/i18n";
 import { openDisplay } from "@/lib/open-display";
+import {
+  devicesKey,
+  devicesQueryOptions,
+  type DeviceRow,
+} from "@/lib/queries/devices";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
@@ -49,50 +65,148 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
 
+/**
+ * The display device registry, backed by `/v1/devices`.
+ *
+ * A TV is a principal now, not a row of sample data: it pairs once through a
+ * single-use link, reports a heartbeat, and can be revoked individually.
+ * `online` and last-seen therefore come from the API rather than from the
+ * hardcoded strings this screen used to show — an anonymous URL could not have
+ * produced either.
+ *
+ * Display *content* (running texts, fleet picks, rotation) is deliberately not
+ * persisted by this change; those controls stay local, as the rest of the
+ * static port is, until the display-configuration change lands.
+ */
 export function DisplayAdminMenu({
   mode,
   kind,
 }: {
   mode: AccessMode;
-  kind: "att" | "fleet";
+  kind: Extract<DeviceKind, "att" | "fleet">;
 }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const queryClient = useQueryClient();
   const canW = mode === "manage";
 
-  const [displays, setDisplays] = React.useState<Disp[]>(() => DISPLAYS[kind]);
+  const devicesQ = useQuery(devicesQueryOptions(kind));
+  const devices = React.useMemo(() => devicesQ.data ?? [], [devicesQ.data]);
+
   const [q, setQ] = React.useState("");
   const [statusF, setStatusF] = React.useState("");
 
-  const fleetsOf = (d: Disp) => d.fleets ?? [];
-  const subOf = (d: Disp) => {
-    const fls = fleetsOf(d);
-    if (!fls.length) return d.id;
-    const units = fls.reduce((n, f) => n + f.unitCount, 0);
-    return `${units} unit · ${d.id}`;
-  };
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: devicesKey(kind) });
 
-  const filtered = displays.filter((d) => {
+  const filtered = devices.filter((d) => {
     const needle = q.trim().toLowerCase();
     const okQ =
       !needle ||
       d.name.toLowerCase().includes(needle) ||
-      d.id.toLowerCase().includes(needle) ||
-      fleetsOf(d).some((f) => f.digger.toLowerCase().includes(needle));
+      d.id.toLowerCase().includes(needle);
     const okS = statusF === "" || d.active === (statusF === "1");
     return okQ && okS;
   });
   const pg = usePagination(filtered, "5");
 
-  // add/edit dialog
+  /* ------------------------------------------------------------ mutations */
+
+  const save = useMutation({
+    mutationFn: async (input: {
+      existingId: string | null;
+      id: string;
+      name: string;
+      active: boolean;
+    }) => {
+      const result = input.existingId
+        ? await api.v1
+            .devices({ id: input.existingId })
+            .patch({ name: input.name, active: input.active })
+        : await api.v1.devices.post({
+            id: input.id,
+            name: input.name,
+            kind,
+            active: input.active,
+          });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (_d, input) => {
+      await invalidate();
+      pushToast(
+        "success",
+        input.existingId ? t.dspToastEdit : t.dspToastAdd,
+        input.name
+      );
+      setDlgOpen(false);
+    },
+    onError: (error) =>
+      pushToast("error", t.dspAdd, errorMessage(error, t.loginErr)),
+  });
+
+  const setActive = useMutation({
+    mutationFn: async (input: { device: DeviceRow; active: boolean }) => {
+      const { error } = await api.v1
+        .devices({ id: input.device.id })
+        .patch({ active: input.active });
+      if (error) throw error;
+    },
+    onSuccess: async (_d, input) => {
+      await invalidate();
+      pushToast(
+        input.active ? "success" : "info",
+        input.active ? t.stAktif : t.stNonaktif,
+        input.device.name
+      );
+    },
+    onError: (error) =>
+      pushToast("error", t.thStatus, errorMessage(error, t.loginErr)),
+  });
+
+  const del = useMutation({
+    mutationFn: async (device: DeviceRow) => {
+      const { error } = await api.v1.devices({ id: device.id }).delete();
+      if (error) throw error;
+    },
+    onSuccess: async (_d, device) => {
+      await invalidate();
+      pushToast("success", t.dspToastDel, device.name);
+      setDelTarget(null);
+    },
+    onError: (error) =>
+      pushToast("error", t.dspDelT, errorMessage(error, t.loginErr)),
+  });
+
+  const pair = useMutation({
+    mutationFn: async (device: DeviceRow) => {
+      const { data, error } = await api.v1
+        .devices({ id: device.id })
+        .pairing.post();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => setPairing(data?.url ?? null),
+    onError: (error) =>
+      pushToast("error", t.dspPairT, errorMessage(error, t.loginErr)),
+  });
+
+  /* --------------------------------------------------------------- dialog */
+
   const [dlgOpen, setDlgOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<Disp | null>(null);
+  const [editing, setEditing] = React.useState<DeviceRow | null>(null);
+  const [fId, setFId] = React.useState("");
   const [fName, setFName] = React.useState("");
   const [fSel, setFSel] = React.useState<FleetPick[]>([]);
   const [fRuntexts, setFRuntexts] = React.useState<CustomRunText[]>([]);
   const [fActive, setFActive] = React.useState(true);
+  const [nameErr, setNameErr] = React.useState(false);
+  const [delTarget, setDelTarget] = React.useState<DeviceRow | null>(null);
+  const [pairing, setPairing] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
 
   const addRT = () =>
     setFRuntexts((p) => [...p, { text: "", color: RUNTEXT_COLORS[0]! }]);
@@ -100,11 +214,19 @@ export function DisplayAdminMenu({
     setFRuntexts((p) => p.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const removeRT = (i: number) =>
     setFRuntexts((p) => p.filter((_, j) => j !== i));
-  const [nameErr, setNameErr] = React.useState(false);
-  const [delTarget, setDelTarget] = React.useState<Disp | null>(null);
+
+  const nextId = () => {
+    const prefix = kind === "att" ? "DSP-A" : "DSP-F";
+    const taken = devices
+      .map((d) => Number(d.id.replace(prefix, "")))
+      .filter((n) => Number.isFinite(n));
+    const next = (taken.length ? Math.max(...taken) : 0) + 1;
+    return `${prefix}${String(next).padStart(2, "0")}`;
+  };
 
   function openAdd() {
     setEditing(null);
+    setFId(nextId());
     setFName("");
     setFSel([]);
     setFRuntexts([]);
@@ -112,11 +234,12 @@ export function DisplayAdminMenu({
     setNameErr(false);
     setDlgOpen(true);
   }
-  function openEdit(d: Disp) {
+  function openEdit(d: DeviceRow) {
     setEditing(d);
+    setFId(d.id);
     setFName(d.name);
-    setFSel([...(d.fleets ?? [])]);
-    setFRuntexts(d.runtexts.map((r) => ({ ...r })));
+    setFSel([]);
+    setFRuntexts([]);
     setFActive(d.active);
     setNameErr(false);
     setDlgOpen(true);
@@ -130,59 +253,31 @@ export function DisplayAdminMenu({
       return next;
     });
   }
-  function save(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (kind === "fleet" ? !fSel.length : !fName.trim()) {
+    if (!fName.trim() && !(kind === "fleet" && fSel.length)) {
       setNameErr(true);
       return;
     }
     const name =
-      kind === "fleet"
+      kind === "fleet" && fSel.length && !fName.trim()
         ? fSel.length === 1
           ? `Fleet ${fSel[0]!.digger}`
           : `Fleet ${fSel[0]!.digger} +${fSel.length - 1}`
         : fName.trim();
-    const runtexts = fRuntexts.filter((r) => r.text.trim());
-    if (editing) {
-      setDisplays((prev) =>
-        prev.map((d) =>
-          d.id === editing.id
-            ? {
-                ...d,
-                name,
-                fleets: kind === "fleet" ? fSel : undefined,
-                runtexts,
-                active: fActive,
-              }
-            : d
-        )
-      );
-      pushToast("success", t.dspToastEdit);
-    } else {
-      const id = `DSP-${kind === "att" ? "A" : "F"}${String(displays.length + 1).padStart(2, "0")}`;
-      setDisplays((prev) => [
-        {
-          id,
-          name,
-          kind,
-          fleets: kind === "fleet" ? fSel : undefined,
-          online: true,
-          hb: "baru saja",
-          runtexts,
-          active: fActive,
-          rotateSec: 12,
-        },
-        ...prev,
-      ]);
-      pushToast("success", t.dspToastAdd);
-    }
-    setDlgOpen(false);
+    save.mutate({
+      existingId: editing?.id ?? null,
+      id: fId.trim(),
+      name,
+      active: fActive,
+    });
   }
-  function delDo() {
-    if (!delTarget) return;
-    setDisplays((prev) => prev.filter((d) => d.id !== delTarget.id));
-    pushToast("success", t.dspToastDel);
-    setDelTarget(null);
+
+  async function copyPairing() {
+    if (!pairing) return;
+    await navigator.clipboard.writeText(pairing);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
   }
 
   return (
@@ -222,120 +317,94 @@ export function DisplayAdminMenu({
             </Select>
           </ToolbarGroup>
         </Toolbar>
-        <Table>
-          <TableHeader>
-            <tr>
-              <TableHead>
-                {kind === "fleet" ? t.dspFleetsCol : t.dspName}
-              </TableHead>
-              <TableHead>{t.dspRuntext}</TableHead>
-              <TableHead>{t.dspConn}</TableHead>
-              <TableHead>{t.thStatus}</TableHead>
-              <TableHead className="w-27.5">{t.thAct}</TableHead>
-            </tr>
-          </TableHeader>
-          <TableBody>
-            {pg.rows.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell>
-                  {kind === "fleet" ? (
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex max-w-75 flex-wrap gap-1">
-                        {fleetsOf(d)
-                          .slice(0, 4)
-                          .map((f) => (
-                            <Badge key={f.id} variant="info">
-                              {f.digger}
-                            </Badge>
-                          ))}
-                        {fleetsOf(d).length > 4 ? (
-                          <Badge variant="neutral">
-                            +{fleetsOf(d).length - 4}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <span className="font-mono text-xs text-(--text-tertiary)">
-                        {subOf(d)}
-                        {(d.fleets?.length ?? 0) > 1
-                          ? ` · ${d.rotateSec ?? 12} dtk/fleet`
-                          : ""}
-                      </span>
+
+        {devicesQ.isPending ? (
+          <TableSkeleton rows={5} />
+        ) : (
+          <Table>
+            <TableHeader>
+              <tr>
+                <TableHead>{t.dspName}</TableHead>
+                <TableHead>{t.dspConn}</TableHead>
+                <TableHead>{t.thStatus}</TableHead>
+                <TableHead className="w-44">{t.thAct}</TableHead>
+              </tr>
+            </TableHeader>
+            <TableBody>
+              {pg.rows.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell>
+                    <NameCell name={d.name} sub={d.id} />
+                  </TableCell>
+                  {/* Derived from last_seen_at, not asserted by the row. */}
+                  <TableCell>
+                    <Badge variant={d.online ? "success" : "danger"} dot>
+                      {d.online ? "Online" : "Offline"}
+                    </Badge>
+                    <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
+                      {d.lastSeenLabel}
                     </div>
-                  ) : (
-                    <NameCell name={d.name} sub={subOf(d)} />
-                  )}
-                </TableCell>
-                <TableCell className="text-(--text-secondary)">
-                  {d.runtexts.length ? (
-                    <div className="flex max-w-90 flex-wrap gap-1.5">
-                      {d.runtexts.map((r, i) => (
-                        <span
-                          key={`${r.text}-${i}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-(--glass-1-border) bg-(--fill-subtle) px-2.5 py-1 text-xs"
-                        >
-                          <i
-                            className="inline-block size-2 flex-none rounded-full"
-                            style={{ background: COLOR_VAL[r.color] }}
-                          />
-                          <span className="max-w-40 truncate">{r.text}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-(--text-tertiary) italic">
-                      {t.dspRuntextDefault}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={d.online ? "success" : "danger"} dot>
-                    {d.online ? "Online" : "Offline"}
-                  </Badge>
-                  <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
-                    {d.hb}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={d.active ? "success" : "danger"} dot>
-                    {d.active ? t.stAktif : t.stNonaktif}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-2">
-                    <IconButton
-                      aria-label={t.dspPreview}
-                      onClick={() =>
-                        /* layar kiosk sungguhan (dark-only) — tab baru, fullscreen */
-                        openDisplay(
-                          `/display/${kind === "att" ? "attendance" : "fleet"}?name=${encodeURIComponent(d.name)}`
-                        )
-                      }
-                    >
-                      <Eye />
-                    </IconButton>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={d.active ? "success" : "danger"} dot>
+                      {d.active ? t.stAktif : t.stNonaktif}
+                    </Badge>
                     {canW ? (
-                      <>
-                        <IconButton
-                          aria-label={t.udbEditT}
-                          onClick={() => openEdit(d)}
-                        >
-                          <Pencil />
-                        </IconButton>
-                        <IconButton
-                          danger
-                          aria-label={t.empDel}
-                          onClick={() => setDelTarget(d)}
-                        >
-                          <Trash2 />
-                        </IconButton>
-                      </>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActive.mutate({ device: d, active: !d.active })
+                        }
+                        className="mt-1 block cursor-pointer text-xs text-(--text-tertiary) hover:text-(--text-primary)"
+                      >
+                        {d.active ? t.umOff : t.umOn}
+                      </button>
                     ) : null}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <IconButton
+                        aria-label={t.dspPreview}
+                        onClick={() =>
+                          /* layar kiosk sungguhan (dark-only) — tab baru, fullscreen */
+                          openDisplay(
+                            `/display/${kind === "att" ? "attendance" : "fleet"}?name=${encodeURIComponent(d.name)}`
+                          )
+                        }
+                      >
+                        <Eye />
+                      </IconButton>
+                      {canW ? (
+                        <>
+                          <IconButton
+                            aria-label={t.dspPairT}
+                            onClick={() => pair.mutate(d)}
+                          >
+                            <Link2 />
+                          </IconButton>
+                          <IconButton
+                            aria-label={t.udbEditT}
+                            onClick={() => openEdit(d)}
+                          >
+                            <Pencil />
+                          </IconButton>
+                          <IconButton
+                            danger
+                            aria-label={t.empDel}
+                            onClick={() => setDelTarget(d)}
+                          >
+                            <Trash2 />
+                          </IconButton>
+                        </>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
         <PanelFoot>
           <FootSum>
             {t.attSumA} <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b>{" "}
@@ -352,6 +421,7 @@ export function DisplayAdminMenu({
         </PanelFoot>
       </Panel>
 
+      {/* dialog tambah/edit perangkat */}
       <Dialog
         open={dlgOpen}
         onClose={() => setDlgOpen(false)}
@@ -365,26 +435,38 @@ export function DisplayAdminMenu({
           {editing ? `${t.dspEditT} — ${editing.name}` : t.dspAdd}
         </DialogTitle>
         <DialogBody>{t.dspDlgB}</DialogBody>
-        <form onSubmit={save} noValidate>
+        <form onSubmit={submit} noValidate>
           <div className="mt-4 flex flex-col gap-5">
+            {/* The id is the tag physically written on the TV, so it is typed
+                rather than generated behind the operator's back. */}
+            <Field
+              label={t.dspId}
+              htmlFor="dsp-id"
+              required
+              helper={t.dspIdHelp}
+            >
+              <Input
+                id="dsp-id"
+                placeholder="DSP-A01"
+                disabled={!!editing}
+                value={fId}
+                onChange={(e) => setFId(e.target.value)}
+              />
+            </Field>
+
             {kind === "fleet" ? (
               <Field
                 label={
                   <span className="flex w-full items-center gap-2">
-                    <span>
-                      Fleet
-                      <span className="text-danger-text"> *</span>
-                    </span>
+                    <span>Fleet</span>
                     <Badge variant={fSel.length ? "info" : "neutral"}>
                       {fSel.length} {t.dspPicked}
                     </Badge>
                   </span>
                 }
-                helper={t.dspFleetHelp}
-                error={nameErr}
-                errorMessage={t.dspErrFleet}
+                helper={t.dspContentNote}
               >
-                <div className="grid max-h-64 grid-cols-2 gap-1 overflow-y-auto rounded-control border border-(--border-input) bg-(--fill-input) p-2">
+                <div className="grid max-h-52 grid-cols-2 gap-1 overflow-y-auto rounded-control border border-(--border-input) bg-(--fill-input) p-2">
                   {FLEETS.map((f) => (
                     <ToggleRow
                       key={f.id}
@@ -406,26 +488,27 @@ export function DisplayAdminMenu({
                   ))}
                 </div>
               </Field>
-            ) : (
-              <Field
-                label={t.dspName}
-                htmlFor="dsp-name"
-                required
-                error={nameErr}
-                errorMessage={t.mdErrName}
-              >
-                <Input
-                  id="dsp-name"
-                  placeholder="TV Gate Utara"
-                  value={fName}
-                  onChange={(e) => {
-                    setFName(e.target.value);
-                    if (e.target.value.trim()) setNameErr(false);
-                  }}
-                />
-              </Field>
-            )}
-            <Field label={t.dspRuntext} helper={t.dspRuntextHelp}>
+            ) : null}
+
+            <Field
+              label={t.dspName}
+              htmlFor="dsp-name"
+              required={kind === "att"}
+              error={nameErr}
+              errorMessage={t.mdErrName}
+            >
+              <Input
+                id="dsp-name"
+                placeholder={kind === "att" ? "TV Gate Utara" : "Fleet EX-22"}
+                value={fName}
+                onChange={(e) => {
+                  setFName(e.target.value);
+                  if (e.target.value.trim()) setNameErr(false);
+                }}
+              />
+            </Field>
+
+            <Field label={t.dspRuntext} helper={t.dspContentNote}>
               <div className="flex flex-col gap-2">
                 {fRuntexts.length === 0 ? (
                   <p className="rounded-control border border-dashed border-(--border-input) px-3 py-2.5 text-xs text-(--text-tertiary) italic">
@@ -452,6 +535,10 @@ export function DisplayAdminMenu({
                           </option>
                         ))}
                       </Select>
+                      <span
+                        className="inline-block size-3 flex-none rounded-full"
+                        style={{ background: COLOR_VAL[r.color] }}
+                      />
                       <IconButton
                         danger
                         aria-label={t.empDel}
@@ -473,6 +560,7 @@ export function DisplayAdminMenu({
                 </Button>
               </div>
             </Field>
+
             <ToggleRow htmlFor="dsp-active">
               <Checkbox
                 id="dsp-active"
@@ -490,13 +578,40 @@ export function DisplayAdminMenu({
             >
               {t.btnCancel}
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={save.isPending}>
               {editing ? t.udbSaveEdit : t.dspSaveAdd}
             </Button>
           </DialogActions>
         </form>
       </Dialog>
 
+      {/* dialog link pairing — sekali pakai, 15 menit */}
+      <Dialog
+        open={pairing !== null}
+        onClose={() => setPairing(null)}
+        className="w-[min(560px,100%)]"
+        labelledBy="dsppair-t"
+      >
+        <DialogIcon variant="info">
+          <Link2 />
+        </DialogIcon>
+        <DialogTitle id="dsppair-t">{t.dspPairT}</DialogTitle>
+        <DialogBody>{t.dspPairB}</DialogBody>
+        <div className="mt-4 flex items-center gap-2">
+          <Input readOnly value={pairing ?? ""} className="font-mono text-xs" />
+          <Button variant="secondary" onClick={copyPairing}>
+            {copied ? <Check /> : <Copy />}
+            {copied ? t.dspPairCopied : t.dspPairCopy}
+          </Button>
+        </div>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setPairing(null)}>
+            {t.btnCancel}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* dialog hapus perangkat */}
       <Dialog
         open={delTarget !== null}
         onClose={() => setDelTarget(null)}
@@ -511,7 +626,11 @@ export function DisplayAdminMenu({
           <Button variant="ghost" onClick={() => setDelTarget(null)}>
             {t.btnCancel}
           </Button>
-          <Button variant="destructive" onClick={delDo}>
+          <Button
+            variant="destructive"
+            disabled={del.isPending}
+            onClick={() => delTarget && del.mutate(delTarget)}
+          >
             {t.empDelDo}
           </Button>
         </DialogActions>

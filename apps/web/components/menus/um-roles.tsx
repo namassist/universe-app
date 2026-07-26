@@ -1,30 +1,23 @@
 "use client";
 
 import * as React from "react";
-import {
-  Download,
-  Lock,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, Lock, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import { api, errorMessage } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv";
 import { useI18n } from "@/lib/i18n";
 import type { Dict } from "@/lib/i18n/id";
+import { rolesKey, rolesQueryOptions, type RoleRow } from "@/lib/queries/roles";
 import {
   emptyPerms,
   MENU_SLUGS,
   pageSections,
-  ROLES_INIT,
-  roleUserCount,
-  USERS_INIT,
+  permsFromApi,
+  permsToApi,
   type MenuSlug,
   type UmPerm,
-  type UmRole,
   type UmScope,
 } from "@/lib/um-data";
 import { cn } from "@/lib/utils";
@@ -60,6 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
 
 const SCOPE_LABEL_KEYS: Record<UmScope, keyof Dict> = {
@@ -71,37 +65,83 @@ const SCOPE_LABEL_KEYS: Record<UmScope, keyof Dict> = {
 export function UmRolesMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const queryClient = useQueryClient();
   const canW = mode === "manage";
-  const impRef = React.useRef<HTMLInputElement>(null);
 
-  const [roles, setRoles] = React.useState<UmRole[]>(ROLES_INIT);
+  const rolesQ = useQuery(rolesQueryOptions);
+  const roles = React.useMemo(() => rolesQ.data ?? [], [rolesQ.data]);
+
   const [q, setQ] = React.useState("");
-
-  /* dialog tambah/edit role */
   const [dlgOpen, setDlgOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<UmRole | null>(null);
+  const [editing, setEditing] = React.useState<RoleRow | null>(null);
   const [fName, setFName] = React.useState("");
   const [fDesc, setFDesc] = React.useState("");
   const [fScope, setFScope] = React.useState<UmScope>("self");
   const [fPerms, setFPerms] =
     React.useState<Record<MenuSlug, UmPerm>>(emptyPerms);
   const [nameErr, setNameErr] = React.useState(false);
-  const [delTarget, setDelTarget] = React.useState<UmRole | null>(null);
+  const [delTarget, setDelTarget] = React.useState<RoleRow | null>(null);
+  const [delError, setDelError] = React.useState<string | null>(null);
 
-  const userCount = (roleId: string) => roleUserCount(USERS_INIT, roleId);
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: rolesKey });
+
+  const save = useMutation({
+    mutationFn: async (input: {
+      id: string | null;
+      name: string;
+      description: string;
+      scope: UmScope;
+      permissions: Partial<Record<MenuSlug, "view" | "manage">>;
+    }) => {
+      const { id, ...body } = input;
+      const result = id
+        ? await api.v1.roles({ id }).patch(body)
+        : await api.v1.roles.post(body);
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (_d, input) => {
+      await invalidate();
+      pushToast(
+        "success",
+        input.id ? t.umToastRoleEdit : t.umToastRoleAdd,
+        input.name
+      );
+      setDlgOpen(false);
+    },
+    onError: (error) =>
+      pushToast("error", t.umRolesT, errorMessage(error, t.loginErr)),
+  });
+
+  const del = useMutation({
+    mutationFn: async (role: RoleRow) => {
+      const { error } = await api.v1.roles({ id: role.id }).delete();
+      if (error) throw error;
+    },
+    onSuccess: async (_d, role) => {
+      await invalidate();
+      pushToast("success", t.umToastRoleDel, role.name);
+      setDelTarget(null);
+    },
+    // The API is the authority on whether a role may go: it refuses a locked
+    // role, and one still held by an account. The dialog relays that answer
+    // rather than second-guessing it from a stale count.
+    onError: (error) => setDelError(errorMessage(error, t.loginErr)),
+  });
 
   const rows = roles.filter(
     (r) =>
       !q ||
       r.name.toLowerCase().includes(q.toLowerCase()) ||
-      r.desc.toLowerCase().includes(q.toLowerCase())
+      r.description.toLowerCase().includes(q.toLowerCase())
   );
   const pg = usePagination(rows);
   const locked = !!editing?.locked;
   const sections = pageSections();
 
-  const permStr = (r: UmRole) => {
-    const vals = Object.values(r.perms);
+  const permStr = (r: RoleRow) => {
+    const vals = Object.values(r.permissions);
     const m = vals.filter((p) => p === "manage").length;
     const v = vals.filter((p) => p === "view").length;
     return `${m} ${t.umPManage.toLowerCase()} · ${v} ${t.umPView.toLowerCase()}`;
@@ -116,68 +156,47 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
     setNameErr(false);
     setDlgOpen(true);
   }
-  function openEdit(r: UmRole) {
+  function openEdit(r: RoleRow) {
     setEditing(r);
     setFName(r.name);
-    setFDesc(r.desc);
+    setFDesc(r.description);
     setFScope(r.scope);
-    setFPerms({ ...r.perms });
+    setFPerms(permsFromApi(r.permissions));
     setNameErr(false);
     setDlgOpen(true);
   }
-  function save(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!fName.trim()) {
       setNameErr(true);
       return;
     }
-    const data = {
+    save.mutate({
+      id: editing?.id ?? null,
       name: fName.trim(),
-      desc: fDesc.trim(),
+      description: fDesc.trim(),
       scope: fScope,
-      perms: fPerms,
-    };
-    if (editing) {
-      setRoles((prev) =>
-        prev.map((r) => (r.id === editing.id ? { ...r, ...data } : r))
-      );
-      pushToast("success", t.umToastRoleEdit, data.name);
-    } else {
-      setRoles((prev) => [
-        ...prev,
-        { id: `n-${data.name}`, locked: false, ...data },
-      ]);
-      pushToast("success", t.umToastRoleAdd, data.name);
-    }
-    setDlgOpen(false);
+      permissions: permsToApi(fPerms),
+    });
   }
-  function delDo() {
-    if (!delTarget) return;
-    setRoles((prev) => prev.filter((r) => r.id !== delTarget.id));
-    pushToast("success", t.umToastRoleDel, delTarget.name);
-    setDelTarget(null);
-  }
+
   function exportCsv() {
     const head = ["role", "deskripsi", "lingkup", ...MENU_SLUGS].join(";");
     const body = roles
-      .map((r) =>
-        [r.name, r.desc, r.scope, ...MENU_SLUGS.map((m) => r.perms[m])].join(
-          ";"
-        )
-      )
+      .map((r) => {
+        const perms = permsFromApi(r.permissions);
+        return [
+          r.name,
+          r.description,
+          r.scope,
+          ...MENU_SLUGS.map((m) => perms[m]),
+        ].join(";");
+      })
       .join("\n");
     const name = `roles_${new Date().toISOString().slice(0, 10)}.csv`;
     downloadCsv(name, `${head}\n${body}`);
     pushToast("success", t.umToastExp, name);
   }
-  function importChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    pushToast("success", t.umToastImp, `${file.name} — 1 ${t.umToastImpD}`);
-    e.target.value = "";
-  }
-
-  const delUsed = delTarget ? userCount(delTarget.id) : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -202,35 +221,22 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
-              {canW ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => impRef.current?.click()}
-                >
-                  <Upload />
-                  Import
-                </Button>
-              ) : null}
               <Button variant="secondary" onClick={exportCsv}>
                 <Download />
                 Export
               </Button>
-              <input
-                ref={impRef}
-                type="file"
-                accept=".csv,.xlsx"
-                className="hidden"
-                onChange={importChange}
-              />
             </ToolbarGroup>
           </Toolbar>
 
-          {pg.rows.length ? (
+          {rolesQ.isPending ? (
+            <TableSkeleton rows={6} />
+          ) : pg.rows.length ? (
             <Table>
               <TableHeader>
                 <tr>
                   <TableHead>Role</TableHead>
                   <TableHead className="max-xl:hidden">{t.umDesc}</TableHead>
+                  <TableHead>{t.umScopeT}</TableHead>
                   <TableHead>Permission</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead className="w-[110px]">{t.thAct}</TableHead>
@@ -248,12 +254,15 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
                       </span>
                     </TableCell>
                     <TableCell className="text-(--text-secondary) max-xl:hidden">
-                      {r.desc}
+                      {r.description}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="neutral">
+                        {t[SCOPE_LABEL_KEYS[r.scope]]}
+                      </Badge>
                     </TableCell>
                     <TableCell className="font-mono">{permStr(r)}</TableCell>
-                    <TableCell className="font-mono">
-                      {userCount(r.id)}
-                    </TableCell>
+                    <TableCell className="font-mono">{r.userCount}</TableCell>
                     <TableCell>
                       {canW ? (
                         <div className="flex gap-2">
@@ -263,11 +272,16 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
                           >
                             <Pencil />
                           </IconButton>
+                          {/* A locked role has no delete affordance — the API
+                              refuses it regardless, this just says so up front. */}
                           {!r.locked ? (
                             <IconButton
                               danger
                               aria-label={t.empDel}
-                              onClick={() => setDelTarget(r)}
+                              onClick={() => {
+                                setDelError(null);
+                                setDelTarget(r);
+                              }}
                             >
                               <Trash2 />
                             </IconButton>
@@ -353,10 +367,10 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
                           {label}
                         </TableCell>
                         {roles.map((r) => {
-                          const perm = r.perms[m];
+                          const perm = r.permissions[m];
                           return (
                             <TableCell key={r.id} className="text-center">
-                              {perm === "none" ? (
+                              {!perm ? (
                                 <span className="text-(--text-disabled)">
                                   —
                                 </span>
@@ -399,7 +413,7 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
           {editing ? `${t.umRoleEditT} — ${editing.name}` : t.umRoleAdd}
         </DialogTitle>
         <DialogBody>{t.umRoleDlgB}</DialogBody>
-        <form onSubmit={save} noValidate>
+        <form onSubmit={submit} noValidate>
           <FormGrid className="mt-4">
             <Field
               label={t.umRoleName}
@@ -422,6 +436,7 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
             <Field label={t.umDesc} htmlFor="um-rdesc">
               <Input
                 id="um-rdesc"
+                disabled={locked}
                 value={fDesc}
                 onChange={(e) => setFDesc(e.target.value)}
               />
@@ -445,6 +460,9 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
                 ))}
               </Segmented>
             </div>
+            <p className="mb-3 text-xs text-(--text-tertiary)">
+              {t.umRoleScopeNote}
+            </p>
             <div className="mb-3 flex items-center justify-between">
               <label className="text-sm font-medium">{t.umMatrixT}</label>
               <span className="text-xs text-(--text-tertiary)">
@@ -512,7 +530,7 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
               {t.btnCancel}
             </Button>
             {!locked ? (
-              <Button type="submit">
+              <Button type="submit" disabled={save.isPending}>
                 {editing ? t.udbSaveEdit : t.umRoleSaveAdd}
               </Button>
             ) : null}
@@ -520,7 +538,7 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
         </form>
       </Dialog>
 
-      {/* dialog hapus role — terblokir bila masih dipakai user */}
+      {/* dialog hapus role */}
       <Dialog
         open={delTarget !== null}
         onClose={() => setDelTarget(null)}
@@ -531,16 +549,21 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
         </DialogIcon>
         <DialogTitle id="umrd-t">{`${t.umRoleDelT} "${delTarget?.name ?? ""}"?`}</DialogTitle>
         <DialogBody>
-          {delUsed > 0
-            ? `${t.umRoleDelBlocked} ${delUsed} user.`
-            : t.umRoleDelB}
+          {delError ??
+            (delTarget && delTarget.userCount > 0
+              ? `${t.umRoleDelBlocked} ${delTarget.userCount} user.`
+              : t.umRoleDelB)}
         </DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setDelTarget(null)}>
             {t.btnCancel}
           </Button>
-          {delUsed === 0 ? (
-            <Button variant="destructive" onClick={delDo}>
+          {delTarget && delTarget.userCount === 0 && !delError ? (
+            <Button
+              variant="destructive"
+              disabled={del.isPending}
+              onClick={() => delTarget && del.mutate(delTarget)}
+            >
               {t.empDelDo}
             </Button>
           ) : null}

@@ -21,7 +21,6 @@ import {
   type EmpStatus,
 } from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
-import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -75,8 +74,7 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
   const router = useRouter();
-  const { role } = useRole();
-  const base = `/${role}/employees`;
+  const base = `/employees`;
   const canW = mode === "manage";
 
   const [emps, setEmps] = React.useState<Emp[]>(EMPLOYEES);

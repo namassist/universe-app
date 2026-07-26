@@ -8,7 +8,6 @@ import { ArrowLeft, CalendarDays, Plus, Send, Trash2 } from "lucide-react";
 import { EMPLOYEES } from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
 import { revCodeList } from "@/lib/roster-data";
-import { useRole } from "@/components/providers/role-context";
 import { AsyncSelect, type AsyncOption } from "@/components/ui/async-select";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
@@ -86,9 +85,8 @@ async function loadEmployees(search: string): Promise<AsyncOption<EmpRow>[]> {
 export function RosterRevisionNew() {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
-  const listHref = `/${role}/roster-revision`;
+  const listHref = `/roster-revision`;
 
   const codes = revCodeList(lang);
 
@@ -214,8 +212,7 @@ export function RosterRevisionNew() {
               errorMessage={t.errCode}
               helper={
                 <>
-                  {t.helpCode1}{" "}
-                  <Link href={`/${role}/roster-data`}>{t.navR1}</Link>.
+                  {t.helpCode1} <Link href={`/roster-data`}>{t.navR1}</Link>.
                 </>
               }
             >

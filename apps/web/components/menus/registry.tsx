@@ -1,6 +1,10 @@
+"use client";
+
 import type { ComponentType } from "react";
+import { notFound } from "next/navigation";
 
 import type { AccessMode, MenuSlug } from "@/lib/access";
+import { useRole } from "@/components/providers/role-context";
 
 import { AttendanceMenu } from "./attendance";
 import { DashboardMenu } from "./dashboard";
@@ -24,7 +28,7 @@ type MenuComponent = ComponentType<{ mode: AccessMode }>;
 
 /**
  * slug → faithful static page. Filled in incrementally; any slug not present
- * falls back to <MenuPlaceholder>. Each role's `page.tsx` renders <MenuPage>.
+ * falls back to <MenuPlaceholder>. Each route's `page.tsx` renders <MenuPage>.
  */
 const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   dashboard: DashboardMenu,
@@ -59,7 +63,20 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   setting: SettingMenu,
 };
 
-export function MenuPage({ slug, mode }: { slug: MenuSlug; mode: AccessMode }) {
+/**
+ * Resolves its own access mode from the session rather than taking it as a
+ * prop. There is now one page per menu instead of one per role × menu, so a
+ * build-time `mode` literal would have to name a role the URL no longer
+ * carries — and the URL was never a trustworthy place to keep one.
+ *
+ * A slug the caller has no grant for renders not-found. That is presentation,
+ * not protection: every request behind it is refused by the API independently.
+ */
+export function MenuPage({ slug }: { slug: MenuSlug }) {
+  const { access } = useRole();
+  const mode = access(slug);
+  if (!mode) notFound();
+
   const Comp = REGISTRY[slug];
   if (Comp) return <Comp mode={mode} />;
   return <MenuPlaceholder slug={slug} mode={mode} />;

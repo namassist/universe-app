@@ -19,9 +19,15 @@ const navBtnClass =
 const activeClass =
   "border-[rgba(0,212,255,.5)] bg-(image:--gradient-nav-active) font-semibold text-(--text-primary) shadow-[0_0_10px_rgba(0,212,255,.4)]";
 
-/** Which nav group (if any) owns the current path, for auto-expand. */
+/**
+ * Which nav group (if any) owns the current path, for auto-expand.
+ *
+ * The slug is the first segment now that routes are no longer prefixed with a
+ * role — reading segment 2 would look at the *sub*-page (`/employees/new`) and
+ * never match a group.
+ */
 function groupOfPath(pathname: string): string | null {
-  const slug = pathname.split("/")[2];
+  const slug = pathname.split("/")[1];
   if (!slug) return null;
   for (const e of NAV) {
     if (e.kind === "group" && e.children.some((c) => c.slug === slug))
@@ -32,13 +38,12 @@ function groupOfPath(pathname: string): string | null {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { role, access } = useRole();
+  const { access } = useRole();
   const { collapsed, setCollapsed, sideOpen, setSideOpen } = useShell();
   const settingEntry = NAV.find(
     (e) => e.kind === "item" && e.slug === "setting"
   );
 
-  const base = `/${role}`;
   const currentGroup = groupOfPath(pathname);
   const [openGroup, setOpenGroup] = React.useState<string | null>(currentGroup);
 
@@ -53,7 +58,9 @@ export function Sidebar() {
     setSideOpen(false);
   }, [pathname, setSideOpen]);
 
-  const hrefOf = (slug: string) => `${base}/${slug}`;
+  /* One page set serves every role, so a menu is reachable at its own slug and
+     permission alone decides whether it is shown. */
+  const hrefOf = (slug: string) => `/${slug}`;
   /* startsWith: sub-halaman (detail/edit/upload) tetap menyalakan induknya */
   const isActive = (slug: string) => pathname.startsWith(hrefOf(slug));
 

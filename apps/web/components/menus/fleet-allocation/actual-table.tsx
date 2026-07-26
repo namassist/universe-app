@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { History, Zap } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
-import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +45,6 @@ const TODAY = "2026-07-21";
 export function ActualTable({ canManage }: { canManage: boolean }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
 
   const [rowsAll, setRowsAll] = React.useState<ActualRow[]>(ACTUAL_INIT);
@@ -244,7 +242,7 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
                           className="h-8 text-[13px]"
                           onClick={() =>
                             router.push(
-                              `/${role}/fleet-allocation/detail?date=${r.date}&shift=${r.shift}`
+                              `/fleet-allocation/detail?date=${r.date}&shift=${r.shift}`
                             )
                           }
                         >

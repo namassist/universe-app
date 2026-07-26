@@ -2,38 +2,51 @@
 
 import * as React from "react";
 
-import {
-  accessOf,
-  ROLE_LABELS,
-  type AccessMode,
-  type MenuSlug,
-  type Role,
-} from "@/lib/access";
+import type {
+  AccessMode,
+  EffectivePermissions,
+  MenuSlug,
+  Scope,
+  SessionPrincipal,
+} from "@universe/contracts";
 
 type RoleCtx = {
-  role: Role;
+  principal: SessionPrincipal;
+  /** Role name for display. Devices carry no role, hence the fallback. */
   roleLabel: string;
-  /** Access mode for a menu, or undefined when hidden for this role. */
+  scope: Scope | null;
+  /** Access mode for a menu, or undefined when hidden for this caller. */
   access: (slug: MenuSlug) => AccessMode | undefined;
 };
 
 const Ctx = React.createContext<RoleCtx | null>(null);
 
-/** Supplies the current (static) role to the shell + pages. One per role route. */
+/**
+ * Supplies the caller's identity and effective grants to the shell and pages.
+ *
+ * The permissions arrive from the session endpoint rather than from a static
+ * matrix or a URL segment: a role editable at runtime cannot be a build-time
+ * constant, and a URL segment is an unverified claim. The `access(slug)` shape
+ * is unchanged, so consumers did not have to move.
+ */
 export function RoleProvider({
-  role,
+  principal,
+  permissions,
   children,
 }: {
-  role: Role;
+  principal: SessionPrincipal;
+  permissions: EffectivePermissions;
   children: React.ReactNode;
 }) {
   const value = React.useMemo<RoleCtx>(
     () => ({
-      role,
-      roleLabel: ROLE_LABELS[role],
-      access: (slug) => accessOf(role, slug),
+      principal,
+      roleLabel:
+        principal.kind === "user" ? principal.roleName : principal.name,
+      scope: principal.kind === "user" ? principal.scope : null,
+      access: (slug) => permissions[slug],
     }),
-    [role]
+    [principal, permissions]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

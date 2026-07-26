@@ -1,0 +1,42 @@
+schema: spec-driven
+
+# Project context — shown to the AI when creating artifacts.
+context: |
+  UNIVERSE — fleet automation for a mining company. The core job is zero unit
+  downtime at the start of every shift: put a qualified, fit operator on every
+  unit the moment the shift begins, filling any gap from a pool of spares.
+
+  Tech stack (monorepo, Bun + Turbo):
+  - apps/api — Elysia on Bun (:3001). Routes live under /v1 and each declares
+    body, params, and response schemas (this is what makes the OpenAPI spec
+    complete for a future mobile client). TypeBox schemas stay in apps/api.
+  - apps/web — Next.js App Router, React 19, TypeScript, Tailwind v4 (:3000).
+    This is a vendored/modified Next — check node_modules/next/dist/docs before
+    relying on stock behavior.
+  - packages/contracts — types + enums shared with the browser; must stay
+    browser-safe (no db client, no secrets, no node builtins). Enum values come
+    from here so DB, API, and client cannot drift.
+  - Postgres via Drizzle, Redis via ioredis. Type safety flows via Eden Treaty:
+    apps/api exports `type App`, apps/web consumes it (type-only, no codegen).
+    Web data fetching uses TanStack Query (queryOptions in lib/queries/*) with
+    prefetch + hydration; mutations invalidate, they do not router.refresh().
+  - apps/web is shadcn-style: vendored compound components in components/ui,
+    styled ONLY through design tokens in app/globals.css (arbitrary hex is an
+    ESLint error). Extend existing components with variants — no Radix or any
+    headless UI library.
+
+  Current state: the web app is a STATIC DESIGN PORT — sample data, no
+  persistence, mutations are toast-only, and not yet wired to the API. Auth is not
+  decided yet (web wants httpOnly cookies, mobile needs bearer tokens — one
+  session store should serve both).
+
+# Per-artifact rules — project-specific guidance layered on OpenSpec's defaults.
+# rules:
+#   proposal:
+#     - State which apps are touched (apps/api, apps/web, packages/contracts).
+#     - Include a "Non-goals" section.
+# tasks:
+#   - Order shared contract/enum changes first, so both API and web can rely on
+#     them.
+#   - End any web-facing task with the verification pipeline (rm -rf .next,
+#     prettier, tsc --noEmit, eslint, next build).

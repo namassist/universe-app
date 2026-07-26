@@ -6,7 +6,6 @@ import { ArrowLeft, Download, Upload } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import { rosterGrid, upErrorRows } from "@/lib/roster-data";
-import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
 import { Button, Spinner } from "@/components/ui/button";
 import { Dropzone } from "@/components/ui/dropzone";
@@ -43,9 +42,8 @@ type Stage = "idle" | "progress" | "validating" | "results";
 export function RosterUpload() {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
-  const listHref = `/${role}/roster-data`;
+  const listHref = `/roster-data`;
 
   const [stage, setStage] = React.useState<Stage>("idle");
   const [pct, setPct] = React.useState(0);
@@ -112,23 +110,31 @@ export function RosterUpload() {
   );
   const pgErr = usePagination(errRows);
 
+  /* Counted from the rows actually on screen rather than hardcoded. The chips
+     used to read 2.140 / 3 / 5 while the tables below listed a different set
+     entirely, so the summary contradicted the very data it summarised. */
+  const dupCount = errors.filter((e) => e.badgeVariant === "warning").length;
+  const errCount = errors.filter((e) => e.badgeVariant === "danger").length;
+  const flagged = new Set(errors.map((e) => e.nik));
+  const validCount = preview.rows.filter((r) => !flagged.has(r.nik)).length;
+
   const vchips = [
     {
-      n: t.n2140,
+      n: validCount,
       label: t.vValid,
       bg: "var(--badge-success-fill)",
       border: "var(--badge-success-border)",
       color: "var(--badge-success-text)",
     },
     {
-      n: "3",
+      n: dupCount,
       label: t.vDup,
       bg: "var(--badge-warning-fill)",
       border: "var(--badge-warning-border)",
       color: "var(--badge-warning-text)",
     },
     {
-      n: "5",
+      n: errCount,
       label: t.vErr,
       bg: "var(--badge-danger-fill)",
       border: "var(--badge-danger-border)",
@@ -255,7 +261,8 @@ export function RosterUpload() {
             </div>
             <PanelFoot>
               <FootSum>
-                {t.upPrevA} <b>{pgPrev.range}</b> {t.upPrevB}
+                {t.upPrevA} <b>{pgPrev.range}</b> {t.attSumB}{" "}
+                <b>{pgPrev.total}</b> {t.upPrevB}
               </FootSum>
               <Pagination
                 page={pgPrev.page}
@@ -351,9 +358,13 @@ export function RosterUpload() {
                     <Download />
                     {t.upDlErrors}
                   </Button>
+                  {/* Says how many rows it is about to import, so the button
+                      and the summary above it cannot disagree. */}
                   <Button onClick={doImport} disabled={importBusy}>
                     {importBusy ? <Spinner /> : null}
-                    {importBusy ? t.upImporting : t.upImport}
+                    {importBusy
+                      ? t.upImporting
+                      : `${t.upImport} ${validCount} ${t.upRowsValid}`}
                   </Button>
                 </div>
               </div>

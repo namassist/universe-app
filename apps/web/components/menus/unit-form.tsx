@@ -14,7 +14,6 @@ import {
   PROD_OPTS,
   UNITS,
 } from "@/lib/unit-data";
-import { useRole } from "@/components/providers/role-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
 import { Field, FormGrid } from "@/components/ui/field";
@@ -26,9 +25,8 @@ import { useToast } from "@/components/ui/toast";
 export function UnitForm({ code }: { code?: string }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
-  const listHref = `/${role}/database-unit`;
+  const listHref = `/database-unit`;
 
   const record = code ? findUnit(code) : undefined;
 

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   ChevronDown,
@@ -16,10 +17,11 @@ import {
 } from "lucide-react";
 
 import { MENU_LABELS, type MenuSlug } from "@/lib/access";
+import { api } from "@/lib/api";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { NAV } from "@/lib/nav";
 import { notifStore, notifToneDot, useNotifs } from "@/lib/notifications-data";
-import { ROLE_ACCOUNTS } from "@/lib/um-data";
+import { sessionKey } from "@/lib/queries/session";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
 import {
@@ -54,23 +56,44 @@ export function Topbar() {
   const router = useRouter();
   const { t, lang, setLang } = useI18n();
   const { pref, resolved, setTheme } = useTheme();
-  const { role, roleLabel, access } = useRole();
+  const { principal, roleLabel, access } = useRole();
   const { setSideOpen } = useShell();
   const { pushToast } = useToast();
+  const queryClient = useQueryClient();
   const notifs = useNotifs();
   const [openDrop, setOpenDrop] = React.useState<string | null>(null);
   const unread = notifs.filter((n) => !n.read).length;
 
-  const account = ROLE_ACCOUNTS[role];
+  /* Identity comes from the session, not from a table of sample accounts.
+     An account is credentialed by email or NIK, so whichever it carries is
+     what the menu shows. */
+  const account = {
+    name: principal.name,
+    identifier:
+      principal.kind === "user"
+        ? (principal.email ?? principal.nik ?? "—")
+        : principal.id,
+  };
   const userShort = account.name.trim().split(/\s+/).slice(0, 2).join(" ");
+
+  async function signOut() {
+    close();
+    await api.v1.auth.logout.post();
+    // Drop the cached session before navigating, or the login page briefly
+    // renders against the identity that just ended.
+    await queryClient.invalidateQueries({ queryKey: sessionKey });
+    pushToast("info", t.logout, account.identifier);
+    router.replace("/login");
+  }
 
   const toggle = (key: string) => setOpenDrop((v) => (v === key ? null : key));
   const close = () => setOpenDrop(null);
 
   /* breadcrumb: parent grup (bila ada) + halaman aktif */
-  const slug = pathname.split("/")[2] as MenuSlug | undefined;
+  /* Routes are no longer role-prefixed: the menu slug is the first segment. */
+  const slug = pathname.split("/")[1] as MenuSlug | undefined;
   let cur = slug ? (MENU_LABELS[slug] ?? "") : "";
-  const sub = pathname.split("/")[3];
+  const sub = pathname.split("/")[2];
   if (slug === "employees" && sub === "new") cur = t.efTitleAdd;
   else if (slug === "employees" && sub) cur = t.navEmployees;
   else if (slug === "roster-data" && sub === "upload") cur = t.navR1;
@@ -78,6 +101,7 @@ export function Topbar() {
   else if (slug === "roster-revision" && sub === "new") cur = t.revNewTitle;
   else if (slug === "fit-to-work" && sub === "history") cur = t.ftwHistPage;
   else if (slug === "fleet-allocation" && sub === "detail") cur = "ACTUAL";
+  else if (slug === "users" && sub === "import") cur = t.umImpTitle;
   else if ((slug as string) === "profile") cur = t.profile;
   else if ((slug as string) === "notifications") cur = t.notifTitle;
   const group = slug ? groupLabelOf(slug) : null;
@@ -239,7 +263,7 @@ export function Topbar() {
               <button
                 onClick={() => {
                   close();
-                  router.push(`/${role}/notifications`);
+                  router.push("/notifications");
                 }}
                 className="flex h-9 cursor-pointer items-center rounded-lg px-3 text-[13px] font-medium whitespace-nowrap text-(--color-primary-bright) hover:bg-(--fill-hover)"
               >
@@ -272,13 +296,13 @@ export function Topbar() {
             <div className="mb-2 border-b border-(--divider) px-3 pt-2 pb-3">
               <b className="block text-[13px]">{account.name}</b>
               <span className="font-mono text-[11px] text-(--text-tertiary)">
-                {account.email}
+                {account.identifier}
               </span>
             </div>
             <DropMenuItem
               onClick={() => {
                 close();
-                router.push(`/${role}/profile`);
+                router.push("/profile");
               }}
             >
               <User />
@@ -288,7 +312,7 @@ export function Topbar() {
               <DropMenuItem
                 onClick={() => {
                   close();
-                  router.push(`/${role}/setting`);
+                  router.push("/setting");
                 }}
               >
                 <Settings />
@@ -297,11 +321,7 @@ export function Topbar() {
             ) : null}
             <DropMenuItem
               className="text-(--color-danger-text) hover:bg-(--badge-danger-fill) hover:text-(--color-danger-text)"
-              onClick={() => {
-                close();
-                pushToast("info", t.logout, account.email);
-                router.push("/");
-              }}
+              onClick={signOut}
             >
               <LogOut />
               {t.logout}

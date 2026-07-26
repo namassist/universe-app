@@ -7,7 +7,6 @@ import { Download, Pencil, Plus, Search, Upload } from "lucide-react";
 import type { AccessMode } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { CLS_OPTS, PROD_OPTS, UNITS } from "@/lib/unit-data";
-import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import {
@@ -52,9 +51,8 @@ type ImpState = {
 export function DatabaseUnitMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
-  const { role } = useRole();
   const router = useRouter();
-  const base = `/${role}/database-unit`;
+  const base = `/database-unit`;
   const canW = mode === "manage";
 
   const [q, setQ] = React.useState("");

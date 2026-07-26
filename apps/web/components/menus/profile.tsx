@@ -4,7 +4,6 @@ import * as React from "react";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
-import { ROLE_ACCOUNTS } from "@/lib/um-data";
 import { useRole } from "@/components/providers/role-context";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -50,15 +49,20 @@ function PwInput({
   );
 }
 
-/** Profil akun sesi — identitas dari akun contoh role; simpan = toast. */
+/** Profil akun sesi — identitas dari sesi; simpan = toast (belum ke API). */
 export function ProfilePage() {
   const { t } = useI18n();
   const { pushToast } = useToast();
-  const { role, roleLabel } = useRole();
-  const account = ROLE_ACCOUNTS[role];
+  const { principal, roleLabel } = useRole();
+  /* Identity comes from the session. A device never reaches this page — the
+     shell redirects it — so the user fields are the only meaningful shape. */
+  const account =
+    principal.kind === "user"
+      ? { name: principal.name, email: principal.email, nik: principal.nik }
+      : { name: principal.name, email: null, nik: null };
 
   const [name, setName] = React.useState(account.name);
-  const [email, setEmail] = React.useState(account.email);
+  const [email, setEmail] = React.useState(account.email ?? "");
   const [pwCur, setPwCur] = React.useState("");
   const [pwNew, setPwNew] = React.useState("");
   const [pwConf, setPwConf] = React.useState("");

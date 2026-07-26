@@ -16,7 +16,7 @@ import type { FaShift } from "./data";
    unit teralokasi, substitusi spare, downtime, dan intervensi manual. */
 export function FleetAllocationDetail() {
   const { t } = useI18n();
-  const { role, access } = useRole();
+  const { access } = useRole();
   const router = useRouter();
   const searchParams = useSearchParams();
   const canManage = access("fleet-allocation") === "manage";
@@ -32,7 +32,7 @@ export function FleetAllocationDetail() {
       <PageTitle title={`ACTUAL — ${date}`} sub={`${shiftLabel} — ${t.faSubB}`}>
         <Button
           variant="ghost"
-          onClick={() => router.push(`/${role}/fleet-allocation?mode=actual`)}
+          onClick={() => router.push(`/fleet-allocation?mode=actual`)}
         >
           <ArrowLeft />
           {t.upBack}

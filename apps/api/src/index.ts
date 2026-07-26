@@ -6,6 +6,9 @@ import { API_VERSION } from "@universe/contracts";
 import { env, isProd } from "./env";
 import { pingDb } from "./db";
 import { pingRedis } from "./redis";
+import { authRoutes } from "./routes/auth";
+import { devicesRoutes, displayRoutes } from "./routes/devices";
+import { rolesRoutes } from "./routes/roles";
 import { usersRoutes } from "./routes/users";
 
 /**
@@ -15,7 +18,12 @@ import { usersRoutes } from "./routes/users";
  * users can sit on an old version for weeks. Adding the prefix later means
  * touching every route and every client.
  */
-const api = new Elysia({ prefix: `/${API_VERSION}` }).use(usersRoutes);
+const api = new Elysia({ prefix: `/${API_VERSION}` })
+  .use(authRoutes)
+  .use(rolesRoutes)
+  .use(usersRoutes)
+  .use(devicesRoutes)
+  .use(displayRoutes);
 
 export const app = new Elysia()
   .use(
@@ -28,7 +36,13 @@ export const app = new Elysia()
     openapi({
       documentation: {
         info: { title: "Universe API", version: "1.0.0" },
-        tags: [{ name: "users", description: "User management" }],
+        tags: [
+          { name: "auth", description: "Sessions and credentials" },
+          { name: "roles", description: "Roles and permissions" },
+          { name: "users", description: "Account management" },
+          { name: "devices", description: "Display device registry" },
+          { name: "display", description: "Kiosk data and heartbeat" },
+        ],
       },
     })
   )

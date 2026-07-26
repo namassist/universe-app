@@ -630,9 +630,8 @@ export const id = {
   dzHint:
     "Format .xlsx sesuai template — kolom NIK, nama, tanggal 1–31 berisi kode roster",
   upUploading: "Mengunggah…",
-  upValidating: "Memvalidasi 2.148 baris…",
+  upValidating: "Memvalidasi baris…",
   upResults: "Hasil validasi",
-  n2140: "2.140",
   vValid: "baris valid — siap diimpor",
   vDup: "duplikat — baris terakhir dipakai",
   vErr: "error — tidak akan diimpor",
@@ -640,11 +639,12 @@ export const id = {
   upFootNote:
     "Impor hanya memproses baris valid; baris error diunduh, diperbaiki, lalu diunggah ulang.",
   upDlErrors: "Unduh 5 baris error",
-  upImport: "Impor 2.140 baris valid",
+  upImport: "Impor",
+  upRowsValid: "baris valid",
   upImporting: "Mengimpor…",
   toastImportT: "Roster Juli diimpor",
   toastImportD:
-    "2.140 baris masuk. 5 baris error menunggu perbaikan — unduh detailnya.",
+    "Baris valid masuk. Baris error menunggu perbaikan — unduh detailnya.",
   toastTemplateT: "Template diunduh",
   toastTemplateD: "roster_template.xlsx — kolom NIK, nama, tanggal 1–31.",
   toastErrT: "5 baris error diunduh",
@@ -655,7 +655,7 @@ export const id = {
     "Kode roster per karyawan per tanggal — geser untuk melihat semua tanggal",
   thNama: "Nama",
   upPrevA: "Preview",
-  upPrevB: "dari 247 karyawan — seluruh baris diperiksa saat validasi.",
+  upPrevB: "karyawan — seluruh baris diperiksa saat validasi.",
   legendTitle: "Legend kode roster — 28 kode",
   legendNote:
     "Kode yang sama dipakai di file Excel, revisi, dan tampilan attendance",
@@ -807,6 +807,72 @@ export const id = {
   pfPwErrConf: "Konfirmasi tidak sama dengan password baru.",
   pfPwSavedT: "Password diubah",
   pfPwSavedD: "gunakan password baru saat login berikutnya.",
+
+  /* --- auth: identifier + forced password change --- */
+  authIdentLabel: "Email atau NIK",
+  authIdentPh: "nama@unggul.co.id atau OPS-0421",
+  authIdentHelp: "Staf kantor memakai email, operator lapangan memakai NIK.",
+  authLoginErr:
+    "Identifier atau password salah. Periksa kembali, atau hubungi admin bila akun Anda dinonaktifkan.",
+  cpTitle: "Ganti password",
+  cpSub:
+    "Akun ini masih memakai password awal dari admin. Tetapkan password Anda sendiri untuk melanjutkan.",
+  cpTitlePlain: "Password baru",
+  cpCurrent: "Password saat ini",
+  cpNew: "Password baru",
+  cpConfirm: "Ulangi password baru",
+  cpMismatch: "Konfirmasi password tidak cocok.",
+  cpSubmit: "Simpan password",
+  cpSaving: "Menyimpan…",
+  cpDone: "Password diperbarui",
+  cpBackToLogin: "Keluar dan masuk sebagai akun lain",
+
+  /* --- user management: single role, reset, import --- */
+  umErrRequired: "Nama dan role wajib diisi.",
+  umErrIdentifier: "Akun harus punya email atau NIK.",
+  umIdentHelp: "Isi email, NIK, atau keduanya — minimal salah satu.",
+  umPickRole: "Pilih role",
+  umMustChange: "Wajib ganti password",
+  umDefaultPwNote:
+    "Akun baru memakai password awal dari konfigurasi dan wajib menggantinya saat login pertama.",
+  umResetT: "Reset password",
+  umResetB:
+    "Password akun dikembalikan ke password awal dari konfigurasi, dan akun wajib menetapkan password baru saat login berikutnya.",
+  umResetDo: "Reset password",
+  umResetDoneT: "Password direset",
+  umResetDoneD: "wajib ganti password saat login berikutnya.",
+  umImpTitle: "Import akun dari spreadsheet",
+  umImpHint:
+    "Format .xlsx — kolom nik, nama, email, role. Tanpa kolom password.",
+  umImpNew: "Baru",
+  umImpUpd: "Diperbarui",
+  umImpChanges: "Perubahan",
+  umImpCreated: "dibuat",
+  umImpUpdated: "diperbarui",
+  umImpSub: "Buat dan perbarui akun secara massal dari file .xlsx.",
+  umImpBack: "Kembali ke daftar user",
+  umImpDzTitle: "Seret file akun ke sini, atau klik untuk memilih",
+  umImpValidating: "Memvalidasi baris…",
+  umImpPrevB: "baris",
+  umImpErr: "error — import diblokir",
+  umImpAccounts: "akun",
+  umImpDoneT: "Akun diimpor",
+  umImpTplD: "template_akun.xlsx — kolom nik, nama, email, role.",
+  umImpFoot:
+    "Setiap baris diperiksa di server sebelum ada yang ditulis ke database.",
+  umImpBlocked: "Perbaiki baris bermasalah sebelum melakukan import.",
+  umRoleScopeNote: "Lingkup dept dan self mensyaratkan akun punya NIK.",
+
+  /* --- display devices: identity, pairing, heartbeat --- */
+  dspId: "ID Perangkat",
+  dspIdHelp: "Kode yang tertempel di TV — dipakai untuk pairing dan revoke.",
+  dspContentNote:
+    "Konfigurasi konten display belum disimpan ke server; menyusul pada perubahan berikutnya.",
+  dspPairT: "Link pairing",
+  dspPairB:
+    "Buka link ini sekali di TV yang bersangkutan. Sekali pakai dan kedaluwarsa dalam 15 menit.",
+  dspPairCopy: "Salin",
+  dspPairCopied: "Tersalin",
 } as const;
 
 export type Dict = { [K in keyof typeof id]: string };

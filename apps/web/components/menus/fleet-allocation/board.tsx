@@ -6,7 +6,6 @@ import { Upload, UserPlus } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useRole } from "@/components/providers/role-context";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -219,7 +218,6 @@ export function AllocBoard({
   const { t } = useI18n();
   const { pushToast } = useToast();
   const importRef = React.useRef<HTMLInputElement>(null);
-  const { role } = useRole();
   const router = useRouter();
 
   const [units, setUnits] = React.useState<BoardUnit[]>(() =>
@@ -640,7 +638,7 @@ export function AllocBoard({
                   <Button
                     variant="secondary"
                     className="h-[34px] flex-1 text-[13px]"
-                    onClick={() => router.push(`/${role}/unit-status`)}
+                    onClick={() => router.push(`/unit-status`)}
                   >
                     {t.faGoStatus}
                   </Button>

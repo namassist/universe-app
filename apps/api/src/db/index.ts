@@ -8,7 +8,7 @@ const client = postgres(env.DATABASE_URL, { max: 10 });
 
 export const db = drizzle(client, { schema });
 export { schema };
-export type { UserRow } from "./schema";
+export type { DeviceRow, RolePermissionRow, RoleRow, UserRow } from "./schema";
 
 const UNIQUE_VIOLATION = "23505";
 
