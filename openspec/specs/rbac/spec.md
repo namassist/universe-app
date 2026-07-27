@@ -49,7 +49,7 @@ The seed MUST be idempotent.
 #### Scenario: Superadmin
 
 - **WHEN** the seed runs
-- **THEN** `superadmin` SHALL hold `manage` on all 30 menu slugs, SHALL have scope `all`, and SHALL be `locked`
+- **THEN** `superadmin` SHALL hold `manage` on all 31 menu slugs, SHALL have scope `all`, and SHALL be `locked`
 
 #### Scenario: Admin
 
@@ -64,7 +64,7 @@ The seed MUST be idempotent.
 #### Scenario: Manpower
 
 - **WHEN** the seed runs
-- **THEN** `manpower` SHALL have scope `all` and `manage` on all 22 menus of its remit, including every master-data menu and `setting`, with no `view`-only grants
+- **THEN** `manpower` SHALL have scope `all` and `manage` on all 23 menus of its remit, including every master-data menu — `kode-simper` among them — and `setting`, with no `view`-only grants
 
 #### Scenario: Medic
 
@@ -80,6 +80,11 @@ The seed MUST be idempotent.
 
 - **WHEN** the seed runs against a database that already contains the six roles
 - **THEN** it SHALL complete without error and SHALL NOT duplicate roles or permission rows
+
+#### Scenario: Seeding a new menu slug into an existing installation
+
+- **WHEN** the seed runs against a database seeded before `kode-simper` existed
+- **THEN** `superadmin` and `manpower` SHALL gain `manage` on `kode-simper`, no other role SHALL gain a grant, and no existing grant SHALL be altered or removed
 
 ### Requirement: Permissions are grants of a mode on a menu slug
 
@@ -102,6 +107,31 @@ package.
 
 - **WHEN** a caller attempts to introduce a new menu slug through the roles API
 - **THEN** the API SHALL reject it, since a slug corresponds to a page that exists in code
+
+### Requirement: The menu slug list covers the qualification catalogue
+
+The shared contracts SHALL define a `kode-simper` menu slug governing the SIMPER
+qualification catalogue, distinct from the existing `simper` slug governing
+permit types.
+
+Adding it SHALL be additive: permission records referencing existing slugs SHALL
+remain valid, and a role with no grant on `kode-simper` SHALL simply have no
+access to it.
+
+#### Scenario: The new slug is accepted
+
+- **WHEN** a permission is submitted granting a mode on `kode-simper`
+- **THEN** the API SHALL persist it, since the slug is defined in the contracts package
+
+#### Scenario: Existing grants are unaffected
+
+- **WHEN** the slug list is widened
+- **THEN** every existing permission record SHALL remain valid and SHALL continue to resolve to the same menu
+
+#### Scenario: A role without the grant has no access
+
+- **WHEN** a caller whose role holds no grant on `kode-simper` requests the qualification catalogue
+- **THEN** the API SHALL respond 403
 
 ### Requirement: An account holds exactly one role
 
@@ -262,7 +292,7 @@ constant, and the role MUST NOT be taken from the URL.
 
 ### Requirement: Client-side gating is not the security boundary
 
-The web middleware and shell SHALL be treated as user experience only. Every API
+The web proxy and shell SHALL be treated as user experience only. Every API
 route SHALL enforce permission and scope independently of any client check.
 
 #### Scenario: Client check bypassed
