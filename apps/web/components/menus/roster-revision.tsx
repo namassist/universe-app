@@ -63,7 +63,7 @@ const stBadge: Record<Status, BadgeVariant> = {
 const ROWS: Row[] = [
   {
     sid: "REV-2481",
-    nik: "OPS-0421",
+    nik: "503220421",
     name: "Budi Santoso",
     status: "pending",
     whenId: "20 Jul 2026",
@@ -73,7 +73,7 @@ const ROWS: Row[] = [
   },
   {
     sid: "REV-2481",
-    nik: "OPS-0510",
+    nik: "501230510",
     name: "Rudi Hartono",
     status: "pending",
     whenId: "20 Jul 2026",
@@ -83,7 +83,7 @@ const ROWS: Row[] = [
   },
   {
     sid: "REV-2481",
-    nik: "OPS-0111",
+    nik: "511190111",
     name: "Joko Prasetyo",
     status: "pending",
     whenId: "20 Jul 2026",
@@ -93,7 +93,7 @@ const ROWS: Row[] = [
   },
   {
     sid: "REV-2479",
-    nik: "OPS-0388",
+    nik: "508210388",
     name: "Andi Wijaya",
     status: "approved",
     whenId: "18 Jul 2026",
@@ -105,7 +105,7 @@ const ROWS: Row[] = [
   },
   {
     sid: "REV-2479",
-    nik: "OPS-0290",
+    nik: "509220290",
     name: "Dewi Anggraini",
     status: "rejected",
     whenId: "18 Jul 2026",
@@ -117,7 +117,7 @@ const ROWS: Row[] = [
   },
   {
     sid: "REV-2470",
-    nik: "OPS-0455",
+    nik: "506230455",
     name: "Fitri Handayani",
     status: "approved",
     whenId: "12 Jul 2026",

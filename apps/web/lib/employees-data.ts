@@ -51,7 +51,7 @@ export const MESS_OPTS = [
 
 export const EMPLOYEES: Employee[] = [
   {
-    nik: "OPS-0421",
+    nik: "503220421",
     name: "Budi Santoso",
     company: UDU,
     dept: "Mining Operation",
@@ -75,7 +75,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0388",
+    nik: "508210388",
     name: "Andi Wijaya",
     company: UDU,
     dept: "Mining Operation",
@@ -96,7 +96,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0510",
+    nik: "501230510",
     name: "Rudi Hartono",
     company: UDU,
     dept: "Mining Operation",
@@ -114,7 +114,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0233",
+    nik: "505200233",
     name: "Sari Lestari",
     company: UDU,
     dept: "HRGA",
@@ -126,7 +126,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0111",
+    nik: "511190111",
     name: "Joko Prasetyo",
     company: UDU,
     dept: "Mining Operation",
@@ -144,7 +144,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0290",
+    nik: "509220290",
     name: "Dewi Anggraini",
     company: UDU,
     dept: "SDI",
@@ -156,7 +156,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0367",
+    nik: "502210367",
     name: "Hendra Gunawan",
     company: UDU,
     dept: "Mining Operation",
@@ -174,7 +174,7 @@ export const EMPLOYEES: Employee[] = [
     status: "cuti",
   },
   {
-    nik: "OPS-0455",
+    nik: "506230455",
     name: "Fitri Handayani",
     company: UDU,
     dept: "Mining Operation",
@@ -186,7 +186,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0129",
+    nik: "504180129",
     name: "Agus Salim",
     company: UDU,
     dept: "Plant",
@@ -204,7 +204,7 @@ export const EMPLOYEES: Employee[] = [
     status: "aktif",
   },
   {
-    nik: "OPS-0602",
+    nik: "510200602",
     name: "Rina Marlina",
     company: UDU,
     dept: "SDI",

@@ -3,6 +3,8 @@
 import * as React from "react";
 import { Monitor, WifiOff } from "lucide-react";
 
+import type { DeviceKind } from "@universe/contracts";
+
 import { cn } from "@/lib/utils";
 import { LogoBadge } from "@/components/ui/logo";
 
@@ -31,6 +33,12 @@ export function DisplayShell({
   title,
   meta,
   deviceName,
+  /**
+   * Which display this screen is. Fixed per kiosk page rather than read from
+   * the URL: it selects the endpoint the ticker polls, and the API refuses a
+   * device session asking for a kind it is not registered for anyway.
+   */
+  displayKind,
   stats,
   topBar,
   children,
@@ -38,6 +46,7 @@ export function DisplayShell({
   title: string;
   meta?: React.ReactNode;
   deviceName?: string;
+  displayKind: DeviceKind;
   stats: DisplayStat[];
   topBar?: React.ReactNode;
   children: React.ReactNode;
@@ -217,8 +226,10 @@ export function DisplayShell({
           {children}
         </div>
 
-        {/* running text — sabuk berjalan (kustom display / master), nempel dasar layar */}
-        <RunningTicker displayName={deviceName} />
+        {/* Running text — sabuk berjalan, isinya diputuskan server (kustom
+            display kalau ada, kalau tidak master). Poll-nya sekaligus heartbeat
+            perangkat ini. */}
+        <RunningTicker kind={displayKind} />
       </div>
 
       {/* demo switch (bukan bagian desain kiosk) */}

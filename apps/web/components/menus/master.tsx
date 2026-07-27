@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Download,
   Pencil,
@@ -9,24 +11,24 @@ import {
   Search,
   Trash2,
   Upload,
-  Volume2,
 } from "lucide-react";
 
-import { MENU_LABELS, type AccessMode, type MenuSlug } from "@/lib/access";
-import { AREA_KERJA, AREA_TIPE } from "@/lib/area-data";
-import { DEPARTEMEN } from "@/lib/departemen-data";
 import {
-  COLOR_VAL,
-  RUNNING_TEXTS,
-  RUNTEXT_COLORS,
-  SOUNDS,
-  soundSrc,
-  TIMELINE,
-  TIMELINE_ACTION_LABELS,
-  timelineActionLabel,
-} from "@/lib/display-data";
+  AREA_TYPES,
+  MENU_LABELS,
+  type AreaType,
+  type MasterKind,
+} from "@universe/contracts";
+
+import type { AccessMode } from "@/lib/access";
+import { api, errorMessage, fetchBlob } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { UNITS } from "@/lib/unit-data";
+import {
+  masterQueryOptions,
+  recordDescription,
+  recordType,
+  type MasterRecord,
+} from "@/lib/queries/master";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -62,351 +64,347 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
-export type MasterCat =
-  | "jenis-unit"
-  | "model-unit"
-  | "merk-unit"
-  | "kelas-unit"
-  | "simper"
-  | "departemen"
-  | "area-kerja"
-  | "bus"
-  | "mess"
-  | "running-text"
-  | "sound"
-  | "timeline";
+/**
+ * The nine lookup catalogues, through one component and one route (design D3).
+ *
+ * The static port flattened every category into `{ name, a, b, c }`, where `a`
+ * meant "description" here and "type" there. That is gone: `colsFor` names each
+ * catalogue's real field, and a row is read by that name rather than by
+ * position — which is also what lets the API describe each catalogue honestly
+ * in its OpenAPI document.
+ *
+ * The four screens that used to ride this component and are not catalogues —
+ * Bus, Running Text, Sound, Timeline — now have their own, because they never
+ * shared a domain with these, only a table with a dialog.
+ */
 
-type ColKey = "name" | "a" | "b" | "c";
+type Extra = "none" | "description" | "type";
+
+const EXTRA_OF_KIND: Record<MasterKind, Extra> = {
+  "jenis-unit": "none",
+  "model-unit": "none",
+  "merk-unit": "none",
+  mess: "none",
+  "kelas-unit": "description",
+  simper: "description",
+  "kode-simper": "description",
+  departemen: "description",
+  "area-kerja": "type",
+};
+
 type Col = {
-  key: ColKey;
+  key: "name" | "description" | "type";
   label: string;
-  kind?: "text" | "time" | "select" | "color" | "file";
-  opts?: string[];
-};
-type Entry = {
-  id: string;
-  name: string;
-  a: string;
-  b: string;
-  c?: string;
-  active: boolean;
+  kind?: "text" | "select";
+  opts?: readonly string[];
 };
 
-/* kode bus = unit dgn jenis BUS (belum ada di fleet saat ini) */
-const BUS_UNIT_CODES = UNITS.filter((u) => u.egiType === "BUS").map(
-  (u) => u.code
-);
-
-const SAMPLE: Record<MasterCat, Entry[]> = {
-  "jenis-unit": [
-    { id: "g1", name: "EXCAVATOR", a: "", b: "", active: true },
-    { id: "g2", name: "WHEEL EXCAVATOR", a: "", b: "", active: true },
-    { id: "g3", name: "RIGID", a: "", b: "", active: true },
-    { id: "g4", name: "DUMPTRUCK", a: "", b: "", active: true },
-  ],
-  "model-unit": [
-    { id: "m1", name: "EX2600-7BH", a: "", b: "", active: true },
-    { id: "m2", name: "EX2000-7BH", a: "", b: "", active: true },
-    { id: "m3", name: "ZX870LCH-5G", a: "", b: "", active: true },
-    { id: "m4", name: "ZX470LC-5G", a: "", b: "", active: true },
-    { id: "m5", name: "SY215W", a: "", b: "", active: true },
-    { id: "m6", name: "777E", a: "", b: "", active: true },
-    { id: "m7", name: "773E", a: "", b: "", active: true },
-    { id: "m8", name: "SYZ440C", a: "", b: "", active: true },
-    { id: "m9", name: "SYZ320C-8W(R)", a: "", b: "", active: true },
-  ],
-  "merk-unit": [
-    { id: "p1", name: "HITACHI", a: "", b: "", active: true },
-    { id: "p2", name: "SANY", a: "", b: "", active: true },
-    { id: "p3", name: "CATERPILLAR", a: "", b: "", active: true },
-  ],
-  "kelas-unit": [
-    {
-      id: "k1",
-      name: "BIGDIGGER",
-      a: "Excavator besar (250T)",
-      b: "",
-      active: true,
-    },
-    {
-      id: "k2",
-      name: "MEDIUMDIGGER",
-      a: "Excavator sedang (80T)",
-      b: "",
-      active: true,
-    },
-    {
-      id: "k3",
-      name: "SMALLDIGGER",
-      a: "Excavator kecil (40T)",
-      b: "",
-      active: true,
-    },
-    {
-      id: "k4",
-      name: "WHEEL EXCAVATOR",
-      a: "Excavator roda (20T)",
-      b: "",
-      active: true,
-    },
-    {
-      id: "k5",
-      name: "DUMPTRUCKCAT100T",
-      a: "Rigid dump truck 100T",
-      b: "",
-      active: true,
-    },
-    {
-      id: "k6",
-      name: "DUMPTRUCK60T",
-      a: "Rigid dump truck 60T",
-      b: "",
-      active: true,
-    },
-    {
-      id: "k7",
-      name: "DUMPTRUCK40T",
-      a: "Dump truck 40T",
-      b: "",
-      active: true,
-    },
-    {
-      id: "k8",
-      name: "DUMPTRUCK30T",
-      a: "Dump truck 30T",
-      b: "",
-      active: true,
-    },
-  ],
-  simper: [
-    { id: "sp1", name: "F", a: "Full permit", b: "", active: true },
-    { id: "sp2", name: "P", a: "Probation", b: "", active: true },
-  ],
-  departemen: DEPARTEMEN.map((d, i) => ({
-    id: `dp${i + 1}`,
-    name: d.name,
-    a: d.desc,
-    b: "",
-    active: true,
-  })),
-  "area-kerja": AREA_KERJA.map((a) => ({
-    id: a.id,
-    name: a.name,
-    a: a.tipe,
-    b: "",
-    active: true,
-  })),
-  bus: [],
-  mess: [
-    { id: "ms1", name: "Mess A", a: "", b: "", active: true },
-    { id: "ms2", name: "Mess B", a: "", b: "", active: true },
-    { id: "ms3", name: "Mess C", a: "", b: "", active: true },
-  ],
-  /* Running Text, Sound & Timeline berbagi sumber dgn kiosk (lib/display-data) */
-  "running-text": RUNNING_TEXTS.map((r) => ({
-    id: r.id,
-    name: r.text,
-    a: "",
-    b: r.color,
-    active: r.active,
-  })),
-  sound: SOUNDS.map((s) => ({
-    id: s.id,
-    name: s.name,
-    a: s.file,
-    b: "",
-    active: s.active,
-  })),
-  timeline: TIMELINE.map((e) => ({
-    id: e.id,
-    name: e.name,
-    a: e.time,
-    b: timelineActionLabel(e.action),
-    c: "",
-    active: e.active,
-  })),
-};
-
-function colsFor(
-  cat: MasterCat,
-  mdNama: string,
-  thCat: string,
-  mdJam: string
-): Col[] {
-  switch (cat) {
-    case "jenis-unit":
-    case "model-unit":
-    case "merk-unit":
-      return [{ key: "name", label: mdNama }];
-    case "kelas-unit":
+function colsFor(kind: MasterKind, t: ReturnType<typeof useI18n>["t"]): Col[] {
+  const name: Col = {
+    key: "name",
+    label:
+      kind === "kelas-unit" || kind === "simper" || kind === "kode-simper"
+        ? "Kode"
+        : kind === "departemen"
+          ? "Departemen"
+          : t.mdNama,
+  };
+  switch (EXTRA_OF_KIND[kind]) {
+    case "description":
+      return [name, { key: "description", label: t.mdDesc }];
+    case "type":
       return [
-        { key: "name", label: "Kode" },
-        { key: "a", label: "Deskripsi" },
+        name,
+        { key: "type", label: t.thCat, kind: "select", opts: AREA_TYPES },
       ];
-    case "simper":
-      return [
-        { key: "name", label: "Kode" },
-        { key: "a", label: "Tipe SIMPER" },
-      ];
-    case "departemen":
-      return [
-        { key: "name", label: "Departemen" },
-        { key: "a", label: "Deskripsi" },
-      ];
-    case "area-kerja":
-      return [
-        { key: "name", label: mdNama },
-        { key: "a", label: thCat, kind: "select", opts: AREA_TIPE },
-      ];
-    case "bus":
-      return [
-        { key: "name", label: "Kode", kind: "select", opts: BUS_UNIT_CODES },
-        { key: "b", label: mdJam, kind: "time" },
-      ];
-    case "mess":
-      return [{ key: "name", label: mdNama }];
-    case "running-text":
-      return [
-        { key: "name", label: "Teks" },
-        { key: "b", label: "Warna", kind: "color", opts: RUNTEXT_COLORS },
-      ];
-    case "sound":
-      return [
-        { key: "name", label: mdNama },
-        { key: "a", label: "File", kind: "file" },
-      ];
-    case "timeline":
-      return [
-        { key: "name", label: "Nama Tahap" },
-        { key: "a", label: mdJam, kind: "time" },
-        {
-          key: "b",
-          label: "Aksi",
-          kind: "select",
-          opts: TIMELINE_ACTION_LABELS,
-        },
-      ];
+    default:
+      return [name];
   }
 }
+
+/** Matches `maxItems` on the bulk-delete route; see the mutation for why. */
+const BULK_CHUNK = 200;
+
+const valueOf = (row: MasterRecord, key: Col["key"]): string =>
+  key === "name"
+    ? row.name
+    : key === "description"
+      ? recordDescription(row)
+      : recordType(row);
 
 export function MasterMenu({
   mode,
   cat,
 }: {
   mode: AccessMode;
-  cat: MasterCat;
+  cat: MasterKind;
 }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const canW = mode === "manage";
-  const catLabel = MENU_LABELS[cat as MenuSlug];
-  const cols = colsFor(cat, t.mdNama, t.thCat, t.mdJam);
+  const catLabel = MENU_LABELS[cat];
+  const cols = colsFor(cat, t);
+  const extra = EXTRA_OF_KIND[cat];
 
-  const [entries, setEntries] = React.useState<Entry[]>(() => SAMPLE[cat]);
+  // The management list, not the selection list: inactive records belong here
+  // and nowhere a value is being chosen.
+  const listQ = useQuery(masterQueryOptions(cat));
+  const entries = React.useMemo(() => listQ.data ?? [], [listQ.data]);
+
   const [q, setQ] = React.useState("");
   const [stF, setStF] = React.useState("");
 
-  // add/edit dialog
   const [dlgOpen, setDlgOpen] = React.useState(false);
-  const [editId, setEditId] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<MasterRecord | null>(null);
   const [fName, setFName] = React.useState("");
-  const [fA, setFA] = React.useState("");
-  const [fB, setFB] = React.useState("");
-  const [fC, setFC] = React.useState("");
+  const [fDesc, setFDesc] = React.useState("");
+  const [fType, setFType] = React.useState<AreaType>(AREA_TYPES[0]);
   const [fActive, setFActive] = React.useState(true);
   const [errName, setErrName] = React.useState(false);
-  const [delTarget, setDelTarget] = React.useState<Entry | null>(null);
-  // upload file (Sound): input tersembunyi + object URL utk preview file baru
-  const fileRef = React.useRef<HTMLInputElement>(null);
-  const [fFileUrl, setFFileUrl] = React.useState<string | null>(null);
-  // import/export Excel (stub — logika parsing menyusul)
-  const importRef = React.useRef<HTMLInputElement>(null);
-  const exportStub = () => pushToast("info", t.toastExportT, `${cat}.xlsx`);
+  const [delTarget, setDelTarget] = React.useState<MasterRecord | null>(null);
+
+  /**
+   * Selection is a set of ids, not of rows: the list is refetched after every
+   * write, and holding row objects would keep a tick attached to a stale copy
+   * of a record whose name has since changed underneath it.
+   */
+  const [sel, setSel] = React.useState<ReadonlySet<string>>(() => new Set());
+  const [bulkOpen, setBulkOpen] = React.useState(false);
+
+  // Resolved against the whole list rather than the filtered one, so typing in
+  // the search box does not silently drop entries already ticked on another
+  // page. Ids that no longer exist fall out here without needing to be pruned.
+  const selectedRows = React.useMemo(
+    () => entries.filter((r) => sel.has(r.id)),
+    [entries, sel]
+  );
+
+  /**
+   * Invalidate rather than `router.refresh()`: the list is client state owned
+   * by the query cache, and a route refresh would re-render the shell around it
+   * without touching the data that changed.
+   *
+   * Both entries for this kind, not just the one this screen reads: the
+   * management list and the active-only selection list are separate cache
+   * entries, and a record deactivated here has to leave every dropdown too.
+   */
+  const invalidateAll = () =>
+    queryClient.invalidateQueries({ queryKey: ["master", cat] });
+
+  const save = useMutation({
+    mutationFn: async (input: {
+      id: string | null;
+      name: string;
+      description: string;
+      type: AreaType;
+      active: boolean;
+    }) => {
+      const body = {
+        name: input.name,
+        ...(extra === "description" ? { description: input.description } : {}),
+        ...(extra === "type" ? { type: input.type } : {}),
+        active: input.active,
+      };
+      const result = input.id
+        ? await api.v1.master({ kind: cat })({ id: input.id }).patch(body)
+        : await api.v1.master({ kind: cat }).post(body);
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (_data, input) => {
+      await invalidateAll();
+      pushToast(
+        "success",
+        input.id ? t.mdEditToastT : t.mdAddToastT,
+        input.name
+      );
+      setDlgOpen(false);
+    },
+    // The API's own message, not a generic one: a 409 here is a
+    // case-insensitive duplicate, and saying so is the difference between the
+    // operator fixing it and retyping the same name.
+    onError: (error) =>
+      pushToast("error", t.mdAdd, errorMessage(error, t.loginErr)),
+  });
+
+  const del = useMutation({
+    mutationFn: async (row: MasterRecord) => {
+      const { error } = await api.v1
+        .master({ kind: cat })({ id: row.id })
+        .delete();
+      if (error) throw error;
+    },
+    onSuccess: async (_data, row) => {
+      await invalidateAll();
+      pushToast("success", t.mdDelToastT, row.name);
+      setDelTarget(null);
+      setSel((prev) => {
+        if (!prev.has(row.id)) return prev;
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
+    },
+    // A refused delete carries the referencing count, which is what tells the
+    // operator to deactivate instead. The list is untouched either way.
+    onError: (error) =>
+      pushToast("error", t.mdDelT, errorMessage(error, t.loginErr)),
+  });
+
+  const bulkDel = useMutation({
+    /**
+     * Chunked to the endpoint's own `maxItems`, so a selection accumulated
+     * across pages cannot fail as a whole on a cap the operator never sees.
+     * The route deletes one row per statement and reports what it refused, so
+     * merging chunk results loses nothing.
+     */
+    mutationFn: async (ids: string[]) => {
+      let deleted = 0;
+      const blocked: { id: string; name: string; references: number }[] = [];
+      for (let i = 0; i < ids.length; i += BULK_CHUNK) {
+        const result = await api.v1
+          .master({ kind: cat })
+          ["bulk-delete"].post({ ids: ids.slice(i, i + BULK_CHUNK) });
+        if (result.error) throw result.error;
+        deleted += result.data.deleted;
+        blocked.push(...result.data.blocked);
+      }
+      return { deleted, blocked };
+    },
+    onSuccess: (result) => {
+      setBulkOpen(false);
+      // The refused entries stay ticked. They are still in the table, and
+      // leaving them selected is what shows *which* ones need dealing with,
+      // rather than making the operator re-find the names from a toast.
+      setSel(new Set(result.blocked.map((b) => b.id)));
+
+      const shown = result.blocked.slice(0, 5).map((b) => b.name);
+      const used = `${result.blocked.length} ${t.mdBulkUsed} ${shown.join(", ")}${
+        result.blocked.length > shown.length ? ", …" : ""
+      }`;
+
+      if (!result.blocked.length)
+        pushToast("success", t.mdDelToastT, `${result.deleted} ${t.mdSumB}`);
+      else if (result.deleted)
+        pushToast(
+          "info",
+          t.mdBulkPartT,
+          `${result.deleted} ${t.mdSumB} — ${used}`
+        );
+      else pushToast("error", t.mdBulkNoneT, used);
+    },
+    onError: (error) =>
+      pushToast("error", t.mdBulkDel, errorMessage(error, t.loginErr)),
+    // In `onSettled` rather than `onSuccess`: a chunk that throws may still
+    // have been preceded by chunks that landed, and the list has to catch up
+    // either way.
+    onSettled: () => invalidateAll(),
+  });
+
+  async function exportSheet() {
+    try {
+      // fetchBlob, not Eden: Treaty decodes an unrecognised body as text and
+      // mangles every invalid UTF-8 byte, so the workbook downloads and then
+      // refuses to open (lib/api.ts).
+      const blob = await fetchBlob(`/v1/master/${cat}/export`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${cat}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      pushToast("success", t.toastExportT, `${cat}.xlsx`);
+    } catch (error) {
+      pushToast(
+        "error",
+        t.toastExportT,
+        error instanceof Error ? error.message : t.loginErr
+      );
+    }
+  }
 
   const rows = entries.filter((r) => {
     if (stF === "1" && !r.active) return false;
     if (stF === "0" && r.active) return false;
     const needle = q.trim().toLowerCase();
     if (!needle) return true;
-    return `${r.name} ${r.a} ${r.b} ${r.c ?? ""}`
-      .toLowerCase()
-      .includes(needle);
+    return cols.some((c) => valueOf(r, c.key).toLowerCase().includes(needle));
   });
   const pg = usePagination(rows);
 
+  // The header checkbox governs the page, not the whole filtered set: ticking
+  // one box and silently arming a delete over rows on four other pages is the
+  // kind of help nobody asks for. Selections still accumulate across pages.
+  const pageIds = pg.rows.map((r) => r.id);
+  const allPageSel = pageIds.length > 0 && pageIds.every((id) => sel.has(id));
+  const somePageSel = pageIds.some((id) => sel.has(id));
+
+  function toggleRow(id: string) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+  function togglePage() {
+    setSel((prev) => {
+      const next = new Set(prev);
+      for (const id of pageIds) {
+        if (allPageSel) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
   function openAdd() {
-    setEditId(null);
-    setFName(cols.find((c) => c.key === "name")?.opts?.[0] ?? "");
-    setFA(cols.find((c) => c.key === "a")?.opts?.[0] ?? "");
-    setFB(cols.find((c) => c.key === "b")?.opts?.[0] ?? "");
-    setFC(cols.find((c) => c.key === "c")?.opts?.[0] ?? "");
+    setEditing(null);
+    setFName("");
+    setFDesc("");
+    setFType(AREA_TYPES[0]);
     setFActive(true);
     setErrName(false);
-    setFFileUrl(null);
     setDlgOpen(true);
   }
-  function openEdit(r: Entry) {
-    setEditId(r.id);
+  function openEdit(r: MasterRecord) {
+    setEditing(r);
     setFName(r.name);
-    setFA(r.a);
-    setFB(r.b);
-    setFC(r.c ?? "");
+    setFDesc(recordDescription(r));
+    setFType((recordType(r) || AREA_TYPES[0]) as AreaType);
     setFActive(r.active);
     setErrName(false);
-    setFFileUrl(null);
     setDlgOpen(true);
   }
-  function save(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const name = fName.trim();
     setErrName(!name);
     if (!name) return;
-    if (editId) {
-      setEntries((prev) =>
-        prev.map((r) =>
-          r.id === editId
-            ? { ...r, name, a: fA, b: fB, c: fC, active: fActive }
-            : r
-        )
-      );
-      pushToast("success", t.mdEditToastT, name);
-    } else {
-      setEntries((prev) => [
-        {
-          id: `n${prev.length + 1}-${name}`,
-          name,
-          a: fA,
-          b: fB,
-          c: fC,
-          active: fActive,
-        },
-        ...prev,
-      ]);
-      pushToast("success", t.mdAddToastT, name);
-    }
-    setDlgOpen(false);
-  }
-  function doDelete() {
-    if (!delTarget) return;
-    setEntries((prev) => prev.filter((r) => r.id !== delTarget.id));
-    pushToast("success", t.mdDelToastT, delTarget.name);
-    setDelTarget(null);
+    save.mutate({
+      id: editing?.id ?? null,
+      name,
+      description: fDesc,
+      type: fType,
+      active: fActive,
+    });
   }
 
-  const fieldValue = (key: ColKey) =>
-    key === "name" ? fName : key === "a" ? fA : key === "b" ? fB : fC;
-  const setFieldValue = (key: ColKey, v: string) =>
+  const fieldValue = (key: Col["key"]) =>
+    key === "name" ? fName : key === "description" ? fDesc : fType;
+  const setFieldValue = (key: Col["key"], v: string) =>
     key === "name"
       ? setFName(v)
-      : key === "a"
-        ? setFA(v)
-        : key === "b"
-          ? setFB(v)
-          : setFC(v);
+      : key === "description"
+        ? setFDesc(v)
+        : setFType(v as AreaType);
 
   return (
     <div className="flex flex-col gap-6">
       <PageTitle title={catLabel} sub={t.mdSub}>
+        {/* Presentation only — the API refuses every write without `manage` on
+            this catalogue's own menu, regardless of what renders here. */}
         {canW ? (
           <Button onClick={openAdd}>
             <Plus />
@@ -436,32 +434,28 @@ export function MasterMenu({
               <option value="1">{t.stAktif}</option>
               <option value="0">{t.stNonaktif}</option>
             </Select>
-            {/* Import/Export Excel — sejajar toolbar spt Database Unit (stub) */}
-            <Button variant="secondary" onClick={exportStub}>
+            <Button variant="secondary" onClick={exportSheet}>
               <Download />
               {t.export}
             </Button>
+            {/* A page of its own, as the account import is: the flow carries
+                two tables and should not push this list off the screen. */}
             {canW ? (
-              <>
-                <input
-                  ref={importRef}
-                  type="file"
-                  accept=".csv,.xlsx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) pushToast("success", `Import ${catLabel}`, f.name);
-                    e.target.value = "";
-                  }}
-                />
-                <Button
-                  variant="secondary"
-                  onClick={() => importRef.current?.click()}
-                >
-                  <Upload />
-                  {t.udbImport}
-                </Button>
-              </>
+              <Button
+                variant="secondary"
+                onClick={() => router.push(`/${cat}/import`)}
+              >
+                <Upload />
+                {t.udbImport}
+              </Button>
+            ) : null}
+            {/* Appended rather than prepended so the controls either side keep
+                their position when a selection appears and disappears. */}
+            {canW && selectedRows.length ? (
+              <Button variant="destructive" onClick={() => setBulkOpen(true)}>
+                <Trash2 />
+                {t.mdBulkDel} ({selectedRows.length})
+              </Button>
             ) : null}
           </ToolbarGroup>
         </Toolbar>
@@ -470,6 +464,20 @@ export function MasterMenu({
           <Table>
             <TableHeader>
               <tr>
+                {canW ? (
+                  <TableHead style={{ width: 44 }}>
+                    <Checkbox
+                      ref={(el) => {
+                        // Indeterminate is a DOM property, not an attribute —
+                        // there is no way to express it in JSX.
+                        if (el) el.indeterminate = somePageSel && !allPageSel;
+                      }}
+                      checked={allPageSel}
+                      onChange={togglePage}
+                      aria-label={t.mdSelAll}
+                    />
+                  </TableHead>
+                ) : null}
                 {cols.map((c) => (
                   <TableHead key={c.key}>{c.label}</TableHead>
                 ))}
@@ -479,22 +487,23 @@ export function MasterMenu({
             </TableHeader>
             <TableBody>
               {pg.rows.map((r) => (
-                <TableRow key={r.id}>
+                <TableRow key={r.id} selected={sel.has(r.id)}>
+                  {canW ? (
+                    <TableCell>
+                      <Checkbox
+                        checked={sel.has(r.id)}
+                        onChange={() => toggleRow(r.id)}
+                        aria-label={`${t.mdSelRow} — ${r.name}`}
+                      />
+                    </TableCell>
+                  ) : null}
                   {cols.map((c) => (
                     <TableCell key={c.key} className="max-w-[420px]">
-                      {c.kind === "color" ? (
-                        <span className="inline-flex items-center gap-2">
-                          <i
-                            className="inline-block size-3 rounded"
-                            style={{ background: COLOR_VAL[r[c.key] ?? ""] }}
-                          />
-                          {r[c.key]}
-                        </span>
-                      ) : c.key === "name" ? (
+                      {c.key === "name" ? (
                         <span className="font-semibold">{r.name}</span>
                       ) : (
                         <span className="text-(--text-secondary)">
-                          {r[c.key]}
+                          {valueOf(r, c.key)}
                         </span>
                       )}
                     </TableCell>
@@ -506,16 +515,6 @@ export function MasterMenu({
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      {cat === "sound" && r.a ? (
-                        <IconButton
-                          aria-label="Putar"
-                          onClick={() =>
-                            void new Audio(soundSrc(r.a)).play().catch(() => {})
-                          }
-                        >
-                          <Volume2 />
-                        </IconButton>
-                      ) : null}
                       {canW ? (
                         <>
                           <IconButton
@@ -542,7 +541,7 @@ export function MasterMenu({
         ) : (
           <StateBox
             icon={<Search className="text-(--color-primary-bright)" />}
-            title={t.noResTitle}
+            title={listQ.isPending ? t.mdSub : t.noResTitle}
             body={t.mdEmptyB}
           />
         )}
@@ -571,9 +570,9 @@ export function MasterMenu({
         <DialogIcon variant="info">
           <Rows3 />
         </DialogIcon>
-        <DialogTitle id="md-t">{editId ? t.mdEditT : t.mdAdd}</DialogTitle>
+        <DialogTitle id="md-t">{editing ? t.mdEditT : t.mdAdd}</DialogTitle>
         <DialogBody>{t.mdDlgB}</DialogBody>
-        <form onSubmit={save} noValidate>
+        <form onSubmit={submit} noValidate>
           {cols.map((c) => (
             <Field
               key={c.key}
@@ -584,7 +583,7 @@ export function MasterMenu({
               error={c.key === "name" && errName}
               errorMessage={c.key === "name" ? t.mdErrName : undefined}
             >
-              {c.kind === "select" || c.kind === "color" ? (
+              {c.kind === "select" ? (
                 <Select
                   id={`md-f-${c.key}`}
                   value={fieldValue(c.key)}
@@ -596,64 +595,6 @@ export function MasterMenu({
                     </option>
                   ))}
                 </Select>
-              ) : c.kind === "file" ? (
-                <div className="flex items-center gap-3">
-                  <input
-                    ref={fileRef}
-                    id={`md-f-${c.key}`}
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        setFieldValue(c.key, f.name);
-                        setFFileUrl(URL.createObjectURL(f));
-                      }
-                      e.target.value = "";
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    <Upload />
-                    Pilih file
-                  </Button>
-                  {fieldValue(c.key) ? (
-                    <>
-                      <span className="min-w-0 flex-1 truncate text-sm text-(--text-secondary)">
-                        {fieldValue(c.key)}
-                      </span>
-                      <IconButton
-                        type="button"
-                        aria-label="Putar"
-                        onClick={() =>
-                          void new Audio(
-                            fFileUrl ?? soundSrc(fieldValue(c.key))
-                          )
-                            .play()
-                            .catch(() => {})
-                        }
-                      >
-                        <Volume2 />
-                      </IconButton>
-                    </>
-                  ) : (
-                    <span className="flex-1 text-sm text-(--text-tertiary) italic">
-                      Belum ada file
-                    </span>
-                  )}
-                </div>
-              ) : c.kind === "time" ? (
-                <Input
-                  id={`md-f-${c.key}`}
-                  type="time"
-                  className="font-mono"
-                  value={fieldValue(c.key)}
-                  onChange={(e) => setFieldValue(c.key, e.target.value)}
-                />
               ) : (
                 <Input
                   id={`md-f-${c.key}`}
@@ -679,8 +620,8 @@ export function MasterMenu({
             >
               {t.btnCancel}
             </Button>
-            <Button type="submit">
-              {editId ? t.udbSaveEdit : t.mdSaveAdd}
+            <Button type="submit" disabled={save.isPending}>
+              {editing ? t.udbSaveEdit : t.mdSaveAdd}
             </Button>
           </DialogActions>
         </form>
@@ -702,8 +643,38 @@ export function MasterMenu({
           <Button variant="ghost" onClick={() => setDelTarget(null)}>
             {t.btnCancel}
           </Button>
-          <Button variant="destructive" onClick={doDelete}>
-            {t.empDelDo}
+          <Button
+            variant="destructive"
+            disabled={del.isPending}
+            onClick={() => delTarget && del.mutate(delTarget)}
+          >
+            {t.mdDelDo}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        labelledBy="mdb-t"
+      >
+        <DialogIcon variant="danger">
+          <Trash2 />
+        </DialogIcon>
+        <DialogTitle id="mdb-t">{t.mdBulkDelT}</DialogTitle>
+        <DialogBody>
+          <b>{selectedRows.length}</b> {t.mdSumB} — {t.mdBulkDelB}
+        </DialogBody>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setBulkOpen(false)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={bulkDel.isPending || !selectedRows.length}
+            onClick={() => bulkDel.mutate(selectedRows.map((r) => r.id))}
+          >
+            {t.mdBulkDel}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,18 +1,32 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Megaphone } from "lucide-react";
 
-import { COLOR_VAL, runTextsForDisplay } from "@/lib/display-data";
+import { COLOR_VAL, type DeviceKind } from "@universe/contracts";
 
-/* Running text kiosk (opsi A): SABUK berjalan yang menyambung. Sumbernya
-   fleksibel — kalau display punya running text KUSTOM sendiri pakai itu, kalau
-   tidak jatuh ke semua Running Text master aktif (via runTextsForDisplay).
-   Tiap segmen pakai Warna-nya, dipisah "•". (Timeline kini = jadwal alokasi,
-   bukan pengumuman display — jadi tak ada lagi takeover terjadwal di sini.) */
+import { displayQueryOptions } from "@/lib/queries/display";
 
-export function RunningTicker({ displayName }: { displayName?: string }) {
-  const items = runTextsForDisplay(displayName);
+/**
+ * The kiosk's running-text belt.
+ *
+ * Its content comes from `GET /v1/display/:kind`, which resolves the fallback
+ * server-side: the device's own texts if it has any, the active master list if
+ * it has none (design D8). The client does not know or need to know which of
+ * the two it received.
+ *
+ * Polling this endpoint is also what makes a paired TV report in — the route
+ * stamps `last_seen_at` on every device read — which is why the README's
+ * standing "a paired TV always reads Offline" resolves here rather than in any
+ * heartbeat-specific code. The missing piece was always a caller.
+ *
+ * An unpaired screen (opened by URL, no device session) gets a 401 and simply
+ * shows no belt, rather than an error a passer-by would have to read.
+ */
+export function RunningTicker({ kind }: { kind: DeviceKind }) {
+  const { data } = useQuery(displayQueryOptions(kind));
+  const items = data?.runTexts ?? [];
   if (!items.length) return null;
 
   return (
@@ -27,9 +41,10 @@ export function RunningTicker({ displayName }: { displayName?: string }) {
               {i > 0 ? (
                 <span className="mx-6 text-(--text-tertiary)">•</span>
               ) : null}
-              <span style={{ color: COLOR_VAL[r.color] ?? undefined }}>
-                {r.text}
-              </span>
+              {/* The colour vocabulary is the shared one, so a palette change
+                  is a token change in contracts rather than a rewrite of every
+                  stored row. */}
+              <span style={{ color: COLOR_VAL[r.color] }}>{r.text}</span>
             </React.Fragment>
           ))}
         </div>

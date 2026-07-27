@@ -64,7 +64,7 @@ const stBadge: Record<Status, BadgeVariant> = {
 const INITIAL: Row[] = [
   {
     id: "a1",
-    nik: "OPS-0421",
+    nik: "503220421",
     name: "Budi Santoso",
     status: "pending",
     whatId: "21 Jul: P-2 → OFF · keperluan keluarga",
@@ -74,7 +74,7 @@ const INITIAL: Row[] = [
   },
   {
     id: "a2",
-    nik: "OPS-0510",
+    nik: "501230510",
     name: "Rudi Hartono",
     status: "pending",
     whatId: "22 Jul: M-1 → P-1 · tukar shift",
@@ -84,7 +84,7 @@ const INITIAL: Row[] = [
   },
   {
     id: "a3",
-    nik: "OPS-0111",
+    nik: "511190111",
     name: "Joko Prasetyo",
     status: "pending",
     whatId: "23 Jul: P-1 → M-2",
@@ -94,7 +94,7 @@ const INITIAL: Row[] = [
   },
   {
     id: "a4",
-    nik: "OPS-0388",
+    nik: "508210388",
     name: "Andi Wijaya",
     status: "approved",
     whatId: "19 Jul: OFF → P-2 · lembur",
@@ -106,7 +106,7 @@ const INITIAL: Row[] = [
   },
   {
     id: "a5",
-    nik: "OPS-0290",
+    nik: "509220290",
     name: "Dewi Anggraini",
     status: "rejected",
     whatId: "20 Jul: P-1 → OFF",

@@ -454,7 +454,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
           <Field className="mt-4" label="NIK" htmlFor="um-nik">
             <Input
               id="um-nik"
-              placeholder="OPS-0421"
+              placeholder="503220421"
               value={fNik}
               onChange={(e) => {
                 setFNik(e.target.value);

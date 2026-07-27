@@ -29,7 +29,7 @@ type Row = {
 /* ---- static sample content ---- */
 const ROWS: Row[] = [
   {
-    nik: "OPS-0421",
+    nik: "503220421",
     name: "Budi Santoso",
     pos: "Driver OHT",
     dept: "Hauling",
@@ -39,7 +39,7 @@ const ROWS: Row[] = [
     note: "—",
   },
   {
-    nik: "OPS-0388",
+    nik: "508210388",
     name: "Andi Wijaya",
     pos: "Operator Excavator",
     dept: "Loading",
@@ -49,7 +49,7 @@ const ROWS: Row[] = [
     note: "Diistirahatkan",
   },
   {
-    nik: "OPS-0233",
+    nik: "505200233",
     name: "Sari Lestari",
     pos: "Admin Site",
     dept: "Support",
@@ -59,7 +59,7 @@ const ROWS: Row[] = [
     note: "—",
   },
   {
-    nik: "OPS-0510",
+    nik: "501230510",
     name: "Rudi Hartono",
     pos: "Driver OHT",
     dept: "Hauling",
@@ -69,7 +69,7 @@ const ROWS: Row[] = [
     note: "—",
   },
   {
-    nik: "OPS-0111",
+    nik: "511190111",
     name: "Joko Prasetyo",
     pos: "Driver OHT",
     dept: "Hauling",
@@ -79,7 +79,7 @@ const ROWS: Row[] = [
     note: "—",
   },
   {
-    nik: "OPS-0290",
+    nik: "509220290",
     name: "Dewi Anggraini",
     pos: "Dispatcher",
     dept: "Support",
@@ -89,7 +89,7 @@ const ROWS: Row[] = [
     note: "—",
   },
   {
-    nik: "OPS-0367",
+    nik: "502210367",
     name: "Hendra Gunawan",
     pos: "Operator Dozer",
     dept: "Loading",
@@ -99,7 +99,7 @@ const ROWS: Row[] = [
     note: "Observasi medic",
   },
   {
-    nik: "OPS-0455",
+    nik: "506230455",
     name: "Fitri Handayani",
     pos: "Checker",
     dept: "Hauling",
@@ -109,7 +109,7 @@ const ROWS: Row[] = [
     note: "—",
   },
   {
-    nik: "OPS-0129",
+    nik: "504180129",
     name: "Agus Salim",
     pos: "Mekanik",
     dept: "Plant",
@@ -119,7 +119,7 @@ const ROWS: Row[] = [
     note: "—",
   },
   {
-    nik: "OPS-0602",
+    nik: "510200602",
     name: "Rina Marlina",
     pos: "Safety Officer",
     dept: "SHE",
@@ -137,6 +137,7 @@ export default function DisplayFitworkPage() {
     <DisplayShell
       title="Fit To Work — Shift Pagi"
       deviceName={deviceName}
+      displayKind="fitwork"
       stats={[
         {
           icon: <ClipboardCheck className="text-(--color-primary-bright)" />,

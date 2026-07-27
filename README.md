@@ -100,10 +100,11 @@ into the next crew's shift.
 Display TVs are a third kind of principal: paired once through a single-use
 link, read-only, confined to `/display/*`, and revocable individually. They
 carry no role, no scope, and no NIK. Their `online` state is derived from a
-heartbeat that nothing sends yet — see "Not done yet" before reading anything
-into a TV that reports `Offline`.
+heartbeat rather than asserted: reading `GET /v1/display/:kind` _is_ the
+heartbeat, and the kiosk pages poll it for their running-text content, so a TV
+that has content is by definition one that has just reported in.
 
-The web middleware and shell are user experience, not the boundary — every API
+The web proxy and shell are user experience, not the boundary — every API
 route re-checks session, permission, and scope independently. Accounts are
 provisioned in bulk by uploading a spreadsheet; initial and reset passwords
 come from configuration and cannot survive first login.
@@ -146,11 +147,17 @@ leave room to grow past it:
   have to settle in seconds, because every minute of delay is a minute a fit
   operator waits for a unit assignment.
 
-> Authentication, RBAC, and User Management are wired to the API. Every other
-> menu is still a **static design port** — sample data, no persistence,
-> mutations are toast-only. The allocation engine, the configurable timeline,
-> and the external FTW/fingerprint integrations above are the target the design
-> is built toward, not yet wired to the API.
+> Authentication, RBAC, User Management, the master catalogues, the unit
+> registry, display content, and the allocation timeline are wired to the API.
+> Still a **static design port** — sample data, no persistence, mutations are
+> toast-only: Dashboard, Employees, Roster (upload / revision / approval),
+> Attendance, Fit To Work, Unit Status, Fleet Allocation, and Fleet Setting.
+> Those last screens read master data from the API for their dropdowns and
+> filters, so a value added in a master menu appears in them immediately — only
+> their own records are still sample. The allocation engine and the external
+> FTW/fingerprint integrations above remain the target the design is built
+> toward; the timeline now fires on schedule, into hooks that are documented
+> no-ops until that engine lands.
 
 ## Getting started
 
@@ -160,14 +167,17 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 # fill in DATABASE_URL, SUPERADMIN_PASSWORD and DEFAULT_USER_PASSWORD, then:
 bun run --cwd apps/api db:migrate
-bun run --cwd apps/api db:seed   # six roles + a bootstrap superadmin
+bun run --cwd apps/api db:seed   # roles, superadmin, master catalogues, sample fleet
 bun run dev          # turbo runs api + web together
 ```
 
 Sign in at http://localhost:3000/login with `SUPERADMIN_IDENTIFIER` and
 `SUPERADMIN_PASSWORD`. The seed is idempotent, so re-running it is safe — it
 recreates the bootstrap account if it is ever lost, and leaves roles an
-administrator has edited alone.
+administrator has edited alone. Master catalogues are seeded by name and skip
+what already exists; the fifteen sample units go in **only when the `units`
+table is empty**, so a database that has ever held a real unit can never
+receive an invented one.
 
 - Web: http://localhost:3000
 - API: http://localhost:3001/health — reports `database` and `cache` separately, 503 if either is down
@@ -335,15 +345,15 @@ types from Eden and OpenAPI instead.
   network in the clear at login and a session cookie can be copied and
   replayed by anyone on the same network. An internal CA is sufficient on a
   closed network; this should land before real accounts exist.
-- **A paired TV never reports in, so it always reads Offline.** The heartbeat
-  endpoint exists and works — `GET /v1/display/:kind` stamps `last_seen_at` and
-  the device registry derives `online` and a last-seen label from it — but no
-  client calls it. The four kiosk pages under `app/display/` are still the
-  static design port and make no API request at all, so `last_seen_at` stays
-  null in real use and every device shows `Offline · belum pernah` even while
-  its screen is on. This is a missing caller, not a broken feature: one poll
-  from each kiosk page brings it to life. It lands with the display
-  configuration change, which is when those pages stop being static anyway.
+- **Uploaded sounds need a directory that survives a redeploy.** `SOUND_DIR`
+  is explicit configuration for the same reason `COOKIE_SECURE` is: the right
+  path depends on how the API is deployed, not on which environment it believes
+  it is in. Sound files are written there and streamed back with `Bun.file`,
+  never through Postgres. On an ephemeral container this **must** be a mounted
+  volume, or every uploaded sound is lost on the next deploy — the database
+  keeps the row and the file is simply gone. `/health` reports the directory as
+  writable, so a missing mount surfaces at startup rather than at the first
+  upload.
 - **Redis is unauthenticated.** The shared dev container has no password and no
   ACL, so the db index in `REDIS_URL` is a convention between projects, not a
   boundary — anything on this machine can read or flush our keys. Fine for dev,

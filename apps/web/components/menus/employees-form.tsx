@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   Briefcase,
   Camera,
@@ -12,10 +13,9 @@ import {
   Upload,
 } from "lucide-react";
 
-import { DEPARTEMEN_NAMES } from "@/lib/departemen-data";
-import { findEmployee, MESS_OPTS, SIMPER_TYPES } from "@/lib/employees-data";
+import { findEmployee } from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
-import { SIMPER_CODES } from "@/lib/unit-data";
+import { masterQueryOptions, recordDescription } from "@/lib/queries/master";
 import { initialsOf } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,6 +49,13 @@ type Fields = {
   blood: string;
   medis: string;
   mess: string;
+  /**
+   * Block is its own field now (design D5). The mess catalogue is one level —
+   * Mess A/B/C — because a block carries no attributes and nothing in the
+   * allocation model reads one; modelling it would add a table, a menu, a slug,
+   * and a grant to validate a string that is only ever displayed.
+   */
+  blok: string;
   kamar: string;
 };
 
@@ -68,8 +75,20 @@ const EMPTY: Fields = {
   blood: "",
   medis: "",
   mess: "",
+  blok: "",
   kamar: "",
 };
+
+/**
+ * The sample records store housing as one string — "Mess A — Blok 1" — from
+ * before mess became a catalogue. Split on the separator so an existing record
+ * still opens with both fields filled; anything unrecognised stays in `mess`
+ * and the operator re-picks it.
+ */
+function splitHousing(stored: string): { mess: string; blok: string } {
+  const [mess = "", blok = ""] = stored.split("—").map((part) => part.trim());
+  return { mess, blok };
+}
 
 /**
  * Add/edit employee form — static design port. Edit mode prefills from the
@@ -99,11 +118,18 @@ export function EmployeeForm({ nik }: { nik?: string }) {
           mcuExp: record.mcuExp ?? "",
           blood: record.blood ?? "",
           medis: record.medis ?? "",
-          mess: record.mess ?? "",
+          ...splitHousing(record.mess ?? ""),
           kamar: record.kamar ?? "",
         }
       : EMPTY
   );
+
+  // Active rows only: these are selection lists, so a retired department stops
+  // being offered while the employees already in it keep showing it.
+  const departments = useQuery(masterQueryOptions("departemen", true));
+  const messes = useQuery(masterQueryOptions("mess", true));
+  const simperTypes = useQuery(masterQueryOptions("simper", true));
+  const simperCodes = useQuery(masterQueryOptions("kode-simper", true));
   const [skills, setSkills] = React.useState<string[]>(
     () => record?.simper?.skills ?? []
   );
@@ -255,8 +281,8 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   value={f.dept}
                   onChange={(e) => up("dept", e.target.value)}
                 >
-                  {DEPARTEMEN_NAMES.map((d) => (
-                    <option key={d}>{d}</option>
+                  {(departments.data ?? []).map((d) => (
+                    <option key={d.id}>{d.name}</option>
                   ))}
                 </Select>
               </Field>
@@ -292,9 +318,12 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   onChange={(e) => up("simperKat", e.target.value)}
                 >
                   <option value="">—</option>
-                  {SIMPER_TYPES.map((s) => (
-                    <option key={s.kode} value={s.kode}>
-                      {s.kode} — {s.nama}
+                  {/* Permit type — whether this person may operate at all. A
+                      different catalogue from the qualification codes below
+                      (design D4). */}
+                  {(simperTypes.data ?? []).map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name} — {recordDescription(s)}
                     </option>
                   ))}
                 </Select>
@@ -322,16 +351,19 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                 className="col-span-full"
               >
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-control border border-(--glass-1-border) bg-(--fill-subtle) p-3 sm:grid-cols-3">
-                  {SIMPER_CODES.map((code) => (
+                  {/* The qualification catalogue — what the allocation engine
+                      matches a spare against. A real catalogue now, not a
+                      SELECT DISTINCT over a free-text unit column. */}
+                  {(simperCodes.data ?? []).map((c) => (
                     <label
-                      key={code}
+                      key={c.id}
                       className="flex cursor-pointer items-center gap-2 text-sm"
                     >
                       <Checkbox
-                        checked={skills.includes(code)}
-                        onChange={() => toggleSkill(code)}
+                        checked={skills.includes(c.name)}
+                        onChange={() => toggleSkill(c.name)}
                       />
-                      {code}
+                      {c.name}
                     </label>
                   ))}
                 </div>
@@ -414,12 +446,22 @@ export function EmployeeForm({ nik }: { nik?: string }) {
                   onChange={(e) => up("mess", e.target.value)}
                 >
                   <option value="">{t.optNoMess}</option>
-                  {MESS_OPTS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
+                  {(messes.data ?? []).map((m) => (
+                    <option key={m.id} value={m.name}>
+                      {m.name}
                     </option>
                   ))}
                 </Select>
+              </Field>
+              {/* Free text, deliberately (design D5): a block has no attributes
+                  and participates in no matching, so validating it would cost a
+                  table, a menu, a slug, and a grant to check a label. */}
+              <Field label={t.kBlock} htmlFor="ef-blok">
+                <Input
+                  id="ef-blok"
+                  value={f.blok}
+                  onChange={(e) => up("blok", e.target.value)}
+                />
               </Field>
               <Field label={t.kRoom} htmlFor="ef-kamar">
                 <Input

@@ -190,6 +190,7 @@ export const id = {
   edKompNone: "Bukan operator alat berat — tidak ada kompetensi terdaftar.",
   kMedHistory: "Riwayat medis",
   kBlood: "Golongan darah",
+  kBlock: "Blok",
   kRoom: "Kamar",
   kPhone: "No. HP",
   kEmergency: "Kontak darurat",
@@ -282,6 +283,32 @@ export const id = {
   mdName: "Nama / Isi",
   mdExtra: "Keterangan",
   mdSumB: "entri",
+  mdImpSame: "Sama",
+  mdImpNothing: "Tidak ada perubahan",
+  mdImpNothingB:
+    "Semua baris sudah sama persis dengan data tersimpan — tidak ada yang perlu ditulis.",
+  mdImpTitle: "Import Master Data",
+  mdImpSub:
+    "Unggah spreadsheet, periksa hasilnya, lalu setujui. Tidak ada yang ditulis sebelum disetujui.",
+  mdImpTpl: "Unduh template",
+  mdImpDzTitle: "Seret file ke sini, atau klik untuk memilih",
+  mdImpHint: "Format .xlsx dengan kolom",
+  sndAddB: "Unggah berkas audio, maksimal 2 MB.",
+  sndEditB: "Ganti nama atau status. Berkas audio tidak bisa diganti.",
+  sndDelB: "Entri dan berkas audionya akan dihapus permanen.",
+  sndHelp: "Format audio, maksimal 2 MB",
+  sndErrType: "Berkas harus berupa audio",
+  sndErrSize: "Berkas melebihi 2 MB",
+  sndErrRequired: "Pilih berkas audio dulu",
+  tlSub: "Jadwal alokasi awal shift — tahapan ini dijalankan otomatis",
+  tlDlgB: "Tahap dijalankan otomatis pada jam yang diatur di sini.",
+  busSub: "Jadwal keberangkatan bus — satu jam per unit",
+  busDlgB: "Pilih unit berjenis BUS lalu tentukan jam berangkatnya.",
+  busEmptyB: "Belum ada jadwal keberangkatan.",
+  busNoUnitsT: "Belum ada unit BUS",
+  busNoUnitsB:
+    "Tambahkan unit berjenis BUS di Database Unit dulu, baru jadwalnya bisa diatur di sini.",
+  busSumB: "jadwal bus",
   mdNama: "Nama",
   mdDesc: "Deskripsi",
   mdJam: "Jam berangkat",
@@ -301,6 +328,16 @@ export const id = {
   mdAddToastT: "Entri ditambahkan",
   mdEditToastT: "Entri diperbarui",
   mdDelToastT: "Entri dihapus",
+  mdDelDo: "Hapus entri",
+  mdSelAll: "Pilih semua entri di halaman ini",
+  mdSelRow: "Pilih entri ini",
+  mdBulkDel: "Hapus terpilih",
+  mdBulkDelT: "Hapus entri terpilih?",
+  mdBulkDelB:
+    "Entri yang masih dipakai unit tidak ikut terhapus — sisanya tetap diproses, dan yang ditolak dilaporkan setelahnya.",
+  mdBulkPartT: "Sebagian dihapus",
+  mdBulkNoneT: "Tidak ada yang dihapus",
+  mdBulkUsed: "masih dipakai:",
   dspSubAtt:
     "Pengelolaan TV kiosk attendance, fit to work, dan fingerprint — konten, running text, dan status per display.",
   dspSubFleet:
@@ -575,6 +612,7 @@ export const id = {
   faSupportGrp: "Unit support",
   udbSerial: "No. seri",
   udbErrCode: "Kode wajib diisi dan belum terpakai.",
+  udbGlobal: "Aset global perusahaan",
   udbErrType: "Wajib diisi.",
   udbAddDo: "Simpan unit",
   udbToastT: "Unit ditambahkan",
@@ -586,7 +624,16 @@ export const id = {
   thCap: "Kapasitas",
   allCats: "Semua kelas",
   allProds: "Semua product",
-  searchUnit: "Cari kode / model / product…",
+  searchUnit: "Cari kode, kelas, jenis, model, merk, kode simper…",
+  allFtw: "Semua FTW",
+  udbDelT: "Hapus unit",
+  udbDelB:
+    "Unit dihapus permanen dari database. Unit yang masih punya jadwal bus tidak bisa dihapus.",
+  udbDelDo: "Hapus unit",
+  udbBulkDelT: "Hapus unit terpilih?",
+  udbBulkDelB:
+    "Unit yang masih punya jadwal bus tidak ikut terhapus — sisanya tetap diproses, dan yang ditolak dilaporkan setelahnya.",
+  udbBulkHeld: "tertahan jadwal bus:",
   usSub:
     "Status operasional unit — ubah status dengan alasan; riwayat di panel samping.",
   usListTitle: "Daftar Unit",
@@ -636,6 +683,8 @@ export const id = {
   vDup: "duplikat — baris terakhir dipakai",
   vErr: "error — tidak akan diimpor",
   thRow: "Baris",
+  thData: "Data",
+  thValue: "Nilai",
   upFootNote:
     "Impor hanya memproses baris valid; baris error diunduh, diperbaiki, lalu diunggah ulang.",
   upDlErrors: "Unduh 5 baris error",
@@ -810,7 +859,7 @@ export const id = {
 
   /* --- auth: identifier + forced password change --- */
   authIdentLabel: "Email atau NIK",
-  authIdentPh: "nama@unggul.co.id atau OPS-0421",
+  authIdentPh: "nama@unggul.co.id atau 503220421",
   authIdentHelp: "Staf kantor memakai email, operator lapangan memakai NIK.",
   authLoginErr:
     "Identifier atau password salah. Periksa kembali, atau hubungi admin bila akun Anda dinonaktifkan.",
@@ -849,6 +898,15 @@ export const id = {
   umImpChanges: "Perubahan",
   umImpCreated: "dibuat",
   umImpUpdated: "diperbarui",
+  impMasterChip: "master baru",
+  impMasterAdded: "entri master baru",
+  impMasterRows: "baris",
+  impMasterT: "Tambahkan entri master baru?",
+  impMasterB:
+    "Nilai berikut belum ada di master dan akan dibuat otomatis saat import. Periksa dulu — salah ketik akan ikut jadi entri master baru.",
+  impMasterMore: "lainnya",
+  impMasterLike: "mirip",
+  impMasterDo: "Ya, lanjutkan import",
   umImpSub: "Buat dan perbarui akun secara massal dari file .xlsx.",
   umImpBack: "Kembali ke daftar user",
   umImpDzTitle: "Seret file akun ke sini, atau klik untuk memilih",
@@ -867,7 +925,9 @@ export const id = {
   dspId: "ID Perangkat",
   dspIdHelp: "Kode yang tertempel di TV — dipakai untuk pairing dan revoke.",
   dspContentNote:
-    "Konfigurasi konten display belum disimpan ke server; menyusul pada perubahan berikutnya.",
+    "Pilihan fleet belum disimpan ke server; menyusul pada perubahan berikutnya.",
+  dspRtNote:
+    "Kosongkan agar display ini ikut running text master. Diisi = hanya teks ini yang tampil.",
   dspPairT: "Link pairing",
   dspPairB:
     "Buka link ini sekali di TV yang bersangkutan. Sekali pakai dan kedaluwarsa dalam 15 menit.",

@@ -47,27 +47,42 @@ type Row = {
 
 const UDU = "PT Unggul Dinamika Utama";
 const CREW = [
-  { nik: "OPS-0421", name: "Budi Santoso", dept: "Hauling", pos: "Driver OHT" },
   {
-    nik: "OPS-0388",
+    nik: "503220421",
+    name: "Budi Santoso",
+    dept: "Hauling",
+    pos: "Driver OHT",
+  },
+  {
+    nik: "508210388",
     name: "Andi Wijaya",
     dept: "Loading",
     pos: "Operator Excavator",
   },
-  { nik: "OPS-0510", name: "Rudi Hartono", dept: "Hauling", pos: "Driver OHT" },
   {
-    nik: "OPS-0111",
+    nik: "501230510",
+    name: "Rudi Hartono",
+    dept: "Hauling",
+    pos: "Driver OHT",
+  },
+  {
+    nik: "511190111",
     name: "Joko Prasetyo",
     dept: "Hauling",
     pos: "Driver OHT",
   },
   {
-    nik: "OPS-0367",
+    nik: "502210367",
     name: "Hendra Gunawan",
     dept: "Loading",
     pos: "Operator Dozer",
   },
-  { nik: "OPS-0455", name: "Fitri Handayani", dept: "Hauling", pos: "Checker" },
+  {
+    nik: "506230455",
+    name: "Fitri Handayani",
+    dept: "Hauling",
+    pos: "Checker",
+  },
 ] as const;
 
 const sleepClass = (st: StKey) =>

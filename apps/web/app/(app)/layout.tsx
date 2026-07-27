@@ -12,7 +12,7 @@ import { RoleProvider } from "@/components/providers/role-context";
  * This is the first of two real checks (design D10). It resolves the session
  * server-side so the shell never renders against a guessed identity; the
  * second is the macro on every API route, which re-checks independently. A
- * caller who defeats the middleware reaches a shell with no data.
+ * caller who defeats the proxy reaches a shell with no data.
  */
 export default async function AppLayout({
   children,

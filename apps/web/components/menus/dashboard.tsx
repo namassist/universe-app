@@ -90,12 +90,17 @@ const SAMPLE = {
     { code: "EX-22", model: "PC2000-8", loc: "Disposal", at: "07:40" },
   ],
   unfit: [
-    { name: "Budi Santoso", nik: "OPS-0421", dept: "Hauling", sleep: "4j 10m" },
-    { name: "Andi Wijaya", nik: "OPS-0388", dept: "Loading", sleep: "3j 55m" },
+    {
+      name: "Budi Santoso",
+      nik: "503220421",
+      dept: "Hauling",
+      sleep: "4j 10m",
+    },
+    { name: "Andi Wijaya", nik: "508210388", dept: "Loading", sleep: "3j 55m" },
   ],
   absent: [
-    { name: "Rudi Hartono", nik: "OPS-0510", dept: "Hauling", code: "P-2" },
-    { name: "Sari Lestari", nik: "OPS-0233", dept: "Support", code: "M-1" },
+    { name: "Rudi Hartono", nik: "501230510", dept: "Hauling", code: "P-2" },
+    { name: "Sari Lestari", nik: "505200233", dept: "Support", code: "M-1" },
   ],
   pendingRev: [
     { sid: "REV-2481", entries: 3 },
@@ -104,7 +109,7 @@ const SAMPLE = {
   expiredSimper: [
     {
       name: "Joko Prasetyo",
-      nik: "OPS-0111",
+      nik: "511190111",
       dept: "Hauling",
       jenis: "BII",
       exp: "18 Jul 2026",
@@ -486,7 +491,7 @@ export function DashboardMenu() {
           <ToolbarTitle>{t.panelTitle}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
-              className="w-[240px]"
+              className="w-60"
               placeholder={t.searchPh}
               aria-label={t.searchPh}
               value={q}

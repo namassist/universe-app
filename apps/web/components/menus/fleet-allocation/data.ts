@@ -55,7 +55,7 @@ export const PLAN_UNITS: BoardUnit[] = [
     loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
-    slots: [op("OPS-0388", "Andi Wijaya")],
+    slots: [op("508210388", "Andi Wijaya")],
   },
   {
     code: "RD5001",
@@ -64,7 +64,7 @@ export const PLAN_UNITS: BoardUnit[] = [
     loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
-    slots: [op("OPS-0421", "Budi Santoso"), op("OPS-0510", "Rudi Hartono")],
+    slots: [op("503220421", "Budi Santoso"), op("501230510", "Rudi Hartono")],
   },
   {
     code: "RD5002",
@@ -73,7 +73,7 @@ export const PLAN_UNITS: BoardUnit[] = [
     loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
-    slots: [op("OPS-0111", "Joko Prasetyo")],
+    slots: [op("511190111", "Joko Prasetyo")],
   },
   {
     code: "RD4001",
@@ -100,7 +100,7 @@ export const PLAN_UNITS: BoardUnit[] = [
     loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
-    slots: [op("OPS-0367", "Hendra Gunawan")],
+    slots: [op("502210367", "Hendra Gunawan")],
   },
   {
     code: "DT4017",
@@ -109,7 +109,7 @@ export const PLAN_UNITS: BoardUnit[] = [
     loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
-    slots: [op("OPS-0455", "Fitri Handayani")],
+    slots: [op("506230455", "Fitri Handayani")],
   },
   {
     code: "DT4018",
@@ -118,7 +118,7 @@ export const PLAN_UNITS: BoardUnit[] = [
     loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
-    slots: [op("OPS-0290", "Dewi Anggraini")],
+    slots: [op("509220290", "Dewi Anggraini")],
   },
   {
     code: "DT3013",
@@ -136,7 +136,7 @@ export const PLAN_UNITS: BoardUnit[] = [
     loc: "Workshop",
     status: "ready",
     fleet: null,
-    slots: [op("OPS-0129", "Agus Salim", "KIMPER")],
+    slots: [op("504180129", "Agus Salim", "KIMPER")],
   },
   {
     code: "DT3014",
@@ -194,7 +194,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
     loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
-    slots: [{ ...op("OPS-0388", "Andi Wijaya"), via: "plan", ftw: "fit" }],
+    slots: [{ ...op("508210388", "Andi Wijaya"), via: "plan", ftw: "fit" }],
   },
   {
     code: "RD5001",
@@ -203,7 +203,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
     loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
-    slots: [{ ...op("OPS-0421", "Budi Santoso"), via: "plan", ftw: "fit" }],
+    slots: [{ ...op("503220421", "Budi Santoso"), via: "plan", ftw: "fit" }],
   },
   {
     code: "RD5002",
@@ -214,7 +214,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
     fleet: FL1,
     slots: [
       {
-        ...op("OPS-0715", "Bagus Priyambodo"),
+        ...op("507230715", "Bagus Priyambodo"),
         via: "spare",
         replacedName: "Joko Prasetyo",
         ftw: "fit",
@@ -247,7 +247,9 @@ export const ACTUAL_UNITS: BoardUnit[] = [
     loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
-    slots: [{ ...op("OPS-0367", "Hendra Gunawan"), via: "plan", gugur: "ftw" }],
+    slots: [
+      { ...op("502210367", "Hendra Gunawan"), via: "plan", gugur: "ftw" },
+    ],
   },
   {
     code: "DT4017",
@@ -256,7 +258,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
     loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
-    slots: [{ ...op("OPS-0455", "Fitri Handayani"), via: "plan", ftw: "fit" }],
+    slots: [{ ...op("506230455", "Fitri Handayani"), via: "plan", ftw: "fit" }],
   },
   {
     code: "DT4018",
@@ -267,7 +269,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
     fleet: FL2,
     slots: [
       {
-        ...op("OPS-0733", "Lina Kusuma"),
+        ...op("507230733", "Lina Kusuma"),
         via: "manual",
         at: "2026-07-21T06:40",
         ftw: "fit",
@@ -291,7 +293,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
     status: "ready",
     fleet: null,
     slots: [
-      { ...op("OPS-0129", "Agus Salim", "KIMPER"), via: "plan", ftw: "fit" },
+      { ...op("504180129", "Agus Salim", "KIMPER"), via: "plan", ftw: "fit" },
     ],
   },
   {
@@ -344,11 +346,11 @@ export const ACTUAL_UNITS: BoardUnit[] = [
 /** Pool spare — tanpa urutan prioritas (bukan senioritas). */
 export type SpareRow = { nik: string; name: string };
 export const SPARE_INIT: SpareRow[] = [
-  { nik: "OPS-0715", name: "Bagus Priyambodo" },
-  { nik: "OPS-0733", name: "Lina Kusuma" },
-  { nik: "OPS-0602", name: "Rina Marlina" },
-  { nik: "OPS-0748", name: "Yusuf Maulana" },
-  { nik: "OPS-0752", name: "Tono Sugiarto" },
+  { nik: "507230715", name: "Bagus Priyambodo" },
+  { nik: "507230733", name: "Lina Kusuma" },
+  { nik: "510200602", name: "Rina Marlina" },
+  { nik: "508230748", name: "Yusuf Maulana" },
+  { nik: "508230752", name: "Tono Sugiarto" },
 ];
 
 /** Kandidat dialog alokasi. */
@@ -366,7 +368,7 @@ export type Candidate = {
 
 export const CANDIDATES: Candidate[] = [
   {
-    nik: "OPS-0715",
+    nik: "507230715",
     name: "Bagus Priyambodo",
     simperJenis: "BII",
     eligible: true,
@@ -375,7 +377,7 @@ export const CANDIDATES: Candidate[] = [
     ftw: "fit",
   },
   {
-    nik: "OPS-0733",
+    nik: "507230733",
     name: "Lina Kusuma",
     simperJenis: "BII",
     eligible: true,
@@ -383,7 +385,7 @@ export const CANDIDATES: Candidate[] = [
     ftw: "fit",
   },
   {
-    nik: "OPS-0748",
+    nik: "508230748",
     name: "Yusuf Maulana",
     simperJenis: "BII",
     eligible: true,
@@ -391,7 +393,7 @@ export const CANDIDATES: Candidate[] = [
     ftw: "belum",
   },
   {
-    nik: "OPS-0752",
+    nik: "508230752",
     name: "Tono Sugiarto",
     simperJenis: "BII",
     eligible: true,
@@ -399,7 +401,7 @@ export const CANDIDATES: Candidate[] = [
     ftw: "kurang",
   },
   {
-    nik: "OPS-0421",
+    nik: "503220421",
     name: "Budi Santoso",
     simperJenis: "BII",
     eligible: false,
@@ -408,7 +410,7 @@ export const CANDIDATES: Candidate[] = [
     ftw: "fit",
   },
   {
-    nik: "OPS-0510",
+    nik: "501230510",
     name: "Rudi Hartono",
     simperJenis: "BII",
     eligible: false,
@@ -417,14 +419,14 @@ export const CANDIDATES: Candidate[] = [
     ftw: "fit",
   },
   {
-    nik: "OPS-0233",
+    nik: "505200233",
     name: "Sari Lestari",
     eligible: false,
     rosterShift: "pagi",
     ftw: "fit",
   },
   {
-    nik: "OPS-0602",
+    nik: "510200602",
     name: "Rina Marlina",
     eligible: false,
     rosterShift: "pagi",

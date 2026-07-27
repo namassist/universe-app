@@ -7,6 +7,8 @@
  * initial password comes from configuration instead.
  */
 
+import type { ImportErrorRow } from "./master-import";
+
 /** The template's columns, in order. `email` is the only optional one. */
 export const ACCOUNT_IMPORT_COLUMNS = ["nik", "nama", "email", "role"] as const;
 export type AccountImportColumn = (typeof ACCOUNT_IMPORT_COLUMNS)[number];
@@ -39,16 +41,10 @@ export type AccountImportPreviewRow = {
 
 /**
  * A rejected row. Mirrors the roster upload's `UpError` so the results table
- * looks and behaves identically.
+ * looks and behaves identically — which is now literally the same type, shared
+ * with the master imports rather than a third copy that happens to agree.
  */
-export type AccountImportError = {
-  row: string;
-  nik: string;
-  emp: string;
-  issue: string;
-  badgeVariant: "danger" | "warning";
-  badge: string;
-};
+export type AccountImportError = ImportErrorRow;
 
 export type AccountImportPreview = {
   /** Echoed so the commit can be checked against the file just validated. */

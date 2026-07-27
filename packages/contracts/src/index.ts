@@ -9,6 +9,8 @@ export const API_VERSION = "v1" as const;
 
 export * from "./access";
 export * from "./account-import";
+export * from "./master";
+export * from "./master-import";
 export * from "./session";
 
 /** Shape every non-2xx response from the API uses. */

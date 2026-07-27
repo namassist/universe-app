@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   Download,
   Eye,
@@ -14,13 +15,13 @@ import {
 } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
-import { DEPARTEMEN_NAMES } from "@/lib/departemen-data";
 import {
   EMPLOYEES,
   type Employee as Emp,
   type EmpStatus,
 } from "@/lib/employees-data";
 import { useI18n } from "@/lib/i18n";
+import { masterQueryOptions } from "@/lib/queries/master";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -59,8 +60,6 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
-const DEPTS = DEPARTEMEN_NAMES;
-
 function kompVariant(exp: string): BadgeVariant {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -89,6 +88,15 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
   } | null>(null);
   const selAllRef = React.useRef<HTMLInputElement>(null);
   const importRef = React.useRef<HTMLInputElement>(null);
+
+  /* The department filter's options come from the master catalogue, so one
+     added there appears here without a redeploy — even though this screen's
+     own employee records are still sample data. */
+  const deptsQ = useQuery(masterQueryOptions("departemen", true));
+  const DEPTS = React.useMemo(
+    () => (deptsQ.data ?? []).map((d) => d.name),
+    [deptsQ.data]
+  );
 
   const fN = DEPTS.filter((d) => fDepts[d]).length;
   const needle = q.trim().toLowerCase();

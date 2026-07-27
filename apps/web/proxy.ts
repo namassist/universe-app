@@ -13,11 +13,11 @@ const DEVICE_COOKIE = "universe_device";
  * twice, in `(app)/layout.tsx` and independently in every API route through
  * the auth macro.
  *
- * Do not add authorization logic here. Middleware runs on every request and
- * cannot see the caller's permissions without a round trip that would put a
- * database read in front of every navigation.
+ * Do not add authorization logic here. Proxy runs on every request and cannot
+ * see the caller's permissions without a round trip that would put a database
+ * read in front of every navigation.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // `/display/` with the slash, not `/display` as a prefix: the shell's own
@@ -45,7 +45,12 @@ export const config = {
      * Everything except the auth pages, Next's own assets, and static files.
      * The negative lookahead is what keeps the login page reachable without a
      * session — matching it would redirect it to itself.
+     *
+     * `sounds` used to be listed here for `public/sounds/*.wav`. Those are gone:
+     * audio is uploaded now and served by the API out of `SOUND_DIR`, a path
+     * this matcher never governed. Keeping the exclusion would advertise an
+     * unauthenticated route that no longer exists.
      */
-    "/((?!login|change-password|_next/static|_next/image|favicon.ico|icon1.png|icon2.png|apple-icon.png|logoV1.svg|sounds|android-chrome).*)",
+    "/((?!login|change-password|_next/static|_next/image|favicon.ico|icon1.png|icon2.png|apple-icon.png|logoV1.svg|android-chrome).*)",
   ],
 };

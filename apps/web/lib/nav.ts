@@ -93,6 +93,7 @@ export const NAV: NavEntry[] = [
       leaf("merk-unit"),
       leaf("kelas-unit"),
       leaf("simper"),
+      leaf("kode-simper"),
       leaf("departemen"),
       leaf("area-kerja"),
       leaf("bus"),

@@ -36,6 +36,7 @@ export default function DisplayFingerprintPage() {
     <DisplayShell
       title="Mesin Fingerprint"
       deviceName={deviceName}
+      displayKind="fingerprint"
       stats={[
         {
           icon: <LayoutGrid className="text-(--color-primary-bright)" />,

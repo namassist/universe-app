@@ -16,6 +16,12 @@ import {
   type AccountImportPreviewRow,
 } from "@universe/contracts";
 
+import {
+  missingColumnsFailure,
+  unknownColumnsFailure,
+  type ParseFailure,
+} from "./import-columns";
+
 /** Generous for hundreds of rows, small enough that a hostile file fails fast. */
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 
@@ -59,7 +65,7 @@ export async function buildTemplate(): Promise<Buffer> {
   // One example row, so the expected shape is obvious without a manual. There
   // is deliberately no password column: the initial password is configuration.
   ws.addRow({
-    nik: "OPS-0421",
+    nik: "503220421",
     nama: "Budi Santoso",
     email: "budi.santoso@unggul.co.id",
     role: "User",
@@ -83,8 +89,6 @@ function cellText(value: ExcelJS.CellValue): string {
   }
   return String(value).trim();
 }
-
-export type ParseFailure = { code: string; message: string };
 
 /**
  * Validate an uploaded workbook against the existing accounts and roles, and
@@ -121,19 +125,13 @@ export async function validateWorkbook(
     (h) => !(ACCOUNT_IMPORT_COLUMNS as readonly string[]).includes(h)
   );
   if (unknown.length)
-    return {
-      code: "unknown_columns",
-      message: `Kolom tidak dikenal: ${unknown.join(", ")}`,
-    };
+    return unknownColumnsFailure(unknown, ACCOUNT_IMPORT_COLUMNS);
 
   const missing = ACCOUNT_IMPORT_COLUMNS.filter(
     (c) => c !== "email" && !headers.includes(c)
   );
   if (missing.length)
-    return {
-      code: "missing_columns",
-      message: `Kolom wajib hilang: ${missing.join(", ")}`,
-    };
+    return missingColumnsFailure([...missing], ACCOUNT_IMPORT_COLUMNS);
 
   const index = (name: string) => headers.indexOf(name) + 1;
   const col = {

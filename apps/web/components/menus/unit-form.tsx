@@ -2,68 +2,216 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Truck } from "lucide-react";
 
+import type { MasterKind } from "@universe/contracts";
+
+import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import {
-  CLS_OPTS,
-  DEPT_OPTS,
-  EGI_OPTS,
-  findUnit,
-  MODEL_OPTS,
-  PROD_OPTS,
-  UNITS,
-} from "@/lib/unit-data";
+import { masterQueryOptions, type MasterRecord } from "@/lib/queries/master";
+import { unitKey, unitQueryOptions } from "@/lib/queries/units";
 import { Button } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
 import { Field, FormGrid } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PageTitle, Panel, SectionTitle } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
+
+/**
+ * Add and edit a unit.
+ *
+ * Every catalogue dropdown reads its own `masterQueryOptions(kind)` with
+ * `activeOnly`, so a retired class stops being offered here while the units
+ * already pointing at it keep resolving it — that is the whole meaning of the
+ * active flag (design: deactivating hides from selection, never invalidates a
+ * reference).
+ *
+ * What is submitted is catalogue **ids**, never names. A name would put the
+ * truth back in whatever string this form happened to send, which is exactly
+ * what D2 removed.
+ */
+
+const CATALOGUE_FIELDS = [
+  { key: "classId", kind: "kelas-unit", label: "Kelas Unit", required: true },
+  { key: "typeId", kind: "jenis-unit", label: "Jenis Unit", required: true },
+  { key: "modelId", kind: "model-unit", label: "Model", required: true },
+  { key: "brandId", kind: "merk-unit", label: "Merk", required: true },
+  {
+    key: "simperCodeId",
+    // The qualification catalogue, not the permit-type one (design D4): this is
+    // what the allocation engine matches a spare's skills against.
+    kind: "kode-simper",
+    label: "Kode SIMPER",
+    required: false,
+  },
+  {
+    key: "departmentId",
+    kind: "departemen",
+    label: "Departemen",
+    // Optional: a unit no department owns is a company-wide asset. Leaving it
+    // blank says so, and is not an unfinished record.
+    required: false,
+  },
+] as const satisfies readonly {
+  key: string;
+  kind: MasterKind;
+  label: string;
+  required: boolean;
+}[];
+
+type CatalogueKey = (typeof CATALOGUE_FIELDS)[number]["key"];
 
 export function UnitForm({ code }: { code?: string }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const listHref = `/database-unit`;
 
-  const record = code ? findUnit(code) : undefined;
+  const unitQ = useQuery({
+    ...unitQueryOptions(code ?? ""),
+    enabled: Boolean(code),
+  });
+  const record = unitQ.data;
 
-  const [fCode, setFCode] = React.useState(record?.code ?? "");
-  const [fCls, setFCls] = React.useState(record?.cls ?? CLS_OPTS[0]!);
-  const [fEgiType, setFEgiType] = React.useState(
-    record?.egiType ?? EGI_OPTS[0]!
-  );
-  const [fEgi, setFEgi] = React.useState(record?.egi ?? MODEL_OPTS[0]!);
-  const [fProd, setFProd] = React.useState(record?.product ?? PROD_OPTS[0]!);
-  const [fSimper, setFSimper] = React.useState(record?.simper ?? "");
-  const [fDept, setFDept] = React.useState(record?.departemen ?? DEPT_OPTS[0]!);
-  const [fSerial, setFSerial] = React.useState(record?.serial ?? "");
-  const [fEngine, setFEngine] = React.useState(record?.engineBrand ?? "");
-  const [fDesc, setFDesc] = React.useState(record?.description ?? "");
-  const [fFtw, setFFtw] = React.useState(record?.ftw ?? false);
-  const [fActive, setFActive] = React.useState(record?.active ?? true);
+  // Active-only: this is a selection list, not a management screen.
+  const classes = useQuery(masterQueryOptions("kelas-unit", true));
+  const types = useQuery(masterQueryOptions("jenis-unit", true));
+  const models = useQuery(masterQueryOptions("model-unit", true));
+  const brands = useQuery(masterQueryOptions("merk-unit", true));
+  const simperCodes = useQuery(masterQueryOptions("kode-simper", true));
+  const departments = useQuery(masterQueryOptions("departemen", true));
+
+  const options: Record<CatalogueKey, MasterRecord[]> = {
+    classId: classes.data ?? [],
+    typeId: types.data ?? [],
+    modelId: models.data ?? [],
+    brandId: brands.data ?? [],
+    simperCodeId: simperCodes.data ?? [],
+    departmentId: departments.data ?? [],
+  };
+
+  const [fCode, setFCode] = React.useState("");
+  const [refs, setRefs] = React.useState<Record<CatalogueKey, string>>({
+    classId: "",
+    typeId: "",
+    modelId: "",
+    brandId: "",
+    simperCodeId: "",
+    departmentId: "",
+  });
+  const [fSerial, setFSerial] = React.useState("");
+  const [fEngine, setFEngine] = React.useState("");
+  const [fDesc, setFDesc] = React.useState("");
+  const [fFtw, setFFtw] = React.useState(false);
+  const [fActive, setFActive] = React.useState(true);
   const [errCode, setErrCode] = React.useState(false);
+
+  // Seeded once the record arrives, adjusted during render rather than in an
+  // effect — React's documented shape for "reset state when the input changes".
+  // An effect would render one frame of an empty form over a loaded record.
+  const [seededFor, setSeededFor] = React.useState<string | null>(null);
+  if (record && seededFor !== record.id) {
+    setSeededFor(record.id);
+    setFCode(record.code);
+    setRefs({
+      classId: record.classId,
+      typeId: record.typeId,
+      modelId: record.modelId,
+      brandId: record.brandId,
+      simperCodeId: record.simperCodeId ?? "",
+      departmentId: record.departmentId ?? "",
+    });
+    setFSerial(record.serial);
+    setFEngine(record.engineBrand);
+    setFDesc(record.description);
+    setFFtw(record.ftw);
+    setFActive(record.active);
+  }
+
+  /**
+   * A required dropdown shows its first option rather than a blank.
+   *
+   * Derived at render rather than written into state: the catalogues arrive
+   * asynchronously, and storing a default the moment they land would mean the
+   * form's value depends on which query resolved first. Reading through here
+   * keeps "nothing chosen yet" meaning the first option, whenever that becomes
+   * knowable.
+   */
+  const valueOf = (field: (typeof CATALOGUE_FIELDS)[number]): string => {
+    const chosen = refs[field.key];
+    if (chosen) return chosen;
+    return field.required ? (options[field.key][0]?.id ?? "") : "";
+  };
+
+  /** What the dropdowns show and what submitting sends — the same values. */
+  const resolved = Object.fromEntries(
+    CATALOGUE_FIELDS.map((f) => [f.key, valueOf(f)])
+  ) as Record<CatalogueKey, string>;
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const body = {
+        code: fCode.trim().toUpperCase(),
+        classId: resolved.classId,
+        typeId: resolved.typeId,
+        modelId: resolved.modelId,
+        brandId: resolved.brandId,
+        // Empty is a real state for both — no qualification requirement, no
+        // owning department — and both are sent as null rather than omitted, so
+        // an edit can clear what an earlier one set.
+        simperCodeId: resolved.simperCodeId || null,
+        departmentId: resolved.departmentId || null,
+        serial: fSerial,
+        engineBrand: fEngine,
+        description: fDesc,
+        ftw: fFtw,
+        active: fActive,
+      };
+      const result = record
+        ? await api.v1.units({ code: record.code }).patch(body)
+        : await api.v1.units.post(body);
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ["units"] });
+      if (data)
+        await queryClient.invalidateQueries({ queryKey: unitKey(data.code) });
+      pushToast(
+        "success",
+        record ? t.udbEditToastT : t.udbToastT,
+        data ? `${data.code} — ${data.modelName} · ${data.brandName}` : ""
+      );
+      router.push(listHref);
+    },
+    // 409 on a duplicate code, 422 naming the catalogue field that did not
+    // resolve — the API's message either way, because a generic one would leave
+    // the operator guessing which of six dropdowns is wrong.
+    onError: (error) =>
+      pushToast("error", t.udbErrCode, errorMessage(error, t.loginErr)),
+  });
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const c = fCode.trim().toUpperCase();
-    const dup = UNITS.some((u) => u.code === c && u.code !== record?.code);
-    const bad = !c || dup;
-    setErrCode(bad);
-    if (bad) {
-      pushToast("error", t.udbErrCode, c || "—");
-      return;
-    }
-    /* static-only: tanpa penyimpanan — toast lalu kembali */
-    if (record) {
-      pushToast("success", t.udbEditToastT, `${c} — ${fEgi} · ${fProd}`);
-    } else {
-      pushToast("success", t.udbToastT, `${c} — ${fEgi} · ${fProd}`);
-    }
-    router.push(listHref);
+    const c = fCode.trim();
+    setErrCode(!c);
+    if (!c) return;
+    save.mutate();
   }
+
+  if (code && unitQ.isPending)
+    return (
+      <div className="flex flex-col gap-6">
+        <PageTitle title={t.udbEditT} sub={t.udbEditB} />
+        <Panel>
+          <TableSkeleton rows={6} />
+        </Panel>
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,68 +242,43 @@ export function UnitForm({ code }: { code?: string }) {
                   onChange={(e) => setFCode(e.target.value)}
                 />
               </Field>
-              <Field label="Kelas Unit" htmlFor="uf-cls" required>
-                <Select
-                  id="uf-cls"
-                  value={fCls}
-                  onChange={(e) => setFCls(e.target.value)}
+
+              {CATALOGUE_FIELDS.map((field) => (
+                <Field
+                  key={field.key}
+                  label={field.label}
+                  htmlFor={`uf-${field.key}`}
+                  required={field.required}
                 >
-                  {CLS_OPTS.map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Jenis Unit" htmlFor="uf-type" required>
-                <Select
-                  id="uf-type"
-                  value={fEgiType}
-                  onChange={(e) => setFEgiType(e.target.value)}
-                >
-                  {EGI_OPTS.map((g) => (
-                    <option key={g}>{g}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Model" htmlFor="uf-egi" required>
-                <Select
-                  id="uf-egi"
-                  value={fEgi}
-                  onChange={(e) => setFEgi(e.target.value)}
-                >
-                  {MODEL_OPTS.map((m) => (
-                    <option key={m}>{m}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Merk" htmlFor="uf-prod" required>
-                <Select
-                  id="uf-prod"
-                  value={fProd}
-                  onChange={(e) => setFProd(e.target.value)}
-                >
-                  {PROD_OPTS.map((p) => (
-                    <option key={p}>{p}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Kode Simper" htmlFor="uf-simper">
-                <Input
-                  id="uf-simper"
-                  value={fSimper}
-                  onChange={(e) => setFSimper(e.target.value)}
-                />
-              </Field>
-              <Field label="Departemen" htmlFor="uf-dept" required>
-                <Select
-                  id="uf-dept"
-                  value={fDept}
-                  onChange={(e) => setFDept(e.target.value)}
-                >
-                  {DEPT_OPTS.map((d) => (
-                    <option key={d}>{d}</option>
-                  ))}
-                </Select>
-              </Field>
+                  <Select
+                    id={`uf-${field.key}`}
+                    value={resolved[field.key]}
+                    onChange={(e) =>
+                      setRefs((prev) => ({
+                        ...prev,
+                        [field.key]: e.target.value,
+                      }))
+                    }
+                  >
+                    {/* An optional reference needs its blank to say what blank
+                        means. "—" reads as "not filled in yet" on a department
+                        that is deliberately empty. */}
+                    {field.required ? null : (
+                      <option value="">
+                        {field.key === "departmentId"
+                          ? `— ${t.udbGlobal}`
+                          : "—"}
+                      </option>
+                    )}
+                    {options[field.key].map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              ))}
+
               <Field label="Machine S/N" htmlFor="uf-serial">
                 <Input
                   id="uf-serial"
@@ -201,7 +324,9 @@ export function UnitForm({ code }: { code?: string }) {
             <Button type="button" variant="ghost" onClick={() => router.back()}>
               {t.btnCancel}
             </Button>
-            <Button type="submit">{record ? t.udbSaveEdit : t.udbAddDo}</Button>
+            <Button type="submit" disabled={save.isPending}>
+              {record ? t.udbSaveEdit : t.udbAddDo}
+            </Button>
           </div>
         </div>
       </form>

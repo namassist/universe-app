@@ -15,9 +15,13 @@ import { t } from "elysia";
 import {
   ACCESS_MODES,
   ACCOUNT_IMPORT_FIELDS,
+  AREA_TYPES,
   DEVICE_KINDS,
+  MASTER_KINDS,
   MENU_SLUGS,
+  RUNTEXT_COLORS,
   SCOPES,
+  TIMELINE_ACTIONS,
   type MenuSlug,
 } from "@universe/contracts";
 
@@ -25,6 +29,10 @@ export const AccessModeSchema = t.UnionEnum(ACCESS_MODES);
 export const ScopeSchema = t.UnionEnum(SCOPES);
 export const MenuSlugSchema = t.UnionEnum(MENU_SLUGS);
 export const DeviceKindSchema = t.UnionEnum(DEVICE_KINDS);
+export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
+export const AreaTypeSchema = t.UnionEnum(AREA_TYPES);
+export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
+export const TimelineActionSchema = t.UnionEnum(TIMELINE_ACTIONS);
 
 /* --------------------------------------------------------- optional enums */
 
@@ -53,6 +61,24 @@ const DeviceKindUnion = t.Union([
   t.Literal("fingerprint"),
 ]);
 
+const AreaTypeUnion = t.Union([t.Literal("Mining"), t.Literal("Non Mining")]);
+
+const RunTextColorUnion = t.Union([
+  t.Literal("Cyan"),
+  t.Literal("Oranye"),
+  t.Literal("Putih"),
+  t.Literal("Merah"),
+]);
+
+const TimelineActionUnion = t.Union([
+  t.Literal("ftw-deadline"),
+  t.Literal("finger-in"),
+  t.Literal("finger-ingest"),
+  t.Literal("spare-validate"),
+  t.Literal("bus-depart"),
+  t.Literal("other"),
+]);
+
 type IsExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Assert<T extends true> = T;
 
@@ -65,10 +91,25 @@ type _ScopeInSync = Assert<
 type _DeviceKindInSync = Assert<
   IsExact<(typeof DeviceKindUnion)["static"], (typeof DEVICE_KINDS)[number]>
 >;
+type _AreaTypeInSync = Assert<
+  IsExact<(typeof AreaTypeUnion)["static"], (typeof AREA_TYPES)[number]>
+>;
+type _RunTextColorInSync = Assert<
+  IsExact<(typeof RunTextColorUnion)["static"], (typeof RUNTEXT_COLORS)[number]>
+>;
+type _TimelineActionInSync = Assert<
+  IsExact<
+    (typeof TimelineActionUnion)["static"],
+    (typeof TIMELINE_ACTIONS)[number]
+  >
+>;
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
 export const OptionalScopeSchema = t.Optional(ScopeUnion);
 export const OptionalDeviceKindSchema = t.Optional(DeviceKindUnion);
+export const OptionalAreaTypeSchema = t.Optional(AreaTypeUnion);
+export const OptionalRunTextColorSchema = t.Optional(RunTextColorUnion);
+export const OptionalTimelineActionSchema = t.Optional(TimelineActionUnion);
 
 export const ErrorSchema = t.Object({
   code: t.String(),
@@ -196,6 +237,244 @@ export const ImportPreviewSchema = t.Object({
 export const ImportResultSchema = t.Object({
   created: t.Integer(),
   updated: t.Integer(),
+});
+
+/* ----------------------------------------------------- master data import */
+
+/**
+ * The same two-step preview/commit shape, generalised over the catalogues and
+ * the unit registry. `errors` is literally `ImportErrorSchema` — the results
+ * table in the web app is one component, so the wire shape has to be one shape.
+ */
+const MasterImportChangeSchema = t.Object({
+  field: t.String(),
+  from: t.Nullable(t.String()),
+  to: t.Nullable(t.String()),
+});
+
+const MasterImportPreviewRowSchema = t.Object({
+  row: t.Integer(),
+  kind: t.Union([
+    t.Literal("new"),
+    t.Literal("updated"),
+    t.Literal("unchanged"),
+  ]),
+  key: t.String(),
+  label: t.String(),
+  /** Every non-empty cell of the row, in column order, joined by " - ". */
+  data: t.String(),
+  changes: t.Array(MasterImportChangeSchema),
+});
+
+/**
+ * A catalogue record the unit import would create to satisfy a reference.
+ * Always empty for a catalogue import, which references nothing.
+ */
+const PendingMasterSchema = t.Object({
+  kind: MasterKindSchema,
+  name: t.String(),
+  rows: t.Integer(),
+  /** An existing entry this looks like a misspelling of. Never blocks. */
+  similarTo: t.Optional(t.String()),
+});
+
+export const MasterImportPreviewSchema = t.Object({
+  fileName: t.String(),
+  newCount: t.Integer(),
+  updatedCount: t.Integer(),
+  unchangedCount: t.Integer(),
+  /** Blocking only — warnings are counted by `warnings.length`. */
+  errorCount: t.Integer(),
+  rows: t.Array(MasterImportPreviewRowSchema),
+  errors: t.Array(ImportErrorSchema),
+  warnings: t.Array(ImportErrorSchema),
+  newMasters: t.Array(PendingMasterSchema),
+});
+
+export const MasterImportResultSchema = t.Object({
+  created: t.Integer(),
+  updated: t.Integer(),
+  mastersCreated: t.Integer(),
+});
+
+/* ------------------------------------------------------- master catalogues */
+
+/**
+ * Three shapes, declared separately rather than as one row type with optional
+ * members (design D1/D3).
+ *
+ * One generic handler serves all nine catalogues, but the OpenAPI document is
+ * what a future mobile client generates from — and a schema saying "there may
+ * or may not be a `type` field" tells that author nothing about which
+ * catalogues have one. Naming the fields per shape is the whole reason the
+ * polymorphic `a`/`b`/`c` table was rejected.
+ */
+export const MasterNameSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/** Unit classes, SIMPER permit types, SIMPER qualification codes, departments. */
+export const MasterDescribedSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  description: t.String(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+export const MasterWorkAreaSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  type: AreaTypeSchema,
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/**
+ * Order is load-bearing: a union is checked variant by variant, and every
+ * work-area row also satisfies the name-only shape (extra members are allowed).
+ * Most specific first, or a described row validates as a bare name and its
+ * `description` is normalised away before it reaches the client.
+ */
+export const MasterRecordSchema = t.Union([
+  MasterWorkAreaSchema,
+  MasterDescribedSchema,
+  MasterNameSchema,
+]);
+
+/**
+ * The outcome of deleting a hand-picked selection.
+ *
+ * `blocked` carries the name and the referencing count rather than just an id,
+ * because the caller's list may already have moved on and "3 could not be
+ * deleted" is not something an operator can act on. `deleted + blocked.length`
+ * always equals the number of distinct ids asked for.
+ */
+export const MasterBulkDeleteResultSchema = t.Object({
+  deleted: t.Integer(),
+  blocked: t.Array(
+    t.Object({
+      id: t.String(),
+      name: t.String(),
+      references: t.Integer(),
+    })
+  ),
+});
+
+/* ------------------------------------------------------------ unit registry */
+
+/**
+ * A unit, with each catalogue reference carried as both its key and its name.
+ *
+ * The key is the truth and the name is a join result, but shipping only keys
+ * would mean a thirteen-column table costing seven requests to render — and
+ * shipping only names would undo D2 at the API boundary, since the client
+ * would then have nothing to send back but a string. Both, and the list renders
+ * in one round trip while every write still speaks in keys.
+ */
+export const UnitSchema = t.Object({
+  id: t.String(),
+  code: t.String(),
+  classId: t.String(),
+  className: t.String(),
+  typeId: t.String(),
+  typeName: t.String(),
+  modelId: t.String(),
+  modelName: t.String(),
+  brandId: t.String(),
+  brandName: t.String(),
+  /** Absent is a real state: a wheel excavator needs no qualification code. */
+  simperCodeId: t.Nullable(t.String()),
+  simperCodeName: t.Nullable(t.String()),
+  /** Absent means no department owns it — a company-wide asset. */
+  departmentId: t.Nullable(t.String()),
+  departmentName: t.Nullable(t.String()),
+  serial: t.String(),
+  engineBrand: t.String(),
+  description: t.String(),
+  ftw: t.Boolean(),
+  active: t.Boolean(),
+  standby: t.Boolean(),
+  breakdown: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/**
+ * The outcome of deleting a hand-picked selection of units.
+ *
+ * Keyed by `code` rather than id, because that is what the unit API addresses a
+ * unit by everywhere else and what the operator ticked in the list. `reason`
+ * rather than a count: a unit has at most one bus schedule, so "1" would say
+ * less than naming what is holding it.
+ */
+export const UnitBulkDeleteResultSchema = t.Object({
+  deleted: t.Integer(),
+  blocked: t.Array(t.Object({ code: t.String(), reason: t.String() })),
+});
+
+export const BusScheduleSchema = t.Object({
+  id: t.String(),
+  unitId: t.String(),
+  unitCode: t.String(),
+  /** "HH:MM" — the schedule is specified to the minute, and read as one. */
+  departAt: t.String(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/* ---------------------------------------------------------- display content */
+
+export const RunTextSchema = t.Object({
+  id: t.String(),
+  text: t.String(),
+  color: RunTextColorSchema,
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/**
+ * A device's own text. No `active` flag on purpose (design D8): *having* rows
+ * is what overrides the master list, so a deactivated last row would be
+ * indistinguishable from a deleted one and the fallback rule would read two
+ * ways at once.
+ */
+export const DeviceRunTextSchema = t.Object({
+  text: t.String(),
+  color: RunTextColorSchema,
+});
+
+/** What a kiosk actually renders — the fallback already resolved. */
+export const DisplayContentSchema = t.Object({
+  kind: DeviceKindSchema,
+  device: t.Nullable(t.String()),
+  servedAt: t.String(),
+  runTexts: t.Array(DeviceRunTextSchema),
+});
+
+export const SoundSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  /** The generated storage name, not the one the client uploaded. */
+  fileName: t.String(),
+  mimeType: t.String(),
+  sizeBytes: t.Integer(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/* ------------------------------------------------------ allocation schedule */
+
+export const TimelineStageSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  /** "HH:MM" — a time of day, not an instant: a stage recurs every morning. */
+  at: t.String(),
+  action: TimelineActionSchema,
+  active: t.Boolean(),
+  createdAt: t.String(),
 });
 
 export const DeviceSchema = t.Object({

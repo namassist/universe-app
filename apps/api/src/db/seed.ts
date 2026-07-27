@@ -23,6 +23,7 @@ import {
 import { hashPassword } from "../auth/password";
 import { env } from "../env";
 import { db, schema } from "./index";
+import { seedMasterData } from "./seed-master";
 
 type RoleSeed = {
   slug: string;
@@ -107,6 +108,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "merk-unit",
       "kelas-unit",
       "simper",
+      "kode-simper",
       "departemen",
       "area-kerja",
       "bus",
@@ -148,6 +150,24 @@ const ROLE_SEEDS: RoleSeed[] = [
     manage: ["fit-to-work"],
   },
 ];
+
+/**
+ * Grants for slugs added to `MENU_SLUGS` after an installation was first
+ * seeded.
+ *
+ * `seedRole` leaves an existing editable role alone, which is right — a
+ * permission an administrator changed through the Roles screen must survive a
+ * re-run. But it also means a role can never gain a *newly introduced* menu,
+ * and `manpower` owns every master catalogue by definition. So the new slug is
+ * named here and inserted on its own, `ON CONFLICT DO NOTHING`: a role that has
+ * no row for it gains one, a role that already has any grant on it keeps
+ * whatever that grant is, and no other row is read or written.
+ *
+ * `superadmin` needs no entry — it is `locked` and reconciled against the whole
+ * of `MENU_SLUGS` on every run.
+ */
+const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
+  [{ slug: "kode-simper", mode: "manage", roles: ["manpower"] }];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */
 const DEVICE_SEEDS: { id: string; name: string; kind: DeviceKind }[] = [
@@ -225,6 +245,23 @@ async function seedRole(seed: RoleSeed): Promise<string> {
   return roleId;
 }
 
+async function seedNewSlugGrants(roleIds: Map<string, string>): Promise<void> {
+  for (const grant of NEW_SLUG_GRANTS) {
+    for (const slug of grant.roles) {
+      const roleId = roleIds.get(slug);
+      if (!roleId) continue;
+      const [added] = await db
+        .insert(schema.rolePermissions)
+        .values({ roleId, menuSlug: grant.slug, mode: grant.mode })
+        .onConflictDoNothing()
+        .returning({ menuSlug: schema.rolePermissions.menuSlug });
+      console.log(
+        `  ${slug} → ${grant.slug} — ${added ? `granted ${grant.mode}` : "already decided, left as is"}`
+      );
+    }
+  }
+}
+
 async function seedSuperadminAccount(roleId: string): Promise<void> {
   const identifier = env.SUPERADMIN_IDENTIFIER.trim();
   const isEmail = identifier.includes("@");
@@ -284,11 +321,16 @@ export async function seed(): Promise<void> {
     roleIds.set(seedRow.slug, await seedRole(seedRow));
   }
 
+  console.log("[seed] grants for newly added menu slugs");
+  await seedNewSlugGrants(roleIds);
+
   console.log("[seed] bootstrap account");
   await seedSuperadminAccount(roleIds.get("superadmin")!);
 
   console.log("[seed] devices");
   await seedDevices();
+
+  await seedMasterData();
 
   console.log("[seed] done");
 }

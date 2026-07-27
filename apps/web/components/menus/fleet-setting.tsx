@@ -1,17 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
-import { AREA_MINING_NAMES } from "@/lib/area-data";
 import { useI18n } from "@/lib/i18n";
-import {
-  BUS_UNITS,
-  DIGGER_UNITS,
-  FLEET_MEMBER_UNITS,
-  unitTypeLabel,
-} from "@/lib/unit-data";
+import { masterQueryOptions, recordType } from "@/lib/queries/master";
+import { unitsQueryOptions, type UnitRow } from "@/lib/queries/units";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -25,7 +21,6 @@ import {
 import { Field, FormGrid } from "@/components/ui/field";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
-  DNote,
   FootSum,
   PageTitle,
   Panel,
@@ -60,19 +55,23 @@ type Fleet = {
 };
 
 /* ---- semua dropdown di-derive dari master (unit + area kerja) ---- */
-/* Digger = unit jenis EXCAVATOR / kelas BIGDIGGER-MEDIUMDIGGER-SMALLDIGGER */
-const DIGGERS: Record<string, string> = Object.fromEntries(
-  DIGGER_UNITS.map((u) => [u.code, unitTypeLabel(u)])
-);
-/* Kode bus dari unit berjenis BUS — kosong sampai unit BUS ada di master */
-const BUS_OPTS = BUS_UNITS.map((u) => u.code);
-/* Lokasi kerja = area kerja bertipe Mining (lokasi operasi fleet) */
-const AREA_OPTS = AREA_MINING_NAMES;
-/* Anggota fleet = unit non-digger (hauler/support), label "model · merk" */
-const OHT_TYPE: Record<string, string> = Object.fromEntries(
-  FLEET_MEMBER_UNITS.map((u) => [u.code, unitTypeLabel(u)])
-);
-const OHT_POOL = Object.keys(OHT_TYPE);
+/**
+ * The fleet's own records are still sample data; only the values it *offers*
+ * come from the API now, so a unit or work area added in a master menu appears
+ * here without a redeploy.
+ *
+ * Digger-ness is derived here rather than stored: it is a property of the unit
+ * type and class, and the catalogues do not carry a "this is a fleet leader"
+ * flag. Kept as the same rule the static module used.
+ */
+const DIGGER_CLASSES = ["BIGDIGGER", "MEDIUMDIGGER", "SMALLDIGGER"];
+const isDigger = (u: UnitRow) =>
+  u.typeName === "EXCAVATOR" || DIGGER_CLASSES.includes(u.className);
+
+/** Label tipe unit ringkas: "model · merk". */
+const unitTypeLabel = (u: UnitRow) => `${u.modelName} · ${u.brandName}`;
+
+const BUS_TYPE_NAME = "BUS";
 
 const INITIAL: Fleet[] = [
   {
@@ -99,6 +98,41 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const canW = mode === "manage";
 
   const [fleets, setFleets] = React.useState<Fleet[]>(INITIAL);
+
+  // Active units and active Mining work areas — the values this screen offers.
+  const unitsQ = useQuery(unitsQueryOptions({ active: true }));
+  const areasQ = useQuery(masterQueryOptions("area-kerja", true));
+  const units = React.useMemo(() => unitsQ.data ?? [], [unitsQ.data]);
+
+  const DIGGERS = React.useMemo(
+    () =>
+      Object.fromEntries(
+        units.filter(isDigger).map((u) => [u.code, unitTypeLabel(u)])
+      ) as Record<string, string>,
+    [units]
+  );
+  /* Anggota fleet = unit non-digger (hauler/support), label "model · merk". */
+  const OHT_TYPE = React.useMemo(
+    () =>
+      Object.fromEntries(
+        units.filter((u) => !isDigger(u)).map((u) => [u.code, unitTypeLabel(u)])
+      ) as Record<string, string>,
+    [units]
+  );
+  const OHT_POOL = React.useMemo(() => Object.keys(OHT_TYPE), [OHT_TYPE]);
+  /* Kode bus dari unit berjenis BUS — kosong sampai unit BUS ada di master. */
+  const BUS_OPTS = React.useMemo(
+    () => units.filter((u) => u.typeName === BUS_TYPE_NAME).map((u) => u.code),
+    [units]
+  );
+  /* Lokasi kerja = area kerja bertipe Mining (lokasi operasi fleet). */
+  const AREA_OPTS = React.useMemo(
+    () =>
+      (areasQ.data ?? [])
+        .filter((a) => recordType(a) === "Mining")
+        .map((a) => a.name),
+    [areasQ.data]
+  );
 
   // add/edit dialog
   const importRef = React.useRef<HTMLInputElement>(null);

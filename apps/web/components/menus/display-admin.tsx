@@ -13,17 +13,16 @@ import {
   Trash2,
 } from "lucide-react";
 
-import type { DeviceKind } from "@universe/contracts";
+import {
+  COLOR_VAL,
+  RUNTEXT_COLORS,
+  type DeviceKind,
+  type RunTextColor,
+} from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import {
-  COLOR_VAL,
-  FLEETS,
-  RUNTEXT_COLORS,
-  type CustomRunText,
-  type FleetPick,
-} from "@/lib/display-data";
+import { FLEETS, type FleetPick } from "@/lib/display-data";
 import { useI18n } from "@/lib/i18n";
 import { openDisplay } from "@/lib/open-display";
 import {
@@ -31,6 +30,7 @@ import {
   devicesQueryOptions,
   type DeviceRow,
 } from "@/lib/queries/devices";
+import { deviceRunTextsKey } from "@/lib/queries/run-texts";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
@@ -67,6 +67,9 @@ import {
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
+
+/** A device's own ticker line. Same shape the API exchanges. */
+type CustomRunText = { text: string; color: RunTextColor };
 
 /**
  * The display device registry, backed by `/v1/devices`.
@@ -121,6 +124,7 @@ export function DisplayAdminMenu({
       id: string;
       name: string;
       active: boolean;
+      runTexts: CustomRunText[];
     }) => {
       const result = input.existingId
         ? await api.v1
@@ -133,10 +137,22 @@ export function DisplayAdminMenu({
             active: input.active,
           });
       if (result.error) throw result.error;
+
+      // Written after the device exists, because a new device has no id to
+      // attach them to until it does. PUT replaces the whole list, so an empty
+      // one is how a screen is handed back to the master texts.
+      const deviceId = result.data?.id ?? input.id;
+      const { error } = await api.v1
+        .devices({ id: deviceId })
+        ["run-texts"].put({ runTexts: input.runTexts });
+      if (error) throw error;
       return result.data;
     },
     onSuccess: async (_d, input) => {
       await invalidate();
+      await queryClient.invalidateQueries({
+        queryKey: deviceRunTextsKey(input.existingId ?? input.id),
+      });
       pushToast(
         "success",
         input.existingId ? t.dspToastEdit : t.dspToastAdd,
@@ -202,6 +218,8 @@ export function DisplayAdminMenu({
   const [fName, setFName] = React.useState("");
   const [fSel, setFSel] = React.useState<FleetPick[]>([]);
   const [fRuntexts, setFRuntexts] = React.useState<CustomRunText[]>([]);
+  /* Empty is not "unset": a device with no texts of its own follows the master
+     list, which is the behaviour this field is really editing (design D8). */
   const [fActive, setFActive] = React.useState(true);
   const [nameErr, setNameErr] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<DeviceRow | null>(null);
@@ -234,7 +252,7 @@ export function DisplayAdminMenu({
     setNameErr(false);
     setDlgOpen(true);
   }
-  function openEdit(d: DeviceRow) {
+  async function openEdit(d: DeviceRow) {
     setEditing(d);
     setFId(d.id);
     setFName(d.name);
@@ -243,6 +261,11 @@ export function DisplayAdminMenu({
     setFActive(d.active);
     setNameErr(false);
     setDlgOpen(true);
+    // Fetched on open rather than for every row in the list: a registry of
+    // twenty TVs would otherwise make twenty requests to render a table that
+    // shows none of it.
+    const { data } = await api.v1.devices({ id: d.id })["run-texts"].get();
+    if (data) setFRuntexts(data);
   }
   function toggleFleet(f: FleetPick) {
     setFSel((prev) => {
@@ -270,6 +293,7 @@ export function DisplayAdminMenu({
       id: fId.trim(),
       name,
       active: fActive,
+      runTexts: fRuntexts.filter((r) => r.text.trim().length > 0),
     });
   }
 
@@ -384,7 +408,7 @@ export function DisplayAdminMenu({
                           </IconButton>
                           <IconButton
                             aria-label={t.udbEditT}
-                            onClick={() => openEdit(d)}
+                            onClick={() => void openEdit(d)}
                           >
                             <Pencil />
                           </IconButton>
@@ -508,7 +532,7 @@ export function DisplayAdminMenu({
               />
             </Field>
 
-            <Field label={t.dspRuntext} helper={t.dspContentNote}>
+            <Field label={t.dspRuntext} helper={t.dspRtNote}>
               <div className="flex flex-col gap-2">
                 {fRuntexts.length === 0 ? (
                   <p className="rounded-control border border-dashed border-(--border-input) px-3 py-2.5 text-xs text-(--text-tertiary) italic">
@@ -527,7 +551,9 @@ export function DisplayAdminMenu({
                         wrapperClassName="w-[130px] flex-none"
                         aria-label={`Warna ${i + 1}`}
                         value={r.color}
-                        onChange={(e) => updateRT(i, { color: e.target.value })}
+                        onChange={(e) =>
+                          updateRT(i, { color: e.target.value as RunTextColor })
+                        }
                       >
                         {RUNTEXT_COLORS.map((c) => (
                           <option key={c} value={c}>

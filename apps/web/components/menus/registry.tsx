@@ -7,6 +7,7 @@ import type { AccessMode, MenuSlug } from "@/lib/access";
 import { useRole } from "@/components/providers/role-context";
 
 import { AttendanceMenu } from "./attendance";
+import { BusMenu } from "./bus";
 import { DashboardMenu } from "./dashboard";
 import { DatabaseUnitMenu } from "./database-unit";
 import { DisplayAdminMenu } from "./display-admin";
@@ -19,7 +20,10 @@ import { MenuPlaceholder } from "./placeholder";
 import { RosterApprovalMenu } from "./roster-approval";
 import { RosterDataMenu } from "./roster-data";
 import { RosterRevisionMenu } from "./roster-revision";
+import { RunTextsMenu } from "./run-texts";
 import { SettingMenu } from "./setting";
+import { SoundsMenu } from "./sounds";
+import { TimelineMenu } from "./timeline";
 import { UmRolesMenu } from "./um-roles";
 import { UmUsersMenu } from "./um-users";
 import { UnitStatusMenu } from "./unit-status";
@@ -51,13 +55,18 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "merk-unit": (p) => <MasterMenu {...p} cat="merk-unit" />,
   "kelas-unit": (p) => <MasterMenu {...p} cat="kelas-unit" />,
   simper: (p) => <MasterMenu {...p} cat="simper" />,
+  "kode-simper": (p) => <MasterMenu {...p} cat="kode-simper" />,
   departemen: (p) => <MasterMenu {...p} cat="departemen" />,
   "area-kerja": (p) => <MasterMenu {...p} cat="area-kerja" />,
-  bus: (p) => <MasterMenu {...p} cat="bus" />,
   mess: (p) => <MasterMenu {...p} cat="mess" />,
-  "running-text": (p) => <MasterMenu {...p} cat="running-text" />,
-  sound: (p) => <MasterMenu {...p} cat="sound" />,
-  timeline: (p) => <MasterMenu {...p} cat="timeline" />,
+  /* Not catalogues: these four have their own tables and their own routes, and
+     rode <MasterMenu> only because the static port needed a table with a
+     dialog. Bus is a schedule on a unit, the other three are display content
+     and the allocation schedule. */
+  bus: BusMenu,
+  "running-text": RunTextsMenu,
+  sound: SoundsMenu,
+  timeline: TimelineMenu,
   users: UmUsersMenu,
   roles: UmRolesMenu,
   setting: SettingMenu,

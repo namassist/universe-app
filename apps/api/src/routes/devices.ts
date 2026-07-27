@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import type {
   AccessMode,
   DeviceKind,
   EffectivePermissions,
   MenuSlug,
+  RunTextColor,
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
@@ -19,7 +20,9 @@ import { env } from "../env";
 import { redis } from "../redis";
 import {
   DeviceKindSchema,
+  DeviceRunTextSchema,
   DeviceSchema,
+  DisplayContentSchema,
   ErrorSchema,
   OptionalDeviceKindSchema,
 } from "./schemas";
@@ -373,7 +376,133 @@ export const devicesRoutes = new Elysia({
       },
       detail: { summary: "Mint a single-use, 15-minute pairing link" },
     }
+  )
+
+  /**
+   * A device's own running texts.
+   *
+   * Governed by the menu owning *this device's* kind rather than by
+   * `running-text`: these are the screen's content, and the caller who may
+   * revoke an attendance TV is the caller who may decide what it says.
+   * `refuseUnlessOwned` is the same check the rename and delete routes use.
+   */
+  .get(
+    "/:id/run-texts",
+    async ({ params, permissions, status }) => {
+      const denied = await refuseUnlessOwned(params.id, permissions);
+      if (denied) return status(denied.status, denied.body);
+      const rows = await db
+        .select({
+          text: schema.deviceRunTexts.text,
+          color: schema.deviceRunTexts.color,
+        })
+        .from(schema.deviceRunTexts)
+        .where(eq(schema.deviceRunTexts.deviceId, params.id))
+        .orderBy(asc(schema.deviceRunTexts.ord));
+      return rows.map((r) => ({
+        text: r.text,
+        color: r.color as RunTextColor,
+      }));
+    },
+    {
+      auth: { menu: DISPLAY_MENUS, mode: "view" },
+      params: t.Object({ id: t.String({ minLength: 1 }) }),
+      response: {
+        200: t.Array(DeviceRunTextSchema),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+      },
+      detail: { summary: "A device's own running texts" },
+    }
+  )
+
+  /**
+   * PUT rather than POST/DELETE per row: the screen edits an ordered list as a
+   * whole, and `ord` is that list's position. Replacing it in one transaction
+   * is also what makes "empty means follow master" reachable — sending `[]` is
+   * how a device is handed back to the master list.
+   */
+  .put(
+    "/:id/run-texts",
+    async ({ params, body, permissions, status }) => {
+      const denied = await refuseUnlessOwned(params.id, permissions);
+      if (denied) return status(denied.status, denied.body);
+
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(schema.deviceRunTexts)
+          .where(eq(schema.deviceRunTexts.deviceId, params.id));
+        const rows = body.runTexts
+          .map((r, ord) => ({
+            deviceId: params.id,
+            text: r.text.trim(),
+            color: r.color,
+            ord,
+          }))
+          .filter((r) => r.text.length > 0);
+        if (rows.length) await tx.insert(schema.deviceRunTexts).values(rows);
+      });
+
+      const rows = await db
+        .select({
+          text: schema.deviceRunTexts.text,
+          color: schema.deviceRunTexts.color,
+        })
+        .from(schema.deviceRunTexts)
+        .where(eq(schema.deviceRunTexts.deviceId, params.id))
+        .orderBy(asc(schema.deviceRunTexts.ord));
+      return rows.map((r) => ({
+        text: r.text,
+        color: r.color as RunTextColor,
+      }));
+    },
+    {
+      auth: { menu: DISPLAY_MENUS, mode: "manage" },
+      params: t.Object({ id: t.String({ minLength: 1 }) }),
+      body: t.Object({ runTexts: t.Array(DeviceRunTextSchema) }),
+      response: {
+        200: t.Array(DeviceRunTextSchema),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+      },
+      detail: { summary: "Replace a device's own running texts" },
+    }
   );
+
+/**
+ * What a display is to show (design D8).
+ *
+ * A device with any texts of its own shows those; a device with none shows the
+ * active master list. The rule is on *having rows* rather than on a flag, which
+ * is why `device_run_texts` carries no `active` column — deactivating the last
+ * row and deleting it would otherwise mean two different things that look the
+ * same from here.
+ */
+async function effectiveRunTexts(
+  deviceId: string | null
+): Promise<{ text: string; color: RunTextColor }[]> {
+  if (deviceId) {
+    const own = await db
+      .select({
+        text: schema.deviceRunTexts.text,
+        color: schema.deviceRunTexts.color,
+      })
+      .from(schema.deviceRunTexts)
+      .where(eq(schema.deviceRunTexts.deviceId, deviceId))
+      .orderBy(asc(schema.deviceRunTexts.ord));
+    if (own.length)
+      return own.map((r) => ({ text: r.text, color: r.color as RunTextColor }));
+  }
+
+  const master = await db
+    .select({ text: schema.runTexts.text, color: schema.runTexts.color })
+    .from(schema.runTexts)
+    .where(eq(schema.runTexts.active, true))
+    .orderBy(asc(schema.runTexts.createdAt));
+  return master.map((r) => ({ text: r.text, color: r.color as RunTextColor }));
+}
 
 /**
  * The display data a paired TV polls. Reading it *is* the heartbeat — a device
@@ -404,23 +533,20 @@ export const displayRoutes = new Elysia({
           .where(eq(schema.devices.id, principal.id));
       }
 
-      // Display *content* configuration is out of scope for this change: device
-      // identity lands here, its runtexts and fleet picks do not.
       return {
         kind: params.kind,
         device: principal.kind === "device" ? principal.id : null,
         servedAt: new Date().toISOString(),
+        runTexts: await effectiveRunTexts(
+          principal.kind === "device" ? principal.id : null
+        ),
       };
     },
     {
       auth: { menu: DISPLAY_MENUS, mode: "view", allowDevice: true },
       params: t.Object({ kind: DeviceKindSchema }),
       response: {
-        200: t.Object({
-          kind: DeviceKindSchema,
-          device: t.Nullable(t.String()),
-          servedAt: t.String(),
-        }),
+        200: DisplayContentSchema,
         401: ErrorSchema,
         403: ErrorSchema,
       },

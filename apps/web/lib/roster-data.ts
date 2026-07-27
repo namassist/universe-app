@@ -158,18 +158,18 @@ export function rosterCodeColor(c: string): string {
 }
 
 const CREW: { nik: string; name: string }[] = [
-  { nik: "OPS-0421", name: "Budi Santoso" },
-  { nik: "OPS-0388", name: "Andi Wijaya" },
-  { nik: "OPS-0510", name: "Rudi Hartono" },
-  { nik: "OPS-0233", name: "Sari Lestari" },
-  { nik: "OPS-0111", name: "Joko Prasetyo" },
-  { nik: "OPS-0290", name: "Dewi Anggraini" },
-  { nik: "OPS-0367", name: "Hendra Gunawan" },
-  { nik: "OPS-0455", name: "Fitri Handayani" },
-  { nik: "OPS-0129", name: "Agus Salim" },
-  { nik: "OPS-0602", name: "Rina Marlina" },
-  { nik: "OPS-0715", name: "Bagus Priyambodo" },
-  { nik: "OPS-0733", name: "Lina Kusuma" },
+  { nik: "503220421", name: "Budi Santoso" },
+  { nik: "508210388", name: "Andi Wijaya" },
+  { nik: "501230510", name: "Rudi Hartono" },
+  { nik: "505200233", name: "Sari Lestari" },
+  { nik: "511190111", name: "Joko Prasetyo" },
+  { nik: "509220290", name: "Dewi Anggraini" },
+  { nik: "502210367", name: "Hendra Gunawan" },
+  { nik: "506230455", name: "Fitri Handayani" },
+  { nik: "504180129", name: "Agus Salim" },
+  { nik: "510200602", name: "Rina Marlina" },
+  { nik: "507230715", name: "Bagus Priyambodo" },
+  { nik: "507230733", name: "Lina Kusuma" },
 ];
 
 export type RosterGrid = {
@@ -188,9 +188,9 @@ export function rosterGrid(month = "2026-07", monLabel = "Jul"): RosterGrid {
     0
   ).getDate();
   const OVERRIDE: Record<string, Record<number, string>> = {
-    "OPS-0510": { 14: "S" },
-    "OPS-0129": { 9: "A" },
-    "OPS-0290": { 21: "MCU" },
+    "501230510": { 14: "S" },
+    "504180129": { 9: "A" },
+    "509220290": { 21: "MCU" },
   };
   const days = Array.from(
     { length: dim },
@@ -226,7 +226,7 @@ export function upErrorRows(lang: Lang): UpError[] {
   return [
     {
       row: "214",
-      nik: "OPS-9998",
+      nik: "512259998",
       emp: "—",
       issue: en
         ? "NIK not found in employee data"
@@ -236,7 +236,7 @@ export function upErrorRows(lang: Lang): UpError[] {
     },
     {
       row: "387",
-      nik: "OPS-0510",
+      nik: "501230510",
       emp: "Rudi Hartono",
       issue: en
         ? 'Code "D12" on 14 Jul — not a known roster code'
@@ -246,7 +246,7 @@ export function upErrorRows(lang: Lang): UpError[] {
     },
     {
       row: "512",
-      nik: "OPS-0455",
+      nik: "506230455",
       emp: "Fitri Handayani",
       issue: en
         ? "Day 31 empty — every day must have a code"
@@ -256,17 +256,17 @@ export function upErrorRows(lang: Lang): UpError[] {
     },
     {
       row: "890",
-      nik: "OPS-0733",
+      nik: "507230733",
       emp: "Lina Kusuma",
       issue: en
-        ? 'NIK is not numeric ("OPS-O733" — letter O)'
-        : 'Format NIK bukan angka ("OPS-O733" — huruf O)',
+        ? 'NIK is not numeric ("5O723O733" — letter O)'
+        : 'Format NIK bukan angka ("5O723O733" — huruf O)',
       badgeVariant: "danger",
       badge: "Error",
     },
     {
       row: en ? "1,204" : "1.204",
-      nik: "OPS-0367",
+      nik: "502210367",
       emp: "Hendra Gunawan",
       issue: en
         ? "N consecutive > 14 days — violates roster rules"
@@ -276,7 +276,7 @@ export function upErrorRows(lang: Lang): UpError[] {
     },
     {
       row: "640 & 641",
-      nik: "OPS-0290",
+      nik: "509220290",
       emp: "Dewi Anggraini",
       issue: en
         ? "Duplicate rows — row 641 is used"

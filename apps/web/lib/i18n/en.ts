@@ -192,6 +192,7 @@ export const en: Dict = {
   edKompNone: "Not a heavy-equipment operator — no competencies registered.",
   kMedHistory: "Medical history",
   kBlood: "Blood type",
+  kBlock: "Block",
   kRoom: "Room",
   kPhone: "Phone",
   kEmergency: "Emergency contact",
@@ -284,6 +285,32 @@ export const en: Dict = {
   mdName: "Name / Content",
   mdExtra: "Notes",
   mdSumB: "entries",
+  mdImpSame: "Unchanged",
+  mdImpNothing: "Nothing to apply",
+  mdImpNothingB:
+    "Every row already matches the stored data — there is nothing to write.",
+  mdImpTitle: "Import Master Data",
+  mdImpSub:
+    "Upload a spreadsheet, review the outcome, then approve. Nothing is written before you approve.",
+  mdImpTpl: "Download template",
+  mdImpDzTitle: "Drag the file here, or click to browse",
+  mdImpHint: "An .xlsx with the columns",
+  sndAddB: "Upload an audio file, 2 MB maximum.",
+  sndEditB: "Change the name or status. The audio file cannot be replaced.",
+  sndDelB: "The entry and its audio file are removed permanently.",
+  sndHelp: "Audio format, 2 MB maximum",
+  sndErrType: "The file must be audio",
+  sndErrSize: "The file exceeds 2 MB",
+  sndErrRequired: "Choose an audio file first",
+  tlSub: "Shift-start allocation schedule — these stages fire automatically",
+  tlDlgB: "The stage fires automatically at the time set here.",
+  busSub: "Bus departure schedule — one time per unit",
+  busDlgB: "Pick a unit of type BUS, then set its departure time.",
+  busEmptyB: "No departure schedules yet.",
+  busNoUnitsT: "No BUS units yet",
+  busNoUnitsB:
+    "Add a unit of type BUS in Database Unit first, then its schedule can be set here.",
+  busSumB: "bus schedules",
   mdNama: "Name",
   mdDesc: "Description",
   mdJam: "Departure time",
@@ -302,6 +329,16 @@ export const en: Dict = {
   mdAddToastT: "Entry added",
   mdEditToastT: "Entry updated",
   mdDelToastT: "Entry deleted",
+  mdDelDo: "Delete entry",
+  mdSelAll: "Select every entry on this page",
+  mdSelRow: "Select this entry",
+  mdBulkDel: "Delete selected",
+  mdBulkDelT: "Delete the selected entries?",
+  mdBulkDelB:
+    "Entries a unit still points at are kept — the rest are deleted, and anything refused is reported afterwards.",
+  mdBulkPartT: "Partly deleted",
+  mdBulkNoneT: "Nothing was deleted",
+  mdBulkUsed: "still in use:",
   dspSubAtt:
     "Manage attendance, fit-to-work, and fingerprint kiosk TVs — content, running text, and status per display.",
   dspSubFleet:
@@ -575,6 +612,7 @@ export const en: Dict = {
   faSupportGrp: "Support units",
   udbSerial: "Serial no.",
   udbErrCode: "Code is required and must be unique.",
+  udbGlobal: "Company-wide asset",
   udbErrType: "Required.",
   udbAddDo: "Save unit",
   udbToastT: "Unit added",
@@ -586,7 +624,16 @@ export const en: Dict = {
   thCap: "Capacity",
   allCats: "All classes",
   allProds: "All products",
-  searchUnit: "Search code / model / product…",
+  searchUnit: "Search code, class, type, model, brand, SIMPER code…",
+  allFtw: "All FTW",
+  udbDelT: "Delete unit",
+  udbDelB:
+    "The unit is permanently removed from the database. A unit that still has a bus schedule cannot be deleted.",
+  udbDelDo: "Delete unit",
+  udbBulkDelT: "Delete the selected units?",
+  udbBulkDelB:
+    "Units that still have a bus schedule are kept — the rest are deleted, and anything refused is reported afterwards.",
+  udbBulkHeld: "held by a bus schedule:",
   usSub:
     "Unit operational status — change status with a reason; history in the side panel.",
   usListTitle: "Unit list",
@@ -636,6 +683,8 @@ export const en: Dict = {
   vDup: "duplicates — last row used",
   vErr: "errors — will not be imported",
   thRow: "Row",
+  thData: "Data",
+  thValue: "Value",
   upFootNote:
     "Import only processes valid rows; download the error rows, fix them, then re-upload.",
   upDlErrors: "Download 5 error rows",
@@ -809,7 +858,7 @@ export const en: Dict = {
 
   /* --- auth: identifier + forced password change --- */
   authIdentLabel: "Email or NIK",
-  authIdentPh: "name@unggul.co.id or OPS-0421",
+  authIdentPh: "name@unggul.co.id or 503220421",
   authIdentHelp: "Office staff use an email, field operators use their NIK.",
   authLoginErr:
     "Incorrect identifier or password. Check again, or contact an admin if your account has been deactivated.",
@@ -848,6 +897,15 @@ export const en: Dict = {
   umImpChanges: "Changes",
   umImpCreated: "created",
   umImpUpdated: "updated",
+  impMasterChip: "new master entries",
+  impMasterAdded: "new master entries",
+  impMasterRows: "rows",
+  impMasterT: "Add these master entries?",
+  impMasterB:
+    "These values are not in the master yet and will be created as part of the import. Check them first — a misspelling becomes a master entry too.",
+  impMasterMore: "more",
+  impMasterLike: "like",
+  impMasterDo: "Yes, continue import",
   umImpSub: "Create and update accounts in bulk from an .xlsx file.",
   umImpBack: "Back to user list",
   umImpDzTitle: "Drag the account file here, or click to browse",
@@ -867,7 +925,9 @@ export const en: Dict = {
   dspId: "Device ID",
   dspIdHelp: "The tag on the TV itself — used for pairing and revocation.",
   dspContentNote:
-    "Display content configuration is not persisted yet; it lands with the next change.",
+    "Fleet picks are not persisted yet; they land with the next change.",
+  dspRtNote:
+    "Leave empty for this display to follow the master running text. Filled in = only these lines show.",
   dspPairT: "Pairing link",
   dspPairB:
     "Open this link once on the TV in question. Single-use, and it expires in 15 minutes.",

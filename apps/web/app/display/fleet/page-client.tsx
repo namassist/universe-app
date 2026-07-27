@@ -49,9 +49,9 @@ const FLEETS: FleetView[] = [
     loc: "Pit 3 — Panel Utara",
     bus: "BUS-01",
     cards: [
-      ready("EX-22", "Andi Wijaya", "OPS-0388"),
-      ready("DT-101", "Budi Santoso", "OPS-0421"),
-      ready("DT-102", "Joko Prasetyo", "OPS-0111"),
+      ready("EX-22", "Andi Wijaya", "508210388"),
+      ready("DT-101", "Budi Santoso", "503220421"),
+      ready("DT-102", "Joko Prasetyo", "511190111"),
       {
         code: "DT-104",
         tone: "danger",
@@ -59,7 +59,7 @@ const FLEETS: FleetView[] = [
         opName: null,
         opNik: null,
       },
-      ready("DT-105", "Rudi Hartono", "OPS-0510"),
+      ready("DT-105", "Rudi Hartono", "501230510"),
       {
         code: "DT-106",
         tone: "neutral",
@@ -67,7 +67,7 @@ const FLEETS: FleetView[] = [
         opName: null,
         opNik: null,
       },
-      ready("DT-107", "Agus Salim", "OPS-0129"),
+      ready("DT-107", "Agus Salim", "504180129"),
     ],
   },
   {
@@ -76,10 +76,10 @@ const FLEETS: FleetView[] = [
     loc: "Disposal Utara",
     bus: "BUS-02",
     cards: [
-      ready("EX-07", "Hendra Gunawan", "OPS-0367"),
-      ready("DT-201", "Fitri Handayani", "OPS-0455"),
-      ready("DT-202", "Dewi Anggraini", "OPS-0290"),
-      ready("DT-203", "Rina Marlina", "OPS-0602"),
+      ready("EX-07", "Hendra Gunawan", "502210367"),
+      ready("DT-201", "Fitri Handayani", "506230455"),
+      ready("DT-202", "Dewi Anggraini", "509220290"),
+      ready("DT-203", "Rina Marlina", "510200602"),
       {
         code: "DT-204",
         tone: "neutral",
@@ -113,6 +113,7 @@ export default function DisplayFleetPage() {
     <DisplayShell
       title={`Fleet ${fleet.digger}`}
       deviceName={params.get("name") ?? undefined}
+      displayKind="fleet"
       meta={
         <>
           <span className="truncate">{fleet.loc}</span>

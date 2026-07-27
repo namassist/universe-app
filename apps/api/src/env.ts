@@ -66,6 +66,17 @@ export const env = {
    *  HTTP — tying this to the environment would break login in exactly the
    *  setup that needs it most. */
   COOKIE_SECURE: boolean("COOKIE_SECURE", "false"),
+
+  /** Where uploaded sound files are written (design D7).
+   *
+   *  Explicit configuration for the same reason COOKIE_SECURE is: what the
+   *  right directory is depends on how the API is deployed, not on whether it
+   *  thinks it is in production. A container needs a mounted volume, a bare
+   *  host wants a path under the service account's data directory, and a
+   *  developer wants something inside the repo — deriving one of those from
+   *  NODE_ENV would silently pick wrong in the other two, and the symptom is
+   *  uploaded sounds vanishing on the next redeploy rather than an error. */
+  SOUND_DIR: required("SOUND_DIR", "./storage/sounds"),
 } as const;
 
 export const isProd = env.NODE_ENV === "production";

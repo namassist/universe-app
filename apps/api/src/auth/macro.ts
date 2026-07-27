@@ -6,7 +6,7 @@
  * injects `principal`. Declaring it per route is also what keeps the generated
  * OpenAPI spec accurate, which is what a mobile client generates from.
  *
- * The web middleware and shell are user experience. This is the boundary.
+ * The web proxy and shell are user experience. This is the boundary.
  */
 
 import { Elysia } from "elysia";

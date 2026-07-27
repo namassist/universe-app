@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Download, Search } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
-import { DEPARTEMEN_NAMES } from "@/lib/departemen-data";
 import { useI18n } from "@/lib/i18n";
+import { masterQueryOptions } from "@/lib/queries/master";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +58,7 @@ const stBadge: Record<AttStatus, BadgeVariant> = {
 /* ---- static sample content ---- */
 const ROWS: Row[] = [
   {
-    nik: "OPS-0421",
+    nik: "503220421",
     name: "Budi Santoso",
     date: "2026-07-21",
     dept: "Mining Operation",
@@ -67,7 +68,7 @@ const ROWS: Row[] = [
     status: "hadir",
   },
   {
-    nik: "OPS-0388",
+    nik: "508210388",
     name: "Andi Wijaya",
     date: "2026-07-21",
     dept: "Mining Operation",
@@ -77,7 +78,7 @@ const ROWS: Row[] = [
     status: "terlambat",
   },
   {
-    nik: "OPS-0510",
+    nik: "501230510",
     name: "Rudi Hartono",
     date: "2026-07-21",
     dept: "Mining Operation",
@@ -85,7 +86,7 @@ const ROWS: Row[] = [
     status: "belum",
   },
   {
-    nik: "OPS-0233",
+    nik: "505200233",
     name: "Sari Lestari",
     date: "2026-07-21",
     dept: "HRGA",
@@ -95,7 +96,7 @@ const ROWS: Row[] = [
     status: "hadir",
   },
   {
-    nik: "OPS-0367",
+    nik: "502210367",
     name: "Hendra Gunawan",
     date: "2026-07-21",
     dept: "Mining Operation",
@@ -103,7 +104,7 @@ const ROWS: Row[] = [
     status: "unfit",
   },
   {
-    nik: "OPS-0129",
+    nik: "504180129",
     name: "Agus Salim",
     date: "2026-07-21",
     dept: "Plant",
@@ -111,7 +112,7 @@ const ROWS: Row[] = [
     status: "off",
   },
   {
-    nik: "OPS-0290",
+    nik: "509220290",
     name: "Dewi Anggraini",
     date: "2026-07-20",
     dept: "SDI",
@@ -121,7 +122,7 @@ const ROWS: Row[] = [
     status: "hadir",
   },
   {
-    nik: "OPS-0455",
+    nik: "506230455",
     name: "Fitri Handayani",
     date: "2026-07-20",
     dept: "Mining Operation",
@@ -131,7 +132,7 @@ const ROWS: Row[] = [
     status: "hadir",
   },
   {
-    nik: "OPS-0602",
+    nik: "510200602",
     name: "Rina Marlina",
     date: "2026-07-20",
     dept: "HRGA",
@@ -141,7 +142,7 @@ const ROWS: Row[] = [
     status: "terlambat",
   },
   {
-    nik: "OPS-0111",
+    nik: "511190111",
     name: "Joko Prasetyo",
     date: "2026-07-20",
     dept: "Mining Operation",
@@ -163,6 +164,10 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
   const [dept, setDept] = React.useState("");
   const [q, setQ] = React.useState("");
   const [freshTime, setFreshTime] = React.useState("");
+
+  /* The department filter's options come from the master catalogue; this
+     screen's own attendance rows are still sample data. */
+  const deptsQ = useQuery(masterQueryOptions("departemen", true));
 
   React.useEffect(() => {
     const id = setTimeout(() => {
@@ -256,8 +261,8 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setDept(e.target.value)}
             >
               <option value="">{t.allDepts}</option>
-              {DEPARTEMEN_NAMES.map((d) => (
-                <option key={d}>{d}</option>
+              {(deptsQ.data ?? []).map((d) => (
+                <option key={d.id}>{d.name}</option>
               ))}
             </Select>
             <div className="flex items-center gap-2">
