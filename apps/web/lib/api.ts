@@ -37,10 +37,23 @@ export async function fetchBlob(path: string): Promise<Blob> {
 }
 
 /**
+ * `parseDate: false` on every client, and it is not optional.
+ *
+ * Eden's JSON reviver rewrites any string that *looks* like a date into a
+ * `Date` — `"2018-04-02"` and every `createdAt` included. The API declares
+ * those fields `t.String()`, so the inferred type stays `string` while the
+ * runtime value is an object: TypeScript reports no error and React throws
+ * "Objects are not valid as a React child" the moment one is rendered. Turning
+ * the reviver off is what makes the declared types true.
+ */
+const PARSE_DATE = { parseDate: false } as const;
+
+/**
  * Browser client. `credentials: "include"` is what carries the httpOnly
  * session cookie; without it every request is anonymous and 401s.
  */
 export const api = treaty<App>(API_URL, {
+  ...PARSE_DATE,
   fetch: { credentials: "include" },
 });
 
@@ -58,6 +71,7 @@ export async function serverApi() {
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
   return treaty<App>(API_URL, {
+    ...PARSE_DATE,
     headers: header ? { cookie: header } : undefined,
   });
 }
