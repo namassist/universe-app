@@ -13,13 +13,18 @@ import { db, schema } from "../db";
 import {
   catalogueTarget,
   catalogueWorkbook,
+  employeeTarget,
+  employeeWorkbook,
   nearestName,
   readWorkbook,
   similarity,
+  skillText,
   unitTarget,
   validateWorkbook,
   type CatalogueExisting,
   type Catalogues,
+  type EmployeeCatalogues,
+  type EmployeeExisting,
   type UnitExisting,
 } from "./master-import";
 
@@ -589,6 +594,382 @@ describe("unit import", () => {
     expect(result.preview.errorCount).toBe(1);
     expect(result.preview.errors[0]!.issue).toContain("wajib diisi");
     expect(result.preview.newMasters).toEqual([]);
+  });
+});
+
+/* ---------------------------------------------------------------- employees */
+
+describe("employee import", () => {
+  const named = (
+    id: string,
+    name: string
+  ): [string, { id: string; name: string }] => [
+    name.toLowerCase(),
+    { id, name },
+  ];
+  const catalogues: EmployeeCatalogues = {
+    companies: new Map([named("k1", "PT Unggul Dinamika Utama")]),
+    positions: new Map([named("j1", "Driver OHT")]),
+    departments: new Map([named("d1", "Mining Operation")]),
+    messes: new Map([named("m1", "Mess A")]),
+    simperTypes: new Map([named("t1", "F")]),
+    simperCodes: new Map([named("s1", "OHT 777"), named("s2", "OHT 773")]),
+  };
+
+  const HEADERS = [
+    "nik",
+    "nama",
+    "perusahaan",
+    "jabatan",
+    "departemen",
+    "kode_simper",
+  ];
+  const row = (
+    nik: string,
+    nama: string,
+    jabatan = "Driver OHT",
+    kode = "OHT 777"
+  ) => [
+    nik,
+    nama,
+    "PT Unggul Dinamika Utama",
+    jabatan,
+    "Mining Operation",
+    kode,
+  ];
+
+  const empty = new Map<string, EmployeeExisting>();
+
+  /** Stands in for the caller's `manage` grants on the master menus. */
+  const mayCreate = () => true;
+  const mayNotCreate = () => false;
+
+  const budi: EmployeeExisting = {
+    id: "e1",
+    nik: "503220421",
+    name: "Budi Santoso",
+    companyName: "PT Unggul Dinamika Utama",
+    positionName: "Driver OHT",
+    departmentName: "Mining Operation",
+    messName: "Mess A",
+    simperTypeName: "F",
+    joinDate: "2022-03-01",
+    status: "aktif",
+    simperNo: "F-2022-0421",
+    simperExp: "2027-03-14",
+    skills: ["OHT 777", "OHT 773"],
+    license: "SIM BII Umum",
+    mcu: "Fit",
+    mcuExp: "2027-01-15",
+    blood: "O",
+    medical: "",
+    block: "Blok 1",
+    room: "A-12",
+    phone: "0812-3456-7890",
+    emergency: "Siti Santoso (istri)",
+  };
+
+  /** An employee who operates nothing — no permit, no codes, no mess. */
+  const sari: EmployeeExisting = {
+    ...budi,
+    id: "e2",
+    nik: "505200233",
+    name: "Sari Lestari",
+    messName: null,
+    simperTypeName: null,
+    simperNo: "",
+    simperExp: null,
+    skills: [],
+    license: "",
+    block: "",
+    room: "",
+    phone: "",
+    emergency: "",
+  };
+
+  test("an export round-trips through its own import, unchanged", async () => {
+    const buffer = await employeeWorkbook([budi, sari]);
+    const wb = await readWorkbook(
+      buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength
+      ) as ArrayBuffer
+    );
+    if ("code" in wb) throw new Error(wb.message);
+    const existing = new Map([
+      [budi.nik.toLowerCase(), budi],
+      [sari.nik.toLowerCase(), sari],
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(existing, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    // The whole point of one column list serving both directions: an untouched
+    // export reads back as "nothing to do", not as "everything changed".
+    expect(result.preview.newCount).toBe(0);
+    expect(result.preview.updatedCount).toBe(0);
+    expect(result.preview.unchangedCount).toBe(2);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.preview.newMasters).toEqual([]);
+  });
+
+  test("several codes in one cell become several skills", async () => {
+    const wb = await sheet(HEADERS, [
+      row("601", "Operator Baru", "Driver OHT", "OHT 777; OHT 773"),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.accepted[0]!.parsed.skillIds.sort()).toEqual(["s1", "s2"]);
+  });
+
+  test("codes are matched ignoring case and surrounding whitespace", async () => {
+    const wb = await sheet(HEADERS, [
+      row("602", "Operator Dua", "Driver OHT", "  oht 777 ;oht 773"),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    // Stored as the catalogue spells them, not as the sheet did.
+    expect(result.accepted[0]!.parsed.skillNames).toEqual([
+      "OHT 773",
+      "OHT 777",
+    ]);
+  });
+
+  test("the same code twice in one cell is held once", async () => {
+    const wb = await sheet(HEADERS, [
+      row("603", "Operator Tiga", "Driver OHT", "OHT 777; oht 777"),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.accepted[0]!.parsed.skillIds).toEqual(["s1"]);
+  });
+
+  test("an empty skills cell is an employee with no skills, not an error", async () => {
+    const wb = await sheet(HEADERS, [
+      row("604", "Admin Baru", "Driver OHT", ""),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.preview.newCount).toBe(1);
+    expect(result.accepted[0]!.parsed.skillIds).toEqual([]);
+  });
+
+  test("a blank skills cell on an existing row keeps the codes it has", async () => {
+    // The same rule every other optional column follows. Otherwise a file that
+    // simply omits the column strips every operator of every qualification —
+    // and produces no error at all while doing it.
+    const wb = await sheet(["nik", "nama"], [[budi.nik, "Budi Santoso"]]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(
+        new Map([[budi.nik.toLowerCase(), budi]]),
+        catalogues,
+        mayCreate
+      ),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.accepted[0]!.parsed.skillIds.sort()).toEqual(["s1", "s2"]);
+    expect(result.preview.rows[0]!.kind).toBe("unchanged");
+  });
+
+  test("the same NIK on two rows fails the second, naming the first", async () => {
+    const wb = await sheet(HEADERS, [row("605", "Satu"), row("605", "Dua")]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.row).toBe("3");
+    expect(result.preview.errors[0]!.issue).toContain("baris 2");
+  });
+
+  /**
+   * The one asymmetry in the import (design D11), asserted at the grant level
+   * that would make every other column permissive.
+   */
+  test("an unknown qualification code fails the row even with manage on kode-simper", async () => {
+    const wb = await sheet(HEADERS, [
+      row("606", "Operator Salah Ketik", "Driver OHT", "OHT 7777"),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.row).toBe("2");
+    expect(result.preview.errors[0]!.issue).toContain("OHT 7777");
+    // Nothing is offered for creation, at any grant.
+    expect(result.preview.newMasters).toEqual([]);
+    expect(result.accepted).toEqual([]);
+  });
+
+  test("the refusal explains itself rather than saying only 'not found'", async () => {
+    const wb = await sheet(HEADERS, [
+      row("607", "Operator Salah Ketik", "Driver OHT", "OHT 7777"),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    const issue = result.preview.errors[0]!.issue;
+    // Five columns offer an addition and this one refuses; without the reason
+    // in place, the refusal reads as a defect.
+    expect(issue).toContain("tidak pernah dibuat lewat import");
+    expect(issue).toContain("Kode SIMPER");
+  });
+
+  test("an unknown position is offered as a pending addition", async () => {
+    const wb = await sheet(HEADERS, [
+      row("608", "Jabatan Baru", "Foreman Pit"),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.preview.newCount).toBe(1);
+    expect(result.preview.newMasters).toEqual([
+      { kind: "jabatan", name: "Foreman Pit", rows: 1 },
+    ]);
+    expect(result.preview.warnings).toHaveLength(1);
+    expect(result.preview.warnings[0]!.badgeVariant).toBe("warning");
+    // Carried by name until a commit can supply an id.
+    expect(result.accepted[0]!.parsed.positionId).toBeNull();
+    expect(result.accepted[0]!.parsed.positionName).toBe("Foreman Pit");
+  });
+
+  test("without manage on jabatan, the same position fails its row", async () => {
+    const wb = await sheet(HEADERS, [
+      row("609", "Jabatan Baru", "Foreman Pit"),
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayNotCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("Foreman Pit");
+    expect(result.preview.newMasters).toEqual([]);
+    expect(result.accepted).toEqual([]);
+  });
+
+  test("a missing required reference on a new row fails it", async () => {
+    const wb = await sheet(
+      ["nik", "nama", "perusahaan"],
+      [["610", "Tanpa Departemen", "PT Unggul Dinamika Utama"]]
+    );
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("wajib diisi");
+  });
+
+  test("a status outside the vocabulary fails its row", async () => {
+    const wb = await sheet(
+      [...HEADERS, "status"],
+      [[...row("611", "Cuti Panjang"), "cuti"]]
+    );
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    // `cuti` was a status in the static port and is not one any more (D7): it
+    // belongs to the roster, which is dated, and this column is not.
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("aktif");
+  });
+
+  test("a malformed date fails its row rather than being read as something else", async () => {
+    const wb = await sheet(
+      [...HEADERS, "tanggal_masuk"],
+      [[...row("612", "Tanggal Aneh"), "01/03/2022"]]
+    );
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("YYYY-MM-DD");
+  });
+
+  test("a reordered skills cell is not a change", async () => {
+    const wb = await sheet(
+      ["nik", "kode_simper"],
+      [[budi.nik, "OHT 773; OHT 777"]]
+    );
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(
+        new Map([[budi.nik.toLowerCase(), budi]]),
+        catalogues,
+        mayCreate
+      ),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.rows[0]!.kind).toBe("unchanged");
+    expect(skillText(["OHT 777", "OHT 773"])).toBe("OHT 773; OHT 777");
+  });
+
+  test("names the fields an update would change", async () => {
+    const wb = await sheet(
+      ["nik", "jabatan", "kamar"],
+      [[budi.nik, "Driver OHT", "A-15"]]
+    );
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(
+        new Map([[budi.nik.toLowerCase(), budi]]),
+        catalogues,
+        mayCreate
+      ),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.updatedCount).toBe(1);
+    expect(result.preview.rows[0]!.changes).toEqual([
+      { field: "kamar", from: "A-12", to: "A-15" },
+    ]);
   });
 });
 

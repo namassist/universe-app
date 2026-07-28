@@ -148,16 +148,25 @@ leave room to grow past it:
   operator waits for a unit assignment.
 
 > Authentication, RBAC, User Management, the master catalogues, the unit
-> registry, display content, and the allocation timeline are wired to the API.
+> registry, the employee register, display content, and the allocation timeline
+> are wired to the API.
 > Still a **static design port** — sample data, no persistence, mutations are
-> toast-only: Dashboard, Employees, Roster (upload / revision / approval),
-> Attendance, Fit To Work, Unit Status, Fleet Allocation, and Fleet Setting.
+> toast-only: Dashboard, Roster (upload / revision / approval), Attendance, Fit
+> To Work, Unit Status, Fleet Allocation, and Fleet Setting.
 > Those last screens read master data from the API for their dropdowns and
 > filters, so a value added in a master menu appears in them immediately — only
 > their own records are still sample. The allocation engine and the external
 > FTW/fingerprint integrations above remain the target the design is built
 > toward; the timeline now fires on schedule, into hooks that are documented
 > no-ops until that engine lands.
+>
+> With the employee register persisted, the matching relation the product turns
+> on is closed on both sides: `employee_skills → simper_codes ← units` means
+> "which spares may take this unit" is one query, even though the engine that
+> asks it does not exist yet. Two consequences worth knowing before provisioning
+> a site: a `dept`-scoped account resolves its department **through** its NIK's
+> employee record, and the account import refuses a NIK the register does not
+> carry — so employees are imported first and accounts second.
 
 ## Getting started
 
@@ -167,7 +176,7 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 # fill in DATABASE_URL, SUPERADMIN_PASSWORD and DEFAULT_USER_PASSWORD, then:
 bun run --cwd apps/api db:migrate
-bun run --cwd apps/api db:seed   # roles, superadmin, master catalogues, sample fleet
+bun run --cwd apps/api db:seed   # roles, superadmin, master catalogues, sample fleet & crew
 bun run dev          # turbo runs api + web together
 ```
 
@@ -175,12 +184,12 @@ Sign in at http://localhost:3000/login with `SUPERADMIN_IDENTIFIER` and
 `SUPERADMIN_PASSWORD`. The seed is idempotent, so re-running it is safe — it
 recreates the bootstrap account if it is ever lost, and leaves roles an
 administrator has edited alone. Master catalogues are seeded by name and skip
-what already exists; the fifteen sample units go in **only when the `units`
-table is empty**, so a database that has ever held a real unit can never
-receive an invented one.
+what already exists; the fifteen sample units and ten sample employees go in
+**only when their table is empty**, so a database that has ever held a real
+unit or a real person can never receive an invented one.
 
 - Web: http://localhost:3000
-- API: http://localhost:3001/health — reports `database` and `cache` separately, 503 if either is down
+- API: http://localhost:3001/health — reports `database`, `cache`, and both upload directories separately, 503 if any is down
 - OpenAPI: http://localhost:3001/openapi
 
 ## Code style & tooling
@@ -345,15 +354,17 @@ types from Eden and OpenAPI instead.
   network in the clear at login and a session cookie can be copied and
   replayed by anyone on the same network. An internal CA is sufficient on a
   closed network; this should land before real accounts exist.
-- **Uploaded sounds need a directory that survives a redeploy.** `SOUND_DIR`
-  is explicit configuration for the same reason `COOKIE_SECURE` is: the right
-  path depends on how the API is deployed, not on which environment it believes
-  it is in. Sound files are written there and streamed back with `Bun.file`,
-  never through Postgres. On an ephemeral container this **must** be a mounted
-  volume, or every uploaded sound is lost on the next deploy — the database
-  keeps the row and the file is simply gone. `/health` reports the directory as
-  writable, so a missing mount surfaces at startup rather than at the first
-  upload.
+- **Uploads need directories that survive a redeploy.** `SOUND_DIR` and
+  `PHOTO_DIR` are explicit configuration for the same reason `COOKIE_SECURE`
+  is: the right path depends on how the API is deployed, not on which
+  environment it believes it is in. Sound files and employee photos are written
+  there and streamed back with `Bun.file`, never through Postgres. On an
+  ephemeral container both **must** be mounted volumes, or every upload is lost
+  on the next deploy — the database keeps the row and the file is simply gone,
+  so an employee goes on claiming a photo that cannot be served. `/health`
+  reports each directory as writable, so a missing mount surfaces at startup
+  rather than at the first upload. Writable is not persistent, though, and no
+  probe can tell those apart.
 - **Redis is unauthenticated.** The shared dev container has no password and no
   ACL, so the db index in `REDIS_URL` is a convention between projects, not a
   boundary — anything on this machine can read or flush our keys. Fine for dev,

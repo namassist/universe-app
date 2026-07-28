@@ -19,7 +19,13 @@
  */
 
 import { sql } from "drizzle-orm";
-import type { AreaType, TimelineAction } from "@universe/contracts";
+import type {
+  AreaType,
+  BloodType,
+  EmployeeStatus,
+  McuResult,
+  TimelineAction,
+} from "@universe/contracts";
 
 import { db, schema, type NamedCatalogue } from "./index";
 
@@ -83,6 +89,27 @@ const DEPARTMENTS: [name: string, description: string][] = [
   ["Plant", "Perawatan alat"],
   ["SDI", "Sumber Daya Insani"],
   ["HRGA", "HR & General Affairs"],
+];
+
+/** The two the employee form offered as hardcoded `<option>`s (design D5). */
+const COMPANIES: [name: string, description: string][] = [
+  ["PT Unggul Dinamika Utama", "Kontraktor penambangan"],
+  ["PT Unggul Mitra Energi", "Afiliasi"],
+];
+
+/**
+ * Job titles, which were a free `<Input>` whose value is used to filter — so
+ * `Driver OHT` and `driver oht` were two positions to the screen that groups by
+ * them. The list is the distinct set the sample employees carry.
+ */
+const POSITIONS: [name: string, description: string][] = [
+  ["Driver OHT", "Operator off-highway truck"],
+  ["Operator Excavator", "Operator alat gali"],
+  ["Admin Site", "Administrasi site"],
+  ["Dispatcher", "Pengatur alokasi unit"],
+  ["Checker", "Pemeriksa lapangan"],
+  ["Mekanik", "Perawatan alat"],
+  ["Safety Officer", "Keselamatan kerja"],
 ];
 
 const WORK_AREAS: [name: string, type: AreaType][] = [
@@ -341,6 +368,217 @@ const UNITS: UnitSeed[] = [
   },
 ];
 
+/* ------------------------------------------------------- sample workforce */
+
+/**
+ * The ten people `apps/web/lib/employees-data.ts` used to hold.
+ *
+ * The same names on purpose: a migrated installation should look exactly as it
+ * did before the records moved server-side. Two shapes changed in transit —
+ * `Mess A — Blok 1` was one string and is now a mess reference plus a block,
+ * and Hendra Gunawan's `cuti` became `aktif`, because leave is a dated fact the
+ * roster owns and an employment status cannot express it (design D7).
+ */
+type EmployeeSeed = {
+  nik: string;
+  name: string;
+  company: string;
+  position: string;
+  department: string;
+  joinDate: string;
+  /** Empty means no permit at all — someone who operates nothing. */
+  simperType: string;
+  simperNo: string;
+  simperExp: string;
+  skills: string[];
+  license: string;
+  mcu: McuResult;
+  mcuExp: string;
+  blood: BloodType;
+  medical: string;
+  mess: string;
+  block: string;
+  room: string;
+  phone: string;
+  emergency: string;
+  status: EmployeeStatus;
+};
+
+const UDU = "PT Unggul Dinamika Utama";
+
+const blank = {
+  simperType: "",
+  simperNo: "",
+  simperExp: "",
+  skills: [] as string[],
+  license: "",
+  medical: "",
+  mess: "",
+  block: "",
+  room: "",
+  phone: "",
+  emergency: "",
+  status: "aktif" as EmployeeStatus,
+};
+
+const EMPLOYEES: EmployeeSeed[] = [
+  {
+    ...blank,
+    nik: "503220421",
+    name: "Budi Santoso",
+    company: UDU,
+    position: "Driver OHT",
+    department: "Mining Operation",
+    joinDate: "2022-03-01",
+    license: "SIM BII Umum",
+    simperType: "F",
+    simperNo: "F-2022-0421",
+    simperExp: "2027-03-14",
+    skills: ["OHT 777", "OHT 773"],
+    mcu: "Fit",
+    mcuExp: "2027-01-15",
+    blood: "O",
+    mess: "Mess A",
+    block: "Blok 1",
+    room: "A-12",
+    phone: "0812-3456-7890",
+    emergency: "Siti Santoso (istri) — 0813-1111-2222",
+  },
+  {
+    ...blank,
+    nik: "508210388",
+    name: "Andi Wijaya",
+    company: UDU,
+    position: "Operator Excavator",
+    department: "Mining Operation",
+    joinDate: "2021-08-15",
+    simperType: "F",
+    simperNo: "F-2021-0388",
+    simperExp: "2026-08-02",
+    skills: ["EXC 2600", "EXC ZX870"],
+    mcu: "Fit dengan catatan",
+    mcuExp: "2026-09-30",
+    blood: "B",
+    medical: "Hipertensi ringan",
+    mess: "Mess A",
+    block: "Blok 2",
+    room: "A-27",
+  },
+  {
+    ...blank,
+    nik: "501230510",
+    name: "Rudi Hartono",
+    company: UDU,
+    position: "Driver OHT",
+    department: "Mining Operation",
+    joinDate: "2023-01-10",
+    simperType: "P",
+    simperNo: "P-2023-0510",
+    simperExp: "2026-07-18",
+    skills: ["OHT 773"],
+    mcu: "Fit",
+    mcuExp: "2027-03-01",
+    blood: "A",
+  },
+  {
+    ...blank,
+    nik: "505200233",
+    name: "Sari Lestari",
+    company: UDU,
+    position: "Admin Site",
+    department: "HRGA",
+    joinDate: "2020-05-04",
+    mcu: "Fit",
+    mcuExp: "2027-02-20",
+    blood: "O",
+  },
+  {
+    ...blank,
+    nik: "511190111",
+    name: "Joko Prasetyo",
+    company: UDU,
+    position: "Driver OHT",
+    department: "Mining Operation",
+    joinDate: "2019-11-20",
+    simperType: "F",
+    simperNo: "F-2019-0111",
+    simperExp: "2026-06-30",
+    skills: ["OHT 777"],
+    mcu: "Fit",
+    mcuExp: "2026-12-10",
+    blood: "AB",
+  },
+  {
+    ...blank,
+    nik: "509220290",
+    name: "Dewi Anggraini",
+    company: UDU,
+    position: "Dispatcher",
+    department: "SDI",
+    joinDate: "2022-09-01",
+    mcu: "Fit",
+    mcuExp: "2027-04-05",
+    blood: "B",
+  },
+  {
+    ...blank,
+    nik: "502210367",
+    name: "Hendra Gunawan",
+    company: UDU,
+    position: "Operator Excavator",
+    department: "Mining Operation",
+    joinDate: "2021-02-08",
+    simperType: "F",
+    simperNo: "F-2021-0367",
+    simperExp: "2027-01-22",
+    skills: ["EXC ZX470"],
+    mcu: "Fit",
+    mcuExp: "2026-11-22",
+    blood: "O",
+  },
+  {
+    ...blank,
+    nik: "506230455",
+    name: "Fitri Handayani",
+    company: UDU,
+    position: "Checker",
+    department: "Mining Operation",
+    joinDate: "2023-06-12",
+    mcu: "Fit",
+    mcuExp: "2027-05-30",
+    blood: "A",
+  },
+  {
+    ...blank,
+    nik: "504180129",
+    name: "Agus Salim",
+    company: UDU,
+    position: "Mekanik",
+    department: "Plant",
+    joinDate: "2018-04-02",
+    simperType: "F",
+    simperNo: "F-2018-0129",
+    simperExp: "2027-05-08",
+    skills: ["DT R12", "DT R10"],
+    mcu: "Fit",
+    mcuExp: "2027-03-18",
+    blood: "B",
+  },
+  {
+    ...blank,
+    nik: "510200602",
+    name: "Rina Marlina",
+    company: UDU,
+    position: "Safety Officer",
+    department: "SDI",
+    joinDate: "2020-10-19",
+    mcu: "Fit",
+    mcuExp: "2026-10-19",
+    blood: "O",
+    status: "nonaktif",
+  },
+];
+
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -420,6 +658,16 @@ async function seedCatalogues(): Promise<void> {
     "area kerja",
     schema.workAreas,
     WORK_AREAS.map(([name, type]) => ({ name, type }))
+  );
+  await seedNamed(
+    "perusahaan",
+    schema.companies,
+    COMPANIES.map(([name, description]) => ({ name, description }))
+  );
+  await seedNamed(
+    "jabatan",
+    schema.positions,
+    POSITIONS.map(([name, description]) => ({ name, description }))
   );
 }
 
@@ -523,6 +771,87 @@ async function seedUnits(): Promise<void> {
   console.log(`  units — ${UNITS.length} sample units created`);
 }
 
+/**
+ * The sample workforce, and only into an empty table (design D13).
+ *
+ * The same guard as the sample fleet, for the same reason: a database that has
+ * ever held a real employee must never receive an invented one, and checking
+ * "is NIK 503220421 free?" would happily insert ten strangers into a site whose
+ * own people are numbered differently.
+ */
+async function seedEmployees(): Promise<void> {
+  const [{ count } = { count: 0 }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.employees);
+  if (count > 0) {
+    console.log(`  employees — ${count} already present, sample crew skipped`);
+    return;
+  }
+
+  const [companies, positions, departments, messes, simperTypes, simperCodes] =
+    await Promise.all([
+      idsByName(schema.companies),
+      idsByName(schema.positions),
+      idsByName(schema.departments),
+      idsByName(schema.mess),
+      idsByName(schema.simperTypes),
+      idsByName(schema.simperCodes),
+    ]);
+
+  const resolve = (map: Map<string, string>, name: string, what: string) => {
+    const id = map.get(name.toLowerCase());
+    if (!id)
+      throw new Error(
+        `Sample employee references ${what} "${name}", which the catalogue seed did not create`
+      );
+    return id;
+  };
+
+  const rows = await db
+    .insert(schema.employees)
+    .values(
+      EMPLOYEES.map((e) => ({
+        nik: e.nik,
+        name: e.name,
+        companyId: resolve(companies, e.company, "company"),
+        positionId: resolve(positions, e.position, "position"),
+        departmentId: resolve(departments, e.department, "department"),
+        messId: e.mess ? resolve(messes, e.mess, "mess") : null,
+        simperTypeId: e.simperType
+          ? resolve(simperTypes, e.simperType, "simper type")
+          : null,
+        joinDate: e.joinDate || null,
+        license: e.license,
+        simperNo: e.simperNo,
+        simperExp: e.simperExp || null,
+        mcu: e.mcu,
+        mcuExp: e.mcuExp || null,
+        blood: e.blood,
+        medical: e.medical,
+        block: e.block,
+        room: e.room,
+        phone: e.phone,
+        emergency: e.emergency,
+        status: e.status,
+      }))
+    )
+    .returning({ id: schema.employees.id, nik: schema.employees.nik });
+
+  const idByNik = new Map(rows.map((r) => [r.nik, r.id]));
+  const skills = EMPLOYEES.flatMap((e) =>
+    e.skills.map((code) => ({
+      employeeId: idByNik.get(e.nik)!,
+      simperCodeId: resolve(simperCodes, code, "simper code"),
+    }))
+  );
+  if (skills.length) await db.insert(schema.employeeSkills).values(skills);
+
+  console.log(
+    `  employees — ${EMPLOYEES.length} sample employees created, ` +
+      `${skills.length} skill assignments`
+  );
+}
+
 export async function seedMasterData(): Promise<void> {
   console.log("[seed] master catalogues");
   await seedCatalogues();
@@ -532,4 +861,7 @@ export async function seedMasterData(): Promise<void> {
 
   console.log("[seed] sample fleet");
   await seedUnits();
+
+  console.log("[seed] sample workforce");
+  await seedEmployees();
 }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, Plus, Send, Trash2 } from "lucide-react";
 
-import { EMPLOYEES } from "@/lib/employees-data";
+import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { revCodeList } from "@/lib/roster-data";
 import { AsyncSelect, type AsyncOption } from "@/components/ui/async-select";
@@ -60,22 +60,25 @@ function yesterdayISO() {
   return new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 }
 
-/* pencarian karyawan lokal (nama/NIK) — pengganti loader server referensi */
+/**
+ * Employee search, served by the API.
+ *
+ * This screen's own revision rows are still local state — the roster lands in a
+ * later change — but the people it offers are real records, and the search runs
+ * server-side because that is where the register lives now. A screen that is
+ * not yet persisted still reads its master values from the API rather than from
+ * a compiled-in array.
+ */
 async function loadEmployees(search: string): Promise<AsyncOption<EmpRow>[]> {
-  const needle = search.trim().toLowerCase();
-  return EMPLOYEES.filter(
-    (e) =>
-      e.status === "aktif" &&
-      (!needle ||
-        e.name.toLowerCase().includes(needle) ||
-        e.nik.toLowerCase().includes(needle))
-  )
-    .slice(0, 20)
-    .map((e) => ({
-      value: e.nik,
-      label: `${e.name} — ${e.nik}`,
-      row: { nik: e.nik, name: e.name },
-    }));
+  const needle = search.trim();
+  const { data } = await api.v1.employees.get({
+    query: { status: "aktif", ...(needle ? { q: needle } : {}) },
+  });
+  return (data ?? []).slice(0, 20).map((e) => ({
+    value: e.nik,
+    label: `${e.name} — ${e.nik}`,
+    row: { nik: e.nik, name: e.name },
+  }));
 }
 
 /**

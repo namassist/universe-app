@@ -59,6 +59,8 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   departemen: (p) => <MasterMenu {...p} cat="departemen" />,
   "area-kerja": (p) => <MasterMenu {...p} cat="area-kerja" />,
   mess: (p) => <MasterMenu {...p} cat="mess" />,
+  perusahaan: (p) => <MasterMenu {...p} cat="perusahaan" />,
+  jabatan: (p) => <MasterMenu {...p} cat="jabatan" />,
   /* Not catalogues: these four have their own tables and their own routes, and
      rode <MasterMenu> only because the static port needed a table with a
      dialog. Bus is a schedule on a unit, the other three are display content

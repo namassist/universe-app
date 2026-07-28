@@ -98,6 +98,8 @@ export const NAV: NavEntry[] = [
       leaf("area-kerja"),
       leaf("bus"),
       leaf("mess"),
+      leaf("perusahaan"),
+      leaf("jabatan"),
       leaf("running-text"),
       leaf("sound"),
       leaf("timeline"),

@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, TriangleAlert, Upload } from "lucide-react";
 
 import {
+  EMPLOYEE_IMPORT_COLUMNS,
   MASTER_IMPORT_COLUMNS,
   MENU_LABELS,
   UNIT_IMPORT_COLUMNS,
@@ -75,8 +76,8 @@ const dataTail = (data: string) => {
   return data.length > head.length ? data.slice(head.length) : "";
 };
 
-/** Every master screen that accepts a spreadsheet. */
-export type ImportTarget = MasterKind | "database-unit";
+/** Every screen that accepts a spreadsheet. */
+export type ImportTarget = MasterKind | "database-unit" | "employees";
 
 /**
  * Preview-then-commit import for the master catalogues and the unit registry.
@@ -98,12 +99,24 @@ export function MasterImport({ target }: { target: ImportTarget }) {
   const { access } = useRole();
   const router = useRouter();
 
-  const isUnits = target === "database-unit";
+  // The three targets differ only in which endpoints they call and which
+  // cache the commit invalidates. `kind` rather than a pair of booleans, so
+  // adding a fourth is one more case and not a second flag to keep consistent
+  // with the first.
+  const kind =
+    target === "database-unit"
+      ? "units"
+      : target === "employees"
+        ? "employees"
+        : "catalogue";
   const label = MENU_LABELS[target];
   const listHref = `/${target}`;
-  const templatePath = isUnits
-    ? "/v1/units/import/template"
-    : `/v1/master/${target}/import/template`;
+  const templatePath =
+    kind === "units"
+      ? "/v1/units/import/template"
+      : kind === "employees"
+        ? "/v1/employees/import/template"
+        : `/v1/master/${target}/import/template`;
   const templateName = `template_${target}.xlsx`;
 
   /**
@@ -115,16 +128,27 @@ export function MasterImport({ target }: { target: ImportTarget }) {
    * for a *different* import ends up, and a hand-written list is one that
    * silently stops matching the parser the first time a column is added.
    */
-  const columns = isUnits ? UNIT_IMPORT_COLUMNS : MASTER_IMPORT_COLUMNS[target];
+  const columns =
+    kind === "units"
+      ? UNIT_IMPORT_COLUMNS
+      : kind === "employees"
+        ? EMPLOYEE_IMPORT_COLUMNS
+        : MASTER_IMPORT_COLUMNS[target as MasterKind];
 
   const previewFile = (file: File) =>
-    isUnits
+    kind === "units"
       ? api.v1.units.import.preview.post({ file })
-      : api.v1.master({ kind: target }).import.preview.post({ file });
+      : kind === "employees"
+        ? api.v1.employees.import.preview.post({ file })
+        : api.v1.master({ kind: target as MasterKind }).import.preview.post({
+            file,
+          });
   const commitFile = (file: File) =>
-    isUnits
+    kind === "units"
       ? api.v1.units.import.post({ file })
-      : api.v1.master({ kind: target }).import.post({ file });
+      : kind === "employees"
+        ? api.v1.employees.import.post({ file })
+        : api.v1.master({ kind: target as MasterKind }).import.post({ file });
 
   const [stage, setStage] = React.useState<Stage>("idle");
   const [pct, setPct] = React.useState(0);
@@ -222,10 +246,15 @@ export function MasterImport({ target }: { target: ImportTarget }) {
     // Both cache entries for this kind: the management list and the active-only
     // selection list are separate, and an import touches what both of them read.
     await queryClient.invalidateQueries({
-      queryKey: isUnits ? ["units"] : ["master", target],
+      queryKey:
+        kind === "units"
+          ? ["units"]
+          : kind === "employees"
+            ? ["employees"]
+            : ["master", target],
     });
-    // A unit import that created catalogue records touched nine other screens,
-    // so every master list is stale too, not just this one.
+    // An import that created catalogue records touched every other master
+    // screen, so all of them are stale too, not just this one.
     if (data.mastersCreated > 0)
       await queryClient.invalidateQueries({ queryKey: ["master"] });
     pushToast(
@@ -335,11 +364,12 @@ export function MasterImport({ target }: { target: ImportTarget }) {
           border: "var(--badge-danger-border)",
           color: "var(--color-danger-text)",
         },
-        // Units only, and only when there are any. A permanent "0 master baru"
-        // would suggest the unit import routinely writes into the catalogues,
-        // which is the opposite of what this count is for — and on a catalogue
-        // screen it would repeat the "Baru" chip beside it, digit for digit.
-        ...(isUnits && preview.newMasters.length
+        // Only where a target has references to satisfy, and only when there
+        // are any. A permanent "0 master baru" would suggest the import
+        // routinely writes into the catalogues, which is the opposite of what
+        // this count is for — and on a catalogue screen it would repeat the
+        // "Baru" chip beside it, digit for digit.
+        ...(kind !== "catalogue" && preview.newMasters.length
           ? [
               {
                 n: preview.newMasters.length,

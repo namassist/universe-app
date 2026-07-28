@@ -5,6 +5,12 @@
  * capped, unknown columns are rejected rather than ignored, and nothing is
  * written before an explicit commit, so a malformed or hostile file fails
  * validation instead of reaching the database.
+ *
+ * Every NIK is checked against the employee register. That check used to be
+ * absent for want of a table to check against; it is a blocking per-row error
+ * now, which means a spreadsheet that imported cleanly before this change can
+ * fail today. That is the intent — the accounts it would have created are the
+ * ones that resolve to no departemen and see nothing.
  */
 
 import ExcelJS from "exceljs";
@@ -100,7 +106,9 @@ export async function validateWorkbook(
   roleByName: Map<string, { id: string; name: string }>,
   existingByNik: Map<string, ExistingAccount>,
   /** Keyed lowercase — an operator varying the case means the same mailbox. */
-  existingByEmail: Map<string, ExistingAccount>
+  existingByEmail: Map<string, ExistingAccount>,
+  /** Every NIK the employee register carries. See the per-row check below. */
+  employeeNiks: Set<string>
 ): Promise<AccountImportPreview | ParseFailure> {
   const wb = new ExcelJS.Workbook();
   try {
@@ -222,12 +230,19 @@ export async function validateWorkbook(
       }
     }
 
+    // A NIK matching no employee fails its row, by the same rule the single
+    // account route enforces: an account whose NIK resolves to no employee has
+    // no departemen, so a `dept`- or `self`-scoped one is born blind. Applying
+    // the rule in both places is the point — if the import were the laxer of
+    // the two, operators would simply route around the form.
+    if (!employeeNiks.has(nik)) {
+      errors.push(danger(n, nik, nama, "NIK tidak terdaftar di data karyawan"));
+      continue;
+    }
+
     seenNik.set(nik, n);
     if (email) seenEmail.set(emailKey, n);
 
-    // A NIK matching no employee is accepted for now: employee master data is
-    // provisioned by the change that follows this one, and the same validation
-    // the roster upload already specifies applies here once it exists.
     const existing = existingByNik.get(nik);
     if (!existing) {
       rows.push({

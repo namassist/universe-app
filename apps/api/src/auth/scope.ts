@@ -10,13 +10,23 @@ import { eq, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { SessionPrincipal } from "@universe/contracts";
 
+import { db, schema } from "../db";
+
 /** Matches nothing. The shape every unresolvable scope collapses to. */
 const NOTHING: SQL = sql`false`;
 /** Matches everything — the `all` scope adds no filter. */
 const EVERYTHING: SQL = sql`true`;
 
 export type ScopeColumns = {
-  /** The departemen column on the target table, when it has one. */
+  /**
+   * The departemen column on the target table, when it has one.
+   *
+   * A `department_id`, not a department *name* (design D9). The distinction
+   * matters more than it looks: comparing a name against a uuid column raises
+   * no error, it simply never matches — and the symptom is a `dept` caller
+   * seeing an empty set, which is indistinguishable from the feature not being
+   * finished yet.
+   */
   dept?: AnyPgColumn;
   /** The NIK column identifying whose record a row is, when it has one. */
   self?: AnyPgColumn;
@@ -49,12 +59,12 @@ export async function scopeWhere(
 
     case "dept": {
       if (!principal.nik || !columns.dept) return NOTHING;
-      const departemen = await departemenOf(principal.nik);
-      // Employee master data lands in the change after this one. Until then no
-      // NIK resolves, and a dept caller sees an empty set rather than
-      // everything — which is what makes the transitional state safe.
-      if (departemen === null) return NOTHING;
-      return eq(columns.dept, departemen);
+      const departemenId = await departemenIdOf(principal.nik);
+      // A NIK that matches no employee still yields an empty set rather than
+      // everything. That fail-closed posture is unchanged by the employee table
+      // landing; what changed is only that some NIKs now resolve.
+      if (departemenId === null) return NOTHING;
+      return eq(columns.dept, departemenId);
     }
   }
 }
@@ -64,13 +74,20 @@ export async function scopeWhere(
  * between departments must not have to be written in two places. That makes the
  * NIK the only link, and its absence a closed door rather than an open one.
  *
- * The `employees` table lands with the master-data change that follows this
- * one, so today this always answers "unknown". That is deliberate rather than
- * unfinished: by D8 an unresolvable departemen yields an empty set, and by D5
- * the API serves no dept-scoped collection yet, so the inert period is
- * invisible rather than permissive. Landing the real lookup is one query here.
+ * Named for what it returns: the department's **id** (design D9). Departemen
+ * has been a uuid since the master-data change, and returning the name here
+ * would compile, run, raise nothing, and match no row ever — a bug whose
+ * symptom is identical to this function not being implemented at all.
+ *
+ * The operational consequence, which belongs in the release notes rather than
+ * only here: an `admin` account whose NIK is not in the employee register is
+ * still blind. Provisioning order is employees first, accounts second.
  */
-async function departemenOf(nik: string): Promise<string | null> {
-  void nik;
-  return null;
+async function departemenIdOf(nik: string): Promise<string | null> {
+  const [row] = await db
+    .select({ departmentId: schema.employees.departmentId })
+    .from(schema.employees)
+    .where(eq(schema.employees.nik, nik))
+    .limit(1);
+  return row?.departmentId ?? null;
 }

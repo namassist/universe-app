@@ -113,6 +113,8 @@ const ROLE_SEEDS: RoleSeed[] = [
       "area-kerja",
       "bus",
       "mess",
+      "perusahaan",
+      "jabatan",
       "running-text",
       "sound",
       "timeline",
@@ -167,7 +169,11 @@ const ROLE_SEEDS: RoleSeed[] = [
  * of `MENU_SLUGS` on every run.
  */
 const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
-  [{ slug: "kode-simper", mode: "manage", roles: ["manpower"] }];
+  [
+    { slug: "kode-simper", mode: "manage", roles: ["manpower"] },
+    { slug: "perusahaan", mode: "manage", roles: ["manpower"] },
+    { slug: "jabatan", mode: "manage", roles: ["manpower"] },
+  ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */
 const DEVICE_SEEDS: { id: string; name: string; kind: DeviceKind }[] = [

@@ -59,6 +59,47 @@ async function roleOrNull(roleId: string) {
 }
 
 /**
+ * Whether a NIK names an employee.
+ *
+ * Enforced here rather than by a foreign key on `users.nik`, deliberately
+ * (design D2): the two records have different lifetimes — deleting an employee
+ * must not delete the account, and D10 refuses that deletion instead — and an
+ * application rule can be relaxed per route the day an account that is not a
+ * person is needed, where a constraint could not be.
+ *
+ * The reason to enforce it at all is functional, not tidiness: an account whose
+ * role is scoped `dept` or `self` resolves its departemen *through* this NIK
+ * (D9), so one that matches nobody is born blind. Refusing it at creation is
+ * far better than handing over an account that silently shows nothing.
+ *
+ * The bootstrap superadmin is exempt by construction — the seed writes it
+ * straight to the table and never comes through these routes — which is what
+ * keeps the account that recovers a misconfigured installation from being
+ * blocked by the master data that installation is missing.
+ */
+async function employeeExists(nik: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.employees.id })
+    .from(schema.employees)
+    .where(eq(schema.employees.nik, nik))
+    .limit(1);
+  return Boolean(row);
+}
+
+/** Every NIK the register carries — the import checks against this set. */
+async function employeeNiks(): Promise<Set<string>> {
+  const rows = await db
+    .select({ nik: schema.employees.nik })
+    .from(schema.employees);
+  return new Set(rows.map((r) => r.nik));
+}
+
+const nikNotRegistered = (nik: string) => ({
+  code: "nik_not_registered",
+  message: `NIK ${nik} tidak terdaftar di data karyawan`,
+});
+
+/**
  * The last account that can still administer roles must not be removable —
  * losing it locks everyone out of the screen that would restore access.
  */
@@ -179,7 +220,8 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         file.name,
         roleByName,
         existingByNik,
-        existingByEmail
+        existingByEmail,
+        await employeeNiks()
       );
       if ("code" in result) return status(422, result);
       return result;
@@ -245,7 +287,8 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         file.name,
         roleByName,
         existingByNik,
-        existingByEmail
+        existingByEmail,
+        await employeeNiks()
       );
       if ("code" in preview) return status(422, preview);
       // Re-validated rather than trusted from the client: the preview the
@@ -382,6 +425,8 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
           code: "scope_requires_nik",
           message: `Lingkup "${role.scope}" memerlukan NIK`,
         });
+      if (body.nik && !(await employeeExists(body.nik)))
+        return status(422, nikNotRegistered(body.nik));
 
       try {
         const [row] = await db
@@ -486,6 +531,11 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
           code: "scope_requires_nik",
           message: `Lingkup "${role.scope}" memerlukan NIK`,
         });
+      // Checked when the caller *supplies* one, not on every edit: an account
+      // predating this rule should still be renameable, and one that keeps its
+      // NIK is not being "edited with a NIK".
+      if (body.nik && !(await employeeExists(body.nik)))
+        return status(422, nikNotRegistered(body.nik));
 
       if (body.active === false && (await isLastRolesAdmin(params.id)))
         return status(409, {

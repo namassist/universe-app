@@ -77,6 +77,17 @@ export const env = {
    *  NODE_ENV would silently pick wrong in the other two, and the symptom is
    *  uploaded sounds vanishing on the next redeploy rather than an error. */
   SOUND_DIR: required("SOUND_DIR", "./storage/sounds"),
+
+  /** Where uploaded employee photos are written (design D8).
+   *
+   *  Explicit for the same reason SOUND_DIR is, and with a sharper consequence:
+   *  a photo that vanishes on redeploy leaves its `photo_file_name` behind in
+   *  the database, so the record claims a picture that is no longer there. On
+   *  an ephemeral container this must point at a mounted volume. /health
+   *  reports the directory writable, which catches an unmounted volume at
+   *  startup — but writable is not persistent, and no probe can tell the two
+   *  apart. */
+  PHOTO_DIR: required("PHOTO_DIR", "./storage/photos"),
 } as const;
 
 export const isProd = env.NODE_ENV === "production";

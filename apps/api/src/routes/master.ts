@@ -1,22 +1,25 @@
 /**
- * The nine master catalogues, behind one generic route surface (design D3).
+ * The eleven master catalogues, behind one generic route surface (design D3).
  *
  * D1 gives each catalogue its own table, so a foreign key into it constrains
  * something real. D3 is the compromise that keeps that from multiplying
- * upwards: the tables are nine, the handlers are one. `KIND_TABLES` resolves a
+ * upwards: the tables are eleven, the handlers are one. `KIND_TABLES` resolves a
  * `:kind` to its table, its column projection, and how a reference to it is
  * counted, and the handler body is written once.
  *
+ * `perusahaan` and `jabatan` are what that bought: two catalogues landed with
+ * entries in the maps below and no handler of their own.
+ *
  * Authorization is per catalogue, not per group. The macro can only gate on a
- * statically declared menu list, so the route declares all nine and the handler
- * then narrows to the *requested* one — the same shape `devices.ts` uses to
- * stop a fleet-board grant revoking an attendance TV. Declaring the union alone
- * would let `manage` on `kelas-unit` create a department.
+ * statically declared menu list, so the route declares all eleven and the
+ * handler then narrows to the *requested* one — the same shape `devices.ts`
+ * uses to stop a fleet-board grant revoking an attendance TV. Declaring the
+ * union alone would let `manage` on `kelas-unit` create a department.
  */
 
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import {
   MASTER_KINDS,
   type AccessMode,
@@ -70,76 +73,157 @@ const MENU_OF_KIND: Record<MasterKind, MenuSlug> = {
   departemen: "departemen",
   "area-kerja": "area-kerja",
   mess: "mess",
+  perusahaan: "perusahaan",
+  jabatan: "jabatan",
 };
 
 /** Any master grant opens the surface; the handler narrows to the kind asked for. */
 const MASTER_MENUS: MenuSlug[] = MASTER_KINDS.map((k) => MENU_OF_KIND[k]);
+
+/** One referrer's contribution, so a refusal can say what is holding the row. */
+type ReferenceCount = { label: string; count: number };
 
 type KindConfig = {
   table: NamedCatalogue;
   /** Which optional column this catalogue carries, if any. */
   extra: "none" | "description" | "type";
   /**
-   * How many rows point at this one. `null` where nothing references the
-   * catalogue yet — work areas, mess, and permit types are all waiting on the
-   * `employees` table (design D13), so a foreign-key violation on them is
-   * currently impossible rather than merely unlikely.
+   * What points at this record, counted per referrer.
+   *
+   * `null` only where nothing references the catalogue at all — work areas,
+   * which no table keys on yet. Everything else has at least one referrer since
+   * `employees` landed: mess and permit types acquired their first, and
+   * departments and qualification codes acquired a second beside units.
+   *
+   * A list rather than a single number because the two answers differ: "still
+   * used by 3 units and 12 employees" tells an operator where to look, and
+   * "still used by 15" does not.
    */
-  countReferences: ((id: string) => Promise<number>) | null;
+  countReferences: ((id: string) => Promise<ReferenceCount[]>) | null;
 };
 
-/** Units are the only referrer that exists today. */
-const unitsReferencing = (column: AnyPgColumn) => async (id: string) => {
+/** How many rows of one table point at this catalogue record. */
+async function countRows(
+  table: PgTable,
+  column: AnyPgColumn,
+  id: string
+): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(schema.units)
+    .from(table)
     .where(eq(column, id));
   return row?.count ?? 0;
-};
+}
+
+type Referrer = { label: string; table: PgTable; column: AnyPgColumn };
+
+const byUnits = (column: AnyPgColumn): Referrer => ({
+  label: "unit",
+  table: schema.units,
+  column,
+});
+
+const byEmployees = (column: AnyPgColumn): Referrer => ({
+  label: "karyawan",
+  table: schema.employees,
+  column,
+});
+
+const referencedBy =
+  (...referrers: Referrer[]) =>
+  (id: string): Promise<ReferenceCount[]> =>
+    Promise.all(
+      referrers.map(async (r) => ({
+        label: r.label,
+        count: await countRows(r.table, r.column, id),
+      }))
+    );
 
 const KIND_TABLES: Record<MasterKind, KindConfig> = {
   "jenis-unit": {
     table: schema.unitTypes,
     extra: "none",
-    countReferences: unitsReferencing(schema.units.typeId),
+    countReferences: referencedBy(byUnits(schema.units.typeId)),
   },
   "model-unit": {
     table: schema.unitModels,
     extra: "none",
-    countReferences: unitsReferencing(schema.units.modelId),
+    countReferences: referencedBy(byUnits(schema.units.modelId)),
   },
   "merk-unit": {
     table: schema.unitBrands,
     extra: "none",
-    countReferences: unitsReferencing(schema.units.brandId),
+    countReferences: referencedBy(byUnits(schema.units.brandId)),
   },
   "kelas-unit": {
     table: schema.unitClasses,
     extra: "description",
-    countReferences: unitsReferencing(schema.units.classId),
+    countReferences: referencedBy(byUnits(schema.units.classId)),
   },
   simper: {
     table: schema.simperTypes,
     extra: "description",
-    countReferences: null,
+    countReferences: referencedBy(byEmployees(schema.employees.simperTypeId)),
   },
   "kode-simper": {
     table: schema.simperCodes,
     extra: "description",
-    countReferences: unitsReferencing(schema.units.simperCodeId),
+    // Employees reach a qualification code through the join table, not through
+    // a column of their own — one row per code a person holds (design D4).
+    countReferences: referencedBy(byUnits(schema.units.simperCodeId), {
+      label: "karyawan",
+      table: schema.employeeSkills,
+      column: schema.employeeSkills.simperCodeId,
+    }),
   },
   departemen: {
     table: schema.departments,
     extra: "description",
-    countReferences: unitsReferencing(schema.units.departmentId),
+    countReferences: referencedBy(
+      byUnits(schema.units.departmentId),
+      byEmployees(schema.employees.departmentId)
+    ),
   },
   "area-kerja": {
     table: schema.workAreas,
     extra: "type",
     countReferences: null,
   },
-  mess: { table: schema.mess, extra: "none", countReferences: null },
+  mess: {
+    table: schema.mess,
+    extra: "none",
+    countReferences: referencedBy(byEmployees(schema.employees.messId)),
+  },
+  perusahaan: {
+    table: schema.companies,
+    extra: "description",
+    countReferences: referencedBy(byEmployees(schema.employees.companyId)),
+  },
+  jabatan: {
+    table: schema.positions,
+    extra: "description",
+    countReferences: referencedBy(byEmployees(schema.employees.positionId)),
+  },
 };
+
+/** Every referrer folded into one number — what the bulk-delete result carries. */
+const totalOf = (counts: ReferenceCount[]) =>
+  counts.reduce((sum, c) => sum + c.count, 0);
+
+/**
+ * "3 unit dan 12 karyawan", or a bare fallback.
+ *
+ * The counts are read *after* the database refused the delete, so they can be a
+ * moment stale — and if every one comes back zero the row was freed in between.
+ * The refusal still stands, so the message says what it can rather than
+ * claiming a number it no longer has.
+ */
+function describeReferences(counts: ReferenceCount[]): string {
+  const parts = counts
+    .filter((c) => c.count > 0)
+    .map((c) => `${c.count} ${c.label}`);
+  return parts.length ? parts.join(" dan ") : "data lain";
+}
 
 /**
  * The columns a kind projects — never `select *`, so a column added to a
@@ -583,7 +667,7 @@ export const masterRoutes = new Elysia({
           blocked.push({
             id,
             name,
-            references: (await config.countReferences?.(id)) ?? 0,
+            references: totalOf((await config.countReferences?.(id)) ?? []),
           });
         }
       }
@@ -685,13 +769,14 @@ export const masterRoutes = new Elysia({
         return { ok: true };
       } catch (error) {
         if (!isForeignKeyViolation(error)) throw error;
-        // The database already refused it; the count is read only to say how
-        // many, which is the difference between "cannot delete" and a message
-        // an operator can act on.
-        const count = (await config.countReferences?.(params.id)) ?? 0;
+        // The database already refused it; the counts are read only to say by
+        // what, which is the difference between "cannot delete" and a message
+        // an operator can act on. A department can now be held by units and by
+        // employees at once, so the message names both rather than a total.
+        const counts = (await config.countReferences?.(params.id)) ?? [];
         return status(409, {
           code: "master_in_use",
-          message: `Masih dipakai oleh ${count} unit — nonaktifkan saja bila sudah tidak terpakai`,
+          message: `Masih dipakai oleh ${describeReferences(counts)} — nonaktifkan saja bila sudah tidak terpakai`,
         });
       }
     },

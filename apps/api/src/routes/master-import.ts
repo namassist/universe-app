@@ -1,6 +1,6 @@
 /**
- * Spreadsheet export and preview-then-commit import for the master catalogues
- * and the unit registry (design D10).
+ * Spreadsheet export and preview-then-commit import for the master catalogues,
+ * the unit registry (design D10), and the employee register (employee D11).
  *
  * The parsing lives here rather than in the route file for the same reason
  * `users-import.ts` does: it is pure, it is the part worth reading, and it
@@ -20,19 +20,34 @@
  * wanted it, surfaced as a warning row, and written only after the operator
  * confirms. A caller without `manage` on that catalogue gets the old refusal;
  * the offer is a convenience, not a way around the master's permissions.
+ *
+ * The employee import follows that rule for five of its six references and
+ * breaks it for one. `kode-simper` is never created from an employee sheet, at
+ * any grant level, because the two mistakes are not comparable: a misspelled
+ * company is a label somebody can tidy later, while a misspelled qualification
+ * code is a claim of competence that matches no unit, produces no error, and
+ * shows up as a machine standing idle at the start of a shift.
  */
 
 import ExcelJS from "exceljs";
 import {
   AREA_TYPES,
+  BLOOD_TYPES,
+  EMPLOYEE_IMPORT_COLUMNS,
+  EMPLOYEE_STATUSES,
   MASTER_IMPORT_COLUMNS,
+  MCU_RESULTS,
+  SKILL_SEPARATOR,
   UNIT_IMPORT_COLUMNS,
   type AreaType,
+  type BloodType,
+  type EmployeeStatus,
   type ImportErrorRow,
   type MasterImportChange,
   type MasterImportPreview,
   type MasterImportPreviewRow,
   type MasterKind,
+  type McuResult,
   type PendingMaster,
 } from "@universe/contracts";
 
@@ -153,8 +168,26 @@ export function nearestName(
   return best;
 }
 
+/**
+ * A date cell as `YYYY-MM-DD`.
+ *
+ * Read from UTC parts, which is how ExcelJS parses a date cell. A local-time
+ * read shifts the day by one either side of midnight for anyone east or west of
+ * UTC, and a join date silently off by a day is the kind of error nobody
+ * notices until it matters.
+ */
+function isoDate(value: Date): string {
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  return `${value.getUTCFullYear()}-${month}-${day}`;
+}
+
 function cellText(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return "";
+  // Before the generic object branch: a real date cell is an object with none
+  // of the members checked below, so it would otherwise read as empty — and a
+  // blank date column silently wipes a date rather than failing loudly.
+  if (value instanceof Date) return isoDate(value);
   if (typeof value === "object") {
     if ("text" in value && typeof value.text === "string")
       return value.text.trim();
@@ -591,6 +624,11 @@ const CATALOGUE_EXAMPLE: Record<MasterKind, Record<string, string>> = {
   },
   departemen: { nama: "Mining Operation", deskripsi: "Operasi penambangan" },
   "area-kerja": { nama: "Panel East Puncak Utara", tipe: "Mining" },
+  perusahaan: {
+    nama: "PT Unggul Dinamika Utama",
+    deskripsi: "Kontraktor penambangan",
+  },
+  jabatan: { nama: "Driver OHT", deskripsi: "Operator off-highway truck" },
 };
 
 /**
@@ -931,6 +969,471 @@ export async function unitWorkbook(rows: UnitExisting[]): Promise<Buffer> {
       deskripsi: row.description,
       ftw: boolText(row.ftw),
       aktif: boolText(row.active),
+    });
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+/* ---------------------------------------------------------------- employees */
+
+export type EmployeeExisting = {
+  id: string;
+  nik: string;
+  name: string;
+  companyName: string;
+  positionName: string;
+  departmentName: string;
+  messName: string | null;
+  simperTypeName: string | null;
+  joinDate: string | null;
+  status: EmployeeStatus;
+  simperNo: string;
+  simperExp: string | null;
+  /** Qualification code names, sorted — the shape the sheet's cell holds. */
+  skills: string[];
+  license: string;
+  mcu: McuResult | null;
+  mcuExp: string | null;
+  blood: BloodType | null;
+  medical: string;
+  block: string;
+  room: string;
+  phone: string;
+  emergency: string;
+};
+
+/**
+ * A parsed employee row.
+ *
+ * Same convention as `ParsedUnit`: a catalogue id may be `null` while the
+ * reference is carried by name until the commit creates the record and can
+ * supply one. `skillIds` is the exception — it is never null, because a
+ * qualification code is never created by an employee import (design D11), so a
+ * code that did not resolve failed the row long before this shape was built.
+ */
+export type ParsedEmployee = {
+  nik: string;
+  name: string;
+  companyId: string | null;
+  companyName: string;
+  positionId: string | null;
+  positionName: string;
+  departmentId: string | null;
+  departmentName: string;
+  messId: string | null;
+  messName: string | null;
+  simperTypeId: string | null;
+  simperTypeName: string | null;
+  joinDate: string | null;
+  status: EmployeeStatus;
+  simperNo: string;
+  simperExp: string | null;
+  skillIds: string[];
+  skillNames: string[];
+  license: string;
+  mcu: McuResult | null;
+  mcuExp: string | null;
+  blood: BloodType | null;
+  medical: string;
+  block: string;
+  room: string;
+  phone: string;
+  emergency: string;
+  pending: PendingRef[];
+};
+
+/** name (lowercased) → { id, name }, for each catalogue an employee row names. */
+export type EmployeeCatalogues = {
+  companies: Map<string, { id: string; name: string }>;
+  positions: Map<string, { id: string; name: string }>;
+  departments: Map<string, { id: string; name: string }>;
+  messes: Map<string, { id: string; name: string }>;
+  simperTypes: Map<string, { id: string; name: string }>;
+  /** Read but never written: see `kode_simper` below. */
+  simperCodes: Map<string, { id: string; name: string }>;
+};
+
+/**
+ * The five columns that may offer a catalogue addition.
+ *
+ * `kode_simper` is deliberately absent, and that absence is the whole of D11 —
+ * see the parse below.
+ */
+const EMPLOYEE_REFS = {
+  perusahaan: { kind: "perusahaan", label: "Perusahaan" },
+  jabatan: { kind: "jabatan", label: "Jabatan" },
+  departemen: { kind: "departemen", label: "Departemen" },
+  mess: { kind: "mess", label: "Mess" },
+  simper: { kind: "simper", label: "Tipe SIMPER" },
+} as const satisfies Record<string, { kind: MasterKind; label: string }>;
+
+type EmployeeRefColumn = keyof typeof EMPLOYEE_REFS;
+
+/** What the row's own text says about a qualification code that does not exist. */
+const UNKNOWN_SKILL_ISSUE = (code: string) =>
+  `Kode SIMPER "${code}" tidak ada di master. Kode kualifikasi tidak pernah ` +
+  `dibuat lewat import karyawan — tambahkan dulu di menu Kode SIMPER, lalu ` +
+  `import ulang. Kode yang salah ketik menghasilkan operator yang tampak ` +
+  `punya keahlian tapi tidak pernah cocok dengan unit mana pun.`;
+
+/** `YYYY-MM-DD`, or a reason it is not one. Blank keeps what the record has. */
+function dateValue(
+  raw: string,
+  current: string | null | undefined
+): { date: string | null } | { issue: string } {
+  if (!raw) return { date: current ?? null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw))
+    return { issue: `Tanggal "${raw}" harus berformat YYYY-MM-DD` };
+  return { date: raw };
+}
+
+/** Case-insensitive lookup into a small closed vocabulary. */
+const matchIn = <T extends string>(
+  values: readonly T[],
+  raw: string
+): T | undefined => values.find((v) => v.toLowerCase() === raw.toLowerCase());
+
+export function employeeTarget(
+  existing: Map<string, EmployeeExisting>,
+  catalogues: EmployeeCatalogues,
+  /**
+   * Whether an unknown value in this column may be created rather than refused.
+   *
+   * Per catalogue, because the caller's `manage` grants are per master menu:
+   * someone who may add a position has not thereby been given departments.
+   * Never consulted for `kode-simper`, which is refused regardless.
+   */
+  mayCreate: (kind: MasterKind) => boolean
+): ImportTarget<EmployeeExisting, ParsedEmployee> {
+  return {
+    columns: EMPLOYEE_IMPORT_COLUMNS,
+    required: ["nik"],
+    existing,
+    parse: (read, current) => {
+      const nik = read("nik");
+      if (!nik) return { issue: "NIK kosong", key: "", label: "" };
+      const name = read("nama") || current?.name || "";
+      if (!name) return { issue: "Nama kosong", key: nik, label: "" };
+
+      /** Resolve one catalogue reference — the same shape `unitTarget` uses. */
+      const resolve = (
+        column: EmployeeRefColumn,
+        map: Map<string, { id: string; name: string }>,
+        currentName: string | null | undefined
+      ): Resolution => {
+        const raw = read(column);
+        if (!raw)
+          return currentName ? map.get(currentName.toLowerCase()) : null;
+        const found = map.get(raw.toLowerCase());
+        if (found) return found;
+        const ref = EMPLOYEE_REFS[column];
+        if (!mayCreate(ref.kind)) return { missing: raw, label: ref.label };
+        const similarTo = nearestName(
+          raw,
+          [...map.values()].map((r) => r.name)
+        );
+        return {
+          pending: {
+            kind: ref.kind,
+            name: raw,
+            label: ref.label,
+            ...(similarTo ? { similarTo } : {}),
+          },
+        };
+      };
+
+      const resolved = {
+        cmp: resolve("perusahaan", catalogues.companies, current?.companyName),
+        pos: resolve("jabatan", catalogues.positions, current?.positionName),
+        dpt: resolve(
+          "departemen",
+          catalogues.departments,
+          current?.departmentName
+        ),
+        mss: resolve("mess", catalogues.messes, current?.messName),
+        spt: resolve("simper", catalogues.simperTypes, current?.simperTypeName),
+      };
+
+      for (const value of Object.values(resolved)) {
+        if (value && "missing" in value)
+          return {
+            issue: `${value.label} "${value.missing}" tidak ada di master, dan Anda tidak punya akses menambahnya — minta ditambahkan di menu masternya`,
+            key: nik,
+            label: value.missing,
+          };
+      }
+
+      // The three required references. Blank on a new row fails it rather than
+      // writing a null column, because the database would refuse it anyway. A
+      // pending one counts as present — it will exist before anything is
+      // written. Mess and permit type are not among them: living off site and
+      // holding no permit are both real states.
+      const required = [
+        [resolved.cmp, "Perusahaan"],
+        [resolved.pos, "Jabatan"],
+        [resolved.dpt, "Departemen"],
+      ] as const;
+      for (const [value, label] of required) {
+        if (!value)
+          return { issue: `${label} wajib diisi`, key: nik, label: "" };
+      }
+
+      type Ref = { id: string | null; name: string };
+      const pending: PendingRef[] = [];
+      const ref = (value: Resolution): Ref => {
+        if (!value) return { id: null, name: "" };
+        if ("pending" in value) {
+          pending.push(value.pending);
+          return { id: null, name: value.pending.name };
+        }
+        return value as { id: string; name: string };
+      };
+
+      const cmp = ref(resolved.cmp);
+      const pos = ref(resolved.pos);
+      const dpt = ref(resolved.dpt);
+      const mss = resolved.mss ? ref(resolved.mss) : null;
+      const spt = resolved.spt ? ref(resolved.spt) : null;
+
+      /**
+       * The qualification codes, from one multi-valued cell (design D11).
+       *
+       * A blank cell keeps whatever the record holds, the same rule every other
+       * optional column follows here — otherwise a file that simply omits the
+       * column would strip every operator of every qualification, which is the
+       * failure mode this product is built to prevent and which produces no
+       * error at all.
+       *
+       * An unknown code is the one reference that is never offered for
+       * creation. The asymmetry is deliberate and the issue text has to explain
+       * it, because five columns offering an addition and one refusing reads as
+       * a bug otherwise.
+       */
+      const rawSkills = read("kode_simper");
+      const skillNames: string[] = [];
+      const skillIds: string[] = [];
+      if (rawSkills) {
+        const seenSkill = new Set<string>();
+        for (const piece of rawSkills.split(SKILL_SEPARATOR)) {
+          const code = piece.trim();
+          if (!code) continue;
+          // The same code twice in one cell is one assignment.
+          if (seenSkill.has(code.toLowerCase())) continue;
+          seenSkill.add(code.toLowerCase());
+          const found = catalogues.simperCodes.get(code.toLowerCase());
+          if (!found)
+            return { issue: UNKNOWN_SKILL_ISSUE(code), key: nik, label: code };
+          skillNames.push(found.name);
+          skillIds.push(found.id);
+        }
+      } else if (current) {
+        for (const code of current.skills) {
+          const found = catalogues.simperCodes.get(code.toLowerCase());
+          if (found) {
+            skillNames.push(found.name);
+            skillIds.push(found.id);
+          }
+        }
+      }
+      skillNames.sort();
+
+      const dates: Record<string, string | null> = {};
+      for (const [column, currentValue] of [
+        ["tanggal_masuk", current?.joinDate],
+        ["simper_exp", current?.simperExp],
+        ["mcu_exp", current?.mcuExp],
+      ] as const) {
+        const value = dateValue(read(column), currentValue);
+        if ("issue" in value)
+          return { issue: value.issue, key: nik, label: name };
+        dates[column] = value.date;
+      }
+
+      const rawStatus = read("status");
+      const status = rawStatus
+        ? matchIn(EMPLOYEE_STATUSES, rawStatus)
+        : (current?.status ?? "aktif");
+      if (!status)
+        return {
+          issue: `Status "${rawStatus}" bukan ${EMPLOYEE_STATUSES.join(" atau ")}`,
+          key: nik,
+          label: name,
+        };
+
+      const rawMcu = read("mcu");
+      const mcu = rawMcu
+        ? matchIn(MCU_RESULTS, rawMcu)
+        : (current?.mcu ?? null);
+      if (rawMcu && !mcu)
+        return {
+          issue: `Hasil MCU "${rawMcu}" bukan ${MCU_RESULTS.join(", ")}`,
+          key: nik,
+          label: name,
+        };
+
+      const rawBlood = read("golongan_darah");
+      const blood = rawBlood
+        ? matchIn(BLOOD_TYPES, rawBlood)
+        : (current?.blood ?? null);
+      if (rawBlood && !blood)
+        return {
+          issue: `Golongan darah "${rawBlood}" bukan ${BLOOD_TYPES.join(", ")}`,
+          key: nik,
+          label: name,
+        };
+
+      return {
+        nik,
+        name,
+        companyId: cmp.id,
+        companyName: cmp.name,
+        positionId: pos.id,
+        positionName: pos.name,
+        departmentId: dpt.id,
+        departmentName: dpt.name,
+        messId: mss?.id ?? null,
+        messName: mss?.name ?? null,
+        simperTypeId: spt?.id ?? null,
+        simperTypeName: spt?.name ?? null,
+        joinDate: dates["tanggal_masuk"] ?? null,
+        status,
+        simperNo: read("simper_no") || (current?.simperNo ?? ""),
+        simperExp: dates["simper_exp"] ?? null,
+        skillIds,
+        skillNames,
+        license: read("lisensi") || (current?.license ?? ""),
+        mcu: mcu ?? null,
+        mcuExp: dates["mcu_exp"] ?? null,
+        blood: blood ?? null,
+        medical: read("riwayat_medis") || (current?.medical ?? ""),
+        block: read("blok") || (current?.block ?? ""),
+        room: read("kamar") || (current?.room ?? ""),
+        phone: read("telepon") || (current?.phone ?? ""),
+        emergency: read("kontak_darurat") || (current?.emergency ?? ""),
+        pending,
+      };
+    },
+    pendingOf: (p) => p.pending,
+    keyOf: (p) => p.nik,
+    labelOf: (p) => p.name,
+    // No `nearMatch`: the key is a NIK, and two employee numbers differing by
+    // one digit is the normal case rather than a suspicious one.
+    diff: (current, parsed) => {
+      const changes: MasterImportChange[] = [];
+      const compare = (
+        field: string,
+        from: string | null,
+        to: string | null
+      ) => {
+        if ((from ?? "") !== (to ?? "")) changes.push({ field, from, to });
+      };
+      compare("nama", current.name, parsed.name);
+      compare("perusahaan", current.companyName, parsed.companyName);
+      compare("jabatan", current.positionName, parsed.positionName);
+      compare("departemen", current.departmentName, parsed.departmentName);
+      compare("mess", current.messName, parsed.messName);
+      compare("simper", current.simperTypeName, parsed.simperTypeName);
+      compare("tanggal_masuk", current.joinDate, parsed.joinDate);
+      compare("status", current.status, parsed.status);
+      compare("simper_no", current.simperNo, parsed.simperNo);
+      compare("simper_exp", current.simperExp, parsed.simperExp);
+      // Compared as a sorted joined list, so a reordered cell is not a change.
+      compare(
+        "kode_simper",
+        skillText(current.skills),
+        skillText(parsed.skillNames)
+      );
+      compare("lisensi", current.license, parsed.license);
+      compare("mcu", current.mcu, parsed.mcu);
+      compare("mcu_exp", current.mcuExp, parsed.mcuExp);
+      compare("golongan_darah", current.blood, parsed.blood);
+      compare("riwayat_medis", current.medical, parsed.medical);
+      compare("blok", current.block, parsed.block);
+      compare("kamar", current.room, parsed.room);
+      compare("telepon", current.phone, parsed.phone);
+      compare("kontak_darurat", current.emergency, parsed.emergency);
+      return changes;
+    },
+  };
+}
+
+/** The cell a set of qualification codes is written to and read back from. */
+export const skillText = (codes: string[]) =>
+  [...codes].sort().join(`${SKILL_SEPARATOR} `);
+
+function employeeSheet(): [ExcelJS.Workbook, ExcelJS.Worksheet] {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("karyawan");
+  ws.columns = EMPLOYEE_IMPORT_COLUMNS.map((key) => ({
+    header: key,
+    key,
+    width:
+      key === "kontak_darurat" || key === "kode_simper" || key === "nama"
+        ? 32
+        : 18,
+  }));
+  ws.getRow(HEADER_ROW).font = { bold: true };
+  return [wb, ws];
+}
+
+/** One filled-in row, naming values the seed creates, so a first import lands. */
+export async function employeeTemplate(): Promise<Buffer> {
+  const [wb, ws] = employeeSheet();
+  ws.addRow({
+    nik: "503220421",
+    nama: "Budi Santoso",
+    perusahaan: "PT Unggul Dinamika Utama",
+    jabatan: "Driver OHT",
+    departemen: "Mining Operation",
+    tanggal_masuk: "2022-03-01",
+    status: "aktif",
+    simper: "F",
+    simper_no: "F-2022-0421",
+    simper_exp: "2027-03-14",
+    kode_simper: skillText(["OHT 777", "OHT 773"]),
+    lisensi: "SIM BII Umum",
+    mcu: "Fit",
+    mcu_exp: "2027-01-15",
+    golongan_darah: "O",
+    riwayat_medis: "",
+    mess: "Mess A",
+    blok: "Blok 1",
+    kamar: "A-12",
+    telepon: "0812-3456-7890",
+    kontak_darurat: "Siti Santoso (istri) — 0813-1111-2222",
+  });
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+export async function employeeWorkbook(
+  rows: EmployeeExisting[]
+): Promise<Buffer> {
+  const [wb, ws] = employeeSheet();
+  for (const row of rows)
+    ws.addRow({
+      nik: row.nik,
+      nama: row.name,
+      perusahaan: row.companyName,
+      jabatan: row.positionName,
+      departemen: row.departmentName,
+      // Every optional value exports blank when absent, and a blank cell is
+      // what the import reads back as "leave it alone" — so the round trip of
+      // an employee with no mess stays without one rather than acquiring one.
+      tanggal_masuk: row.joinDate ?? "",
+      status: row.status,
+      simper: row.simperTypeName ?? "",
+      simper_no: row.simperNo,
+      simper_exp: row.simperExp ?? "",
+      kode_simper: skillText(row.skills),
+      lisensi: row.license,
+      mcu: row.mcu ?? "",
+      mcu_exp: row.mcuExp ?? "",
+      golongan_darah: row.blood ?? "",
+      riwayat_medis: row.medical,
+      mess: row.messName ?? "",
+      blok: row.block,
+      kamar: row.room,
+      telepon: row.phone,
+      kontak_darurat: row.emergency,
     });
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

@@ -16,8 +16,11 @@ import {
   ACCESS_MODES,
   ACCOUNT_IMPORT_FIELDS,
   AREA_TYPES,
+  BLOOD_TYPES,
   DEVICE_KINDS,
+  EMPLOYEE_STATUSES,
   MASTER_KINDS,
+  MCU_RESULTS,
   MENU_SLUGS,
   RUNTEXT_COLORS,
   SCOPES,
@@ -33,6 +36,9 @@ export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
 export const AreaTypeSchema = t.UnionEnum(AREA_TYPES);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
 export const TimelineActionSchema = t.UnionEnum(TIMELINE_ACTIONS);
+export const EmployeeStatusSchema = t.UnionEnum(EMPLOYEE_STATUSES);
+export const McuResultSchema = t.UnionEnum(MCU_RESULTS);
+export const BloodTypeSchema = t.UnionEnum(BLOOD_TYPES);
 
 /* --------------------------------------------------------- optional enums */
 
@@ -79,6 +85,24 @@ const TimelineActionUnion = t.Union([
   t.Literal("other"),
 ]);
 
+const EmployeeStatusUnion = t.Union([
+  t.Literal("aktif"),
+  t.Literal("nonaktif"),
+]);
+
+const McuResultUnion = t.Union([
+  t.Literal("Fit"),
+  t.Literal("Fit dengan catatan"),
+  t.Literal("Unfit sementara"),
+]);
+
+const BloodTypeUnion = t.Union([
+  t.Literal("A"),
+  t.Literal("B"),
+  t.Literal("AB"),
+  t.Literal("O"),
+]);
+
 type IsExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Assert<T extends true> = T;
 
@@ -103,6 +127,18 @@ type _TimelineActionInSync = Assert<
     (typeof TIMELINE_ACTIONS)[number]
   >
 >;
+type _EmployeeStatusInSync = Assert<
+  IsExact<
+    (typeof EmployeeStatusUnion)["static"],
+    (typeof EMPLOYEE_STATUSES)[number]
+  >
+>;
+type _McuResultInSync = Assert<
+  IsExact<(typeof McuResultUnion)["static"], (typeof MCU_RESULTS)[number]>
+>;
+type _BloodTypeInSync = Assert<
+  IsExact<(typeof BloodTypeUnion)["static"], (typeof BLOOD_TYPES)[number]>
+>;
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
 export const OptionalScopeSchema = t.Optional(ScopeUnion);
@@ -110,6 +146,10 @@ export const OptionalDeviceKindSchema = t.Optional(DeviceKindUnion);
 export const OptionalAreaTypeSchema = t.Optional(AreaTypeUnion);
 export const OptionalRunTextColorSchema = t.Optional(RunTextColorUnion);
 export const OptionalTimelineActionSchema = t.Optional(TimelineActionUnion);
+export const OptionalEmployeeStatusSchema = t.Optional(EmployeeStatusUnion);
+/** Nullable as well as optional: absent leaves it, `null` clears it. */
+export const OptionalMcuResultSchema = t.Optional(t.Nullable(McuResultUnion));
+export const OptionalBloodTypeSchema = t.Optional(t.Nullable(BloodTypeUnion));
 
 export const ErrorSchema = t.Object({
   code: t.String(),
@@ -423,6 +463,74 @@ export const BusScheduleSchema = t.Object({
   departAt: t.String(),
   active: t.Boolean(),
   createdAt: t.String(),
+});
+
+/* ------------------------------------------------------------------ employees */
+
+/** A qualification code an employee holds — key and name, like every reference. */
+export const EmployeeSkillSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+});
+
+/**
+ * An employee, with each catalogue reference carried as both its key and its
+ * name — the same bargain `UnitSchema` strikes, and for the same reason: a
+ * list of two hundred people renders in one round trip while every write still
+ * speaks in keys.
+ *
+ * The nullable members are all real states rather than unfinished records: an
+ * employee may live off site (`mess`), operate nothing (`simperType`), have no
+ * photo, or simply not have had a date recorded. Dates are ISO `YYYY-MM-DD`
+ * strings, which is what Postgres `date` reads back as and what an `<input
+ * type="date">` writes.
+ */
+export const EmployeeSchema = t.Object({
+  id: t.String(),
+  nik: t.String(),
+  name: t.String(),
+  companyId: t.String(),
+  companyName: t.String(),
+  positionId: t.String(),
+  positionName: t.String(),
+  departmentId: t.String(),
+  departmentName: t.String(),
+  /** Absent means the employee lives off site. */
+  messId: t.Nullable(t.String()),
+  messName: t.Nullable(t.String()),
+  /** Absent means no permit at all — someone who operates no unit. */
+  simperTypeId: t.Nullable(t.String()),
+  simperTypeName: t.Nullable(t.String()),
+  joinDate: t.Nullable(t.String()),
+  license: t.String(),
+  simperNo: t.String(),
+  simperExp: t.Nullable(t.String()),
+  mcu: t.Nullable(McuResultSchema),
+  mcuExp: t.Nullable(t.String()),
+  blood: t.Nullable(BloodTypeSchema),
+  medical: t.String(),
+  block: t.String(),
+  room: t.String(),
+  phone: t.String(),
+  emergency: t.String(),
+  /** The generated storage name, not the one the client uploaded. Null if none. */
+  photoFileName: t.Nullable(t.String()),
+  status: EmployeeStatusSchema,
+  /** What this person may operate. Empty for anyone who operates nothing. */
+  skills: t.Array(EmployeeSkillSchema),
+  createdAt: t.String(),
+});
+
+/**
+ * The shape a reference failure takes.
+ *
+ * Names the field, following `units.ts`: a form with five catalogue dropdowns
+ * cannot act on "a reference did not resolve".
+ */
+export const ValidationIssuesSchema = t.Object({
+  code: t.String(),
+  message: t.String(),
+  issues: t.Array(t.Object({ field: t.String(), message: t.String() })),
 });
 
 /* ---------------------------------------------------------- display content */

@@ -161,7 +161,51 @@ export const MASTER_IMPORT_COLUMNS: Record<MasterKind, readonly string[]> = {
   "kode-simper": ["nama", "deskripsi", "aktif"],
   departemen: ["nama", "deskripsi", "aktif"],
   "area-kerja": ["nama", "tipe", "aktif"],
+  perusahaan: ["nama", "deskripsi", "aktif"],
+  jabatan: ["nama", "deskripsi", "aktif"],
 };
+
+/**
+ * The employee sheet's columns (design D11).
+ *
+ * `kode_simper` is one column holding a separated list rather than one column
+ * per qualification code: a code added to the catalogue must not change the
+ * width of every employee file already in circulation.
+ */
+export const EMPLOYEE_IMPORT_COLUMNS = [
+  "nik",
+  "nama",
+  "perusahaan",
+  "jabatan",
+  "departemen",
+  "tanggal_masuk",
+  "status",
+  "simper",
+  "simper_no",
+  "simper_exp",
+  "kode_simper",
+  "lisensi",
+  "mcu",
+  "mcu_exp",
+  "golongan_darah",
+  "riwayat_medis",
+  "mess",
+  "blok",
+  "kamar",
+  "telepon",
+  "kontak_darurat",
+] as const;
+export type EmployeeImportColumn = (typeof EMPLOYEE_IMPORT_COLUMNS)[number];
+
+/**
+ * What separates the codes inside `kode_simper`.
+ *
+ * A semicolon rather than a comma: `,` is the decimal separator in an
+ * Indonesian locale spreadsheet and the field separator of a CSV saved from
+ * one, so a comma-separated cell is the one shape most likely to be split by
+ * something other than this parser.
+ */
+export const SKILL_SEPARATOR = ";";
 
 export const UNIT_IMPORT_COLUMNS = [
   "kode",

@@ -32,6 +32,8 @@ export const MENU_SLUGS = [
   "area-kerja",
   "bus",
   "mess",
+  "perusahaan",
+  "jabatan",
   "running-text",
   "sound",
   "timeline",
@@ -68,6 +70,8 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   "area-kerja": "Area Kerja",
   bus: "Bus",
   mess: "Mess",
+  perusahaan: "Perusahaan",
+  jabatan: "Jabatan",
   "running-text": "Running Text",
   sound: "Sound",
   timeline: "Timeline",
@@ -96,7 +100,7 @@ export function isMenuSlug(value: string): value is MenuSlug {
 }
 
 /**
- * The nine lookup catalogues reachable through `/v1/master/:kind`.
+ * The eleven lookup catalogues reachable through `/v1/master/:kind`.
  *
  * A kind is also a menu slug — the menu that owns a catalogue is what
  * authorizes it — so the list is typed as a subset rather than a parallel
@@ -114,6 +118,8 @@ export const MASTER_KINDS = [
   "departemen",
   "area-kerja",
   "mess",
+  "perusahaan",
+  "jabatan",
 ] as const satisfies readonly MenuSlug[];
 export type MasterKind = (typeof MASTER_KINDS)[number];
 

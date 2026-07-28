@@ -65,7 +65,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 
 /**
- * The nine lookup catalogues, through one component and one route (design D3).
+ * The eleven lookup catalogues, through one component and one route (design D3).
  *
  * The static port flattened every category into `{ name, a, b, c }`, where `a`
  * meant "description" here and "type" there. That is gone: `colsFor` names each
@@ -90,6 +90,8 @@ const EXTRA_OF_KIND: Record<MasterKind, Extra> = {
   "kode-simper": "description",
   departemen: "description",
   "area-kerja": "type",
+  perusahaan: "description",
+  jabatan: "description",
 };
 
 type Col = {
@@ -107,7 +109,9 @@ function colsFor(kind: MasterKind, t: ReturnType<typeof useI18n>["t"]): Col[] {
         ? "Kode"
         : kind === "departemen"
           ? "Departemen"
-          : t.mdNama,
+          : kind === "perusahaan" || kind === "jabatan"
+            ? MENU_LABELS[kind]
+            : t.mdNama,
   };
   switch (EXTRA_OF_KIND[kind]) {
     case "description":

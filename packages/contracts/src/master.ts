@@ -15,6 +15,46 @@ export const AREA_TYPES = ["Mining", "Non Mining"] as const;
 export type AreaType = (typeof AREA_TYPES)[number];
 
 /**
+ * Employment status, and only employment (design D7).
+ *
+ * Two values, not three. "Cuti" was the third in the static port, and it is
+ * gone: leave is a fact about a *date*, owned by the roster, and a column with
+ * no date cannot answer "on leave until when". Keeping it here would leave two
+ * sources of truth for the same question, one of which can never win.
+ */
+export const EMPLOYEE_STATUSES = ["aktif", "nonaktif"] as const;
+export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
+
+export function isEmployeeStatus(value: string): value is EmployeeStatus {
+  return (EMPLOYEE_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * MCU outcome and blood type (design D6).
+ *
+ * Enums rather than catalogues: neither is something an admin adds without a
+ * deploy, and nothing points at either with a foreign key. That is the whole
+ * line between a catalogue and an enum here.
+ */
+export const MCU_RESULTS = [
+  "Fit",
+  "Fit dengan catatan",
+  "Unfit sementara",
+] as const;
+export type McuResult = (typeof MCU_RESULTS)[number];
+
+export function isMcuResult(value: string): value is McuResult {
+  return (MCU_RESULTS as readonly string[]).includes(value);
+}
+
+export const BLOOD_TYPES = ["A", "B", "AB", "O"] as const;
+export type BloodType = (typeof BLOOD_TYPES)[number];
+
+export function isBloodType(value: string): value is BloodType {
+  return (BLOOD_TYPES as readonly string[]).includes(value);
+}
+
+/**
  * What a timeline stage *does* when its time arrives.
  *
  * `finger-ingest` and `spare-validate` name work the allocation engine will

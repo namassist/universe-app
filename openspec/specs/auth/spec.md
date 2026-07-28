@@ -15,6 +15,11 @@ An account SHALL be identifiable by an email address, a NIK, or both. Each
 value MUST be unique across accounts when present, and every account MUST carry
 at least one of the two.
 
+A NIK carried by an account SHALL match an employee record. The check SHALL be
+enforced at the API boundary rather than by a database constraint, so that
+deleting an employee does not remove an account and the rule can be relaxed per
+route if an account that is not a person is ever needed.
+
 #### Scenario: Login with email
 
 - **WHEN** a caller submits an identifier matching an active account's email and the correct password
@@ -29,6 +34,16 @@ at least one of the two.
 
 - **WHEN** an account is created with both email and NIK absent
 - **THEN** the API SHALL reject the request with 422 and the database constraint SHALL prevent the row
+
+#### Scenario: Account created with a NIK that matches no employee
+
+- **WHEN** an account is created or edited with a NIK that no employee record carries
+- **THEN** the API SHALL respond 422 and SHALL NOT persist the account, because an account whose NIK resolves to no employee has no departemen and would be scoped to an empty set
+
+#### Scenario: The bootstrap superadmin is exempt
+
+- **WHEN** the seed creates or restores the bootstrap superadmin account
+- **THEN** it SHALL succeed regardless of whether an employee record carries its identifier, so that the account which recovers a misconfigured installation cannot itself be blocked by missing master data
 
 #### Scenario: Wrong password
 
@@ -162,10 +177,10 @@ server, and nothing MUST be persisted before the caller confirms a preview.
 - **WHEN** a row names a role that does not exist
 - **THEN** validation SHALL report an error for that row
 
-#### Scenario: NIK not matching an employee is accepted for now
+#### Scenario: NIK not matching an employee fails its row
 
 - **WHEN** a row carries a NIK that matches no employee record
-- **THEN** the row SHALL be accepted, because employee master data is provisioned by a later change
+- **THEN** validation SHALL report an error for that row identified by its row number, and the file SHALL NOT be committable until resolved
 
 #### Scenario: Malformed file
 

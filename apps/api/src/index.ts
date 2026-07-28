@@ -7,10 +7,11 @@ import { env, isProd } from "./env";
 import { pingDb } from "./db";
 import { pingRedis } from "./redis";
 import { startScheduler } from "./scheduler";
-import { pingSoundStorage } from "./storage";
+import { pingPhotoStorage, pingSoundStorage } from "./storage";
 import { authRoutes } from "./routes/auth";
 import { devicesRoutes, displayRoutes } from "./routes/devices";
 import { runTextsRoutes, soundsRoutes } from "./routes/display-content";
+import { employeesRoutes } from "./routes/employees";
 import { masterRoutes } from "./routes/master";
 import { rolesRoutes } from "./routes/roles";
 import { timelineRoutes } from "./routes/timeline";
@@ -31,6 +32,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(devicesRoutes)
   .use(displayRoutes)
   .use(masterRoutes)
+  .use(employeesRoutes)
   .use(unitsRoutes)
   .use(busSchedulesRoutes)
   .use(runTextsRoutes)
@@ -55,6 +57,7 @@ export const app = new Elysia()
           { name: "devices", description: "Display device registry" },
           { name: "display", description: "Kiosk data and heartbeat" },
           { name: "master", description: "Master lookup catalogues" },
+          { name: "employees", description: "Employee register and photos" },
           { name: "units", description: "Unit registry" },
           { name: "bus", description: "Bus departure schedules" },
           { name: "sounds", description: "Sound clips and their audio" },
@@ -94,13 +97,14 @@ export const app = new Elysia()
     });
   })
   .get("/health", async ({ status }) => {
-    const [database, cache, soundStorage] = await Promise.all([
+    const [database, cache, soundStorage, photoStorage] = await Promise.all([
       pingDb(),
       pingRedis(),
       pingSoundStorage(),
+      pingPhotoStorage(),
     ]);
     const body = {
-      ok: database && cache && soundStorage,
+      ok: database && cache && soundStorage && photoStorage,
       version: API_VERSION,
       database,
       cache,
@@ -108,6 +112,9 @@ export const app = new Elysia()
       // otherwise is the *first upload* failing — long after the deploy that
       // caused it. Reporting it here makes it a startup-time fact.
       soundStorage,
+      // Same reasoning, one step worse: a lost PHOTO_DIR leaves every
+      // `photo_file_name` in the database pointing at nothing.
+      photoStorage,
     };
     // 503 so a load balancer or container healthcheck actually reacts.
     return body.ok ? body : status(503, body);

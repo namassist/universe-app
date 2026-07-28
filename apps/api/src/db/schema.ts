@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   integer,
   pgEnum,
@@ -17,7 +18,10 @@ import {
 import {
   ACCESS_MODES,
   AREA_TYPES,
+  BLOOD_TYPES,
   DEVICE_KINDS,
+  EMPLOYEE_STATUSES,
+  MCU_RESULTS,
   SCOPES,
   TIMELINE_ACTIONS,
 } from "@universe/contracts";
@@ -28,6 +32,9 @@ export const accessMode = pgEnum("access_mode", ACCESS_MODES);
 export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const areaType = pgEnum("area_type", AREA_TYPES);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
+export const employeeStatus = pgEnum("employee_status", EMPLOYEE_STATUSES);
+export const mcuResult = pgEnum("mcu_result", MCU_RESULTS);
+export const bloodType = pgEnum("blood_type", BLOOD_TYPES);
 
 /**
  * Roles are runtime data — the User Management screen creates, edits, and
@@ -68,7 +75,15 @@ export const rolePermissions = pgTable(
  * Accounts authenticate by email or NIK — office staff have one, field
  * operators the other, some both. There is deliberately no `departemen`
  * column: departemen belongs to the employee record, and a `dept`-scoped
- * caller resolves through `users.nik → employees.nik → employees.dept`.
+ * caller resolves through `users.nik → employees.nik → employees.department_id`.
+ *
+ * `nik` still carries **no** foreign key to `employees`, and that is a decision
+ * rather than an omission (auth D5, employee D2). The two records have
+ * different lifetimes: deleting an employee must not delete the account, and
+ * the employee route refuses that deletion instead. The rule that a NIK must
+ * name an employee is enforced at the API boundary — in the account routes and
+ * in the account import both — where it can be relaxed per route if an account
+ * that is not a person is ever needed.
  */
 export const users = pgTable(
   "users",
@@ -214,6 +229,27 @@ export const workAreas = pgTable(
   (table) => [lowerNameUnique("work_areas", table.name)]
 );
 
+/**
+ * The employing company, and the job title (design D5).
+ *
+ * Both were free-ish text before: company was two hardcoded `<option>`s and
+ * position was an open `<Input>` whose value is used to filter. `PT UDU` beside
+ * `PT Unggul Dinamika Utama` is a typing accident in every case, and once both
+ * exist half the workforce points at one and half at the other. Described
+ * catalogues, like `departemen`, rather than a fourth shape.
+ */
+export const companies = pgTable(
+  "companies",
+  describedCatalogueColumns(),
+  (table) => [lowerNameUnique("companies", table.name)]
+);
+
+export const positions = pgTable(
+  "positions",
+  describedCatalogueColumns(),
+  (table) => [lowerNameUnique("positions", table.name)]
+);
+
 /* ---------------------------------------------------------- unit registry */
 
 /**
@@ -290,6 +326,112 @@ export const busSchedules = pgTable("bus_schedules", {
     .notNull()
     .defaultNow(),
 });
+
+/* ----------------------------------------------------------------- workforce */
+
+/**
+ * One wide table for a person, and one join table for what they may operate
+ * (design D1).
+ *
+ * Identity, employment, SIMPER, medical, mess, and contact all live here.
+ * Splitting them into `employee_medical`, `employee_contacts`, and
+ * `employee_housing` would yield three tables that are one-to-one, never null,
+ * never two, and read together on every screen — which is a column, not a
+ * relation. `units` set the precedent: one wide table with six foreign keys.
+ *
+ * `id` is a uuid and `nik` is the business key (D2). NIK is issued by people
+ * and occasionally corrected; as a primary key a one-digit correction would
+ * cascade into every table that points at an employee — and those tables
+ * (roster, attendance, FTW) do not exist yet, which is exactly why the decision
+ * is cheap to make now.
+ *
+ * `mess_id` and `simper_type_id` are nullable because both absences are real
+ * states: an employee may live off site, and one who operates nothing holds no
+ * permit. Everything else is `onDelete: "restrict"`, following `units` — a
+ * catalogue row in use cannot be deleted, and the API answers 409 with the
+ * count.
+ */
+export const employees = pgTable(
+  "employees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nik: text("nik").notNull().unique(),
+    name: text("name").notNull(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    positionId: uuid("position_id")
+      .notNull()
+      .references(() => positions.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    messId: uuid("mess_id").references(() => mess.id, { onDelete: "restrict" }),
+    /** Permit *type* (`F`, `P`) — distinct from the qualification codes below. */
+    simperTypeId: uuid("simper_type_id").references(() => simperTypes.id, {
+      onDelete: "restrict",
+    }),
+    joinDate: date("join_date"),
+    license: text("license").notNull().default(""),
+    simperNo: text("simper_no").notNull().default(""),
+    simperExp: date("simper_exp"),
+    /* The value in force, with no history (design D3): renewing a SIMPER or an
+       MCU overwrites, because "is it valid today" is the only question either
+       the screens or the allocation engine ask. */
+    mcu: mcuResult("mcu"),
+    mcuExp: date("mcu_exp"),
+    blood: bloodType("blood"),
+    medical: text("medical").notNull().default(""),
+    block: text("block").notNull().default(""),
+    room: text("room").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    emergency: text("emergency").notNull().default(""),
+    /** Generated by the upload handler; the bytes live under `PHOTO_DIR` (D8). */
+    photoFileName: text("photo_file_name"),
+    status: employeeStatus("status").notNull().default("aktif"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // The three the list filters and the scope predicate read, following the
+    // shape of the indexes on `units`.
+    index("employees_department_id_idx").on(table.departmentId),
+    index("employees_company_id_idx").on(table.companyId),
+    index("employees_position_id_idx").on(table.positionId),
+  ]
+);
+
+/**
+ * Which units a person may operate (design D4).
+ *
+ * The static port kept these as an array of strings while `units.simper_code_id`
+ * was already a uuid, so matching the two meant comparing a name with a key —
+ * and a mistyped code produced no error at all, only a spare who never matches
+ * any unit. The symptom is an idle machine at the start of a shift, which is
+ * precisely the failure this product exists to prevent.
+ *
+ * Composite primary key rather than an `id` of its own: a second row for the
+ * same pair means nothing, and refusing it in the schema is cheaper than
+ * refusing it in every writer. `cascade` to the employee because the assignment
+ * is part of the person's record; `restrict` to the catalogue, like everywhere
+ * else.
+ */
+export const employeeSkills = pgTable(
+  "employee_skills",
+  {
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    simperCodeId: uuid("simper_code_id")
+      .notNull()
+      .references(() => simperCodes.id, { onDelete: "restrict" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.employeeId, table.simperCodeId] }),
+    index("employee_skills_simper_code_id_idx").on(table.simperCodeId),
+  ]
+);
 
 /* --------------------------------------------------------- display content */
 
@@ -379,7 +521,11 @@ export type SimperTypeRow = typeof simperTypes.$inferSelect;
 export type SimperCodeRow = typeof simperCodes.$inferSelect;
 export type DepartmentRow = typeof departments.$inferSelect;
 export type WorkAreaRow = typeof workAreas.$inferSelect;
+export type CompanyRow = typeof companies.$inferSelect;
+export type PositionRow = typeof positions.$inferSelect;
 export type UnitRow = typeof units.$inferSelect;
+export type EmployeeRow = typeof employees.$inferSelect;
+export type EmployeeSkillRow = typeof employeeSkills.$inferSelect;
 export type BusScheduleRow = typeof busSchedules.$inferSelect;
 export type RunTextRow = typeof runTexts.$inferSelect;
 export type DeviceRunTextRow = typeof deviceRunTexts.$inferSelect;

@@ -6,8 +6,8 @@ import { env } from "../env";
 import * as schema from "./schema";
 
 /**
- * Any of the nine master catalogue tables, seen through the columns they all
- * share. Structural rather than a union of the nine, so the generic route and
+ * Any of the eleven master catalogue tables, seen through the columns they all
+ * share. Structural rather than a union of the eleven, so the generic route and
  * the seed both address them without enumerating them a second time.
  */
 export type NamedCatalogue = PgTable & {
@@ -30,10 +30,14 @@ export { schema };
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type {
   BusScheduleRow,
+  CompanyRow,
   DepartmentRow,
   DeviceRow,
   DeviceRunTextRow,
+  EmployeeRow,
+  EmployeeSkillRow,
   MessRow,
+  PositionRow,
   RolePermissionRow,
   RoleRow,
   RunTextRow,
