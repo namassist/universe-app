@@ -1,15 +1,23 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Download, Eye, Search, Upload } from "lucide-react";
 
+import type { RosterDocumentStatus } from "@universe/contracts";
+
 import type { AccessMode } from "@/lib/access";
+import { API_URL, errorMessage, fetchBlob } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { ROSTER_DOCS } from "@/lib/roster-data";
+import { masterQueryOptions } from "@/lib/queries/master";
+import {
+  rosterDocumentsQueryOptions,
+  type RosterDocumentRow,
+} from "@/lib/queries/roster";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
   FootSum,
@@ -32,7 +40,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
+
+/** "2026-07-01" → "Juli 2026", the period an operator recognises. */
+function monthLabel(month: string, lang: string): string {
+  const [year, m] = [month.slice(0, 4), Number(month.slice(5, 7))];
+  const name = new Date(Date.UTC(2026, m - 1, 1)).toLocaleDateString(
+    lang === "en" ? "en-GB" : "id-ID",
+    { month: "long", timeZone: "UTC" }
+  );
+  return `${name} ${year}`;
+}
+
+/** An upload's timestamp as a plain date, in the reader's locale. */
+function dateLabel(iso: string, lang: string): string {
+  return new Date(iso).toLocaleDateString(lang === "en" ? "en-GB" : "id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export function RosterDataMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
@@ -41,33 +69,50 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
   const base = `/roster-data`;
   const canW = mode === "manage";
 
+  /* Every filter is sent to the API rather than applied to a loaded list: the
+     search reaches the joined department and uploader names, which this side
+     holds only as rendered text. */
   const [month, setMonth] = React.useState("");
-  const [dept, setDept] = React.useState("");
+  const [departmentId, setDepartmentId] = React.useState("");
   const [q, setQ] = React.useState("");
-  const [st, setSt] = React.useState("");
+  const [status, setStatus] = React.useState<RosterDocumentStatus | "">("");
 
-  const depts = Array.from(new Set(ROSTER_DOCS.map((r) => r.dept))).sort();
-  const monthNames = React.useMemo(() => {
-    const loc = lang === "en" ? "en-GB" : "id-ID";
-    return Array.from({ length: 12 }, (_, i) =>
-      new Date(2026, i, 1).toLocaleDateString(loc, { month: "long" })
-    );
-  }, [lang]);
+  const documentsQ = useQuery(
+    rosterDocumentsQueryOptions({
+      ...(q.trim() ? { q: q.trim() } : {}),
+      ...(departmentId ? { departmentId } : {}),
+      ...(month ? { month } : {}),
+      ...(status ? { status } : {}),
+    })
+  );
+  const departmentsQ = useQuery(masterQueryOptions("departemen", true));
 
-  const rows = ROSTER_DOCS.filter((r) => {
-    if (st && r.status !== st) return false;
-    if (dept && r.dept !== dept) return false;
-    if (month && r.month.slice(5) !== month) return false;
-    const needle = q.trim().toLowerCase();
-    if (!needle) return true;
-    return (
-      r.label.toLowerCase().includes(needle) ||
-      r.file.toLowerCase().includes(needle) ||
-      r.dept.toLowerCase().includes(needle) ||
-      r.by.toLowerCase().includes(needle)
-    );
-  });
+  const rows: RosterDocumentRow[] = React.useMemo(
+    () => documentsQ.data ?? [],
+    [documentsQ.data]
+  );
   const pg = usePagination(rows);
+
+  /**
+   * The document as a spreadsheet, generated from the stored days.
+   *
+   * `fetchBlob` rather than Eden: Treaty decodes an unrecognised body as text,
+   * and a workbook that survives that downloads and then refuses to open.
+   */
+  async function download(row: RosterDocumentRow) {
+    try {
+      const blob = await fetchBlob(`/v1/roster/${row.id}/export`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = row.fileName || `roster_${row.month.slice(0, 7)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      pushToast("success", t.rdDlT, row.fileName);
+    } catch (error) {
+      pushToast("error", t.rdDlErrT, errorMessage(error, t.rdLoadErr));
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,43 +139,43 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
             <Select
               aria-label={t.allDepts}
               wrapperClassName="w-[180px]"
-              value={dept}
-              onChange={(e) => setDept(e.target.value)}
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
             >
               <option value="">{t.allDepts}</option>
-              {depts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              {(departmentsQ.data ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </Select>
             <Select
               aria-label={t.allStatus}
               wrapperClassName="w-[170px]"
-              value={st}
-              onChange={(e) => setSt(e.target.value)}
+              value={status}
+              onChange={(e) =>
+                setStatus(e.target.value as RosterDocumentStatus | "")
+              }
             >
               <option value="">{t.allStatus}</option>
               <option value="aktif">{t.stAktif}</option>
               <option value="arsip">{t.stArsip}</option>
             </Select>
-            <Select
+            {/* A month, not a month-of-year: a document is one month of one
+                year, and a bare "July" filter would mix 2026 with 2027. */}
+            <Input
+              type="month"
               aria-label={t.lblMonth}
-              wrapperClassName="w-[160px]"
+              className="w-[170px]"
               value={month}
               onChange={(e) => setMonth(e.target.value)}
-            >
-              <option value="">{t.allMonths}</option>
-              {monthNames.map((m, i) => (
-                <option key={m} value={String(i + 1).padStart(2, "0")}>
-                  {m}
-                </option>
-              ))}
-            </Select>
+            />
           </ToolbarGroup>
         </Toolbar>
 
-        {rows.length ? (
+        {documentsQ.isPending ? (
+          <TableSkeleton rows={6} />
+        ) : pg.rows.length ? (
           <Table>
             <TableHeader>
               <tr>
@@ -145,19 +190,24 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
             </TableHeader>
             <TableBody>
               {pg.rows.map((r) => (
-                <TableRow key={r.key}>
+                <TableRow key={r.id}>
                   <TableCell>
-                    <NameCell name={r.label} sub={r.file} />
-                  </TableCell>
-                  <TableCell>{r.dept}</TableCell>
-                  <TableCell className="max-xl:hidden">
                     <NameCell
-                      name={<span className="font-medium">{r.by}</span>}
-                      sub={r.date}
+                      name={monthLabel(r.month, lang)}
+                      sub={r.fileName}
                     />
                   </TableCell>
-                  <TableCell className="font-mono">{r.emp}</TableCell>
-                  <TableCell className="font-mono">{r.rows}</TableCell>
+                  <TableCell>{r.departmentName}</TableCell>
+                  <TableCell className="max-xl:hidden">
+                    <NameCell
+                      name={
+                        <span className="font-medium">{r.uploadedByName}</span>
+                      }
+                      sub={dateLabel(r.createdAt, lang)}
+                    />
+                  </TableCell>
+                  <TableCell className="font-mono">{r.employeeCount}</TableCell>
+                  <TableCell className="font-mono">{r.dayCount}</TableCell>
                   <TableCell>
                     <Badge
                       variant={r.status === "aktif" ? "success" : "neutral"}
@@ -168,21 +218,15 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Link
-                        href={`/attendance`}
-                        className="text-sm whitespace-nowrap"
-                      >
-                        {t.rdView}
-                      </Link>
                       <IconButton
                         aria-label={t.rdDetail}
-                        onClick={() => router.push(`${base}/detail?p=${r.key}`)}
+                        onClick={() => router.push(`${base}/detail?p=${r.id}`)}
                       >
                         <Eye />
                       </IconButton>
                       <IconButton
                         aria-label={t.rdDl}
-                        onClick={() => pushToast("success", t.rdDlT, r.file)}
+                        onClick={() => void download(r)}
                       >
                         <Download />
                       </IconButton>
@@ -195,9 +239,25 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
         ) : (
           <StateBox
             icon={<Search className="text-(--color-primary-bright)" />}
-            title={t.noResTitle}
-            body={t.rdEmptyB}
-          />
+            title={documentsQ.isError ? t.rdLoadErr : t.noResTitle}
+            body={
+              documentsQ.isError
+                ? errorMessage(documentsQ.error, t.rdLoadErr)
+                : q || departmentId || month || status
+                  ? t.rdEmptyB
+                  : t.rdEmptyNone
+            }
+          >
+            {documentsQ.isError ? (
+              <Button
+                variant="secondary"
+                className="mx-auto"
+                onClick={() => void documentsQ.refetch()}
+              >
+                {t.rdRetry}
+              </Button>
+            ) : null}
+          </StateBox>
         )}
 
         <PanelFoot>
@@ -218,3 +278,5 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
     </div>
   );
 }
+
+export { API_URL };

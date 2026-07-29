@@ -25,7 +25,10 @@ import { api, errorMessage, fetchBlob } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import {
   masterQueryOptions,
+  recordCode,
   recordDescription,
+  recordFleetAllocation,
+  recordParentId,
   recordType,
   type MasterRecord,
 } from "@/lib/queries/master";
@@ -94,10 +97,25 @@ const EXTRA_OF_KIND: Record<MasterKind, Extra> = {
   jabatan: "description",
 };
 
+/**
+ * Which catalogue owns which, mirroring the two foreign keys the API added.
+ *
+ * The owner is chosen when the record is created and never afterwards: moving
+ * a department to another company would move every employee in it, so the
+ * field is offered on add and disabled on edit. The API refuses the change
+ * regardless — this only keeps the screen from suggesting it.
+ */
+const PARENT_OF_KIND: Partial<
+  Record<MasterKind, { kind: MasterKind; field: "companyId" | "departmentId" }>
+> = {
+  departemen: { kind: "perusahaan", field: "companyId" },
+  jabatan: { kind: "departemen", field: "departmentId" },
+};
+
 type Col = {
-  key: "name" | "description" | "type";
+  key: "name" | "description" | "type" | "code" | "parent" | "fleet";
   label: string;
-  kind?: "text" | "select";
+  kind?: "text" | "select" | "bool";
   opts?: readonly string[];
 };
 
@@ -113,9 +131,28 @@ function colsFor(kind: MasterKind, t: ReturnType<typeof useI18n>["t"]): Col[] {
             ? MENU_LABELS[kind]
             : t.mdNama,
   };
+  // The owner leads, because it is what the row's identity starts with: two
+  // departments may share a name and the company is what tells them apart.
+  const parent = PARENT_OF_KIND[kind];
+  const lead: Col[] = parent
+    ? [{ key: "parent", label: MENU_LABELS[parent.kind], kind: "select" }]
+    : [];
+  const code: Col[] =
+    kind === "perusahaan" ? [{ key: "code", label: t.mdCode }] : [];
+  const fleet: Col[] =
+    kind === "jabatan"
+      ? [{ key: "fleet", label: t.mdFleet, kind: "bool" }]
+      : [];
+
   switch (EXTRA_OF_KIND[kind]) {
     case "description":
-      return [name, { key: "description", label: t.mdDesc }];
+      return [
+        ...lead,
+        name,
+        ...code,
+        { key: "description", label: t.mdDesc },
+        ...fleet,
+      ];
     case "type":
       return [
         name,
@@ -134,7 +171,15 @@ const valueOf = (row: MasterRecord, key: Col["key"]): string =>
     ? row.name
     : key === "description"
       ? recordDescription(row)
-      : recordType(row);
+      : key === "code"
+        ? recordCode(row)
+        : key === "parent"
+          ? recordParentId(row)
+          : key === "fleet"
+            ? recordFleetAllocation(row)
+              ? "1"
+              : "0"
+            : recordType(row);
 
 export function MasterMenu({
   mode,
@@ -151,6 +196,38 @@ export function MasterMenu({
   const catLabel = MENU_LABELS[cat];
   const cols = colsFor(cat, t);
   const extra = EXTRA_OF_KIND[cat];
+  const parent = PARENT_OF_KIND[cat];
+
+  /**
+   * The owner catalogue, for the two kinds that have one.
+   *
+   * Active-only, matching every other selection list: a retired company is not
+   * somewhere to file a new department. `enabled` rather than a conditional
+   * hook — the kind is a prop and could change under the same mounted
+   * component.
+   */
+  const parentQ = useQuery({
+    ...masterQueryOptions(parent?.kind ?? "perusahaan", true),
+    enabled: Boolean(parent),
+  });
+  /** Only for `jabatan`, to say which company a department belongs to. */
+  const grandparentQ = useQuery({
+    ...masterQueryOptions("perusahaan", true),
+    enabled: cat === "jabatan",
+  });
+
+  const parentLabel = React.useCallback(
+    (id: string) => {
+      const row = (parentQ.data ?? []).find((r) => r.id === id);
+      if (!row) return "—";
+      if (cat !== "jabatan") return row.name;
+      const company = (grandparentQ.data ?? []).find(
+        (c) => c.id === recordParentId(row)
+      );
+      return company ? `${recordCode(company)} / ${row.name}` : row.name;
+    },
+    [parentQ.data, grandparentQ.data, cat]
+  );
 
   // The management list, not the selection list: inactive records belong here
   // and nowhere a value is being chosen.
@@ -165,8 +242,14 @@ export function MasterMenu({
   const [fName, setFName] = React.useState("");
   const [fDesc, setFDesc] = React.useState("");
   const [fType, setFType] = React.useState<AreaType>(AREA_TYPES[0]);
+  const [fCode, setFCode] = React.useState("");
+  const [fParent, setFParent] = React.useState("");
+  const [fFleet, setFFleet] = React.useState(false);
+  /** Toolbar filter: which owner's rows to show. `""` is all of them. */
+  const [parentF, setParentF] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
   const [errName, setErrName] = React.useState(false);
+  const [errParent, setErrParent] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<MasterRecord | null>(null);
 
   /**
@@ -203,17 +286,28 @@ export function MasterMenu({
       name: string;
       description: string;
       type: AreaType;
+      code: string;
+      parentId: string;
+      fleetAllocation: boolean;
       active: boolean;
     }) => {
       const body = {
         name: input.name,
         ...(extra === "description" ? { description: input.description } : {}),
         ...(extra === "type" ? { type: input.type } : {}),
+        ...(cat === "perusahaan" ? { code: input.code } : {}),
+        ...(cat === "jabatan"
+          ? { fleetAllocation: input.fleetAllocation }
+          : {}),
         active: input.active,
       };
       const result = input.id
         ? await api.v1.master({ kind: cat })({ id: input.id }).patch(body)
-        : await api.v1.master({ kind: cat }).post(body);
+        : // The owner is sent on create only. The API ignores it on an edit,
+          // so sending it would be a promise this screen cannot keep.
+          await api.v1
+            .master({ kind: cat })
+            .post(parent ? { ...body, [parent.field]: input.parentId } : body);
       if (result.error) throw result.error;
       return result.data;
     },
@@ -332,9 +426,19 @@ export function MasterMenu({
   const rows = entries.filter((r) => {
     if (stF === "1" && !r.active) return false;
     if (stF === "0" && r.active) return false;
+    // A department belongs to one company and a position to one department, so
+    // "show me one owner's rows" is the question this list is most often opened
+    // with once there is more than one company on site.
+    if (parentF && recordParentId(r) !== parentF) return false;
     const needle = q.trim().toLowerCase();
     if (!needle) return true;
-    return cols.some((c) => valueOf(r, c.key).toLowerCase().includes(needle));
+    return cols.some((c) =>
+      // The owner column holds an id; searching it would match nothing a person
+      // could have typed, so it is searched by the name that is on screen.
+      (c.key === "parent" ? parentLabel(valueOf(r, c.key)) : valueOf(r, c.key))
+        .toLowerCase()
+        .includes(needle)
+    );
   });
   const pg = usePagination(rows);
 
@@ -368,8 +472,17 @@ export function MasterMenu({
     setFName("");
     setFDesc("");
     setFType(AREA_TYPES[0]);
+    setFCode("");
+    setFFleet(false);
+    // Pre-selected when there is exactly one to choose, which is the common
+    // case for a single-company installation and saves a click that has no
+    // decision in it.
+    setFParent(
+      (parentQ.data ?? []).length === 1 ? (parentQ.data![0]!.id ?? "") : ""
+    );
     setFActive(true);
     setErrName(false);
+    setErrParent(false);
     setDlgOpen(true);
   }
   function openEdit(r: MasterRecord) {
@@ -377,32 +490,55 @@ export function MasterMenu({
     setFName(r.name);
     setFDesc(recordDescription(r));
     setFType((recordType(r) || AREA_TYPES[0]) as AreaType);
+    setFCode(recordCode(r));
+    setFParent(recordParentId(r));
+    setFFleet(recordFleetAllocation(r));
     setFActive(r.active);
     setErrName(false);
+    setErrParent(false);
     setDlgOpen(true);
   }
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const name = fName.trim();
+    // Only on create: the owner is not editable, so an edit cannot be missing
+    // one it is not being asked for.
+    const missingParent = Boolean(parent) && !editing && !fParent;
     setErrName(!name);
-    if (!name) return;
+    setErrParent(missingParent);
+    if (!name || missingParent) return;
     save.mutate({
       id: editing?.id ?? null,
       name,
       description: fDesc,
       type: fType,
+      code: fCode.trim(),
+      parentId: fParent,
+      fleetAllocation: fFleet,
       active: fActive,
     });
   }
 
   const fieldValue = (key: Col["key"]) =>
-    key === "name" ? fName : key === "description" ? fDesc : fType;
+    key === "name"
+      ? fName
+      : key === "description"
+        ? fDesc
+        : key === "code"
+          ? fCode
+          : key === "parent"
+            ? fParent
+            : fType;
   const setFieldValue = (key: Col["key"], v: string) =>
     key === "name"
       ? setFName(v)
       : key === "description"
         ? setFDesc(v)
-        : setFType(v as AreaType);
+        : key === "code"
+          ? setFCode(v)
+          : key === "parent"
+            ? setFParent(v)
+            : setFType(v as AreaType);
 
   return (
     <div className="flex flex-col gap-6">
@@ -428,6 +564,21 @@ export function MasterMenu({
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+            {parent ? (
+              <Select
+                wrapperClassName="w-[220px]"
+                value={parentF}
+                onChange={(e) => setParentF(e.target.value)}
+                aria-label={MENU_LABELS[parent.kind]}
+              >
+                <option value="">{`${t.allPrefix} ${MENU_LABELS[parent.kind]}`}</option>
+                {(parentQ.data ?? []).map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {parentLabel(o.id)}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
             <Select
               wrapperClassName="w-[160px]"
               value={stF}
@@ -505,9 +656,24 @@ export function MasterMenu({
                     <TableCell key={c.key} className="max-w-[420px]">
                       {c.key === "name" ? (
                         <span className="font-semibold">{r.name}</span>
+                      ) : c.key === "fleet" ? (
+                        <Badge
+                          variant={
+                            recordFleetAllocation(r) ? "success" : "neutral"
+                          }
+                          dot
+                        >
+                          {recordFleetAllocation(r)
+                            ? t.mdFleetYes
+                            : t.mdFleetNo}
+                        </Badge>
                       ) : (
                         <span className="text-(--text-secondary)">
-                          {valueOf(r, c.key)}
+                          {/* The stored value is an id; the column shows the
+                              name, which is the only form anyone reads by. */}
+                          {c.key === "parent"
+                            ? parentLabel(valueOf(r, c.key))
+                            : valueOf(r, c.key)}
                         </span>
                       )}
                     </TableCell>
@@ -583,11 +749,51 @@ export function MasterMenu({
               className="mt-4"
               label={c.label}
               htmlFor={`md-f-${c.key}`}
-              required={c.key === "name"}
-              error={c.key === "name" && errName}
-              errorMessage={c.key === "name" ? t.mdErrName : undefined}
+              required={
+                c.key === "name" || c.key === "code" || c.key === "parent"
+              }
+              error={
+                (c.key === "name" && errName) ||
+                (c.key === "parent" && errParent)
+              }
+              errorMessage={
+                c.key === "name"
+                  ? t.mdErrName
+                  : c.key === "parent"
+                    ? t.mdErrParent
+                    : undefined
+              }
+              helper={
+                c.key === "parent" && editing ? t.mdParentLocked : undefined
+              }
             >
-              {c.kind === "select" ? (
+              {c.key === "fleet" ? (
+                <ToggleRow htmlFor="md-f-fleet">
+                  <Checkbox
+                    id="md-f-fleet"
+                    checked={fFleet}
+                    onChange={(e) => setFFleet(e.target.checked)}
+                  />
+                  {t.mdFleetHint}
+                </ToggleRow>
+              ) : c.key === "parent" ? (
+                <Select
+                  id="md-f-parent"
+                  value={fParent}
+                  // Set once, at creation. Changing it would move every
+                  // employee filed under this row to somewhere nobody chose,
+                  // and the API refuses it regardless.
+                  disabled={Boolean(editing)}
+                  onChange={(e) => setFParent(e.target.value)}
+                >
+                  <option value="">{t.mdPickParent}</option>
+                  {(parentQ.data ?? []).map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {parentLabel(o.id)}
+                    </option>
+                  ))}
+                </Select>
+              ) : c.kind === "select" ? (
                 <Select
                   id={`md-f-${c.key}`}
                   value={fieldValue(c.key)}

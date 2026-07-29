@@ -18,7 +18,7 @@
  *   even if every sample code happens to be free.
  */
 
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type {
   AreaType,
   BloodType,
@@ -83,34 +83,370 @@ const SIMPER_CODES: [name: string, description: string][] = [
   ["DT R10", "Dump truck Sany SYZ320C"],
 ];
 
-const DEPARTMENTS: [name: string, description: string][] = [
-  ["Mining Operation", "Operasi penambangan"],
-  ["Pit Service", "Layanan pit"],
-  ["Plant", "Perawatan alat"],
-  ["SDI", "Sumber Daya Insani"],
-  ["HRGA", "HR & General Affairs"],
-];
+/* ------------------------------------------------------------ organisation */
 
-/** The two the employee form offered as hardcoded `<option>`s (design D5). */
-const COMPANIES: [name: string, description: string][] = [
-  ["PT Unggul Dinamika Utama", "Kontraktor penambangan"],
-  ["PT Unggul Mitra Energi", "Afiliasi"],
+/**
+ * Company → department → position → headcount, as one tree.
+ *
+ * Written as a tree rather than as three flat lists because that is what the
+ * schema now says it is, and because the three used to drift: a department
+ * belonged to nobody, a position belonged to nowhere, and the only thing tying
+ * an employee's company to their department was that whoever typed the row
+ * happened to pick a matching pair.
+ *
+ * Reading it top to bottom is also the order it has to be written in — a
+ * department needs its company's id, a position its department's, an employee
+ * all three — so the seed walks this once rather than making three passes and
+ * looking names back up.
+ */
+type PositionSeed = {
+  name: string;
+  description: string;
+  /**
+   * How many employees to create for this position.
+   *
+   * Never below two: a position with one holder cannot demonstrate anything
+   * that depends on there being a crew — a roster with a stand-in, a spare to
+   * allocate, a revision for one person while another keeps their shift.
+   */
+  headcount: number;
+  /** Whether this position operates a unit, and so carries a permit. */
+  operator?: boolean;
+  /** The qualification codes an operator in this position holds. */
+  skills?: string[];
+};
+
+type DepartmentSeed = {
+  name: string;
+  description: string;
+  positions: PositionSeed[];
+};
+
+type CompanySeed = {
+  code: string;
+  name: string;
+  description: string;
+  /** Where this company's accounts get their email addresses. */
+  domain: string;
+  departments: DepartmentSeed[];
+};
+
+/** Every department carries one, because every department needs an account. */
+const ADMIN_POSITION: PositionSeed = {
+  name: "ADMIN",
+  description: "Administrasi departemen",
+  headcount: 2,
+};
+
+/**
+ * The two posts the cross-cutting roles are filled from.
+ *
+ * `manpower` and `medic` reach every department in every company, but a role's
+ * reach is its *scope* — it does not make the holder a person without a desk.
+ * Somebody configures the fleet boards and somebody staffs the clinic, and both
+ * are filed where that work sits: manpower planning under HRM, the site clinic
+ * under General Affair. Their scope is what crosses the organisation; their
+ * employment does not have to.
+ *
+ * Appended to their departments rather than inserted, so the seeded NIKs of
+ * everyone already in those departments do not shift — a NIK in yesterday's
+ * screenshot should still name the same person.
+ */
+const MANPOWER_POSITION: PositionSeed = {
+  name: "MANPOWER OFFICER",
+  description: "Perencanaan tenaga kerja dan konfigurasi operasional",
+  headcount: 2,
+};
+
+const PARAMEDIC_POSITION: PositionSeed = {
+  name: "PARAMEDIC",
+  description: "Klinik site dan pemeriksaan fit to work",
+  headcount: 2,
+};
+
+export const ORGANISATION: CompanySeed[] = [
+  {
+    code: "UDU",
+    name: "PT UNGGUL DINAMIKA UTAMA",
+    description: "Kontraktor penambangan",
+    domain: "ungguldinamika.co.id",
+    departments: [
+      {
+        name: "MINING OPERATION",
+        description: "Operasi penambangan — produksi harian",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "DISPATCHER",
+            description: "Pengatur alokasi unit",
+            headcount: 3,
+          },
+          {
+            name: "GROUP LEADER",
+            description: "Pimpinan grup shift",
+            headcount: 4,
+          },
+          {
+            name: "OPERATOR DUMP TRUCK",
+            description: "Operator dump truck produksi",
+            headcount: 30,
+            operator: true,
+            skills: ["OHT 777", "OHT 773"],
+          },
+          {
+            name: "OPERATOR EXCAVATOR",
+            description: "Operator alat gali",
+            headcount: 12,
+            operator: true,
+            skills: ["EXC 2600", "EXC ZX870"],
+          },
+        ],
+      },
+      {
+        name: "PIT SERVICE AND DEVELOPMENT",
+        description: "Layanan pit dan pengembangan front",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "FOREMAN PIT SERVICE",
+            description: "Pengawas layanan pit",
+            headcount: 2,
+          },
+          {
+            name: "OPERATOR WATER TRUCK",
+            description: "Operator penyiraman jalan hauling",
+            headcount: 4,
+            operator: true,
+            skills: ["DT R12"],
+          },
+          { name: "CHECKER", description: "Pemeriksa lapangan", headcount: 2 },
+        ],
+      },
+      {
+        name: "EARTHWORKS & INFRAS",
+        description: "Pekerjaan tanah dan infrastruktur site",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "SURVEYOR",
+            description: "Pengukuran dan pemetaan",
+            headcount: 2,
+          },
+          {
+            name: "OPERATOR DOZER",
+            description: "Operator bulldozer",
+            headcount: 4,
+            operator: true,
+            skills: ["EXC ZX470"],
+          },
+          {
+            name: "FOREMAN EARTHWORKS",
+            description: "Pengawas pekerjaan tanah",
+            headcount: 2,
+          },
+        ],
+      },
+      {
+        name: "HRM",
+        description: "Human Resource Management",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "RECRUITMENT OFFICER",
+            description: "Rekrutmen dan seleksi",
+            headcount: 2,
+          },
+          {
+            name: "PAYROLL OFFICER",
+            description: "Penggajian dan benefit",
+            headcount: 2,
+          },
+          MANPOWER_POSITION,
+        ],
+      },
+      {
+        name: "SUPPLY CHAIN MANAGEMENT",
+        description: "Pengadaan, gudang, dan logistik",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "WAREHOUSE OFFICER",
+            description: "Pengelolaan gudang",
+            headcount: 3,
+          },
+          {
+            name: "PURCHASING OFFICER",
+            description: "Pengadaan barang dan jasa",
+            headcount: 2,
+          },
+        ],
+      },
+      {
+        name: "GENERAL AFFAIR",
+        description: "Sarana, mess, dan keamanan site",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "SECURITY OFFICER",
+            description: "Keamanan site",
+            headcount: 4,
+          },
+          {
+            name: "MESS OFFICER",
+            description: "Pengelolaan mess dan katering",
+            headcount: 2,
+          },
+          PARAMEDIC_POSITION,
+        ],
+      },
+      {
+        name: "SYSTEM DEVELOPMENT AND INTEGRATION",
+        description: "Pengembangan sistem dan integrasi teknologi",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "PROGRAMMER DEVELOPMENT OFFICER",
+            description: "Pengembangan aplikasi internal",
+            headcount: 3,
+          },
+          {
+            name: "IT FMS TECHNICIAN OFFICER",
+            description: "Teknisi fleet management system",
+            headcount: 3,
+          },
+          {
+            name: "IT TECHNICIAN NETWORK & ERP",
+            description: "Jaringan dan dukungan ERP",
+            headcount: 2,
+          },
+        ],
+      },
+      {
+        name: "COST CONTROL AND COMMERCIAL",
+        description: "Pengendalian biaya dan komersial",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "COST CONTROL OFFICER",
+            description: "Pengendalian biaya operasi",
+            headcount: 2,
+          },
+          {
+            name: "COMMERCIAL ANALYST",
+            description: "Analisa komersial dan kontrak",
+            headcount: 2,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    code: "RBS",
+    name: "PT REZEKI BORNEO SEBUKU",
+    description: "Kontraktor penambangan — site Sebuku",
+    domain: "rezekiborneo.co.id",
+    departments: [
+      {
+        name: "MINING OPERATION",
+        description: "Operasi penambangan — produksi harian",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "DISPATCHER",
+            description: "Pengatur alokasi unit",
+            headcount: 2,
+          },
+          {
+            name: "OPERATOR DUMP TRUCK",
+            description: "Operator dump truck produksi",
+            headcount: 16,
+            operator: true,
+            skills: ["DT R12", "DT R10"],
+          },
+          {
+            name: "OPERATOR EXCAVATOR",
+            description: "Operator alat gali",
+            headcount: 6,
+            operator: true,
+            skills: ["EXC ZX870", "EXC ZX470"],
+          },
+        ],
+      },
+      {
+        name: "PLANT AND MAINTENANCE",
+        description: "Perawatan dan perbaikan alat",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "MEKANIK",
+            description: "Perawatan alat berat",
+            headcount: 4,
+          },
+          {
+            name: "TYRE MAN",
+            description: "Perawatan ban alat berat",
+            headcount: 2,
+          },
+        ],
+      },
+      {
+        name: "HRM",
+        description: "Human Resource Management",
+        positions: [
+          ADMIN_POSITION,
+          { name: "HR OFFICER", description: "Kepegawaian site", headcount: 2 },
+          MANPOWER_POSITION,
+        ],
+      },
+      {
+        name: "SUPPLY CHAIN MANAGEMENT",
+        description: "Pengadaan dan gudang",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "WAREHOUSE OFFICER",
+            description: "Pengelolaan gudang",
+            headcount: 2,
+          },
+        ],
+      },
+      {
+        name: "GENERAL AFFAIR",
+        description: "Sarana, mess, dan keamanan site",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "SECURITY OFFICER",
+            description: "Keamanan site",
+            headcount: 3,
+          },
+          PARAMEDIC_POSITION,
+        ],
+      },
+      {
+        name: "HSE",
+        description: "Health, Safety & Environment",
+        positions: [
+          ADMIN_POSITION,
+          {
+            name: "SAFETY OFFICER",
+            description: "Keselamatan kerja",
+            headcount: 3,
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 /**
- * Job titles, which were a free `<Input>` whose value is used to filter — so
- * `Driver OHT` and `driver oht` were two positions to the screen that groups by
- * them. The list is the distinct set the sample employees carry.
+ * The department the sample fleet belongs to.
+ *
+ * Units key on a department, and `MINING OPERATION` now exists under both
+ * companies — so a lookup by name alone would resolve to whichever row the
+ * query happened to return first. The operating contractor owns the fleet.
  */
-const POSITIONS: [name: string, description: string][] = [
-  ["Driver OHT", "Operator off-highway truck"],
-  ["Operator Excavator", "Operator alat gali"],
-  ["Admin Site", "Administrasi site"],
-  ["Dispatcher", "Pengatur alokasi unit"],
-  ["Checker", "Pemeriksa lapangan"],
-  ["Mekanik", "Perawatan alat"],
-  ["Safety Officer", "Keselamatan kerja"],
-];
+const FLEET_COMPANY = "UDU";
 
 const WORK_AREAS: [name: string, type: AreaType][] = [
   ["Panel East Puncak Utara", "Mining"],
@@ -178,7 +514,7 @@ const UNITS: UnitSeed[] = [
     model: "EX2600-7BH",
     brand: "HITACHI",
     simper: "EXC 2600",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "KEA90E00007046",
     engineBrand: "CUMMINS",
     description: "EXCAVATOR250T",
@@ -191,7 +527,7 @@ const UNITS: UnitSeed[] = [
     model: "EX2000-7BH",
     brand: "HITACHI",
     simper: "EXC 2600",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "HCMKDA90H00007002",
     engineBrand: "CUMMINS",
     description: "EXCAVATOR200T",
@@ -204,7 +540,7 @@ const UNITS: UnitSeed[] = [
     model: "ZX870LCH-5G",
     brand: "HITACHI",
     simper: "EXC ZX870",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "HCMJBE93E00051019",
     engineBrand: "ISUZU-6WG1-XQA",
     description: "EXCAVATOR80T,HITACHIZX870-LCH",
@@ -217,7 +553,7 @@ const UNITS: UnitSeed[] = [
     model: "ZX870LCH-5G",
     brand: "HITACHI",
     simper: "EXC ZX870",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "HCMJBE93E00051103",
     engineBrand: "ISUZU-6WG1-XQA",
     description: "EXCAVATOR80T,HITACHIZX870-LCH",
@@ -230,7 +566,7 @@ const UNITS: UnitSeed[] = [
     model: "ZX470LC-5G",
     brand: "HITACHI",
     simper: "EXC ZX470",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "JACE1L00200077",
     engineBrand: "ISUZU",
     description: "EXCAVATOR40T",
@@ -243,7 +579,7 @@ const UNITS: UnitSeed[] = [
     model: "ZX470LC-5G",
     brand: "HITACHI",
     simper: "EXC ZX470",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "JACE1V00200139",
     engineBrand: "ISUZU",
     description: "EXCAVATOR40T",
@@ -256,7 +592,7 @@ const UNITS: UnitSeed[] = [
     model: "SY215W",
     brand: "SANY",
     simper: "",
-    department: "Pit Service",
+    department: "PIT SERVICE AND DEVELOPMENT",
     serial: "SY021CF0090K8",
     engineBrand: "4HK1",
     description: "WHEELEXCAVATOR20T",
@@ -269,7 +605,7 @@ const UNITS: UnitSeed[] = [
     model: "777E",
     brand: "CATERPILLAR",
     simper: "OHT 777",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "KYD00379",
     engineBrand: "CAT",
     description: "DUMPTRUCK100T",
@@ -282,7 +618,7 @@ const UNITS: UnitSeed[] = [
     model: "777E",
     brand: "CATERPILLAR",
     simper: "OHT 777",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "KYD00380",
     engineBrand: "CAT",
     description: "DUMPTRUCK100T",
@@ -295,7 +631,7 @@ const UNITS: UnitSeed[] = [
     model: "773E",
     brand: "CATERPILLAR",
     simper: "OHT 773",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "PRB00688",
     engineBrand: "CAT",
     description: "DUMPTRUCK60T",
@@ -308,7 +644,7 @@ const UNITS: UnitSeed[] = [
     model: "773E",
     brand: "CATERPILLAR",
     simper: "OHT 773",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "PRB00743",
     engineBrand: "CAT",
     description: "DUMPTRUCK60T",
@@ -321,7 +657,7 @@ const UNITS: UnitSeed[] = [
     model: "SYZ440C",
     brand: "SANY",
     simper: "DT R12",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "LFCDKG7PON1021232",
     engineBrand: "WEIICHAI",
     description: "DUMPTRUCK40TSANYSYZ440C-8W®",
@@ -334,7 +670,7 @@ const UNITS: UnitSeed[] = [
     model: "SYZ440C",
     brand: "SANY",
     simper: "DT R12",
-    department: "Mining Operation",
+    department: "MINING OPERATION",
     serial: "LFCDKG7P9N1021732",
     engineBrand: "WEIICHAI",
     description: "DUMPTRUCK40TSANYSYZ440C-8W®",
@@ -347,7 +683,7 @@ const UNITS: UnitSeed[] = [
     model: "SYZ320C-8W(R)",
     brand: "SANY",
     simper: "DT R10",
-    department: "Pit Service",
+    department: "PIT SERVICE AND DEVELOPMENT",
     serial: "LFCDHB7P4P1044869",
     engineBrand: "WEIICHAI",
     description: "DUMPTRUCK30TSANYSYZ320C-8W®",
@@ -360,7 +696,7 @@ const UNITS: UnitSeed[] = [
     model: "SYZ320C-8W(R)",
     brand: "SANY",
     simper: "DT R10",
-    department: "Pit Service",
+    department: "PIT SERVICE AND DEVELOPMENT",
     serial: "LFCDHB7P8P1044939",
     engineBrand: "WEIICHAI",
     description: "DUMPTRUCK30TSANYSYZ320C-8W®",
@@ -371,22 +707,125 @@ const UNITS: UnitSeed[] = [
 /* ------------------------------------------------------- sample workforce */
 
 /**
- * The ten people `apps/web/lib/employees-data.ts` used to hold.
+ * The workforce is generated from `ORGANISATION`, not listed.
  *
- * The same names on purpose: a migrated installation should look exactly as it
- * did before the records moved server-side. Two shapes changed in transit —
- * `Mess A — Blok 1` was one string and is now a mess reference plus a block,
- * and Hendra Gunawan's `cuti` became `aktif`, because leave is a dated fact the
- * roster owns and an employment status cannot express it (design D7).
+ * The ten hand-written people this replaced were transcribed from the static
+ * web module, and they could not answer the question the roster asks: a
+ * department with three people has no roster worth looking at, and a position
+ * with one holder cannot show a shift being covered. Every position now gets at
+ * least two, and the mining operators get a crew large enough that a month's
+ * grid is a real grid.
+ *
+ * Generated, but not random. Every field is a pure function of the person's
+ * index, so two runs of the seed produce the same register down to the NIK —
+ * which is what lets a screenshot, a bug report, or a test that names a NIK
+ * still mean something tomorrow.
  */
-type EmployeeSeed = {
+
+/**
+ * Name parts, combined by index rather than drawn.
+ *
+ * Forty by thirty is twelve hundred distinct combinations, and the workforce is
+ * a fraction of that — so `personName` never repeats within a seed, and a NIK
+ * and a name stay in step across runs.
+ */
+const FIRST_NAMES = [
+  "Adi",
+  "Agus",
+  "Ahmad",
+  "Andi",
+  "Anton",
+  "Arif",
+  "Bagus",
+  "Bambang",
+  "Budi",
+  "Cahyo",
+  "Dedi",
+  "Dimas",
+  "Eko",
+  "Fajar",
+  "Firman",
+  "Gunawan",
+  "Hadi",
+  "Hendra",
+  "Ilham",
+  "Irfan",
+  "Joko",
+  "Kurnia",
+  "Lukman",
+  "Marwan",
+  "Nanda",
+  "Oki",
+  "Panji",
+  "Rahmat",
+  "Reza",
+  "Rudi",
+  "Samsul",
+  "Slamet",
+  "Taufik",
+  "Umar",
+  "Wahyu",
+  "Yudi",
+  "Zainal",
+  "Bayu",
+  "Candra",
+  "Dwi",
+];
+
+const LAST_NAMES = [
+  "Santoso",
+  "Wijaya",
+  "Hartono",
+  "Lestari",
+  "Prasetyo",
+  "Anggraini",
+  "Gunawan",
+  "Handayani",
+  "Salim",
+  "Marlina",
+  "Nugroho",
+  "Setiawan",
+  "Kusuma",
+  "Pratama",
+  "Ramadhan",
+  "Siregar",
+  "Simanjuntak",
+  "Butar",
+  "Maulana",
+  "Hidayat",
+  "Saputra",
+  "Permana",
+  "Wibowo",
+  "Susanto",
+  "Purnama",
+  "Yulianto",
+  "Firmansyah",
+  "Rahayu",
+  "Utami",
+  "Syahputra",
+];
+
+const pad = (n: number, width: number) => String(n).padStart(width, "0");
+
+const personName = (i: number) =>
+  `${FIRST_NAMES[i % FIRST_NAMES.length]!} ` +
+  `${LAST_NAMES[Math.floor(i / FIRST_NAMES.length) % LAST_NAMES.length]!}`;
+
+/**
+ * One planned person: everything the register needs, plus what the account
+ * seed needs to find them again.
+ */
+export type PersonPlan = {
   nik: string;
   name: string;
-  company: string;
-  position: string;
+  companyCode: string;
+  companyName: string;
+  companyDomain: string;
   department: string;
+  position: string;
+  /** The one holder of this department's ADMIN post who gets an account. */
+  departmentAdmin: boolean;
   joinDate: string;
-  /** Empty means no permit at all — someone who operates nothing. */
   simperType: string;
   simperNo: string;
   simperExp: string;
@@ -404,180 +843,74 @@ type EmployeeSeed = {
   status: EmployeeStatus;
 };
 
-const UDU = "PT Unggul Dinamika Utama";
+const BLOODS: BloodType[] = ["A", "B", "AB", "O"];
+const MESSES = ["Mess A", "Mess B", "Mess C"];
 
-const blank = {
-  simperType: "",
-  simperNo: "",
-  simperExp: "",
-  skills: [] as string[],
-  license: "",
-  medical: "",
-  mess: "",
-  block: "",
-  room: "",
-  phone: "",
-  emergency: "",
-  status: "aktif" as EmployeeStatus,
-};
+/**
+ * The whole register, in the order it will be written.
+ *
+ * The NIK encodes where a person sits — `5`, company, department, sequence —
+ * which is not how a real payroll number is built, but it makes a seeded NIK
+ * readable at a glance while debugging, and guarantees uniqueness without a
+ * lookup.
+ */
+export function workforce(): PersonPlan[] {
+  const people: PersonPlan[] = [];
+  let n = 0;
 
-const EMPLOYEES: EmployeeSeed[] = [
-  {
-    ...blank,
-    nik: "503220421",
-    name: "Budi Santoso",
-    company: UDU,
-    position: "Driver OHT",
-    department: "Mining Operation",
-    joinDate: "2022-03-01",
-    license: "SIM BII Umum",
-    simperType: "F",
-    simperNo: "F-2022-0421",
-    simperExp: "2027-03-14",
-    skills: ["OHT 777", "OHT 773"],
-    mcu: "Fit",
-    mcuExp: "2027-01-15",
-    blood: "O",
-    mess: "Mess A",
-    block: "Blok 1",
-    room: "A-12",
-    phone: "0812-3456-7890",
-    emergency: "Siti Santoso (istri) — 0813-1111-2222",
-  },
-  {
-    ...blank,
-    nik: "508210388",
-    name: "Andi Wijaya",
-    company: UDU,
-    position: "Operator Excavator",
-    department: "Mining Operation",
-    joinDate: "2021-08-15",
-    simperType: "F",
-    simperNo: "F-2021-0388",
-    simperExp: "2026-08-02",
-    skills: ["EXC 2600", "EXC ZX870"],
-    mcu: "Fit dengan catatan",
-    mcuExp: "2026-09-30",
-    blood: "B",
-    medical: "Hipertensi ringan",
-    mess: "Mess A",
-    block: "Blok 2",
-    room: "A-27",
-  },
-  {
-    ...blank,
-    nik: "501230510",
-    name: "Rudi Hartono",
-    company: UDU,
-    position: "Driver OHT",
-    department: "Mining Operation",
-    joinDate: "2023-01-10",
-    simperType: "P",
-    simperNo: "P-2023-0510",
-    simperExp: "2026-07-18",
-    skills: ["OHT 773"],
-    mcu: "Fit",
-    mcuExp: "2027-03-01",
-    blood: "A",
-  },
-  {
-    ...blank,
-    nik: "505200233",
-    name: "Sari Lestari",
-    company: UDU,
-    position: "Admin Site",
-    department: "HRGA",
-    joinDate: "2020-05-04",
-    mcu: "Fit",
-    mcuExp: "2027-02-20",
-    blood: "O",
-  },
-  {
-    ...blank,
-    nik: "511190111",
-    name: "Joko Prasetyo",
-    company: UDU,
-    position: "Driver OHT",
-    department: "Mining Operation",
-    joinDate: "2019-11-20",
-    simperType: "F",
-    simperNo: "F-2019-0111",
-    simperExp: "2026-06-30",
-    skills: ["OHT 777"],
-    mcu: "Fit",
-    mcuExp: "2026-12-10",
-    blood: "AB",
-  },
-  {
-    ...blank,
-    nik: "509220290",
-    name: "Dewi Anggraini",
-    company: UDU,
-    position: "Dispatcher",
-    department: "SDI",
-    joinDate: "2022-09-01",
-    mcu: "Fit",
-    mcuExp: "2027-04-05",
-    blood: "B",
-  },
-  {
-    ...blank,
-    nik: "502210367",
-    name: "Hendra Gunawan",
-    company: UDU,
-    position: "Operator Excavator",
-    department: "Mining Operation",
-    joinDate: "2021-02-08",
-    simperType: "F",
-    simperNo: "F-2021-0367",
-    simperExp: "2027-01-22",
-    skills: ["EXC ZX470"],
-    mcu: "Fit",
-    mcuExp: "2026-11-22",
-    blood: "O",
-  },
-  {
-    ...blank,
-    nik: "506230455",
-    name: "Fitri Handayani",
-    company: UDU,
-    position: "Checker",
-    department: "Mining Operation",
-    joinDate: "2023-06-12",
-    mcu: "Fit",
-    mcuExp: "2027-05-30",
-    blood: "A",
-  },
-  {
-    ...blank,
-    nik: "504180129",
-    name: "Agus Salim",
-    company: UDU,
-    position: "Mekanik",
-    department: "Plant",
-    joinDate: "2018-04-02",
-    simperType: "F",
-    simperNo: "F-2018-0129",
-    simperExp: "2027-05-08",
-    skills: ["DT R12", "DT R10"],
-    mcu: "Fit",
-    mcuExp: "2027-03-18",
-    blood: "B",
-  },
-  {
-    ...blank,
-    nik: "510200602",
-    name: "Rina Marlina",
-    company: UDU,
-    position: "Safety Officer",
-    department: "SDI",
-    joinDate: "2020-10-19",
-    mcu: "Fit",
-    mcuExp: "2026-10-19",
-    blood: "O",
-    status: "nonaktif",
-  },
-];
+  ORGANISATION.forEach((company, ci) => {
+    company.departments.forEach((department, di) => {
+      let seq = 0;
+      for (const position of department.positions) {
+        for (let k = 0; k < position.headcount; k++) {
+          seq += 1;
+          const i = n++;
+          const operator = position.operator === true;
+          const year = 2018 + (i % 8);
+
+          people.push({
+            nik: `5${ci + 1}${pad(di + 1, 2)}${pad(seq, 4)}`,
+            name: personName(i),
+            companyCode: company.code,
+            companyName: company.name,
+            companyDomain: company.domain,
+            department: department.name,
+            position: position.name,
+            departmentAdmin: position === ADMIN_POSITION && k === 0,
+            joinDate: `${year}-${pad((i % 12) + 1, 2)}-${pad((i % 28) + 1, 2)}`,
+            // Only someone who operates a unit carries a permit; an office
+            // record with an invented SIMPER number is a record that would
+            // fail the first audit it met.
+            simperType: operator ? (i % 7 === 0 ? "P" : "F") : "",
+            simperNo: operator
+              ? `${i % 7 === 0 ? "P" : "F"}-${year}-${pad(i, 4)}`
+              : "",
+            simperExp: operator ? `${year + 5}-${pad((i % 12) + 1, 2)}-15` : "",
+            skills: operator ? (position.skills ?? []) : [],
+            license: operator ? "SIM BII Umum" : "",
+            mcu: i % 11 === 0 ? "Fit dengan catatan" : "Fit",
+            mcuExp: `${2026 + (i % 2)}-${pad((i % 12) + 1, 2)}-20`,
+            blood: BLOODS[i % BLOODS.length]!,
+            medical: i % 11 === 0 ? "Hipertensi ringan" : "",
+            mess: operator ? MESSES[i % MESSES.length]! : "",
+            block: operator ? `Blok ${(i % 4) + 1}` : "",
+            room: operator
+              ? `${String.fromCharCode(65 + (i % 3))}-${pad((i % 40) + 1, 2)}`
+              : "",
+            phone: `08${pad(12 + (i % 80), 2)}-${pad(1000 + i, 4)}-${pad(2000 + i * 3, 4)}`,
+            emergency: "",
+            // Everyone active. A roster is a plan for people who work, and a
+            // seeded `nonaktif` would quietly shrink every template by one
+            // without saying why.
+            status: "aktif",
+          });
+        }
+      }
+    });
+  });
+
+  return people;
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -613,7 +946,7 @@ async function idsByName(table: NamedCatalogue): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.name.toLowerCase(), r.id]));
 }
 
-async function seedCatalogues(): Promise<void> {
+async function seedCatalogues(): Promise<OrganisationIds> {
   await seedNamed(
     "jenis unit",
     schema.unitTypes,
@@ -650,25 +983,143 @@ async function seedCatalogues(): Promise<void> {
     SIMPER_CODES.map(([name, description]) => ({ name, description }))
   );
   await seedNamed(
-    "departemen",
-    schema.departments,
-    DEPARTMENTS.map(([name, description]) => ({ name, description }))
-  );
-  await seedNamed(
     "area kerja",
     schema.workAreas,
     WORK_AREAS.map(([name, type]) => ({ name, type }))
   );
-  await seedNamed(
-    "perusahaan",
-    schema.companies,
-    COMPANIES.map(([name, description]) => ({ name, description }))
+  return seedOrganisation();
+}
+
+/* ----------------------------------------------------------- organisation */
+
+/** Where a department or a position sits, resolved once and looked up by key. */
+export type OrganisationIds = {
+  /** `UDU` → company id. */
+  companyByCode: Map<string, string>;
+  /** `UDU|mining operation` → department id. */
+  departmentByKey: Map<string, string>;
+  /** `<department id>|admin` → position id. */
+  positionByKey: Map<string, string>;
+};
+
+export const departmentKey = (companyCode: string, department: string) =>
+  `${companyCode}|${department.toLowerCase()}`;
+
+const positionKey = (departmentId: string, position: string) =>
+  `${departmentId}|${position.toLowerCase()}`;
+
+/**
+ * Companies, then their departments, then their positions — in that order,
+ * because each level needs the one above it to exist first.
+ *
+ * The lookups are keyed on the parent as well as the name, mirroring the unique
+ * indexes: `MINING OPERATION` now names two different departments, and a map
+ * keyed on the name alone would silently hand back whichever was written last.
+ */
+async function seedOrganisation(): Promise<OrganisationIds> {
+  const companyByCode = new Map<string, string>();
+  const departmentByKey = new Map<string, string>();
+  const positionByKey = new Map<string, string>();
+
+  let departments = 0;
+  let positions = 0;
+
+  for (const company of ORGANISATION) {
+    const [row] = await db
+      .insert(schema.companies)
+      .values({
+        code: company.code,
+        name: company.name,
+        description: company.description,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.companies.id });
+
+    const companyId =
+      row?.id ??
+      (
+        await db
+          .select({ id: schema.companies.id })
+          .from(schema.companies)
+          .where(
+            sql`lower(${schema.companies.code}) = ${company.code.toLowerCase()}`
+          )
+          .limit(1)
+      )[0]!.id;
+    companyByCode.set(company.code, companyId);
+
+    for (const department of company.departments) {
+      const [made] = await db
+        .insert(schema.departments)
+        .values({
+          companyId,
+          name: department.name,
+          description: department.description,
+        })
+        .onConflictDoNothing()
+        .returning({ id: schema.departments.id });
+
+      const departmentId =
+        made?.id ??
+        (
+          await db
+            .select({ id: schema.departments.id })
+            .from(schema.departments)
+            .where(
+              and(
+                eq(schema.departments.companyId, companyId),
+                sql`lower(${schema.departments.name}) = ${department.name.toLowerCase()}`
+              )
+            )
+            .limit(1)
+        )[0]!.id;
+      if (made) departments += 1;
+      departmentByKey.set(
+        departmentKey(company.code, department.name),
+        departmentId
+      );
+
+      for (const position of department.positions) {
+        const [created] = await db
+          .insert(schema.positions)
+          .values({
+            departmentId,
+            name: position.name,
+            description: position.description,
+            // The same flag that decides whether these people carry a permit:
+            // a position that operates a unit is a position the allocation
+            // engine draws from, and stating it twice would be two things to
+            // keep true.
+            fleetAllocation: position.operator === true,
+          })
+          .onConflictDoNothing()
+          .returning({ id: schema.positions.id });
+
+        const positionId =
+          created?.id ??
+          (
+            await db
+              .select({ id: schema.positions.id })
+              .from(schema.positions)
+              .where(
+                and(
+                  eq(schema.positions.departmentId, departmentId),
+                  sql`lower(${schema.positions.name}) = ${position.name.toLowerCase()}`
+                )
+              )
+              .limit(1)
+          )[0]!.id;
+        if (created) positions += 1;
+        positionByKey.set(positionKey(departmentId, position.name), positionId);
+      }
+    }
+  }
+
+  console.log(
+    `  perusahaan — ${ORGANISATION.length}, departemen — ${departments} created, ` +
+      `jabatan — ${positions} created`
   );
-  await seedNamed(
-    "jabatan",
-    schema.positions,
-    POSITIONS.map(([name, description]) => ({ name, description }))
-  );
+  return { companyByCode, departmentByKey, positionByKey };
 }
 
 /**
@@ -723,7 +1174,7 @@ async function seedSchedule(): Promise<void> {
  * "is EX8001 free?" would happily insert fifteen invented serial numbers into a
  * site whose own units are all named differently.
  */
-async function seedUnits(): Promise<void> {
+async function seedUnits(organisation: OrganisationIds): Promise<void> {
   const [{ count } = { count: 0 }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.units);
@@ -732,21 +1183,31 @@ async function seedUnits(): Promise<void> {
     return;
   }
 
-  const [classes, types, models, brands, codes, departments] =
-    await Promise.all([
-      idsByName(schema.unitClasses),
-      idsByName(schema.unitTypes),
-      idsByName(schema.unitModels),
-      idsByName(schema.unitBrands),
-      idsByName(schema.simperCodes),
-      idsByName(schema.departments),
-    ]);
+  const [classes, types, models, brands, codes] = await Promise.all([
+    idsByName(schema.unitClasses),
+    idsByName(schema.unitTypes),
+    idsByName(schema.unitModels),
+    idsByName(schema.unitBrands),
+    idsByName(schema.simperCodes),
+  ]);
 
   const resolve = (map: Map<string, string>, name: string, what: string) => {
     const id = map.get(name.toLowerCase());
     if (!id)
       throw new Error(
         `Sample unit references ${what} "${name}", which the catalogue seed did not create`
+      );
+    return id;
+  };
+
+  /** Company-qualified, because two companies now run a `MINING OPERATION`. */
+  const department = (name: string) => {
+    const id = organisation.departmentByKey.get(
+      departmentKey(FLEET_COMPANY, name)
+    );
+    if (!id)
+      throw new Error(
+        `Sample unit references department "${name}" under ${FLEET_COMPANY}, which the organisation seed did not create`
       );
     return id;
   };
@@ -761,7 +1222,7 @@ async function seedUnits(): Promise<void> {
       simperCodeId: u.simper
         ? resolve(codes, u.simper, "simper code")
         : undefined,
-      departmentId: resolve(departments, u.department, "department"),
+      departmentId: department(u.department),
       serial: u.serial,
       engineBrand: u.engineBrand,
       description: u.description,
@@ -776,10 +1237,11 @@ async function seedUnits(): Promise<void> {
  *
  * The same guard as the sample fleet, for the same reason: a database that has
  * ever held a real employee must never receive an invented one, and checking
- * "is NIK 503220421 free?" would happily insert ten strangers into a site whose
- * own people are numbered differently.
+ * "is this NIK free?" would happily insert a hundred and sixty strangers into a
+ * site whose own people are numbered differently. `db:seed:fresh` is the door
+ * out of this guard, and it is a door somebody has to open on purpose.
  */
-async function seedEmployees(): Promise<void> {
+async function seedEmployees(organisation: OrganisationIds): Promise<void> {
   const [{ count } = { count: 0 }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.employees);
@@ -788,15 +1250,11 @@ async function seedEmployees(): Promise<void> {
     return;
   }
 
-  const [companies, positions, departments, messes, simperTypes, simperCodes] =
-    await Promise.all([
-      idsByName(schema.companies),
-      idsByName(schema.positions),
-      idsByName(schema.departments),
-      idsByName(schema.mess),
-      idsByName(schema.simperTypes),
-      idsByName(schema.simperCodes),
-    ]);
+  const [messes, simperTypes, simperCodes] = await Promise.all([
+    idsByName(schema.mess),
+    idsByName(schema.simperTypes),
+    idsByName(schema.simperCodes),
+  ]);
 
   const resolve = (map: Map<string, string>, name: string, what: string) => {
     const id = map.get(name.toLowerCase());
@@ -807,61 +1265,82 @@ async function seedEmployees(): Promise<void> {
     return id;
   };
 
-  const rows = await db
-    .insert(schema.employees)
-    .values(
-      EMPLOYEES.map((e) => ({
-        nik: e.nik,
-        name: e.name,
-        companyId: resolve(companies, e.company, "company"),
-        positionId: resolve(positions, e.position, "position"),
-        departmentId: resolve(departments, e.department, "department"),
-        messId: e.mess ? resolve(messes, e.mess, "mess") : null,
-        simperTypeId: e.simperType
-          ? resolve(simperTypes, e.simperType, "simper type")
-          : null,
-        joinDate: e.joinDate || null,
-        license: e.license,
-        simperNo: e.simperNo,
-        simperExp: e.simperExp || null,
-        mcu: e.mcu,
-        mcuExp: e.mcuExp || null,
-        blood: e.blood,
-        medical: e.medical,
-        block: e.block,
-        room: e.room,
-        phone: e.phone,
-        emergency: e.emergency,
-        status: e.status,
-      }))
-    )
-    .returning({ id: schema.employees.id, nik: schema.employees.nik });
+  const people = workforce();
+
+  const values = people.map((e) => {
+    const companyId = organisation.companyByCode.get(e.companyCode)!;
+    const departmentId = organisation.departmentByKey.get(
+      departmentKey(e.companyCode, e.department)
+    )!;
+    const positionId = organisation.positionByKey.get(
+      `${departmentId}|${e.position.toLowerCase()}`
+    )!;
+    return {
+      nik: e.nik,
+      name: e.name,
+      companyId,
+      departmentId,
+      positionId,
+      messId: e.mess ? resolve(messes, e.mess, "mess") : null,
+      simperTypeId: e.simperType
+        ? resolve(simperTypes, e.simperType, "simper type")
+        : null,
+      joinDate: e.joinDate || null,
+      license: e.license,
+      simperNo: e.simperNo,
+      simperExp: e.simperExp || null,
+      mcu: e.mcu,
+      mcuExp: e.mcuExp || null,
+      blood: e.blood,
+      medical: e.medical,
+      block: e.block,
+      room: e.room,
+      phone: e.phone,
+      emergency: e.emergency,
+      status: e.status,
+    };
+  });
+
+  // Sliced for the same reason the roster's day inserts are: Postgres caps the
+  // parameters one statement may carry, and this is a hundred and sixty rows of
+  // twenty columns.
+  const rows: { id: string; nik: string }[] = [];
+  for (let i = 0; i < values.length; i += 200)
+    rows.push(
+      ...(await db
+        .insert(schema.employees)
+        .values(values.slice(i, i + 200))
+        .returning({ id: schema.employees.id, nik: schema.employees.nik }))
+    );
 
   const idByNik = new Map(rows.map((r) => [r.nik, r.id]));
-  const skills = EMPLOYEES.flatMap((e) =>
+  const skills = people.flatMap((e) =>
     e.skills.map((code) => ({
       employeeId: idByNik.get(e.nik)!,
       simperCodeId: resolve(simperCodes, code, "simper code"),
     }))
   );
-  if (skills.length) await db.insert(schema.employeeSkills).values(skills);
+  for (let i = 0; i < skills.length; i += 200)
+    await db.insert(schema.employeeSkills).values(skills.slice(i, i + 200));
 
   console.log(
-    `  employees — ${EMPLOYEES.length} sample employees created, ` +
+    `  employees — ${people.length} sample employees created, ` +
       `${skills.length} skill assignments`
   );
 }
 
-export async function seedMasterData(): Promise<void> {
+export async function seedMasterData(): Promise<OrganisationIds> {
   console.log("[seed] master catalogues");
-  await seedCatalogues();
+  const organisation = await seedCatalogues();
 
   console.log("[seed] timeline & running text");
   await seedSchedule();
 
   console.log("[seed] sample fleet");
-  await seedUnits();
+  await seedUnits(organisation);
 
   console.log("[seed] sample workforce");
-  await seedEmployees();
+  await seedEmployees(organisation);
+
+  return organisation;
 }

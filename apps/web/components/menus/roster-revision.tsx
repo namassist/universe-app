@@ -2,10 +2,18 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, Plus, Search } from "lucide-react";
 
+import type { RosterRevisionStatus } from "@universe/contracts";
+
 import type { AccessMode } from "@/lib/access";
+import { errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import {
+  rosterRevisionsQueryOptions,
+  type RosterRevisionRow,
+} from "@/lib/queries/roster";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,138 +45,59 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 
-type Status = "pending" | "approved" | "rejected";
-type Row = {
-  sid: string;
-  nik: string;
-  name: string;
-  status: Status;
-  whenId: string;
-  whenEn: string;
-  whatId: string;
-  whatEn: string;
-  byId?: string;
-  byEn?: string;
-};
-type Group = { sid: string; rows: Row[] };
-
-const stBadge: Record<Status, BadgeVariant> = {
+const stBadge: Record<RosterRevisionStatus, BadgeVariant> = {
   pending: "warning",
   approved: "success",
   rejected: "danger",
 };
 
-/* ---- static sample content ---- */
-const ROWS: Row[] = [
-  {
-    sid: "REV-2481",
-    nik: "503220421",
-    name: "Budi Santoso",
-    status: "pending",
-    whenId: "20 Jul 2026",
-    whenEn: "20 Jul 2026",
-    whatId: "21 Jul: P-2 → OFF (keperluan keluarga)",
-    whatEn: "21 Jul: P-2 → OFF (family matter)",
-  },
-  {
-    sid: "REV-2481",
-    nik: "501230510",
-    name: "Rudi Hartono",
-    status: "pending",
-    whenId: "20 Jul 2026",
-    whenEn: "20 Jul 2026",
-    whatId: "22 Jul: M-1 → P-1 (tukar shift)",
-    whatEn: "22 Jul: M-1 → P-1 (shift swap)",
-  },
-  {
-    sid: "REV-2481",
-    nik: "511190111",
-    name: "Joko Prasetyo",
-    status: "pending",
-    whenId: "20 Jul 2026",
-    whenEn: "20 Jul 2026",
-    whatId: "23 Jul: P-1 → M-2",
-    whatEn: "23 Jul: P-1 → M-2",
-  },
-  {
-    sid: "REV-2479",
-    nik: "508210388",
-    name: "Andi Wijaya",
-    status: "approved",
-    whenId: "18 Jul 2026",
-    whenEn: "18 Jul 2026",
-    whatId: "19 Jul: OFF → P-2 (lembur disetujui)",
-    whatEn: "19 Jul: OFF → P-2 (approved overtime)",
-    byId: "Disetujui Manajer Ops · 19 Jul",
-    byEn: "Approved by Ops Manager · 19 Jul",
-  },
-  {
-    sid: "REV-2479",
-    nik: "509220290",
-    name: "Dewi Anggraini",
-    status: "rejected",
-    whenId: "18 Jul 2026",
-    whenEn: "18 Jul 2026",
-    whatId: "20 Jul: P-1 → OFF",
-    whatEn: "20 Jul: P-1 → OFF",
-    byId: "Ditolak Manajer Ops · kuota shift",
-    byEn: "Rejected by Ops Manager · shift quota",
-  },
-  {
-    sid: "REV-2470",
-    nik: "506230455",
-    name: "Fitri Handayani",
-    status: "approved",
-    whenId: "12 Jul 2026",
-    whenEn: "12 Jul 2026",
-    whatId: "14 Jul: M-2 → OFF (sakit)",
-    whatEn: "14 Jul: M-2 → OFF (sick)",
-    byId: "Disetujui Manajer Ops · 13 Jul",
-    byEn: "Approved by Ops Manager · 13 Jul",
-  },
-];
+/** A submission's statuses, deduplicated — one badge per distinct verdict. */
+const statusesOf = (r: RosterRevisionRow): RosterRevisionStatus[] =>
+  Array.from(new Set(r.items.map((i) => i.status)));
 
 export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
   const router = useRouter();
-  const en = lang === "en";
   const canW = mode === "manage";
 
-  const [st, setSt] = React.useState("");
+  const [status, setStatus] = React.useState<RosterRevisionStatus | "">("");
   const [q, setQ] = React.useState("");
-  const [detailSid, setDetailSid] = React.useState<string | null>(null);
+  const [detailId, setDetailId] = React.useState<string | null>(null);
 
-  const stLabel = (s: Status) =>
+  /* Filtered by the API, like every other list here: the search reaches the
+     joined employee names, and the status filter is a predicate on the
+     *entries* — a submission is shown when one of its entries matches. */
+  const revisionsQ = useQuery(
+    rosterRevisionsQueryOptions({
+      ...(q.trim() ? { q: q.trim() } : {}),
+      ...(status ? { status } : {}),
+    })
+  );
+
+  const rows = React.useMemo(() => revisionsQ.data ?? [], [revisionsQ.data]);
+  const pg = usePagination(rows);
+
+  const stLabel = (s: RosterRevisionStatus) =>
     s === "pending"
       ? t.stPending
       : s === "approved"
         ? t.stApproved
         : t.stRejected;
 
-  /* kelompokkan per sid — urutan sesuai kemunculan pertama */
-  const groups = React.useMemo(() => {
-    const map = new Map<string, Group>();
-    for (const r of ROWS) {
-      const g = map.get(r.sid);
-      if (g) g.rows.push(r);
-      else map.set(r.sid, { sid: r.sid, rows: [r] });
-    }
-    return Array.from(map.values());
-  }, []);
+  const dateLabel = (iso: string) =>
+    new Date(iso).toLocaleDateString(lang === "en" ? "en-GB" : "id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 
-  const shown = groups.filter((g) => {
-    if (st && !g.rows.some((r) => r.status === st)) return false;
-    const needle = q.trim().toLowerCase();
-    if (!needle) return true;
-    return g.rows.some((r) => r.name.toLowerCase().includes(needle));
-  });
-  const pg = usePagination(shown);
-
-  const pendingN = ROWS.filter((r) => r.status === "pending").length;
-  const detail = detailSid
-    ? groups.find((g) => g.sid === detailSid)
-    : undefined;
+  const pendingN = rows.reduce(
+    (n, r) => n + r.items.filter((i) => i.status === "pending").length,
+    0
+  );
+  const detail = detailId ? rows.find((r) => r.id === detailId) : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -195,8 +124,10 @@ export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
             <Select
               aria-label={t.allStatus}
               wrapperClassName="w-[170px]"
-              value={st}
-              onChange={(e) => setSt(e.target.value)}
+              value={status}
+              onChange={(e) =>
+                setStatus(e.target.value as RosterRevisionStatus | "")
+              }
             >
               <option value="">{t.allStatus}</option>
               <option value="pending">{t.stPending}</option>
@@ -206,7 +137,9 @@ export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
           </ToolbarGroup>
         </Toolbar>
 
-        {shown.length ? (
+        {revisionsQ.isPending ? (
+          <TableSkeleton rows={6} />
+        ) : pg.rows.length ? (
           <Table>
             <TableHeader>
               <tr>
@@ -220,53 +153,68 @@ export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
               </tr>
             </TableHeader>
             <TableBody>
-              {pg.rows.map((g) => {
-                const statuses = Array.from(
-                  new Set(g.rows.map((r) => r.status))
-                );
-                return (
-                  <TableRow key={g.sid}>
-                    <TableCell>
-                      <NameCell
-                        name={<span className="font-mono">{g.sid}</span>}
-                        sub={`${g.rows.length} ${t.revCount}`}
-                      />
-                    </TableCell>
-                    <TableCell className="max-w-[340px]">
-                      {g.rows.map((r) => r.name).join(", ")}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-(--text-secondary) max-xl:hidden">
-                      {en ? g.rows[0]!.whenEn : g.rows[0]!.whenId}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        {statuses.map((s) => (
-                          <Badge key={s} variant={stBadge[s]} dot>
-                            {stLabel(s)}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setDetailSid(g.sid)}
-                      >
-                        {t.rvDetail}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {pg.rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <NameCell
+                      name={<span className="font-mono">{r.code}</span>}
+                      sub={`${r.items.length} ${t.revCount}`}
+                    />
+                  </TableCell>
+                  <TableCell className="max-w-[340px]">
+                    {Array.from(
+                      new Set(r.items.map((i) => i.employeeName))
+                    ).join(", ")}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-(--text-secondary) max-xl:hidden">
+                    {dateLabel(r.submittedAt)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-2">
+                      {/* A set, not one badge: entries of one submission are
+                          decided independently (API design D10). */}
+                      {statusesOf(r).map((s) => (
+                        <Badge key={s} variant={stBadge[s]} dot>
+                          {stLabel(s)}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setDetailId(r.id)}
+                    >
+                      {t.rvDetail}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         ) : (
           <StateBox
             icon={<Search className="text-primary-bright" />}
-            title={t.noResTitle}
-            body={t.apEmptyB}
-          />
+            title={revisionsQ.isError ? t.rvLoadErr : t.noResTitle}
+            body={
+              revisionsQ.isError
+                ? errorMessage(revisionsQ.error, t.rvLoadErr)
+                : q || status
+                  ? t.apEmptyB
+                  : t.rvEmptyNone
+            }
+          >
+            {revisionsQ.isError ? (
+              <Button
+                variant="secondary"
+                className="mx-auto"
+                onClick={() => void revisionsQ.refetch()}
+              >
+                {t.rdRetry}
+              </Button>
+            ) : null}
+          </StateBox>
         )}
 
         <PanelFoot>
@@ -287,7 +235,7 @@ export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
 
       <Dialog
         open={!!detail}
-        onClose={() => setDetailSid(null)}
+        onClose={() => setDetailId(null)}
         className="w-[min(620px,100%)]"
         labelledBy="rvd-t"
       >
@@ -297,35 +245,51 @@ export function RosterRevisionMenu({ mode }: { mode: AccessMode }) {
               <CalendarDays />
             </DialogIcon>
             <DialogTitle id="rvd-t" className="font-mono">
-              {detail.sid}
+              {detail.code}
             </DialogTitle>
             <DialogBody>
-              {detail.rows.length} {t.revCount} · {t.thWhen.toLowerCase()}{" "}
-              {en ? detail.rows[0]!.whenEn : detail.rows[0]!.whenId}
+              {detail.items.length} {t.revCount} · {t.rvSubmittedBy}{" "}
+              {detail.submittedByName} · {dateLabel(detail.submittedAt)}
             </DialogBody>
             <div className="mt-3 max-h-[50vh] overflow-y-auto">
-              {detail.rows.map((r, i) => (
-                <div key={i} className="border-b border-(--divider) py-3">
+              {detail.items.map((item) => (
+                <div key={item.id} className="border-b border-(--divider) py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <b className="text-sm">{r.name}</b>
+                    <b className="text-sm">{item.employeeName}</b>
                     <span className="font-mono text-xs text-(--text-tertiary)">
-                      {r.nik}
+                      {item.nik}
                     </span>
-                    <Badge variant={stBadge[r.status]} dot className="ml-auto">
-                      {stLabel(r.status)}
+                    <Badge
+                      variant={stBadge[item.status]}
+                      dot
+                      className="ml-auto"
+                    >
+                      {stLabel(item.status)}
                     </Badge>
                   </div>
                   <div className="mt-1 text-sm text-(--text-secondary)">
-                    {en ? r.whatEn : r.whatId}
+                    <span className="font-mono">{item.date}</span>:{" "}
+                    <span className="font-mono">{item.fromCode}</span> →{" "}
+                    <span className="font-mono">{item.toCode}</span>
+                    {item.startTime
+                      ? ` (${item.startTime}–${item.endTime ?? "…"})`
+                      : ""}{" "}
+                    — {item.reason}
                   </div>
                   <div className="mt-0.5 text-xs text-(--text-tertiary)">
-                    {(en ? r.byEn : r.byId) ?? (en ? r.whenEn : r.whenId)}
+                    {item.decidedByName
+                      ? `${t.rvDecidedBy} ${item.decidedByName}${
+                          item.decidedAt
+                            ? ` · ${dateLabel(item.decidedAt)}`
+                            : ""
+                        }${item.decisionNote ? ` · ${item.decisionNote}` : ""}`
+                      : dateLabel(detail.submittedAt)}
                   </div>
                 </div>
               ))}
             </div>
             <DialogActions>
-              <Button variant="secondary" onClick={() => setDetailSid(null)}>
+              <Button variant="secondary" onClick={() => setDetailId(null)}>
                 {t.btnClose}
               </Button>
             </DialogActions>

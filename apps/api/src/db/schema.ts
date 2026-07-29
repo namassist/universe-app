@@ -22,6 +22,9 @@ import {
   DEVICE_KINDS,
   EMPLOYEE_STATUSES,
   MCU_RESULTS,
+  ROSTER_CODES,
+  ROSTER_DOCUMENT_STATUSES,
+  ROSTER_REVISION_STATUSES,
   SCOPES,
   TIMELINE_ACTIONS,
 } from "@universe/contracts";
@@ -35,6 +38,15 @@ export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const employeeStatus = pgEnum("employee_status", EMPLOYEE_STATUSES);
 export const mcuResult = pgEnum("mcu_result", MCU_RESULTS);
 export const bloodType = pgEnum("blood_type", BLOOD_TYPES);
+export const rosterCode = pgEnum("roster_code", ROSTER_CODES);
+export const rosterDocumentStatus = pgEnum(
+  "roster_document_status",
+  ROSTER_DOCUMENT_STATUSES
+);
+export const rosterRevisionStatus = pgEnum(
+  "roster_revision_status",
+  ROSTER_REVISION_STATUSES
+);
 
 /**
  * Roles are runtime data — the User Management screen creates, edits, and
@@ -214,10 +226,47 @@ export const simperCodes = pgTable(
   (table) => [lowerNameUnique("simper_codes", table.name)]
 );
 
+/**
+ * A department belongs to exactly one company, and a position to exactly one
+ * department.
+ *
+ * All three were flat catalogues until the two companies turned out to run
+ * different departments and every department to need its own `ADMIN`. Both
+ * facts are unrepresentable in a flat list: with one global name index there
+ * can be exactly one `ADMIN` and exactly one `MINING OPERATION` in the whole
+ * installation, and whichever company or department claimed the name first owns
+ * it. The parent key is what makes "the same name under a different parent" a
+ * different row.
+ *
+ * Which is also why the uniqueness moved rather than merely gaining a column:
+ * it is `(parent, lower(name))` now, so `UDU / HRM` and `RBS / HRM` coexist and
+ * a second `HRM` under the same company is still refused.
+ *
+ * `restrict` on both, following every other reference here: a company with
+ * departments and a department with positions cannot be deleted out from under
+ * them, and the master route answers 409 naming what is holding the row.
+ *
+ * `employees` keeps its own `company_id` even though the department already
+ * implies one. The pairing is checked in the route rather than by the schema —
+ * a composite foreign key would force `departments` to carry a redundant unique
+ * key on `(id, company_id)` for the sake of a constraint the route can state
+ * more clearly, and state in the same message as every other validation.
+ */
 export const departments = pgTable(
   "departments",
-  describedCatalogueColumns(),
-  (table) => [lowerNameUnique("departments", table.name)]
+  {
+    ...describedCatalogueColumns(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+  },
+  (table) => [
+    uniqueIndex("departments_company_name_lower_idx").on(
+      table.companyId,
+      sql`lower(${table.name})`
+    ),
+    index("departments_company_id_idx").on(table.companyId),
+  ]
 );
 
 export const workAreas = pgTable(
@@ -238,16 +287,54 @@ export const workAreas = pgTable(
  * exist half the workforce points at one and half at the other. Described
  * catalogues, like `departemen`, rather than a fourth shape.
  */
+/**
+ * `code` is the short form the site actually speaks in — UDU, RBS. It is a
+ * second identity for the same row rather than decoration, so it is unique and
+ * required: a company whose code is blank cannot be referred to the way people
+ * refer to it, and two companies sharing one code is the ambiguity the code
+ * exists to remove.
+ */
 export const companies = pgTable(
   "companies",
-  describedCatalogueColumns(),
-  (table) => [lowerNameUnique("companies", table.name)]
+  {
+    ...describedCatalogueColumns(),
+    code: text("code").notNull(),
+  },
+  (table) => [
+    lowerNameUnique("companies", table.name),
+    uniqueIndex("companies_code_lower_idx").on(sql`lower(${table.code})`),
+  ]
 );
 
 export const positions = pgTable(
   "positions",
-  describedCatalogueColumns(),
-  (table) => [lowerNameUnique("positions", table.name)]
+  {
+    ...describedCatalogueColumns(),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    /**
+     * Whether someone holding this position is allocated a unit.
+     *
+     * A property of the *position*, not of the person: whether an operator is
+     * in today's allocation is a roster question, but whether a payroll officer
+     * could ever be is a question about the job. Keeping it here is what lets
+     * the allocation engine ask for candidates without enumerating job titles
+     * it would have to be taught again every time one is added.
+     *
+     * Defaults to false, which is the safe direction: a position nobody has
+     * classified yet is left out of allocation rather than silently offered a
+     * dump truck.
+     */
+    fleetAllocation: boolean("fleet_allocation").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("positions_department_name_lower_idx").on(
+      table.departmentId,
+      sql`lower(${table.name})`
+    ),
+    index("positions_department_id_idx").on(table.departmentId),
+  ]
 );
 
 /* ---------------------------------------------------------- unit registry */
@@ -433,6 +520,170 @@ export const employeeSkills = pgTable(
   ]
 );
 
+/* --------------------------------------------------------------- roster */
+
+/**
+ * One monthly upload for one department (design D4).
+ *
+ * `month` is a date pinned to the first of the month rather than a `YYYY-MM`
+ * string: it is compared against `roster_days.date` on every revision, and a
+ * comparison between a date and a text month is a comparison that works until
+ * someone writes `2026-7`.
+ *
+ * `uploaded_by` is `restrict` like every other reference in this schema — an
+ * account that uploaded a roster is part of the document's provenance, and
+ * provenance that can be deleted is provenance that cannot be trusted.
+ */
+export const rosterDocuments = pgTable(
+  "roster_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    /** Always the first day of the month the document covers. */
+    month: date("month").notNull(),
+    fileName: text("file_name").notNull(),
+    uploadedBy: uuid("uploaded_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: rosterDocumentStatus("status").notNull().default("aktif"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    /**
+     * One department, one month, one document in force (design D5).
+     *
+     * Partial rather than total, because the archived documents of the same
+     * month are exactly what re-uploading produces — the rule is about which
+     * one is *active*, and stating it any other way would forbid the history.
+     */
+    uniqueIndex("roster_documents_active_month_idx")
+      .on(table.departmentId, table.month)
+      .where(sql`${table.status} = 'aktif'`),
+    index("roster_documents_department_id_idx").on(table.departmentId),
+  ]
+);
+
+/**
+ * One code, for one person, on one day — owned by the document that carried it.
+ *
+ * Ownership rather than a flat `(employee_id, date)` table (design D4): the
+ * detail screen renders an *archived* document's grid, and on a flat table a
+ * re-upload would move those rows to the new document and leave the old one
+ * rendering as empty — indistinguishable from a broken screen.
+ *
+ * No unit column, no spare flag, and no knowledge that PLAN exists (D3). A
+ * spare is rostered `D` or `N` like anyone else; being a spare is a property of
+ * holding no unit, and that is resolved a layer up.
+ *
+ * `restrict` to the employee is what makes a roster day a trace that refuses
+ * the employee's deletion (D14) — enforced by the database, not promised by a
+ * route.
+ */
+export const rosterDays = pgTable(
+  "roster_days",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => rosterDocuments.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "restrict" }),
+    date: date("date").notNull(),
+    code: rosterCode("code").notNull(),
+  },
+  (table) => [
+    uniqueIndex("roster_days_document_employee_date_idx").on(
+      table.documentId,
+      table.employeeId,
+      table.date
+    ),
+    /** The morning question: who is `D` (or `N`) on this date (design D15). */
+    index("roster_days_date_code_idx").on(table.date, table.code),
+    /** Revisions and one person's history. */
+    index("roster_days_employee_date_idx").on(table.employeeId, table.date),
+  ]
+);
+
+/**
+ * A submission: one operator, one moment, N entries (design D10).
+ *
+ * `code` is the readable identifier (`REV-0001`) the screens show, generated
+ * server-side and unique. It belongs to a document, so archiving the document
+ * freezes the submission with it (D12) — there is no revision floating free of
+ * the roster it revises.
+ */
+export const rosterRevisions = pgTable(
+  "roster_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull().unique(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => rosterDocuments.id, { onDelete: "cascade" }),
+    submittedBy: uuid("submitted_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("roster_revisions_document_id_idx").on(table.documentId)]
+);
+
+/**
+ * One requested change, decided on its own (design D10).
+ *
+ * `from_code` is stored rather than resolved at decision time: an entry that
+ * waited two days would otherwise approve a change away from a code that was
+ * never the one submitted, and the history would read as a lie. When it no
+ * longer matches what is in force, that is a conflict to report — not a value
+ * to overwrite.
+ *
+ * `start_time`/`end_time` live here and nowhere else. The revision form offers
+ * them as an optional pair; an ordinary roster day has no hours, and two
+ * always-null columns on a table that grows by 62,000 rows a month is not a
+ * trade worth making.
+ */
+export const rosterRevisionItems = pgTable(
+  "roster_revision_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    revisionId: uuid("revision_id")
+      .notNull()
+      .references(() => rosterRevisions.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "restrict" }),
+    date: date("date").notNull(),
+    fromCode: rosterCode("from_code").notNull(),
+    toCode: rosterCode("to_code").notNull(),
+    startTime: time("start_time"),
+    endTime: time("end_time"),
+    reason: text("reason").notNull(),
+    status: rosterRevisionStatus("status").notNull().default("pending"),
+    decidedBy: uuid("decided_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionNote: text("decision_note").notNull().default(""),
+  },
+  (table) => [
+    index("roster_revision_items_revision_id_idx").on(table.revisionId),
+    /** The approval queue reads by status. */
+    index("roster_revision_items_status_idx").on(table.status),
+    /** The import's "which approved revisions would this file revert" pass (D9). */
+    index("roster_revision_items_employee_date_idx").on(
+      table.employeeId,
+      table.date
+    ),
+  ]
+);
+
 /* --------------------------------------------------------- display content */
 
 /**
@@ -531,3 +782,7 @@ export type RunTextRow = typeof runTexts.$inferSelect;
 export type DeviceRunTextRow = typeof deviceRunTexts.$inferSelect;
 export type SoundRow = typeof sounds.$inferSelect;
 export type TimelineStageRow = typeof timelineStages.$inferSelect;
+export type RosterDocumentRow = typeof rosterDocuments.$inferSelect;
+export type RosterDayRow = typeof rosterDays.$inferSelect;
+export type RosterRevisionRow = typeof rosterRevisions.$inferSelect;
+export type RosterRevisionItemRow = typeof rosterRevisionItems.$inferSelect;

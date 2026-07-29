@@ -1,10 +1,18 @@
 "use client";
 
 import * as React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, PenLine, TriangleAlert } from "lucide-react";
 
+import type { RosterRevisionStatus } from "@universe/contracts";
+
 import type { AccessMode } from "@/lib/access";
+import { api, errorCode, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import {
+  rosterQueueQueryOptions,
+  type RosterRevisionItemRow,
+} from "@/lib/queries/roster";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,148 +45,144 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
 
-type Status = "pending" | "approved" | "rejected";
-type Filter = Status | "all";
-type Row = {
-  id: string;
-  nik: string;
-  name: string;
-  status: Status;
-  whatId: string;
-  whatEn: string;
-  whenId: string;
-  whenEn: string;
-  byId?: string;
-  byEn?: string;
-};
+type Filter = RosterRevisionStatus;
 
-const stBadge: Record<Status, BadgeVariant> = {
+const stBadge: Record<RosterRevisionStatus, BadgeVariant> = {
   pending: "warning",
   approved: "success",
   rejected: "danger",
 };
 
-/* ---- static sample content ---- */
-const INITIAL: Row[] = [
-  {
-    id: "a1",
-    nik: "503220421",
-    name: "Budi Santoso",
-    status: "pending",
-    whatId: "21 Jul: P-2 → OFF · keperluan keluarga",
-    whatEn: "21 Jul: P-2 → OFF · family matter",
-    whenId: "20 Jul 2026",
-    whenEn: "20 Jul 2026",
-  },
-  {
-    id: "a2",
-    nik: "501230510",
-    name: "Rudi Hartono",
-    status: "pending",
-    whatId: "22 Jul: M-1 → P-1 · tukar shift",
-    whatEn: "22 Jul: M-1 → P-1 · shift swap",
-    whenId: "20 Jul 2026",
-    whenEn: "20 Jul 2026",
-  },
-  {
-    id: "a3",
-    nik: "511190111",
-    name: "Joko Prasetyo",
-    status: "pending",
-    whatId: "23 Jul: P-1 → M-2",
-    whatEn: "23 Jul: P-1 → M-2",
-    whenId: "20 Jul 2026",
-    whenEn: "20 Jul 2026",
-  },
-  {
-    id: "a4",
-    nik: "508210388",
-    name: "Andi Wijaya",
-    status: "approved",
-    whatId: "19 Jul: OFF → P-2 · lembur",
-    whatEn: "19 Jul: OFF → P-2 · overtime",
-    whenId: "18 Jul 2026",
-    whenEn: "18 Jul 2026",
-    byId: "Disetujui · 19 Jul",
-    byEn: "Approved · 19 Jul",
-  },
-  {
-    id: "a5",
-    nik: "509220290",
-    name: "Dewi Anggraini",
-    status: "rejected",
-    whatId: "20 Jul: P-1 → OFF",
-    whatEn: "20 Jul: P-1 → OFF",
-    whenId: "18 Jul 2026",
-    whenEn: "18 Jul 2026",
-    byId: "Ditolak · kuota shift",
-    byEn: "Rejected · shift quota",
-  },
-];
-
+/**
+ * The approval queue.
+ *
+ * Every decision is a request, and the answer is a refetch rather than a local
+ * `setState` — which matters more here than on most screens, because approving
+ * writes a roster day and two approvers can reach for the same entry. A stale
+ * entry comes back 409 naming both codes (API design D10), and the queue is
+ * reloaded so the operator sees what the day now says.
+ */
 export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
-  const en = lang === "en";
+  const queryClient = useQueryClient();
   const canW = mode === "manage";
 
-  const [rows, setRows] = React.useState<Row[]>(INITIAL);
   const [filter, setFilter] = React.useState<Filter>("pending");
   const [q, setQ] = React.useState("");
-  const [noteFor, setNoteFor] = React.useState<string | null>(null);
+  const [noteFor, setNoteFor] = React.useState<RosterRevisionItemRow | null>(
+    null
+  );
   const [note, setNote] = React.useState("");
-  const [noFor, setNoFor] = React.useState<string | null>(null);
+  const [noFor, setNoFor] = React.useState<RosterRevisionItemRow | null>(null);
   const [reason, setReason] = React.useState("");
 
-  const stLabel = (s: Status) =>
+  const queueQ = useQuery(
+    rosterQueueQueryOptions({
+      status: filter,
+      ...(q.trim() ? { q: q.trim() } : {}),
+    })
+  );
+  // Only the current segment is loaded, so the pending badge needs its own
+  // count rather than being derived from the rows on screen.
+  const pendingQ = useQuery(rosterQueueQueryOptions({ status: "pending" }));
+
+  const rows = React.useMemo(() => queueQ.data ?? [], [queueQ.data]);
+  const pg = usePagination(rows);
+  const pendingN = pendingQ.data?.length ?? 0;
+
+  const stLabel = (s: RosterRevisionStatus) =>
     s === "pending"
       ? t.stPending
       : s === "approved"
         ? t.stApproved
         : t.stRejected;
 
-  const pendingN = rows.filter((r) => r.status === "pending").length;
-  const needle = q.trim().toLowerCase();
-  const list = rows
-    .map((r, i) => ({ r, i }))
-    .filter(({ r }) => filter === "all" || r.status === filter)
-    .filter(
-      ({ r }) =>
-        !needle ||
-        r.name.toLowerCase().includes(needle) ||
-        r.nik.toLowerCase().includes(needle) ||
-        (en ? r.whatEn : r.whatId).toLowerCase().includes(needle)
-    );
-  const pg = usePagination(list);
+  const dateLabel = (iso: string) =>
+    new Date(iso).toLocaleDateString(lang === "en" ? "en-GB" : "id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 
-  /* keputusan lokal — status + jejak pengesah berubah di state */
-  function decide(id: string | null, ok: boolean, extra?: string) {
-    if (!id) return;
-    const r = rows.find((row) => row.id === id);
-    if (!r) return;
-    const by = ok
-      ? {
-          byId: `Disetujui · ${extra ?? "tanpa catatan"}`,
-          byEn: `Approved · ${extra ?? "no note"}`,
-        }
-      : { byId: `Ditolak · ${extra}`, byEn: `Rejected · ${extra}` };
-    setRows((prev) =>
-      prev.map((row) =>
-        row.id === id
-          ? { ...row, status: ok ? "approved" : "rejected", ...by }
-          : row
-      )
+  const refresh = React.useCallback(
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["roster-approval-queue"] }),
+        queryClient.invalidateQueries({ queryKey: ["roster-revisions"] }),
+        // Approving rewrote a roster day; anything reading the roster has to
+        // hear about it, which is the whole point of deciding here.
+        queryClient.invalidateQueries({ queryKey: ["roster-days"] }),
+        queryClient.invalidateQueries({ queryKey: ["roster-in-force"] }),
+      ]),
+    [queryClient]
+  );
+
+  /** Both refusals worth naming: a day that moved, and a document that froze. */
+  function reportFailure(error: unknown) {
+    const code = errorCode(error);
+    if (code === "stale_revision") {
+      const value = (error as { value?: Record<string, unknown> }).value ?? {};
+      pushToast(
+        "error",
+        t.apStaleT,
+        `${String(value.recordedCode ?? "?")} → ${String(value.currentCode ?? "?")} · ${errorMessage(error, "")}`
+      );
+      return;
+    }
+    pushToast(
+      "error",
+      code === "document_archived" ? t.apFrozen : t.apDecideErrT,
+      errorMessage(error, t.rvLoadErr)
     );
-    const what = (en ? r.whatEn : r.whatId).split(" · ")[0];
-    if (ok) pushToast("success", t.toastOkT, `${r.name} — ${what}.`);
-    else pushToast("info", t.toastNoT, `${r.name} — ${t.toastNoD}`);
   }
 
-  const noteRow =
-    noteFor !== null ? rows.find((r) => r.id === noteFor) : undefined;
-  const noRow = noFor !== null ? rows.find((r) => r.id === noFor) : undefined;
+  const approveM = useMutation({
+    mutationFn: async (input: { id: string; note?: string }) => {
+      const { data, error } = await api.v1["roster-revisions"]
+        .items({ id: input.id })
+        .approve.post({ note: input.note ?? "" });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (item) => {
+      await refresh();
+      pushToast(
+        "success",
+        t.toastOkT,
+        `${item.employeeName} — ${item.date}: ${item.fromCode} → ${item.toCode}`
+      );
+    },
+    // Refreshed on failure too: a 409 means this screen is showing something
+    // that is no longer true, and leaving it up invites the same click again.
+    onError: async (error) => {
+      reportFailure(error);
+      await refresh();
+    },
+  });
+
+  const rejectM = useMutation({
+    mutationFn: async (input: { id: string; reason: string }) => {
+      const { data, error } = await api.v1["roster-revisions"]
+        .items({ id: input.id })
+        .reject.post({ reason: input.reason });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (item) => {
+      await refresh();
+      pushToast("info", t.toastNoT, `${item.employeeName} — ${t.toastNoD}`);
+    },
+    onError: async (error) => {
+      reportFailure(error);
+      await refresh();
+    },
+  });
+
+  const busy = approveM.isPending || rejectM.isPending;
 
   const segs: { f: Filter; label: React.ReactNode }[] = [
     {
@@ -191,7 +195,6 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
     },
     { f: "approved", label: t.segApproved },
     { f: "rejected", label: t.segRejected },
-    { f: "all", label: t.segAll },
   ];
 
   return (
@@ -209,7 +212,7 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <Segmented role="group" aria-label="Filter status">
+            <Segmented role="group" aria-label={t.allStatus}>
               {segs.map((s) => (
                 <SegmentedButton
                   key={s.f}
@@ -223,7 +226,9 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
           </ToolbarGroup>
         </Toolbar>
 
-        {list.length ? (
+        {queueQ.isPending ? (
+          <TableSkeleton rows={6} />
+        ) : pg.rows.length ? (
           <Table>
             <TableHeader>
               <tr>
@@ -236,17 +241,29 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
               </tr>
             </TableHeader>
             <TableBody>
-              {pg.rows.map(({ r, i }) => (
-                <TableRow key={i}>
-                  <TableCell className="font-semibold">{r.name}</TableCell>
+              {pg.rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-semibold">
+                    {r.employeeName}
+                  </TableCell>
                   <TableCell className="font-mono text-(--text-secondary) tabular-nums">
                     {r.nik}
                   </TableCell>
                   <TableCell className="max-w-[360px]">
-                    {en ? r.whatEn : r.whatId}
+                    <span className="font-mono">{r.revisionCode}</span> ·{" "}
+                    <span className="font-mono">{r.date}</span>:{" "}
+                    <span className="font-mono">{r.fromCode}</span> →{" "}
+                    <span className="font-mono">{r.toCode}</span>
+                    {r.startTime ? ` (${r.startTime}–${r.endTime ?? "…"})` : ""}
+                    <div className="mt-0.5 text-xs text-(--text-tertiary)">
+                      {r.reason}
+                    </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-(--text-secondary)">
-                    {en ? r.whenEn : r.whenId}
+                    {dateLabel(r.submittedAt)}
+                    <div className="text-xs text-(--text-tertiary)">
+                      {r.submittedByName}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant={stBadge[r.status]} dot>
@@ -254,17 +271,22 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {r.status === "pending" && canW ? (
+                    {r.decidable && canW ? (
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => decide(r.id, true)}>
+                        <Button
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => approveM.mutate({ id: r.id })}
+                        >
                           {t.btnOk}
                         </Button>
                         <Button
                           variant="secondary"
                           size="sm"
+                          disabled={busy}
                           onClick={() => {
                             setNote("");
-                            setNoteFor(r.id);
+                            setNoteFor(r);
                           }}
                         >
                           {t.btnNote}
@@ -272,9 +294,10 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
                         <Button
                           variant="destructive"
                           size="sm"
+                          disabled={busy}
                           onClick={() => {
                             setReason("");
-                            setNoFor(r.id);
+                            setNoFor(r);
                           }}
                         >
                           {t.btnNo}
@@ -282,7 +305,14 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
                       </div>
                     ) : (
                       <span className="text-xs text-(--text-tertiary)">
-                        {en ? r.byEn : r.byId}
+                        {/* Both accounts are shown, deliberately: an approver
+                            may decide its own submission (API design D18), and
+                            visibility is what replaces the refusal. */}
+                        {r.decidedByName
+                          ? `${t.rvDecidedBy} ${r.decidedByName}${
+                              r.decidedAt ? ` · ${dateLabel(r.decidedAt)}` : ""
+                            }${r.decisionNote ? ` · ${r.decisionNote}` : ""}`
+                          : t.apFrozen}
                       </span>
                     )}
                   </TableCell>
@@ -293,9 +323,23 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
         ) : (
           <StateBox
             icon={<CheckCircle2 className="text-(--badge-success-text)" />}
-            title={t.apEmptyT}
-            body={t.apEmptyB}
-          />
+            title={queueQ.isError ? t.rvLoadErr : t.apEmptyT}
+            body={
+              queueQ.isError
+                ? errorMessage(queueQ.error, t.rvLoadErr)
+                : t.apEmptyB
+            }
+          >
+            {queueQ.isError ? (
+              <Button
+                variant="secondary"
+                className="mx-auto"
+                onClick={() => void queueQ.refetch()}
+              >
+                {t.rdRetry}
+              </Button>
+            ) : null}
+          </StateBox>
         )}
 
         <PanelFoot>
@@ -323,7 +367,7 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
           <PenLine />
         </DialogIcon>
         <DialogTitle id="note-t">
-          {t.noteDlgT1} {noteRow?.name} {t.noteDlgT2}
+          {t.noteDlgT1} {noteFor?.employeeName} {t.noteDlgT2}
         </DialogTitle>
         <DialogBody>{t.noteDlgB}</DialogBody>
         <Field label={t.lblNote} htmlFor="ap-note" className="mt-4">
@@ -339,8 +383,10 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
             {t.btnCancel}
           </Button>
           <Button
+            disabled={busy}
             onClick={() => {
-              decide(noteFor, true, note.trim() || undefined);
+              if (noteFor)
+                approveM.mutate({ id: noteFor.id, note: note.trim() });
               setNoteFor(null);
             }}
           >
@@ -358,7 +404,7 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
           <TriangleAlert />
         </DialogIcon>
         <DialogTitle id="no-t">
-          {t.noDlgT1} {noRow?.name}?
+          {t.noDlgT1} {noFor?.employeeName}?
         </DialogTitle>
         <DialogBody>{t.noDlgB}</DialogBody>
         <Field
@@ -379,11 +425,14 @@ export function RosterApprovalMenu({ mode }: { mode: AccessMode }) {
           <Button variant="ghost" onClick={() => setNoFor(null)}>
             {t.btnCancel}
           </Button>
+          {/* Disabled until there is a reason — and refused by the API without
+              one regardless, because a disabled button is not a boundary. */}
           <Button
             variant="destructive"
-            disabled={!reason.trim()}
+            disabled={!reason.trim() || busy}
             onClick={() => {
-              decide(noFor, false, reason.trim());
+              if (noFor)
+                rejectM.mutate({ id: noFor.id, reason: reason.trim() });
               setNoFor(null);
             }}
           >

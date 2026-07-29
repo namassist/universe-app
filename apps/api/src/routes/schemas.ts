@@ -22,6 +22,10 @@ import {
   MASTER_KINDS,
   MCU_RESULTS,
   MENU_SLUGS,
+  ROSTER_CODE_KINDS,
+  ROSTER_CODES,
+  ROSTER_DOCUMENT_STATUSES,
+  ROSTER_REVISION_STATUSES,
   RUNTEXT_COLORS,
   SCOPES,
   TIMELINE_ACTIONS,
@@ -39,6 +43,10 @@ export const TimelineActionSchema = t.UnionEnum(TIMELINE_ACTIONS);
 export const EmployeeStatusSchema = t.UnionEnum(EMPLOYEE_STATUSES);
 export const McuResultSchema = t.UnionEnum(MCU_RESULTS);
 export const BloodTypeSchema = t.UnionEnum(BLOOD_TYPES);
+export const RosterCodeSchema = t.UnionEnum(ROSTER_CODES);
+export const RosterCodeKindSchema = t.UnionEnum(ROSTER_CODE_KINDS);
+export const RosterDocumentStatusSchema = t.UnionEnum(ROSTER_DOCUMENT_STATUSES);
+export const RosterRevisionStatusSchema = t.UnionEnum(ROSTER_REVISION_STATUSES);
 
 /* --------------------------------------------------------- optional enums */
 
@@ -103,6 +111,55 @@ const BloodTypeUnion = t.Union([
   t.Literal("O"),
 ]);
 
+const RosterDocumentStatusUnion = t.Union([
+  t.Literal("aktif"),
+  t.Literal("arsip"),
+]);
+
+const RosterRevisionStatusUnion = t.Union([
+  t.Literal("pending"),
+  t.Literal("approved"),
+  t.Literal("rejected"),
+]);
+
+/**
+ * Twenty-eight literals rather than `t.UnionEnum(ROSTER_CODES)`, for the reason
+ * at the top of this block: as an *optional* query filter, `UnionEnum` would
+ * inject `"D"` when the caller sent no code at all — silently turning "every
+ * code" into "day shift only", which is a filtered answer that looks like a
+ * complete one. The assertion below fails the build if the list drifts.
+ */
+const RosterCodeUnion = t.Union([
+  t.Literal("D"),
+  t.Literal("N"),
+  t.Literal("R"),
+  t.Literal("STB"),
+  t.Literal("OFF"),
+  t.Literal("CR"),
+  t.Literal("AL"),
+  t.Literal("LWP"),
+  t.Literal("LWOP"),
+  t.Literal("PH"),
+  t.Literal("PHD"),
+  t.Literal("S"),
+  t.Literal("A"),
+  t.Literal("MCU"),
+  t.Literal("MCR"),
+  t.Literal("MCUF"),
+  t.Literal("ISM"),
+  t.Literal("OBC"),
+  t.Literal("KRT"),
+  t.Literal("TGS"),
+  t.Literal("DNS"),
+  t.Literal("TRV"),
+  t.Literal("TR"),
+  t.Literal("TRS"),
+  t.Literal("IN"),
+  t.Literal("TERM"),
+  t.Literal("EOC"),
+  t.Literal("RSG"),
+]);
+
 type IsExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Assert<T extends true> = T;
 
@@ -139,6 +196,21 @@ type _McuResultInSync = Assert<
 type _BloodTypeInSync = Assert<
   IsExact<(typeof BloodTypeUnion)["static"], (typeof BLOOD_TYPES)[number]>
 >;
+type _RosterCodeInSync = Assert<
+  IsExact<(typeof RosterCodeUnion)["static"], (typeof ROSTER_CODES)[number]>
+>;
+type _RosterDocumentStatusInSync = Assert<
+  IsExact<
+    (typeof RosterDocumentStatusUnion)["static"],
+    (typeof ROSTER_DOCUMENT_STATUSES)[number]
+  >
+>;
+type _RosterRevisionStatusInSync = Assert<
+  IsExact<
+    (typeof RosterRevisionStatusUnion)["static"],
+    (typeof ROSTER_REVISION_STATUSES)[number]
+  >
+>;
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
 export const OptionalScopeSchema = t.Optional(ScopeUnion);
@@ -150,6 +222,13 @@ export const OptionalEmployeeStatusSchema = t.Optional(EmployeeStatusUnion);
 /** Nullable as well as optional: absent leaves it, `null` clears it. */
 export const OptionalMcuResultSchema = t.Optional(t.Nullable(McuResultUnion));
 export const OptionalBloodTypeSchema = t.Optional(t.Nullable(BloodTypeUnion));
+export const OptionalRosterCodeSchema = t.Optional(RosterCodeUnion);
+export const OptionalRosterDocumentStatusSchema = t.Optional(
+  RosterDocumentStatusUnion
+);
+export const OptionalRosterRevisionStatusSchema = t.Optional(
+  RosterRevisionStatusUnion
+);
 
 export const ErrorSchema = t.Object({
   code: t.String(),
@@ -373,13 +452,52 @@ export const MasterWorkAreaSchema = t.Object({
   createdAt: t.String(),
 });
 
+/** A company: described, plus the short code the site refers to it by. */
+export const MasterCompanySchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  code: t.String(),
+  description: t.String(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/** A department, which belongs to exactly one company. */
+export const MasterDepartmentSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  companyId: t.String(),
+  description: t.String(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/** A position, which belongs to exactly one department. */
+export const MasterPositionSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  departmentId: t.String(),
+  description: t.String(),
+  /** Whether someone in this position is allocated a unit. */
+  fleetAllocation: t.Boolean(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
 /**
  * Order is load-bearing: a union is checked variant by variant, and every
  * work-area row also satisfies the name-only shape (extra members are allowed).
  * Most specific first, or a described row validates as a bare name and its
  * `description` is normalised away before it reaches the client.
+ *
+ * The three owned shapes lead for the same reason — a department row also
+ * satisfies `MasterDescribedSchema`, and matching that first would strip the
+ * `companyId` the screen groups by before the client ever saw it.
  */
 export const MasterRecordSchema = t.Union([
+  MasterCompanySchema,
+  MasterDepartmentSchema,
+  MasterPositionSchema,
   MasterWorkAreaSchema,
   MasterDescribedSchema,
   MasterNameSchema,
@@ -595,4 +713,211 @@ export const DeviceSchema = t.Object({
   /** Human label derived from lastSeenAt — "baru saja", "6m lalu". */
   lastSeenLabel: t.String(),
   createdAt: t.String(),
+});
+
+/* ---------------------------------------------------------------- roster */
+
+/**
+ * One monthly upload, with its department and uploader resolved — the same
+ * key-and-name bargain `UnitSchema` and `EmployeeSchema` strike.
+ *
+ * `employeeCount` and `dayCount` are aggregates rather than stored columns: the
+ * list shows both, and a stored counter is a number that can be wrong. `month`
+ * is the ISO date of the first of the month, which is how it is stored and
+ * compared.
+ */
+export const RosterDocumentSchema = t.Object({
+  id: t.String(),
+  departmentId: t.String(),
+  departmentName: t.String(),
+  /** ISO `YYYY-MM-01` — the first of the month the document covers. */
+  month: t.String(),
+  fileName: t.String(),
+  uploadedById: t.String(),
+  uploadedByName: t.String(),
+  status: RosterDocumentStatusSchema,
+  /** How many distinct people the document rosters. */
+  employeeCount: t.Integer(),
+  /** How many daily rows it holds in total. */
+  dayCount: t.Integer(),
+  createdAt: t.String(),
+});
+
+/**
+ * One person's row in a document's grid.
+ *
+ * `codes` is positional — aligned to the `days` of the page envelope — rather
+ * than a list of `{date, code}` pairs, because the grid is a fixed set of
+ * columns and repeating the date on all 62,000 cells of a month would roughly
+ * double the payload the pagination in D8 exists to bound. `null` is a day the
+ * document carries no row for, which validation prevents on import but an
+ * older document could still hold.
+ */
+export const RosterGridRowSchema = t.Object({
+  employeeId: t.String(),
+  nik: t.String(),
+  name: t.String(),
+  codes: t.Array(t.Nullable(RosterCodeSchema)),
+});
+
+/**
+ * A page of the grid (design D8).
+ *
+ * Paginated by *employee*, never by cell: a row split across two pages is not a
+ * row. `total` counts the people in the document, so the client can size the
+ * pager without holding the month.
+ */
+export const RosterGridSchema = t.Object({
+  /** The document's dates in order — the grid's columns. */
+  days: t.Array(t.String()),
+  rows: t.Array(RosterGridRowSchema),
+  total: t.Integer(),
+  page: t.Integer(),
+  pageSize: t.Integer(),
+});
+
+/**
+ * The roster in force for one date — the shape the allocation engine reads.
+ *
+ * `kind` is resolved from the code on the way out and never stored (D2), so a
+ * row cannot disagree with the classification.
+ */
+export const RosterInForceSchema = t.Object({
+  employeeId: t.String(),
+  nik: t.String(),
+  name: t.String(),
+  departmentId: t.String(),
+  code: RosterCodeSchema,
+  kind: RosterCodeKindSchema,
+});
+
+/* ------------------------------------------------------------- roster import */
+
+/**
+ * The roster preview: the master import's shape, plus the handle its size
+ * forces (design D8).
+ *
+ * `errors` and `warnings` come back whole — they are small, and they are the
+ * part an operator actually reads. `rows` is one page of the accepted grid;
+ * `token` fetches the rest, and `rowTotal` is how many there are so the pager
+ * can be drawn without holding the month.
+ */
+export const RosterImportPreviewSchema = t.Object({
+  fileName: t.String(),
+  newCount: t.Integer(),
+  updatedCount: t.Integer(),
+  unchangedCount: t.Integer(),
+  /** Blocking only — remarks are counted by `warnings.length`. */
+  errorCount: t.Integer(),
+  rows: t.Array(MasterImportPreviewRowSchema),
+  errors: t.Array(ImportErrorSchema),
+  warnings: t.Array(ImportErrorSchema),
+  /** Always empty: the roster's one reference is stated, never read from file. */
+  newMasters: t.Array(PendingMasterSchema),
+  /**
+   * Handle for the pages after the first. Null when the file could not be
+   * staged — the preview is still correct, it simply cannot be paged, and the
+   * commit is unaffected because it re-parses the file the client sends.
+   */
+  token: t.Nullable(t.String()),
+  rowTotal: t.Integer(),
+  page: t.Integer(),
+  pageSize: t.Integer(),
+});
+
+/** One more page of an existing preview's accepted rows. */
+export const RosterImportRowsSchema = t.Object({
+  rows: t.Array(MasterImportPreviewRowSchema),
+  rowTotal: t.Integer(),
+  page: t.Integer(),
+  pageSize: t.Integer(),
+});
+
+/**
+ * What a commit did.
+ *
+ * The master result's three members are kept so the shared results panel reads
+ * it unchanged, and four roster-specific ones are added because they are the
+ * questions this import raises and no other does: which document is now in
+ * force, which one it displaced, and how many pending revisions went down with
+ * it (design D12).
+ */
+export const RosterImportResultSchema = t.Object({
+  created: t.Integer(),
+  updated: t.Integer(),
+  mastersCreated: t.Integer(),
+  documentId: t.String(),
+  archivedDocumentId: t.Nullable(t.String()),
+  rejectedRevisions: t.Integer(),
+  employeeCount: t.Integer(),
+});
+
+/* ------------------------------------------------------------ roster revision */
+
+/**
+ * One requested change, with its decision if it has one.
+ *
+ * `submittedBy` rides on the entry as well as the submission so a queue row
+ * carries both accounts: an approver deciding its own submission is permitted
+ * (design D18), and the only thing that makes it auditable is that both names
+ * come back together.
+ */
+export const RosterRevisionItemSchema = t.Object({
+  id: t.String(),
+  revisionId: t.String(),
+  /** The readable submission identifier — `REV-0001`. */
+  revisionCode: t.String(),
+  documentId: t.String(),
+  employeeId: t.String(),
+  nik: t.String(),
+  employeeName: t.String(),
+  departmentId: t.String(),
+  departmentName: t.String(),
+  date: t.String(),
+  fromCode: RosterCodeSchema,
+  toCode: RosterCodeSchema,
+  /** "HH:MM", and only where the submitter asked for a partial day. */
+  startTime: t.Nullable(t.String()),
+  endTime: t.Nullable(t.String()),
+  reason: t.String(),
+  status: RosterRevisionStatusSchema,
+  submittedById: t.String(),
+  submittedByName: t.String(),
+  submittedAt: t.String(),
+  decidedById: t.Nullable(t.String()),
+  decidedByName: t.Nullable(t.String()),
+  decidedAt: t.Nullable(t.String()),
+  /** The rejection's reason, or the approval's optional note. */
+  decisionNote: t.String(),
+  /** False once the document it belongs to has been archived (design D12). */
+  decidable: t.Boolean(),
+});
+
+/** A submission and its entries. Status lives on the entries, never here. */
+export const RosterRevisionSchema = t.Object({
+  id: t.String(),
+  code: t.String(),
+  documentId: t.String(),
+  documentMonth: t.String(),
+  documentStatus: RosterDocumentStatusSchema,
+  departmentId: t.String(),
+  departmentName: t.String(),
+  submittedById: t.String(),
+  submittedByName: t.String(),
+  submittedAt: t.String(),
+  items: t.Array(RosterRevisionItemSchema),
+});
+
+/**
+ * A decision refused because the day moved under the entry (design D10).
+ *
+ * Names both codes rather than saying "stale": the approver has to decide
+ * whether the change still makes sense against what the day now says, and
+ * cannot do that from the fact that it changed.
+ */
+export const RosterConflictSchema = t.Object({
+  code: t.String(),
+  message: t.String(),
+  recordedCode: RosterCodeSchema,
+  currentCode: RosterCodeSchema,
 });

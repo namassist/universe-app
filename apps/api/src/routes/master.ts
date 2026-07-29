@@ -21,6 +21,7 @@ import { asc, eq, inArray, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import {
+  MASTER_IMPORT_PARENT_COLUMNS,
   MASTER_KINDS,
   type AccessMode,
   type EffectivePermissions,
@@ -44,6 +45,7 @@ import {
   readWorkbook,
   validateWorkbook,
   type CatalogueExisting,
+  type CatalogueShape,
 } from "./master-import";
 import {
   ErrorSchema,
@@ -83,10 +85,37 @@ const MASTER_MENUS: MenuSlug[] = MASTER_KINDS.map((k) => MENU_OF_KIND[k]);
 /** One referrer's contribution, so a refusal can say what is holding the row. */
 type ReferenceCount = { label: string; count: number };
 
+/**
+ * What a catalogue hangs off, for the two that hang off something.
+ *
+ * Departments belong to a company and positions to a department, which makes
+ * `(parent, name)` their identity rather than `name` — `MINING OPERATION` names
+ * two departments and `ADMIN` names fourteen positions. Everything here follows
+ * from that: the parent is required on create, validated against the parent
+ * table, projected onto the wire so a screen can group by it, and **not**
+ * editable afterwards. Moving a department between companies would move every
+ * employee in it to a company nobody chose, which is a migration and not a
+ * field edit.
+ */
+type ParentConfig = {
+  /** What the field is called on the wire. */
+  field: "companyId" | "departmentId";
+  column: AnyPgColumn;
+  /** The catalogue it points at, so an unknown id can be refused by name. */
+  table: NamedCatalogue;
+  label: string;
+};
+
 type KindConfig = {
   table: NamedCatalogue;
   /** Which optional column this catalogue carries, if any. */
   extra: "none" | "description" | "type";
+  /** Companies carry a short code beside their name — `UDU`, `RBS`. */
+  hasCode?: boolean;
+  /** Positions carry whether the allocation engine may draw from them. */
+  hasFleetFlag?: boolean;
+  /** Set where this catalogue is owned by another one. */
+  parent?: ParentConfig;
   /**
    * What points at this record, counted per referrer.
    *
@@ -179,9 +208,20 @@ const KIND_TABLES: Record<MasterKind, KindConfig> = {
   departemen: {
     table: schema.departments,
     extra: "description",
+    parent: {
+      field: "companyId",
+      column: schema.departments.companyId,
+      table: schema.companies,
+      label: "Perusahaan",
+    },
     countReferences: referencedBy(
       byUnits(schema.units.departmentId),
-      byEmployees(schema.employees.departmentId)
+      byEmployees(schema.employees.departmentId),
+      {
+        label: "jabatan",
+        table: schema.positions,
+        column: schema.positions.departmentId,
+      }
     ),
   },
   "area-kerja": {
@@ -197,11 +237,23 @@ const KIND_TABLES: Record<MasterKind, KindConfig> = {
   perusahaan: {
     table: schema.companies,
     extra: "description",
-    countReferences: referencedBy(byEmployees(schema.employees.companyId)),
+    hasCode: true,
+    countReferences: referencedBy(byEmployees(schema.employees.companyId), {
+      label: "departemen",
+      table: schema.departments,
+      column: schema.departments.companyId,
+    }),
   },
   jabatan: {
     table: schema.positions,
     extra: "description",
+    hasFleetFlag: true,
+    parent: {
+      field: "departmentId",
+      column: schema.positions.departmentId,
+      table: schema.departments,
+      label: "Departemen",
+    },
     countReferences: referencedBy(byEmployees(schema.employees.positionId)),
   },
 };
@@ -251,6 +303,17 @@ function projection(config: KindConfig): Record<string, AnyPgColumn> {
     active: table.active,
     createdAt: table.createdAt,
     ...extras,
+    ...(config.hasCode
+      ? { code: (table as unknown as { code: AnyPgColumn }).code }
+      : {}),
+    ...(config.hasFleetFlag
+      ? {
+          fleetAllocation: (
+            table as unknown as { fleetAllocation: AnyPgColumn }
+          ).fleetAllocation,
+        }
+      : {}),
+    ...(config.parent ? { [config.parent.field]: config.parent.column } : {}),
   };
 }
 
@@ -261,6 +324,10 @@ type CatalogueRow = {
   createdAt: Date;
   description?: string;
   type?: string;
+  code?: string;
+  fleetAllocation?: boolean;
+  companyId?: string;
+  departmentId?: string;
 };
 
 type MasterRecord = (typeof MasterRecordSchema)["static"];
@@ -273,7 +340,28 @@ function toRecord(row: CatalogueRow): MasterRecord {
     createdAt: row.createdAt.toISOString(),
     ...(row.description !== undefined ? { description: row.description } : {}),
     ...(row.type !== undefined ? { type: row.type } : {}),
+    ...(row.code !== undefined ? { code: row.code } : {}),
+    ...(row.fleetAllocation !== undefined
+      ? { fleetAllocation: row.fleetAllocation }
+      : {}),
+    ...(row.companyId !== undefined ? { companyId: row.companyId } : {}),
+    ...(row.departmentId !== undefined
+      ? { departmentId: row.departmentId }
+      : {}),
   } as MasterRecord;
+}
+
+/** Whether the id a create names actually exists in the parent catalogue. */
+async function parentExists(
+  parent: ParentConfig,
+  id: string
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: parent.table.id })
+    .from(parent.table)
+    .where(eq(parent.table.id, id))
+    .limit(1);
+  return Boolean(row);
 }
 
 /** `manage` satisfies `view`; `view` never satisfies `manage`. */
@@ -289,27 +377,129 @@ function holds(
 
 /* --------------------------------------------------------- import / export */
 
+/**
+ * The owner names of every row of an owned catalogue, keyed by row id.
+ *
+ * Read separately rather than folded into `projection`, because the projection
+ * is what the *wire* carries — a screen wants the company's id to group by, an
+ * exported spreadsheet wants its name to be re-importable, and the two are not
+ * the same value.
+ */
+async function cataloguePaths(
+  kind: MasterKind
+): Promise<Map<string, string[]>> {
+  if (kind === "departemen") {
+    const rows = await db
+      .select({ id: schema.departments.id, company: schema.companies.name })
+      .from(schema.departments)
+      .innerJoin(
+        schema.companies,
+        eq(schema.companies.id, schema.departments.companyId)
+      );
+    return new Map(rows.map((r) => [r.id, [r.company]]));
+  }
+  if (kind === "jabatan") {
+    const rows = await db
+      .select({
+        id: schema.positions.id,
+        department: schema.departments.name,
+        company: schema.companies.name,
+      })
+      .from(schema.positions)
+      .innerJoin(
+        schema.departments,
+        eq(schema.departments.id, schema.positions.departmentId)
+      )
+      .innerJoin(
+        schema.companies,
+        eq(schema.companies.id, schema.departments.companyId)
+      );
+    return new Map(rows.map((r) => [r.id, [r.company, r.department]]));
+  }
+  return new Map();
+}
+
+/**
+ * Owner path (lowercased, joined) → owner id, for the kinds that have one.
+ *
+ * This is the direction the import needs: a sheet names a company, and the
+ * insert needs its uuid.
+ */
+async function catalogueParents(kind: MasterKind): Promise<CatalogueShape> {
+  if (kind === "perusahaan") return { hasCode: true };
+  if (kind === "departemen") {
+    const rows = await db
+      .select({ id: schema.companies.id, name: schema.companies.name })
+      .from(schema.companies);
+    return {
+      parent: {
+        columns: MASTER_IMPORT_PARENT_COLUMNS.departemen!,
+        byPath: new Map(rows.map((r) => [r.name.toLowerCase(), r.id])),
+        label: "Perusahaan",
+      },
+    };
+  }
+  if (kind === "jabatan") {
+    const rows = await db
+      .select({
+        id: schema.departments.id,
+        name: schema.departments.name,
+        company: schema.companies.name,
+      })
+      .from(schema.departments)
+      .innerJoin(
+        schema.companies,
+        eq(schema.companies.id, schema.departments.companyId)
+      );
+    return {
+      hasFleetFlag: true,
+      parent: {
+        columns: MASTER_IMPORT_PARENT_COLUMNS.jabatan!,
+        byPath: new Map(
+          rows.map((r) => [`${r.company}|${r.name}`.toLowerCase(), r.id])
+        ),
+        label: "Departemen",
+      },
+    };
+  }
+  return {};
+}
+
 /** Every row of a catalogue, in the shape the import engine compares against. */
-async function catalogueRows(config: KindConfig): Promise<CatalogueExisting[]> {
+async function catalogueRows(
+  kind: MasterKind,
+  config: KindConfig
+): Promise<CatalogueExisting[]> {
   const rows = (await db
     .select(projection(config))
     .from(config.table)
     .orderBy(asc(config.table.name))) as CatalogueRow[];
+  const paths = await cataloguePaths(kind);
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     description: r.description,
     type: r.type,
+    code: r.code,
+    fleetAllocation: r.fleetAllocation,
+    path: paths.get(r.id),
     active: r.active,
   }));
 }
 
-/** Keyed lowercase, which is the comparison the `lower(name)` index enforces. */
+/**
+ * Keyed lowercase, which is the comparison the unique index enforces — and
+ * qualified by the owner where that index is, so the two `MINING OPERATION`s
+ * are two entries rather than one that overwrites the other.
+ */
 async function catalogueMap(
+  kind: MasterKind,
   config: KindConfig
 ): Promise<Map<string, CatalogueExisting>> {
-  const rows = await catalogueRows(config);
-  return new Map(rows.map((r) => [r.name.toLowerCase(), r]));
+  const rows = await catalogueRows(kind, config);
+  return new Map(
+    rows.map((r) => [[...(r.path ?? []), r.name].join("|").toLowerCase(), r])
+  );
 }
 
 async function previewCatalogue(kind: MasterKind, file: File) {
@@ -318,7 +508,12 @@ async function previewCatalogue(kind: MasterKind, file: File) {
   const config = KIND_TABLES[kind];
   return validateWorkbook(
     file.name,
-    catalogueTarget(kind, config.extra, await catalogueMap(config)),
+    catalogueTarget(
+      kind,
+      config.extra,
+      await catalogueMap(kind, config),
+      await catalogueParents(kind)
+    ),
     workbook
   );
 }
@@ -394,6 +589,32 @@ export const masterRoutes = new Elysia({
           message: "Tipe area wajib diisi",
         });
 
+      const code = body.code?.trim();
+      if (config.hasCode && !code)
+        return status(422, {
+          code: "validation_failed",
+          message: "Kode wajib diisi",
+        });
+
+      // Refused here as well as by the foreign key, because the two answers are
+      // different: the constraint says a write failed, this says which field
+      // the operator has to fix.
+      const parentId = config.parent
+        ? body[config.parent.field]?.trim()
+        : undefined;
+      if (config.parent) {
+        if (!parentId)
+          return status(422, {
+            code: "validation_failed",
+            message: `${config.parent.label} wajib dipilih`,
+          });
+        if (!(await parentExists(config.parent, parentId)))
+          return status(422, {
+            code: "validation_failed",
+            message: `${config.parent.label} yang dipilih tidak ada di master`,
+          });
+      }
+
       try {
         const [row] = (await db
           .insert(config.table)
@@ -404,12 +625,19 @@ export const masterRoutes = new Elysia({
               ? { description: body.description?.trim() ?? "" }
               : {}),
             ...(config.extra === "type" ? { type: body.type } : {}),
+            ...(config.hasCode ? { code } : {}),
+            ...(config.hasFleetFlag
+              ? { fleetAllocation: body.fleetAllocation ?? false }
+              : {}),
+            ...(config.parent ? { [config.parent.field]: parentId } : {}),
           })
           .returning(projection(config))) as CatalogueRow[];
         return status(201, toRecord(row!));
       } catch (error) {
         // The unique index is over lower(name), so this is exactly the
-        // case-insensitive duplicate the catalogue refuses (design D11).
+        // case-insensitive duplicate the catalogue refuses (design D11) — now
+        // scoped to the parent where there is one, so two companies may each
+        // have an `HRM` and neither may have two.
         if (isUniqueViolation(error)) return status(409, duplicate(name));
         throw error;
       }
@@ -422,6 +650,10 @@ export const masterRoutes = new Elysia({
         description: t.Optional(t.String()),
         type: OptionalAreaTypeSchema,
         active: t.Optional(t.Boolean()),
+        code: t.Optional(t.String()),
+        fleetAllocation: t.Optional(t.Boolean()),
+        companyId: t.Optional(t.String({ format: "uuid" })),
+        departmentId: t.Optional(t.String({ format: "uuid" })),
       }),
       response: {
         201: MasterRecordSchema,
@@ -444,7 +676,7 @@ export const masterRoutes = new Elysia({
         return status(403, forbidden(params.kind));
 
       const config = KIND_TABLES[params.kind];
-      const rows = await catalogueRows(config);
+      const rows = await catalogueRows(params.kind, config);
       set.headers["content-type"] =
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
       set.headers["content-disposition"] =
@@ -574,6 +806,18 @@ export const masterRoutes = new Elysia({
               ? { description: row.parsed.description ?? "" }
               : {}),
             ...(config.extra === "type" ? { type: row.parsed.type } : {}),
+            ...(config.hasCode ? { code: row.parsed.code } : {}),
+            ...(config.hasFleetFlag
+              ? { fleetAllocation: row.parsed.fleetAllocation }
+              : {}),
+            // Written on insert only. An import that moved a department to
+            // another company would move everyone in it, which is not
+            // something a spreadsheet should be able to say in passing — the
+            // parser matches on the pair, so a changed owner reads as a new
+            // row rather than as a move.
+            ...(config.parent && !row.current
+              ? { [config.parent.field]: row.parsed.parentId }
+              : {}),
           };
           if (row.current) {
             // An unchanged row is skipped rather than rewritten, which is what
@@ -719,6 +963,17 @@ export const masterRoutes = new Elysia({
             ...(config.extra === "type" && body.type !== undefined
               ? { type: body.type }
               : {}),
+            ...(config.hasCode && body.code !== undefined
+              ? { code: body.code.trim() }
+              : {}),
+            ...(config.hasFleetFlag && body.fleetAllocation !== undefined
+              ? { fleetAllocation: body.fleetAllocation }
+              : {}),
+            // The parent is deliberately absent: see `ParentConfig`. A
+            // department that landed under the wrong company is corrected by
+            // creating the right one and deleting the wrong one, which the
+            // reference check will refuse if anyone is already in it — and
+            // that refusal is the point.
           })
           .where(eq(config.table.id, params.id))
           .returning(projection(config))) as CatalogueRow[];
@@ -740,6 +995,8 @@ export const masterRoutes = new Elysia({
         description: t.Optional(t.String()),
         type: OptionalAreaTypeSchema,
         active: t.Optional(t.Boolean()),
+        code: t.Optional(t.String()),
+        fleetAllocation: t.Optional(t.Boolean()),
       }),
       response: {
         200: MasterRecordSchema,

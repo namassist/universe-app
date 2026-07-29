@@ -33,12 +33,17 @@ import {
   photoUrl,
   type EmployeeRow,
 } from "@/lib/queries/employees";
-import { masterQueryOptions, recordDescription } from "@/lib/queries/master";
+import {
+  masterQueryOptions,
+  recordDescription,
+  recordParentId,
+} from "@/lib/queries/master";
 import {
   decodePhoto,
   EmployeePhotoCrop,
   type CropSource,
 } from "@/components/menus/employee-photo-crop";
+import { useRole } from "@/components/providers/role-context";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -250,6 +255,7 @@ function EmployeeFields({
 }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const { scope, principal } = useRole();
   const queryClient = useQueryClient();
   const router = useRouter();
   const listHref = `/employees`;
@@ -296,6 +302,77 @@ function EmployeeFields({
 
   function up<K extends keyof Fields>(key: K, value: Fields[K]) {
     setF((prev) => ({ ...prev, [key]: value }));
+    setDirty(true);
+  }
+
+  /* ------------------------------------------------- the organisation chain */
+
+  /**
+   * A scoped caller does not choose where the person goes.
+   *
+   * The API resolves the department from that caller's own employee record and
+   * ignores whatever the body carries, so offering the choice here would offer
+   * a decision the server discards. The two fields render read-only instead,
+   * and their value comes from the record being edited or — on a create — from
+   * the caller's own record, which is the only place the client can learn its
+   * own department from.
+   */
+  const scoped = scope !== "all";
+  const ownNik = principal.kind === "user" ? principal.nik : null;
+  const ownQ = useQuery({
+    ...employeeQueryOptions(ownNik ?? ""),
+    enabled: scoped && Boolean(ownNik),
+  });
+
+  const effCompanyId = scoped
+    ? (record?.companyId ?? ownQ.data?.companyId ?? "")
+    : f.companyId;
+  const effDepartmentId = scoped
+    ? (record?.departmentId ?? ownQ.data?.departmentId ?? "")
+    : f.departmentId;
+
+  /**
+   * Only the departments of the chosen company, and only the positions of the
+   * chosen department.
+   *
+   * Filtered here rather than fetched per selection: both lists are small, the
+   * query cache already holds them for every other screen, and a request per
+   * keystroke on a dropdown would be a request to say something the client
+   * already knows.
+   */
+  const departmentOptions = React.useMemo(
+    () =>
+      (departments.data ?? []).filter(
+        (d) => recordParentId(d) === effCompanyId
+      ),
+    [departments.data, effCompanyId]
+  );
+  const positionOptions = React.useMemo(
+    () =>
+      (positions.data ?? []).filter(
+        (p) => recordParentId(p) === effDepartmentId
+      ),
+    [positions.data, effDepartmentId]
+  );
+
+  /**
+   * Changing a link clears what hung off it.
+   *
+   * Leaving the old department selected under a new company would leave a pair
+   * the API refuses, and the refusal would arrive on submit — after the rest of
+   * the form had been filled in.
+   */
+  function pickCompany(companyId: string) {
+    setF((prev) => ({
+      ...prev,
+      companyId,
+      departmentId: "",
+      positionId: "",
+    }));
+    setDirty(true);
+  }
+  function pickDepartment(departmentId: string) {
+    setF((prev) => ({ ...prev, departmentId, positionId: "" }));
     setDirty(true);
   }
 
@@ -400,7 +477,7 @@ function EmployeeFields({
       pushToast("error", t.toastFormErrT, t.toastFormErrD);
       return;
     }
-    if (!f.companyId || !f.positionId || !f.departmentId) {
+    if (!effCompanyId || !f.positionId || !effDepartmentId) {
       pushToast("error", t.toastFormErrT, t.efRefRequired);
       return;
     }
@@ -408,9 +485,12 @@ function EmployeeFields({
     const name = f.nama.trim();
     const body = {
       name,
-      companyId: f.companyId,
+      // Sent even by a scoped caller, whose values these already are: the API
+      // resolves the department from that caller's own record and never reads
+      // the field, so what travels here is what the server would have chosen.
+      companyId: effCompanyId,
       positionId: f.positionId,
-      departmentId: f.departmentId,
+      departmentId: effDepartmentId,
       messId: orNull(f.messId),
       simperTypeId: orNull(f.simperTypeId),
       joinDate: orNull(f.joinDate),
@@ -628,12 +708,23 @@ function EmployeeFields({
                     onChange={(e) => up("nik", e.target.value)}
                   />
                 </Field>
-                {/* A catalogue now, not two hardcoded options (design D5). */}
-                <Field label={t.kCompany} htmlFor="ef-comp" required>
+                {/* A catalogue now, not two hardcoded options (design D5).
+                  The three narrow each other: a department belongs to one
+                  company and a position to one department, so offering all of
+                  them would be offering combinations the API refuses. Changing
+                  the company clears what no longer fits rather than leaving a
+                  stale pair behind that only fails on submit. */}
+                <Field
+                  label={t.kCompany}
+                  htmlFor="ef-comp"
+                  required
+                  helper={scoped ? t.efScopedPlacement : undefined}
+                >
                   <Select
                     id="ef-comp"
-                    value={f.companyId}
-                    onChange={(e) => up("companyId", e.target.value)}
+                    value={effCompanyId}
+                    disabled={scoped}
+                    onChange={(e) => pickCompany(e.target.value)}
                   >
                     <option value="">—</option>
                     {(companies.data ?? []).map((c) => (
@@ -643,14 +734,26 @@ function EmployeeFields({
                     ))}
                   </Select>
                 </Field>
-                <Field label={t.thDept} htmlFor="ef-dept" required>
+                <Field
+                  label={t.thDept}
+                  htmlFor="ef-dept"
+                  required
+                  helper={
+                    scoped
+                      ? t.efScopedPlacement
+                      : effCompanyId
+                        ? undefined
+                        : t.efPickCompanyFirst
+                  }
+                >
                   <Select
                     id="ef-dept"
-                    value={f.departmentId}
-                    onChange={(e) => up("departmentId", e.target.value)}
+                    value={effDepartmentId}
+                    disabled={scoped || !effCompanyId}
+                    onChange={(e) => pickDepartment(e.target.value)}
                   >
                     <option value="">—</option>
-                    {(departments.data ?? []).map((d) => (
+                    {departmentOptions.map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.name}
                       </option>
@@ -660,14 +763,20 @@ function EmployeeFields({
                 {/* Was a free `<Input>`, and its value is used to group and
                   filter — which is exactly what made two spellings of the same
                   job two jobs (design D5). */}
-                <Field label={t.thPos} htmlFor="ef-pos" required>
+                <Field
+                  label={t.thPos}
+                  htmlFor="ef-pos"
+                  required
+                  helper={effDepartmentId ? undefined : t.efPickDeptFirst}
+                >
                   <Select
                     id="ef-pos"
                     value={f.positionId}
+                    disabled={!effDepartmentId}
                     onChange={(e) => up("positionId", e.target.value)}
                   >
                     <option value="">—</option>
-                    {(positions.data ?? []).map((p) => (
+                    {positionOptions.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>

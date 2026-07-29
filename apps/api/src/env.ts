@@ -88,6 +88,17 @@ export const env = {
    *  startup — but writable is not persistent, and no probe can tell the two
    *  apart. */
   PHOTO_DIR: required("PHOTO_DIR", "./storage/photos"),
+
+  /** Where a roster upload waits between its preview and its commit (D8).
+   *
+   *  Explicit like the two above, and the least precious of the three: nothing
+   *  in the database points here, and every file under it is a copy of one the
+   *  operator still has. A roster month is 62,000 cells, far too many to return
+   *  in one preview response, so the pages after the first re-read the file —
+   *  and a file that expired or was never persisted degrades the preview to
+   *  "upload it again", never to a wrong answer, because the commit re-parses
+   *  what the client sends rather than trusting anything stored here. */
+  IMPORT_DIR: required("IMPORT_DIR", "./storage/imports"),
 } as const;
 
 export const isProd = env.NODE_ENV === "production";

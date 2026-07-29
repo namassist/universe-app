@@ -5,6 +5,8 @@ import * as React from "react";
 import { en } from "./en";
 import { id, type Dict } from "./id";
 
+export type { Dict };
+
 export type Lang = "id" | "en";
 
 const dicts: Record<Lang, Dict> = { id, en };

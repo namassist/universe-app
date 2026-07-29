@@ -59,7 +59,7 @@ export async function scopeWhere(
 
     case "dept": {
       if (!principal.nik || !columns.dept) return NOTHING;
-      const departemenId = await departemenIdOf(principal.nik);
+      const departemenId = await departmentIdOfNik(principal.nik);
       // A NIK that matches no employee still yields an empty set rather than
       // everything. That fail-closed posture is unchanged by the employee table
       // landing; what changed is only that some NIKs now resolve.
@@ -82,8 +82,13 @@ export async function scopeWhere(
  * The operational consequence, which belongs in the release notes rather than
  * only here: an `admin` account whose NIK is not in the employee register is
  * still blind. Provisioning order is employees first, accounts second.
+ *
+ * Exported because a scoped *write* needs the same answer as a scoped read: a
+ * roster upload's department is resolved from the caller's own record rather
+ * than read from the request body (roster D6), and resolving it a second way
+ * would be a second thing to keep true.
  */
-async function departemenIdOf(nik: string): Promise<string | null> {
+export async function departmentIdOfNik(nik: string): Promise<string | null> {
   const [row] = await db
     .select({ departmentId: schema.employees.departmentId })
     .from(schema.employees)

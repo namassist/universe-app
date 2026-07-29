@@ -88,6 +88,24 @@ what it may see. `dept` and `self` both resolve through the caller's NIK to its
 employee record, so both require the account to carry one; departemen is
 deliberately not duplicated onto the account.
 
+The organisation those scopes resolve through is a chain, not three lists: a
+**department belongs to one company** and a **position to one department**, and
+each is unique per owner rather than globally. That is what lets two companies
+each run a `MINING OPERATION` and every department have its own `ADMIN` — which
+a flat catalogue cannot express, since the first row to claim a name owns it
+installation-wide. An employee still carries all three keys, and the API checks
+that they describe one place: three ids that each resolve but do not fit
+together is a person who works nowhere, and no foreign key can catch it.
+The owner is set when a record is created and never edited — moving a
+department between companies would move everyone filed under it.
+
+A position also carries **`fleetAllocation`**: whether someone holding it is
+allocated a unit. It sits on the job rather than on the person because that is
+the question it answers — whether an operator is in today's allocation is a
+roster question, but whether a payroll officer could ever be is a property of
+the post. It defaults to false, so a position nobody has classified is left out
+rather than silently offered a dump truck.
+
 Sessions are opaque ids in Redis, delivered as an httpOnly cookie to the web
 app or as an `Authorization: Bearer` header to a mobile client — one session
 store, two transports. Nothing about identity or permissions travels in the
@@ -148,11 +166,11 @@ leave room to grow past it:
   operator waits for a unit assignment.
 
 > Authentication, RBAC, User Management, the master catalogues, the unit
-> registry, the employee register, display content, and the allocation timeline
-> are wired to the API.
+> registry, the employee register, the roster (upload / revision / approval),
+> display content, and the allocation timeline are wired to the API.
 > Still a **static design port** — sample data, no persistence, mutations are
-> toast-only: Dashboard, Roster (upload / revision / approval), Attendance, Fit
-> To Work, Unit Status, Fleet Allocation, and Fleet Setting.
+> toast-only: Dashboard, Attendance, Fit To Work, Unit Status, Fleet Allocation,
+> and Fleet Setting.
 > Those last screens read master data from the API for their dropdowns and
 > filters, so a value added in a master menu appears in them immediately — only
 > their own records are still sample. The allocation engine and the external
@@ -167,6 +185,22 @@ leave room to grow past it:
 > a site: a `dept`-scoped account resolves its department **through** its NIK's
 > employee record, and the account import refuses a NIK the register does not
 > carry — so employees are imported first and accounts second.
+>
+> The roster now answers the first question allocation asks — _who is scheduled
+> for this shift today_ — and adds a third step to that provisioning order:
+> employees, then accounts, then rosters, because every roster row has to find
+> its NIK in the register. A roster is a **monthly document per department**;
+> re-uploading a month archives the previous document rather than overwriting
+> it, so an archived grid still renders exactly as it stood. Its spreadsheet is
+> the first with a width that is not constant —
+> `no | nik | nama | departemen | posisi | 01 Aug 26 … `, decided by the month
+> the operator states rather than by anything in the file. The template is not a
+> blank form: it arrives carrying that department's active employees, so the
+> only thing left to type is the codes.
+> Approving a revision writes the new code straight onto the roster day, which
+> is why the morning query stays one indexed read; the `from → to` chain on the
+> entry is the history. Nothing is seeded: an empty roster is a valid state, and
+> an invented one for two thousand people would be mistaken for real.
 
 ## Getting started
 
@@ -184,9 +218,24 @@ Sign in at http://localhost:3000/login with `SUPERADMIN_IDENTIFIER` and
 `SUPERADMIN_PASSWORD`. The seed is idempotent, so re-running it is safe — it
 recreates the bootstrap account if it is ever lost, and leaves roles an
 administrator has edited alone. Master catalogues are seeded by name and skip
-what already exists; the fifteen sample units and ten sample employees go in
-**only when their table is empty**, so a database that has ever held a real
-unit or a real person can never receive an invented one.
+what already exists; the sample fleet, the sample workforce, and the sample
+accounts go in **only when their table is empty**, so a database that has ever
+held a real unit or a real person can never receive an invented one.
+
+The sample workforce is generated from one tree — two companies, fourteen
+departments, forty-eight positions, a hundred and sixty-eight people. Every
+department gets an `admin` and a `manajer` account, each mining department also
+gets a `self`-scoped `user`, and the two roles that belong to no department —
+`manpower` and `medic` — get one account each, filled from a real post (HRM and
+the site clinic) because a login nobody can look up in the register is not a
+person. Generated but not random: every NIK, name and date is a function of the
+person's index, so two runs produce the same register and a screenshot naming a
+NIK still means something tomorrow.
+
+`db:seed:fresh` empties the workforce, the three owned catalogues, the sample
+fleet and the roster before seeding, keeping only the bootstrap superadmin. It
+is a separate script rather than a flag on `db:seed` because it is the one
+destructive thing here, and it refuses to run with `NODE_ENV=production`.
 
 - Web: http://localhost:3000
 - API: http://localhost:3001/health — reports `database`, `cache`, and both upload directories separately, 503 if any is down

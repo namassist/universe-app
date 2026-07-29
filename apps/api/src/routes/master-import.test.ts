@@ -323,6 +323,205 @@ describe("catalogue import", () => {
   });
 });
 
+/* ------------------------------------------------------- owned catalogues */
+
+/**
+ * Departments and positions are identified by their owner as well as their
+ * name, and the whole point of that is the case a flat catalogue could not
+ * express: the same name under two different owners.
+ */
+describe("a catalogue that belongs to another", () => {
+  const departmentShape = {
+    parent: {
+      columns: ["perusahaan"] as const,
+      byPath: new Map([
+        ["pt unggul dinamika utama", "k1"],
+        ["pt rezeki borneo sebuku", "k2"],
+      ]),
+      label: "Perusahaan",
+    },
+  };
+
+  /** One `MINING OPERATION` per company — the pair a flat key would collapse. */
+  const existing = new Map([
+    [
+      "pt unggul dinamika utama|mining operation",
+      {
+        id: "d1",
+        name: "MINING OPERATION",
+        description: "UDU",
+        path: ["PT UNGGUL DINAMIKA UTAMA"],
+        active: true,
+      },
+    ],
+    [
+      "pt rezeki borneo sebuku|mining operation",
+      {
+        id: "d2",
+        name: "MINING OPERATION",
+        description: "RBS",
+        path: ["PT REZEKI BORNEO SEBUKU"],
+        active: true,
+      },
+    ],
+  ]);
+
+  const HEADERS = ["perusahaan", "nama", "deskripsi", "aktif"];
+
+  test("the same name under two owners updates the right one", async () => {
+    const wb = await sheet(HEADERS, [
+      [
+        "PT REZEKI BORNEO SEBUKU",
+        "MINING OPERATION",
+        "Produksi Sebuku",
+        "TRUE",
+      ],
+    ]);
+    const result = validateWorkbook(
+      "d.xlsx",
+      catalogueTarget("departemen", "description", existing, departmentShape),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.preview.newCount).toBe(0);
+    expect(result.preview.updatedCount).toBe(1);
+    // d2, not d1 — matched on the pair rather than on the name.
+    expect(result.accepted[0]!.current!.id).toBe("d2");
+  });
+
+  test("the same name under a new owner is a new row, not a move", async () => {
+    const wb = await sheet(HEADERS, [
+      ["PT UNGGUL DINAMIKA UTAMA", "HRM", "Human Resource", "TRUE"],
+    ]);
+    const result = validateWorkbook(
+      "d.xlsx",
+      catalogueTarget("departemen", "description", existing, departmentShape),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.newCount).toBe(1);
+    expect(result.accepted[0]!.parsed.parentId).toBe("k1");
+  });
+
+  test("an owner the master does not carry fails the row", async () => {
+    const wb = await sheet(HEADERS, [
+      ["PT TIDAK ADA", "MINING OPERATION", "", "TRUE"],
+    ]);
+    const result = validateWorkbook(
+      "d.xlsx",
+      catalogueTarget("departemen", "description", existing, departmentShape),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("PT TIDAK ADA");
+    expect(result.accepted).toEqual([]);
+  });
+
+  test("a blank owner column fails the row rather than defaulting", async () => {
+    const wb = await sheet(HEADERS, [["", "MINING OPERATION", "", "TRUE"]]);
+    const result = validateWorkbook(
+      "d.xlsx",
+      catalogueTarget("departemen", "description", existing, departmentShape),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("perusahaan");
+  });
+
+  test("a position's fleet flag round-trips, and a blank column keeps it", async () => {
+    const positions = new Map([
+      [
+        "pt unggul dinamika utama|mining operation|operator dump truck",
+        {
+          id: "p1",
+          name: "OPERATOR DUMP TRUCK",
+          description: "",
+          fleetAllocation: true,
+          path: ["PT UNGGUL DINAMIKA UTAMA", "MINING OPERATION"],
+          active: true,
+        },
+      ],
+    ]);
+    const shape = {
+      hasFleetFlag: true,
+      parent: {
+        columns: ["perusahaan", "departemen"] as const,
+        byPath: new Map([["pt unggul dinamika utama|mining operation", "d1"]]),
+        label: "Departemen",
+      },
+    };
+    const headers = [
+      "perusahaan",
+      "departemen",
+      "nama",
+      "deskripsi",
+      "alokasi_fleet",
+      "aktif",
+    ];
+
+    // Column left out entirely — the flag must survive rather than be cleared.
+    const kept = validateWorkbook(
+      "j.xlsx",
+      catalogueTarget("jabatan", "description", positions, shape),
+      await sheet(
+        ["perusahaan", "departemen", "nama", "aktif"],
+        [
+          [
+            "PT UNGGUL DINAMIKA UTAMA",
+            "MINING OPERATION",
+            "OPERATOR DUMP TRUCK",
+            "TRUE",
+          ],
+        ]
+      )
+    );
+    if ("code" in kept) throw new Error(kept.message);
+    expect(kept.preview.unchangedCount).toBe(1);
+    expect(kept.accepted[0]!.parsed.fleetAllocation).toBe(true);
+
+    // Stated false — a real edit, reported as one.
+    const cleared = validateWorkbook(
+      "j.xlsx",
+      catalogueTarget("jabatan", "description", positions, shape),
+      await sheet(headers, [
+        [
+          "PT UNGGUL DINAMIKA UTAMA",
+          "MINING OPERATION",
+          "OPERATOR DUMP TRUCK",
+          "",
+          "FALSE",
+          "TRUE",
+        ],
+      ])
+    );
+    if ("code" in cleared) throw new Error(cleared.message);
+    expect(cleared.preview.updatedCount).toBe(1);
+    expect(cleared.preview.rows[0]!.changes).toEqual([
+      { field: "alokasi_fleet", from: "TRUE", to: "FALSE" },
+    ]);
+  });
+
+  test("a company without a code fails the row", async () => {
+    const wb = await sheet(
+      ["nama", "kode", "deskripsi", "aktif"],
+      [["PT BARU", "", "Kontraktor", "TRUE"]]
+    );
+    const result = validateWorkbook(
+      "k.xlsx",
+      catalogueTarget("perusahaan", "description", new Map(), {
+        hasCode: true,
+      }),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("Kode");
+  });
+});
+
 /* -------------------------------------------------------------------- units */
 
 describe("unit import", () => {
@@ -607,10 +806,36 @@ describe("employee import", () => {
     name.toLowerCase(),
     { id, name },
   ];
+  /**
+   * Departments and positions are keyed by their owner, not by their name —
+   * `MINING OPERATION` and `ADMIN` each name several rows now, so the lookup
+   * has to say which one.
+   */
+  const owned = (
+    id: string,
+    key: string,
+    name: string
+  ): [string, { id: string; name: string }] => [
+    key.toLowerCase(),
+    { id, name },
+  ];
+
   const catalogues: EmployeeCatalogues = {
     companies: new Map([named("k1", "PT Unggul Dinamika Utama")]),
-    positions: new Map([named("j1", "Driver OHT")]),
-    departments: new Map([named("d1", "Mining Operation")]),
+    positions: new Map([
+      owned(
+        "j1",
+        "PT Unggul Dinamika Utama|Mining Operation|Driver OHT",
+        "Driver OHT"
+      ),
+    ]),
+    departments: new Map([
+      owned(
+        "d1",
+        "PT Unggul Dinamika Utama|Mining Operation",
+        "Mining Operation"
+      ),
+    ]),
     messes: new Map([named("m1", "Mess A")]),
     simperTypes: new Map([named("t1", "F")]),
     simperCodes: new Map([named("s1", "OHT 777"), named("s2", "OHT 773")]),
@@ -847,7 +1072,12 @@ describe("employee import", () => {
     expect(issue).toContain("Kode SIMPER");
   });
 
-  test("an unknown position is offered as a pending addition", async () => {
+  /**
+   * A position belongs to a department, so an unknown one is not a name
+   * nobody has typed yet — it is a pairing that does not exist. Creating it
+   * would mean filing it under a department this import inferred.
+   */
+  test("an unknown position fails its row and is never created", async () => {
     const wb = await sheet(HEADERS, [
       row("608", "Jabatan Baru", "Foreman Pit"),
     ]);
@@ -857,19 +1087,18 @@ describe("employee import", () => {
       wb
     );
     if ("code" in result) throw new Error(result.message);
-    expect(result.preview.errorCount).toBe(0);
-    expect(result.preview.newCount).toBe(1);
-    expect(result.preview.newMasters).toEqual([
-      { kind: "jabatan", name: "Foreman Pit", rows: 1 },
-    ]);
-    expect(result.preview.warnings).toHaveLength(1);
-    expect(result.preview.warnings[0]!.badgeVariant).toBe("warning");
-    // Carried by name until a commit can supply an id.
-    expect(result.accepted[0]!.parsed.positionId).toBeNull();
-    expect(result.accepted[0]!.parsed.positionName).toBe("Foreman Pit");
+    expect(result.preview.errorCount).toBe(1);
+    // The message names both halves of the pair, because either one may be the
+    // typo — and says where to fix it.
+    const issue = result.preview.errors[0]!.issue;
+    expect(issue).toContain("Foreman Pit");
+    expect(issue).toContain("Mining Operation");
+    expect(issue).toContain("menu Jabatan");
+    expect(result.preview.newMasters).toEqual([]);
+    expect(result.accepted).toEqual([]);
   });
 
-  test("without manage on jabatan, the same position fails its row", async () => {
+  test("the same holds without manage on jabatan — the grant is not the reason", async () => {
     const wb = await sheet(HEADERS, [
       row("609", "Jabatan Baru", "Foreman Pit"),
     ]);
@@ -882,6 +1111,30 @@ describe("employee import", () => {
     expect(result.preview.errorCount).toBe(1);
     expect(result.preview.errors[0]!.issue).toContain("Foreman Pit");
     expect(result.preview.newMasters).toEqual([]);
+    expect(result.accepted).toEqual([]);
+  });
+
+  test("a department under the wrong company fails the row", async () => {
+    // The department exists — under a different company. Keyed on the name
+    // alone this would have resolved and attached the person to a stranger.
+    const wb = await sheet(HEADERS, [
+      [
+        "611",
+        "Perusahaan Salah",
+        "PT Lain",
+        "Driver OHT",
+        "Mining Operation",
+        "",
+      ],
+    ]);
+    const result = validateWorkbook(
+      "k.xlsx",
+      employeeTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("Mining Operation");
     expect(result.accepted).toEqual([]);
   });
 

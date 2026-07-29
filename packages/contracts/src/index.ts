@@ -11,6 +11,7 @@ export * from "./access";
 export * from "./account-import";
 export * from "./master";
 export * from "./master-import";
+export * from "./roster";
 export * from "./session";
 
 /** Shape every non-2xx response from the API uses. */

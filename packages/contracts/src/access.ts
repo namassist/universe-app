@@ -71,7 +71,10 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   bus: "Bus",
   mess: "Mess",
   perusahaan: "Perusahaan",
-  jabatan: "Jabatan",
+  // The slug stays `jabatan` — it names a page, a route, a permission row, and
+  // a spreadsheet column, and renaming those would be a migration. The label is
+  // what people read, and they read "Posisi".
+  jabatan: "Posisi",
   "running-text": "Running Text",
   sound: "Sound",
   timeline: "Timeline",

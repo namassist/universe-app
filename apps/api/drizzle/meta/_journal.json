@@ -29,6 +29,27 @@
       "when": 1785137798841,
       "tag": "0003_regular_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785240573318,
+      "tag": "0004_huge_songbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785303567347,
+      "tag": "0005_rich_donald_blake",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785308646145,
+      "tag": "0006_supreme_natasha_romanoff",
+      "breakpoints": true
     }
   ]
 }

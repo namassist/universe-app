@@ -15,7 +15,10 @@
  * - **Scope.** This is the first collection a `dept` or `self` caller is
  *   actually narrowed on (design D9). `scopeWhere` is applied to every read,
  *   including the single-record one, so a caller cannot reach past its own
- *   department by guessing a NIK.
+ *   department by guessing a NIK — and to every *write* as well, which it was
+ *   not at first: a scoped caller could edit, delete, or re-photograph anyone
+ *   whose NIK they knew, and `PATCH` returning the updated record made that a
+ *   way to read past the scope too. See `writeScope`.
  * - **Skills.** A person's qualification codes are a set, written by replacing
  *   the whole set in one transaction (D4). Half-applied skills would be a spare
  *   who silently matches the wrong units.
@@ -23,10 +26,15 @@
 
 import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import type { EffectivePermissions, PendingMaster } from "@universe/contracts";
+import type {
+  EffectivePermissions,
+  PendingMaster,
+  SessionPrincipal,
+} from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
-import { scopeWhere } from "../auth/scope";
+import { invalidateUser } from "../auth/principal";
+import { departmentIdOfNik, scopeWhere } from "../auth/scope";
 import {
   db,
   isForeignKeyViolation,
@@ -208,6 +216,97 @@ async function unresolvedReference(
   };
 }
 
+/**
+ * The one department a caller may write into, or `null` where they may write
+ * into any.
+ *
+ * The mirror of `scopeWhere` for the write side. Reads were scoped from the
+ * start; writes were not, which left a `dept` caller able to create a person
+ * into another department and to edit, delete, or re-photograph anyone whose
+ * NIK they knew — and `PATCH` returning the updated record made it a way to
+ * *read* past the scope as well, since a write where a read was refused
+ * answered with the row.
+ *
+ * A refusal here is a 404 rather than a 403, matching `GET /:nik`: an existence
+ * answer that differs for records outside the caller's department is a register
+ * they can enumerate one NIK at a time.
+ */
+type WriteScope =
+  | { kind: "all" }
+  | { kind: "department"; id: string; name: string }
+  | { kind: "none"; message: string };
+
+async function writeScope(principal: SessionPrincipal): Promise<WriteScope> {
+  if (principal.kind !== "user")
+    return { kind: "none", message: "Akses ditolak" };
+  if (principal.scope === "all") return { kind: "all" };
+
+  if (!principal.nik)
+    return {
+      kind: "none",
+      message: "Akun ini tidak punya NIK, departemennya tidak bisa ditentukan",
+    };
+  const departmentId = await departmentIdOfNik(principal.nik);
+  if (!departmentId)
+    return {
+      kind: "none",
+      message: "NIK akun ini tidak ada di data karyawan",
+    };
+  const [row] = await db
+    .select({ name: dpt.name })
+    .from(dpt)
+    .where(eq(dpt.id, departmentId))
+    .limit(1);
+  return { kind: "department", id: departmentId, name: row?.name ?? "" };
+}
+
+/**
+ * That the three keys describe one place in the organisation, not three.
+ *
+ * A department belongs to a company and a position to a department, so
+ * `company: RBS, department: HRM (UDU), position: PAYROLL OFFICER (UDU/HRM)` is
+ * three rows that each exist and one person who works nowhere. The foreign keys
+ * cannot catch it — each one resolves — so the pairing is checked here.
+ *
+ * Stated as a validation issue on the field that is wrong rather than as a 409,
+ * because it is a form the operator can correct: the position is the one that
+ * disagrees with the department, and the department the one that disagrees with
+ * the company.
+ *
+ * On a PATCH the values not mentioned come from the record as it stands, so
+ * moving someone's department alone is checked against the position they still
+ * hold — which is the case that would otherwise leave a mismatched pair behind.
+ */
+async function mismatchedOrganisation(pair: {
+  companyId: string;
+  departmentId: string;
+  positionId: string;
+}): Promise<{ field: string; message: string } | null> {
+  const [department] = await db
+    .select({ companyId: dpt.companyId, name: dpt.name })
+    .from(dpt)
+    .where(eq(dpt.id, pair.departmentId))
+    .limit(1);
+  if (department && department.companyId !== pair.companyId)
+    return {
+      field: "departmentId",
+      message: `Departemen "${department.name}" bukan milik perusahaan yang dipilih`,
+    };
+
+  const [position] = await db
+    .select({ departmentId: pos.departmentId, name: pos.name })
+    .from(pos)
+    .where(eq(pos.id, pair.positionId))
+    .limit(1);
+  if (position && position.departmentId !== pair.departmentId)
+    return {
+      field: "positionId",
+      message: `Jabatan "${position.name}" bukan milik departemen yang dipilih`,
+    };
+
+  return null;
+}
+
 function referencesOf(body: {
   companyId?: string;
   positionId?: string;
@@ -326,20 +425,61 @@ async function catalogueLookup(
 }
 
 /**
+ * `company|department` → row, the key a department is actually identified by.
+ *
+ * A bare name would collapse the two `MINING OPERATION`s into one entry and
+ * hand back whichever the query returned last.
+ */
+async function departmentLookup(): Promise<
+  Map<string, { id: string; name: string }>
+> {
+  const rows = await db
+    .select({ id: dpt.id, name: dpt.name, company: cmp.name })
+    .from(dpt)
+    .innerJoin(cmp, eq(cmp.id, dpt.companyId));
+  return new Map(
+    rows.map((r) => [
+      `${r.company}|${r.name}`.toLowerCase(),
+      { id: r.id, name: r.name },
+    ])
+  );
+}
+
+/** `company|department|position` — same reasoning, one level deeper. */
+async function positionLookup(): Promise<
+  Map<string, { id: string; name: string }>
+> {
+  const rows = await db
+    .select({
+      id: pos.id,
+      name: pos.name,
+      department: dpt.name,
+      company: cmp.name,
+    })
+    .from(pos)
+    .innerJoin(dpt, eq(dpt.id, pos.departmentId))
+    .innerJoin(cmp, eq(cmp.id, dpt.companyId));
+  return new Map(
+    rows.map((r) => [
+      `${r.company}|${r.department}|${r.name}`.toLowerCase(),
+      { id: r.id, name: r.name },
+    ])
+  );
+}
+
+/**
  * Which catalogue an employee import may add to.
  *
- * Five, not six: `kode-simper` is absent, and its absence is enforced here as
- * well as in the parser (design D11). Two independent refusals rather than one,
- * because this is the map a future edit would reach for when adding a column,
- * and a qualification code created by accident fails silently.
+ * Three, not six. `kode-simper` was always absent, and its absence is enforced
+ * here as well as in the parser (design D11). `departemen` and `jabatan` joined
+ * it once each acquired an owner: creating one would mean filing it under a
+ * parent this import inferred, and a department invented under the wrong
+ * company is a row that looks right everywhere except where it matters.
  */
-type EmployeeRefKind =
-  "perusahaan" | "jabatan" | "departemen" | "mess" | "simper";
+type EmployeeRefKind = "perusahaan" | "mess" | "simper";
 
 const CREATABLE: Record<EmployeeRefKind, NamedCatalogue> = {
   perusahaan: cmp,
-  jabatan: pos,
-  departemen: dpt,
   mess: mss,
   simper: spt,
 };
@@ -347,25 +487,29 @@ const CREATABLE: Record<EmployeeRefKind, NamedCatalogue> = {
 /** Catalogue plus name, lowercased — the same pairing the preview deduped on. */
 const refKey = (kind: string, name: string) => `${kind} ${name.toLowerCase()}`;
 
-async function previewEmployees(file: File, permissions: EffectivePermissions) {
+async function previewEmployees(
+  file: File,
+  permissions: EffectivePermissions,
+  scope: WriteScope
+) {
   const workbook = await readWorkbook(await file.arrayBuffer());
   if ("code" in workbook) return workbook;
 
   const [companies, positions, departments, messes, simperTypes, simperCodes] =
     await Promise.all([
       catalogueLookup(cmp),
-      catalogueLookup(pos),
-      catalogueLookup(dpt),
+      positionLookup(),
+      departmentLookup(),
       catalogueLookup(mss),
       catalogueLookup(spt),
       catalogueLookup(spc),
     ]);
 
-  // Deliberately unscoped: an import is keyed on NIK, and a `dept` caller who
-  // could not see an existing row would create a duplicate NIK instead of
-  // updating it — which the unique index would then refuse mid-commit. The
-  // route requires `manage` on employees, which no scoped role holds by
-  // default beyond its own department's data.
+  // Deliberately unscoped, and it stays that way: an import is keyed on NIK,
+  // and a `dept` caller who could not *see* an existing row would create a
+  // duplicate NIK instead of being told the row is not theirs — which the
+  // unique index would then refuse halfway through the commit. What the scope
+  // narrows is what may be written, one row at a time, in `employeeTarget`.
   const existing = new Map(
     (await toExistingRows(await employeeQuery())).map((r) => [
       r.nik.toLowerCase(),
@@ -381,7 +525,10 @@ async function previewEmployees(file: File, permissions: EffectivePermissions) {
       // `manage` on employees is what gets you here; it is not what lets you
       // write into a master. Each catalogue is asked for separately, and a kind
       // the caller cannot manage falls back to a refused row.
-      (kind) => holds(permissions, kind, "manage")
+      (kind) => holds(permissions, kind, "manage"),
+      scope.kind === "department"
+        ? { id: scope.id, name: scope.name }
+        : undefined
     ),
     workbook
   );
@@ -610,8 +757,11 @@ export const employeesRoutes = new Elysia({
 
   .post(
     "/import/preview",
-    async ({ body, permissions, status }) => {
-      const result = await previewEmployees(body.file, permissions);
+    async ({ body, permissions, principal, status }) => {
+      const scope = await writeScope(principal);
+      if (scope.kind === "none")
+        return status(403, { code: "forbidden", message: scope.message });
+      const result = await previewEmployees(body.file, permissions, scope);
       if ("code" in result) return status(422, result);
       return result.preview;
     },
@@ -630,11 +780,14 @@ export const employeesRoutes = new Elysia({
 
   .post(
     "/import",
-    async ({ body, permissions, status }) => {
+    async ({ body, permissions, principal, status }) => {
+      const scope = await writeScope(principal);
+      if (scope.kind === "none")
+        return status(403, { code: "forbidden", message: scope.message });
       // Re-parsed rather than trusting the preview the client saw. That is also
-      // what re-checks the permissions behind every pending master addition:
-      // the confirmation dialog is advisory, this parse decides.
-      const result = await previewEmployees(body.file, permissions);
+      // what re-checks the permissions *and the scope* behind every row: the
+      // confirmation dialog is advisory, this parse decides.
+      const result = await previewEmployees(body.file, permissions, scope);
       if ("code" in result) return status(422, result);
       if (result.preview.errorCount > 0)
         return status(422, {
@@ -669,8 +822,11 @@ export const employeesRoutes = new Elysia({
             nik: p.nik,
             name: p.name,
             companyId: idFor("perusahaan", p.companyId, p.companyName),
-            positionId: idFor("jabatan", p.positionId, p.positionName),
-            departmentId: idFor("departemen", p.departmentId, p.departmentName),
+            // Never pending: neither is creatable from an import, so the parser
+            // has already refused every row whose pair did not resolve, and the
+            // id is present by the time a row reaches this loop.
+            positionId: p.positionId!,
+            departmentId: p.departmentId!,
             // A null *name* on either optional reference means the column was
             // blank — lives off site, holds no permit — as opposed to a pending
             // one, whose name is what resolves it.
@@ -761,9 +917,48 @@ export const employeesRoutes = new Elysia({
 
   .post(
     "/",
-    async ({ body, status }) => {
-      const issue = await unresolvedReference(referencesOf(body));
+    async ({ body, principal, status }) => {
+      const scope = await writeScope(principal);
+      if (scope.kind === "none")
+        return status(403, { code: "forbidden", message: scope.message });
+
+      /**
+       * A scoped caller does not state where the new person goes.
+       *
+       * The department is taken from their own record and the company from
+       * that department, exactly as a roster upload resolves its department
+       * (roster D6): the value in the body is not corrected, it is never read.
+       * Deriving the company as well removes the only way the pair could still
+       * disagree, and there is nothing to choose — a department belongs to one
+       * company.
+       */
+      let placement = {
+        companyId: body.companyId,
+        departmentId: body.departmentId,
+      };
+      if (scope.kind === "department") {
+        const [owner] = await db
+          .select({ companyId: dpt.companyId })
+          .from(dpt)
+          .where(eq(dpt.id, scope.id))
+          .limit(1);
+        placement = {
+          companyId: owner!.companyId,
+          departmentId: scope.id,
+        };
+      }
+
+      const issue = await unresolvedReference(
+        referencesOf({ ...body, ...placement })
+      );
       if (issue) return status(422, validationError(issue));
+
+      const mismatch = await mismatchedOrganisation({
+        companyId: placement.companyId,
+        departmentId: placement.departmentId,
+        positionId: body.positionId,
+      });
+      if (mismatch) return status(422, validationError(mismatch));
 
       const skillIds = [...new Set(body.skillIds ?? [])];
       const unknown = await unknownSkillIds(skillIds);
@@ -783,9 +978,9 @@ export const employeesRoutes = new Elysia({
             .values({
               nik,
               name: body.name.trim(),
-              companyId: body.companyId,
+              companyId: placement.companyId,
               positionId: body.positionId,
-              departmentId: body.departmentId,
+              departmentId: placement.departmentId,
               messId: body.messId ?? null,
               simperTypeId: body.simperTypeId ?? null,
               joinDate: dateOrNull(body.joinDate),
@@ -839,9 +1034,59 @@ export const employeesRoutes = new Elysia({
 
   .patch(
     "/:nik",
-    async ({ params, body, status }) => {
-      const issue = await unresolvedReference(referencesOf(body));
+    async ({ params, body, principal, status }) => {
+      const scope = await writeScope(principal);
+      if (scope.kind === "none")
+        return status(403, { code: "forbidden", message: scope.message });
+
+      // Resolved through the scope, so an edit cannot reach a record a read
+      // could not. This is also what closes the disclosure: a 404 here answers
+      // the same as `GET /:nik` would, rather than handing back the row.
+      const [current] = await db
+        .select({
+          companyId: emp.companyId,
+          departmentId: emp.departmentId,
+          positionId: emp.positionId,
+        })
+        .from(emp)
+        .where(
+          and(
+            eq(emp.nik, params.nik),
+            await scopeWhere(principal, {
+              dept: emp.departmentId,
+              self: emp.nik,
+            })
+          )
+        )
+        .limit(1);
+      if (!current) return status(404, employeeNotFound);
+
+      // A scoped caller does not move anyone in or out — the department and its
+      // company are read from the record as it stands, whatever the body says.
+      // Handing away one of your own people, or claiming one of somebody
+      // else's, is a transfer, and a transfer is not a field edit.
+      const placement =
+        scope.kind === "department"
+          ? { companyId: current.companyId, departmentId: current.departmentId }
+          : {
+              companyId: body.companyId ?? current.companyId,
+              departmentId: body.departmentId ?? current.departmentId,
+            };
+
+      const issue = await unresolvedReference(
+        referencesOf({ ...body, ...placement })
+      );
       if (issue) return status(422, validationError(issue));
+
+      // The three keys are checked as a set even when only one of them was
+      // sent, against the record as it stands — an edit that moves someone's
+      // department while leaving their position behind is exactly the pairing
+      // this exists to refuse.
+      const mismatch = await mismatchedOrganisation({
+        ...placement,
+        positionId: body.positionId ?? current.positionId,
+      });
+      if (mismatch) return status(422, validationError(mismatch));
 
       const skillIds =
         body.skillIds === undefined ? null : [...new Set(body.skillIds)];
@@ -850,21 +1095,45 @@ export const employeesRoutes = new Elysia({
         if (unknown.length) return status(422, unknownSkillsError(unknown));
       }
 
+      /**
+       * A renamed NIK has to be carried to the account holding it.
+       *
+       * `users.nik` is deliberately not a foreign key (auth D5), so nothing
+       * else will do it and nothing will complain: the account keeps working
+       * in every way that would make the breakage visible — it still logs in,
+       * its menus still render — while `departmentIdOfNik` resolves to null
+       * and every scoped screen silently empties. Deleting an employee whose
+       * NIK an account holds is already refused; renaming was the same hole
+       * left open.
+       */
+      const renamedTo =
+        body.nik !== undefined && body.nik.trim() !== params.nik
+          ? body.nik.trim()
+          : null;
+      if (renamedTo) {
+        const [taken] = await db
+          .select({ id: schema.users.id, name: schema.users.name })
+          .from(schema.users)
+          .where(eq(schema.users.nik, renamedTo))
+          .limit(1);
+        if (taken)
+          return status(409, {
+            code: "nik_taken",
+            message: `NIK ${renamedTo} sudah dipakai akun "${taken.name}"`,
+          });
+      }
+
       try {
-        const id = await db.transaction(async (tx) => {
+        const { id, movedAccounts } = await db.transaction(async (tx) => {
           const [updated] = await tx
             .update(emp)
             .set({
               ...(body.nik !== undefined ? { nik: body.nik.trim() } : {}),
               ...(body.name !== undefined ? { name: body.name.trim() } : {}),
-              ...(body.companyId !== undefined
-                ? { companyId: body.companyId }
-                : {}),
+              companyId: placement.companyId,
+              departmentId: placement.departmentId,
               ...(body.positionId !== undefined
                 ? { positionId: body.positionId }
-                : {}),
-              ...(body.departmentId !== undefined
-                ? { departmentId: body.departmentId }
                 : {}),
               // `null` clears it — lives off site, holds no permit; absent
               // leaves it alone.
@@ -902,19 +1171,44 @@ export const employeesRoutes = new Elysia({
             })
             .where(eq(emp.nik, params.nik))
             .returning({ id: emp.id });
-          if (!updated) return null;
+          if (!updated) return { id: null, movedAccounts: [] as string[] };
           // Absent leaves the set alone; an empty array clears it. A person who
           // lost every qualification is a real edit, and it has to be
           // expressible.
           if (skillIds) await replaceSkills(tx, updated.id, skillIds);
-          return updated.id;
+
+          // In the same transaction as the rename, so the two records cannot
+          // disagree even for an instant. The check above is what turns a
+          // collision into a 409; `users_nik_unique` catches the race it
+          // cannot see, and lands in the same handler below.
+          const moved = renamedTo
+            ? await tx
+                .update(schema.users)
+                .set({ nik: renamedTo })
+                .where(eq(schema.users.nik, params.nik))
+                .returning({ id: schema.users.id })
+            : [];
+
+          return { id: updated.id, movedAccounts: moved.map((m) => m.id) };
         });
         if (!id) return status(404, employeeNotFound);
+
+        // The cached principal carries the NIK every scope resolves through,
+        // so an account whose NIK just moved has to be re-read on its next
+        // request rather than at cache expiry.
+        await Promise.all(
+          movedAccounts.map((userId) => invalidateUser(userId))
+        );
 
         const [row] = await employeeQuery().where(eq(emp.id, id)).limit(1);
         const [employee] = await withSkills([row!]);
         return employee!;
       } catch (error) {
+        if (isUniqueViolation(error, "users_nik_unique"))
+          return status(409, {
+            code: "nik_taken",
+            message: `NIK ${body.nik ?? params.nik} sudah dipakai akun lain`,
+          });
         if (isUniqueViolation(error))
           return status(409, {
             code: "employee_exists",
@@ -960,11 +1254,22 @@ export const employeesRoutes = new Elysia({
    */
   .delete(
     "/:nik",
-    async ({ params, status }) => {
+    async ({ params, principal, status }) => {
       const [row] = await db
         .select({ id: emp.id, photoFileName: emp.photoFileName })
         .from(emp)
-        .where(eq(emp.nik, params.nik))
+        .where(
+          and(
+            eq(emp.nik, params.nik),
+            // Scoped like the read: a NIK outside the caller's department is
+            // "not found", not "refused", so the register cannot be probed one
+            // NIK at a time.
+            await scopeWhere(principal, {
+              dept: emp.departmentId,
+              self: emp.nik,
+            })
+          )
+        )
         .limit(1);
       if (!row) return status(404, employeeNotFound);
 
@@ -978,6 +1283,43 @@ export const employeesRoutes = new Elysia({
           code: "employee_in_use",
           message: `Masih dipakai akun "${account.name}" dengan NIK yang sama — hapus akunnya dulu, atau nonaktifkan karyawannya`,
         });
+
+      // Roster days and revision entries are traces too (roster D14), and
+      // unlike the account they *are* backed by `restrict` foreign keys. The
+      // count is read anyway, for the same reason `units.ts` reads one: a
+      // constraint says only that something did not resolve, and "masih
+      // direferensi data lain" is not a sentence anyone can act on. Named
+      // separately because the two are fixed in different places, and archived
+      // documents count — history has to stay readable.
+      const [trace] = await db
+        .select({
+          rosterDays: sql<number>`(
+            select count(*)::int from ${schema.rosterDays}
+            where ${schema.rosterDays.employeeId} = ${row.id}
+          )`,
+          revisionItems: sql<number>`(
+            select count(*)::int from ${schema.rosterRevisionItems}
+            where ${schema.rosterRevisionItems.employeeId} = ${row.id}
+          )`,
+        })
+        .from(emp)
+        .where(eq(emp.id, row.id))
+        .limit(1);
+
+      if (trace && (trace.rosterDays > 0 || trace.revisionItems > 0)) {
+        const reasons = [
+          trace.rosterDays > 0
+            ? `${trace.rosterDays} hari roster (termasuk dokumen arsip)`
+            : null,
+          trace.revisionItems > 0
+            ? `${trace.revisionItems} entri revisi roster`
+            : null,
+        ].filter((r) => r !== null);
+        return status(409, {
+          code: "employee_in_use",
+          message: `Masih punya ${reasons.join(" dan ")} — nonaktifkan saja bila sudah tidak aktif`,
+        });
+      }
 
       try {
         // `employee_skills` cascades with the employee (design D4) — the
@@ -1059,11 +1401,21 @@ export const employeesRoutes = new Elysia({
 
   .post(
     "/:nik/photo",
-    async ({ params, body, status }) => {
+    async ({ params, body, principal, status }) => {
       const [row] = await db
         .select({ id: emp.id, photoFileName: emp.photoFileName })
         .from(emp)
-        .where(eq(emp.nik, params.nik))
+        .where(
+          and(
+            eq(emp.nik, params.nik),
+            // Scoped like every other write: the photo endpoint reached past
+            // the department as freely as the edit did.
+            await scopeWhere(principal, {
+              dept: emp.departmentId,
+              self: emp.nik,
+            })
+          )
+        )
         .limit(1);
       if (!row) return status(404, employeeNotFound);
 

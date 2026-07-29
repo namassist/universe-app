@@ -150,6 +150,12 @@ export type MasterImportResult = {
  * One list per target, used by *both* export and import, which is what makes an
  * exported file re-importable without restructuring — the round trip is a
  * property of there being one definition rather than two that agree today.
+ *
+ * Three of them lead with the columns naming an owner. A department is
+ * identified by its company and a position by its department, so a sheet
+ * carrying only names would describe several different rows with one line —
+ * and the owner columns come first because that is the order they are read in:
+ * the company decides which departments the next column may name.
  */
 export const MASTER_IMPORT_COLUMNS: Record<MasterKind, readonly string[]> = {
   "jenis-unit": ["nama", "aktif"],
@@ -159,10 +165,31 @@ export const MASTER_IMPORT_COLUMNS: Record<MasterKind, readonly string[]> = {
   "kelas-unit": ["nama", "deskripsi", "aktif"],
   simper: ["nama", "deskripsi", "aktif"],
   "kode-simper": ["nama", "deskripsi", "aktif"],
-  departemen: ["nama", "deskripsi", "aktif"],
   "area-kerja": ["nama", "tipe", "aktif"],
-  perusahaan: ["nama", "deskripsi", "aktif"],
-  jabatan: ["nama", "deskripsi", "aktif"],
+  perusahaan: ["nama", "kode", "deskripsi", "aktif"],
+  departemen: ["perusahaan", "nama", "deskripsi", "aktif"],
+  jabatan: [
+    "perusahaan",
+    "departemen",
+    "nama",
+    "deskripsi",
+    "alokasi_fleet",
+    "aktif",
+  ],
+};
+
+/**
+ * Which columns of a kind's sheet name its owner, outermost first.
+ *
+ * Empty for every catalogue that owns itself. Shared so the parser, the
+ * exporter, and the screen that renders the template all agree on which columns
+ * identify the row as opposed to describing it.
+ */
+export const MASTER_IMPORT_PARENT_COLUMNS: Partial<
+  Record<MasterKind, readonly string[]>
+> = {
+  departemen: ["perusahaan"],
+  jabatan: ["perusahaan", "departemen"],
 };
 
 /**
@@ -206,6 +233,36 @@ export type EmployeeImportColumn = (typeof EMPLOYEE_IMPORT_COLUMNS)[number];
  * something other than this parser.
  */
 export const SKILL_SEPARATOR = ";";
+
+/**
+ * The roster sheet's *fixed* columns — and the only ones a constant can name
+ * (design D7).
+ *
+ * Every other target has a column list of a known width. The roster's is
+ * `no | nik | nama | departemen | posisi | 01 Aug 26 | … `: the day columns are
+ * as many as the month chosen for the upload has days, so the width is decided
+ * at upload time and cannot be written down here. What the parser checks is
+ * that the file's count of day columns equals that month's length — a
+ * thirty-one-column sheet for June is a failure of the file as a whole, refused
+ * before any row is read.
+ *
+ * Only `nik` carries meaning on the way in. `no` is a line number for the
+ * person reading the printout, and `departemen` and `posisi` are there because
+ * the sheet is circulated and read by people who need to know whose roster they
+ * are holding — the department is decided by the caller's scope (roster D6) and
+ * the position belongs to the employee register, so neither is read back from
+ * the file. They are carried so that the template the API hands out and the
+ * file a planner already works from are the same document.
+ */
+export const ROSTER_IMPORT_FIXED_COLUMNS = [
+  "no",
+  "nik",
+  "nama",
+  "departemen",
+  "posisi",
+] as const;
+export type RosterImportFixedColumn =
+  (typeof ROSTER_IMPORT_FIXED_COLUMNS)[number];
 
 export const UNIT_IMPORT_COLUMNS = [
   "kode",

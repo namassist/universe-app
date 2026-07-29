@@ -36,6 +36,7 @@ import {
   EMPLOYEE_IMPORT_COLUMNS,
   EMPLOYEE_STATUSES,
   MASTER_IMPORT_COLUMNS,
+  MASTER_IMPORT_PARENT_COLUMNS,
   MCU_RESULTS,
   SKILL_SEPARATOR,
   UNIT_IMPORT_COLUMNS,
@@ -241,6 +242,16 @@ export type ImportTarget<TRow, TParsed> = {
     current: TRow | undefined
   ) => TParsed | { issue: string; key: string; label: string };
   keyOf: (parsed: TParsed) => string;
+  /**
+   * How a row finds the record it would update, when that is more than the
+   * required column.
+   *
+   * A department is identified by `company|name` and a position by
+   * `company|department|name`, so matching on the name alone would pair a row
+   * with a same-named record under a different owner and report a move as an
+   * edit. Absent everywhere else, where the name *is* the identity.
+   */
+  existingKeyOf?: (read: (column: string) => string) => string;
   labelOf: (parsed: TParsed) => string;
   /** What a commit would change about an existing row. */
   diff: (current: TRow, parsed: TParsed) => MasterImportChange[];
@@ -343,7 +354,9 @@ export function validateWorkbook<TRow, TParsed extends object>(
     if (target.columns.every((c) => read(c) === "")) continue;
 
     const keyColumn = target.required[0]!;
-    const rawKey = read(keyColumn).toLowerCase();
+    const rawKey = (
+      target.existingKeyOf ? target.existingKeyOf(read) : read(keyColumn)
+    ).toLowerCase();
     const current = target.existing.get(rawKey);
 
     const parsed = target.parse(read, current);
@@ -473,6 +486,15 @@ export type CatalogueExisting = {
   name: string;
   description?: string;
   type?: string;
+  /** Companies only — the short form beside the name. */
+  code?: string;
+  /** Positions only — whether the allocation engine may draw from this one. */
+  fleetAllocation?: boolean;
+  /**
+   * The owner's names, outermost first: `["PT UDU"]` for a department,
+   * `["PT UDU", "HRM"]` for a position. Absent where the catalogue owns itself.
+   */
+  path?: string[];
   active: boolean;
 };
 
@@ -480,22 +502,82 @@ export type ParsedCatalogue = {
   name: string;
   description: string | undefined;
   type: AreaType | undefined;
+  code: string | undefined;
+  fleetAllocation: boolean | undefined;
+  /** The resolved owner, where the kind has one. */
+  parentId: string | undefined;
+  /** `name`, or `owner|…|name` — what identifies this row in this file. */
+  key: string;
   active: boolean;
+};
+
+/**
+ * What a kind needs beyond a name, for the three that need something.
+ *
+ * `byPath` is keyed on the joined lowercased owner names because that is what
+ * the sheet can express — a spreadsheet names a company, not a uuid.
+ */
+export type CatalogueShape = {
+  /** Companies carry a code, and it is required. */
+  hasCode?: boolean;
+  /** Positions carry the fleet-allocation flag. */
+  hasFleetFlag?: boolean;
+  parent?: {
+    /** Import columns naming the owner, outermost first. */
+    columns: readonly string[];
+    /** `company` or `company|department`, lowercased → the owner's id. */
+    byPath: Map<string, string>;
+    label: string;
+  };
 };
 
 export function catalogueTarget(
   kind: MasterKind,
   extra: "none" | "description" | "type",
-  existing: Map<string, CatalogueExisting>
+  existing: Map<string, CatalogueExisting>,
+  shape: CatalogueShape = {}
 ): ImportTarget<CatalogueExisting, ParsedCatalogue> {
   const columns = MASTER_IMPORT_COLUMNS[kind];
+  const parent = shape.parent;
+
+  /** The owner names this row states, joined the way `byPath` is keyed. */
+  const pathOf = (read: (column: string) => string) =>
+    (parent?.columns ?? []).map((c) => read(c));
+
   return {
     columns,
     required: ["nama"],
     existing,
+    existingKeyOf: parent
+      ? (read) => [...pathOf(read), read("nama")].join("|")
+      : undefined,
     parse: (read, current) => {
       const name = read("nama");
       if (!name) return { issue: "Nama kosong", key: "", label: "" };
+
+      const path = pathOf(read);
+      let parentId: string | undefined;
+      if (parent) {
+        if (path.some((p) => !p))
+          return {
+            issue: `${parent.columns.join(" dan ")} wajib diisi — ${parent.label} menentukan baris ini milik siapa`,
+            key: name,
+            label: "",
+          };
+        parentId = parent.byPath.get(path.join("|").toLowerCase());
+        if (!parentId)
+          return {
+            issue: `${parent.label} "${path[path.length - 1]}" tidak ada di master${
+              path.length > 1 ? ` di bawah "${path[0]}"` : ""
+            } — tambahkan dulu, lalu import ulang`,
+            key: name,
+            label: path.join(" / "),
+          };
+      }
+
+      const code = read("kode");
+      if (shape.hasCode && !code && !current)
+        return { issue: "Kode wajib diisi", key: name, label: "" };
 
       let type: AreaType | undefined;
       if (extra === "type") {
@@ -528,10 +610,19 @@ export function catalogueTarget(
               read("deskripsi") || (current?.description ?? "")
             : undefined,
         type,
+        code: shape.hasCode ? code || (current?.code ?? "") : undefined,
+        // Blank keeps what the record has, like every other optional column
+        // here — a file that omits the column must not clear the flag off
+        // every position it touches.
+        fleetAllocation: shape.hasFleetFlag
+          ? boolCell(read("alokasi_fleet"), current?.fleetAllocation ?? false)
+          : undefined,
+        parentId,
+        key: [...path, name].join("|"),
         active: boolCell(read("aktif"), current?.active ?? true),
       };
     },
-    keyOf: (p) => p.name,
+    keyOf: (p) => p.key,
     labelOf: (p) => p.description ?? p.type ?? "",
     // The key *is* the master entry here, so a new one close to an existing one
     // is the near-duplicate worth catching.
@@ -560,6 +651,21 @@ export function catalogueTarget(
           field: "tipe",
           from: current.type ?? null,
           to: parsed.type,
+        });
+      if (parsed.code !== undefined && (current.code ?? "") !== parsed.code)
+        changes.push({
+          field: "kode",
+          from: current.code ?? "",
+          to: parsed.code,
+        });
+      if (
+        parsed.fleetAllocation !== undefined &&
+        (current.fleetAllocation ?? false) !== parsed.fleetAllocation
+      )
+        changes.push({
+          field: "alokasi_fleet",
+          from: boolText(current.fleetAllocation ?? false),
+          to: boolText(parsed.fleetAllocation),
         });
       if (current.active !== parsed.active)
         changes.push({
@@ -592,11 +698,21 @@ export async function catalogueWorkbook(
   rows: CatalogueExisting[]
 ): Promise<Buffer> {
   const [wb, ws] = catalogueSheet(kind);
+  const parentColumns = MASTER_IMPORT_PARENT_COLUMNS[kind] ?? [];
   for (const row of rows)
     ws.addRow({
+      // The owner columns come from the row's own path, so an export of
+      // `jabatan` is a file the import can take straight back.
+      ...Object.fromEntries(
+        parentColumns.map((column, i) => [column, row.path?.[i] ?? ""])
+      ),
       nama: row.name,
       ...(extra === "description" ? { deskripsi: row.description ?? "" } : {}),
       ...(extra === "type" ? { tipe: row.type ?? "" } : {}),
+      ...(row.code !== undefined ? { kode: row.code } : {}),
+      ...(row.fleetAllocation !== undefined
+        ? { alokasi_fleet: boolText(row.fleetAllocation) }
+        : {}),
       aktif: boolText(row.active),
     });
   return Buffer.from(await wb.xlsx.writeBuffer());
@@ -622,13 +738,26 @@ const CATALOGUE_EXAMPLE: Record<MasterKind, Record<string, string>> = {
     nama: "EXC 2600",
     deskripsi: "Excavator Hitachi EX2600 / EX2000",
   },
-  departemen: { nama: "Mining Operation", deskripsi: "Operasi penambangan" },
   "area-kerja": { nama: "Panel East Puncak Utara", tipe: "Mining" },
   perusahaan: {
-    nama: "PT Unggul Dinamika Utama",
+    nama: "PT UNGGUL DINAMIKA UTAMA",
+    kode: "UDU",
     deskripsi: "Kontraktor penambangan",
   },
-  jabatan: { nama: "Driver OHT", deskripsi: "Operator off-highway truck" },
+  // The owner columns are filled in too, because a blank one in the example is
+  // the reading "this is optional" — and it is the opposite of optional.
+  departemen: {
+    perusahaan: "PT UNGGUL DINAMIKA UTAMA",
+    nama: "MINING OPERATION",
+    deskripsi: "Operasi penambangan",
+  },
+  jabatan: {
+    perusahaan: "PT UNGGUL DINAMIKA UTAMA",
+    departemen: "MINING OPERATION",
+    nama: "OPERATOR DUMP TRUCK",
+    deskripsi: "Operator dump truck produksi",
+    alokasi_fleet: "TRUE",
+  },
 };
 
 /**
@@ -733,7 +862,17 @@ export type UnitRefColumn = keyof typeof UNIT_REFS;
 type Resolution =
   | { id: string; name: string }
   | { pending: PendingRef }
-  | { missing: string; label: string }
+  | {
+      missing: string;
+      label: string;
+      /**
+       * Why it cannot simply be created, when the reason is not "you lack the
+       * grant". A department and a position each belong to something, and the
+       * sheet names that something in another column — so an unknown one is a
+       * pairing that does not exist rather than a name nobody has typed yet.
+       */
+      because?: string;
+    }
   | null
   | undefined;
 
@@ -1041,7 +1180,13 @@ export type ParsedEmployee = {
   pending: PendingRef[];
 };
 
-/** name (lowercased) → { id, name }, for each catalogue an employee row names. */
+/**
+ * Lowercased key → { id, name }, for each catalogue an employee row names.
+ *
+ * Two of them are keyed on more than a name, because two of them are no longer
+ * identified by one: a department by `company|department`, a position by
+ * `company|department|position`.
+ */
 export type EmployeeCatalogues = {
   companies: Map<string, { id: string; name: string }>;
   positions: Map<string, { id: string; name: string }>;
@@ -1102,7 +1247,23 @@ export function employeeTarget(
    * someone who may add a position has not thereby been given departments.
    * Never consulted for `kode-simper`, which is refused regardless.
    */
-  mayCreate: (kind: MasterKind) => boolean
+  mayCreate: (kind: MasterKind) => boolean,
+  /**
+   * The one department a scoped caller may write into, if their scope names
+   * one.
+   *
+   * Checked on both sides of the row: the department the sheet states, and the
+   * one the employee is already in. Only the first would let a department admin
+   * pull somebody out of a neighbouring department by writing their NIK into
+   * their own sheet — a transfer nobody in the other department agreed to, and
+   * one that reads as an ordinary import.
+   *
+   * `existing` is deliberately still unscoped, for the reason its caller
+   * documents: a NIK the caller cannot see has to *resolve* in order to be
+   * refused, or the row would be treated as a new employee and collide with
+   * the unique index halfway through the commit.
+   */
+  restrictTo?: { id: string; name: string }
 ): ImportTarget<EmployeeExisting, ParsedEmployee> {
   return {
     columns: EMPLOYEE_IMPORT_COLUMNS,
@@ -1141,13 +1302,58 @@ export function employeeTarget(
         };
       };
 
+      /**
+       * A department is identified by its company and a position by its
+       * department, so these two are not looked up by name.
+       *
+       * `MINING OPERATION` names a department under each company and `ADMIN`
+       * names one under every department; a lookup on the bare name would
+       * resolve to whichever row was loaded last and attach the person to a
+       * plausible-looking stranger. The sheet already carries the qualifying
+       * columns, so the key is built from them.
+       *
+       * Neither may be created from here, whatever the caller's grants. A new
+       * one would have to be filed under a parent this import inferred, and a
+       * department invented under the wrong company is not a row an operator
+       * would notice — it is a department that looks right on the employee
+       * screen and is missing from the roster of the company that expected it.
+       * The same reasoning `kode_simper` already carries (D11).
+       */
+      const companyName = read("perusahaan") || current?.companyName || "";
+      const departmentName =
+        read("departemen") || current?.departmentName || "";
+      const positionName = read("jabatan") || current?.positionName || "";
+
+      const owned = (
+        raw: string,
+        key: string,
+        map: Map<string, { id: string; name: string }>,
+        label: string,
+        because: string
+      ): Resolution => {
+        if (!raw) return null;
+        return map.get(key.toLowerCase()) ?? { missing: raw, label, because };
+      };
+
       const resolved = {
         cmp: resolve("perusahaan", catalogues.companies, current?.companyName),
-        pos: resolve("jabatan", catalogues.positions, current?.positionName),
-        dpt: resolve(
-          "departemen",
+        dpt: owned(
+          departmentName,
+          `${companyName}|${departmentName}`,
           catalogues.departments,
-          current?.departmentName
+          "Departemen",
+          `Departemen "${departmentName}" tidak ada di perusahaan "${companyName || "—"}". ` +
+            `Departemen tidak pernah dibuat lewat import karyawan — tambahkan dulu ` +
+            `di menu Departemen di bawah perusahaan yang benar, lalu import ulang.`
+        ),
+        pos: owned(
+          positionName,
+          `${companyName}|${departmentName}|${positionName}`,
+          catalogues.positions,
+          "Jabatan",
+          `Jabatan "${positionName}" tidak ada di departemen "${departmentName || "—"}". ` +
+            `Jabatan tidak pernah dibuat lewat import karyawan — tambahkan dulu ` +
+            `di menu Jabatan di bawah departemen yang benar, lalu import ulang.`
         ),
         mss: resolve("mess", catalogues.messes, current?.messName),
         spt: resolve("simper", catalogues.simperTypes, current?.simperTypeName),
@@ -1156,7 +1362,9 @@ export function employeeTarget(
       for (const value of Object.values(resolved)) {
         if (value && "missing" in value)
           return {
-            issue: `${value.label} "${value.missing}" tidak ada di master, dan Anda tidak punya akses menambahnya — minta ditambahkan di menu masternya`,
+            issue:
+              value.because ??
+              `${value.label} "${value.missing}" tidak ada di master, dan Anda tidak punya akses menambahnya — minta ditambahkan di menu masternya`,
             key: nik,
             label: value.missing,
           };
@@ -1175,6 +1383,26 @@ export function employeeTarget(
       for (const [value, label] of required) {
         if (!value)
           return { issue: `${label} wajib diisi`, key: nik, label: "" };
+      }
+
+      if (restrictTo) {
+        // Where the row would put them.
+        const target = resolved.dpt as { id: string; name: string };
+        if (target.id !== restrictTo.id)
+          return {
+            issue: `Departemen "${target.name}" bukan departemen Anda — akun ini hanya boleh menulis ke "${restrictTo.name}"`,
+            key: nik,
+            label: target.name,
+          };
+        // Where they are now. A NIK from a neighbouring department is refused
+        // even when the sheet files them correctly, because the import would
+        // otherwise be a transfer nobody over there agreed to.
+        if (current && current.departmentName !== restrictTo.name)
+          return {
+            issue: `NIK ${nik} terdaftar di departemen "${current.departmentName}" — pemindahan antar departemen tidak lewat import`,
+            key: nik,
+            label: current.name,
+          };
       }
 
       type Ref = { id: string | null; name: string };

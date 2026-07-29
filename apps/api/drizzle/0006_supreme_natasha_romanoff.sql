@@ -1,0 +1,1 @@
+ALTER TABLE "positions" ADD COLUMN "fleet_allocation" boolean DEFAULT false NOT NULL;

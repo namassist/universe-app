@@ -188,3 +188,26 @@ export const deletePhoto = (fileName: string) =>
   deleteIn(env.PHOTO_DIR, fileName);
 
 export const pingPhotoStorage = () => pingDir(env.PHOTO_DIR);
+
+/* ------------------------------------------------------------ import staging */
+
+/**
+ * A roster upload, held between its preview and the page after it (design D8).
+ *
+ * Unlike sounds and photos, nothing in the database refers to these and none of
+ * them is meant to survive: the name is the preview token, the bytes are a copy
+ * of a file the operator still has, and a sweeper or a redeploy losing them
+ * costs a re-upload rather than a record. `/health` reports the directory all
+ * the same — an unwritable one turns every roster preview past page one into a
+ * confusing 404, and that is worth catching at startup.
+ */
+export const importPath = (fileName: string) =>
+  pathIn(env.IMPORT_DIR, fileName);
+
+export const writeImport = (fileName: string, bytes: ArrayBuffer) =>
+  writeIn(env.IMPORT_DIR, fileName, bytes);
+
+export const deleteImport = (fileName: string) =>
+  deleteIn(env.IMPORT_DIR, fileName);
+
+export const pingImportStorage = () => pingDir(env.IMPORT_DIR);
