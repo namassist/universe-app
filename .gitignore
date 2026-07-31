@@ -18,6 +18,7 @@ build/
 # artifact is skills-lock.json, which stays tracked. Run `bunx skills add
 # elysiajs/skills` to restore them.
 .claude
+.agents
 
 # Personal AI-workflow files at the repo root only (leading slash = root). The
 # SDLC framework references the gitignored .claude/ agents, so it stays local,

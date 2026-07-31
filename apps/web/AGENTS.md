@@ -6,53 +6,45 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 <!-- END:nextjs-agent-rules -->
 
-# Frontend architecture — shadcn-style compound components
+# Frontend — shadcn-style components over a typed API
 
-This app follows the **shadcn philosophy**: the design system is **vendored
-into the repo** (owned code, not an npm library), composed of **compound
-components**, styled through **design tokens**, with variants via **cva** and
-class merging via **`cn()`** (`lib/utils.ts` = clsx + tailwind-merge). The one
-deliberate difference from stock shadcn: there are **no Radix primitives** —
-every component is hand-rolled. Do not add Radix (or any headless UI library);
-extend the existing components instead.
+Vendored design system (owned code, no Radix — every primitive hand-rolled),
+data via Eden Treaty + TanStack React Query, RBAC-driven shell. Layers flow
+downward only: routes `app/(app)/{menu}/page.tsx` (thin wrappers) → menu
+components (`components/menus/*`, registered in `registry.tsx`) → shell →
+design system (`components/ui/*`) → `lib/*`.
 
-## Layers (dependency flows downward only)
+## Reference docs — read before working (local `docs/`, gitignored)
 
-| Layer         | Path                         | Role                                                                                                                    |
-| ------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Routes        | `app/{role}/{menu}/page.tsx` | Thin wrappers only — set `metadata`, render a menu component with its access `mode`. Never put logic here.              |
-| Pages         | `components/menus/*`         | One component per menu/sub-page. Owns its sample data + local state. Registered in `components/menus/registry.tsx`.     |
-| Shell         | `components/layout/*`        | Sidebar, topbar, role shell. Filtered by `lib/access.ts` — never hardcode per-role UI here.                             |
-| Design system | `components/ui/*`            | 24 vendored compound components. **Backend/data-agnostic — never import from `menus/`, `lib/access`, or data modules.** |
-| Contexts      | `components/providers/*`     | Theme, i18n, toast, role. No data stores.                                                                               |
-| Data & rules  | `lib/*`                      | `access.ts` (role matrix — single source of truth), `nav.ts`, static sample data modules, `i18n/`.                      |
+| Doc                    | Read it when                                                  |
+| ---------------------- | ------------------------------------------------------------- |
+| `docs/architecture.md` | Adding a menu/page, touching routing, auth flow, or data flow |
+| `docs/schema.md`       | Consuming API data — where every type must come from          |
+| `docs/rules.md`        | Writing any component or query — the full mandatory list      |
+| `docs/design.md`       | Any UI work — the 24 components, tokens, compound patterns    |
 
-Compound examples already in the system — follow this shape:
-`Dialog/DialogIcon/DialogTitle/DialogBody/DialogActions`,
-`Panel/Toolbar/ToolbarTitle/ToolbarGroup/PanelFoot/SectionTitle/PageTitle`,
-`Table/TableHeader/TableHead/TableBody/TableRow/TableCell/NameCell/IOCell`,
-`Drawer/DrawerClose/Timeline/TimelineItem`,
-`DropMenuWrap/DropMenu/DropMenuItem/DropMenuRadio/DropMenuHeading`.
+If `docs/` is absent on this machine, fall back to the root `README.md` and
+the code itself.
 
-## Component rules (mandatory)
+## The sharpest rules (the full list is in `docs/rules.md`)
 
-1. **Check before you create.** Before writing ANY new component, read
-   `components/ui/` first. If a component with a similar role exists, you MUST
-   NOT create a duplicate — extend the existing one with a **variant** (a cva
-   variant like `button.tsx`/`badge.tsx`, or a prop) instead. A new component
-   is only justified when nothing in the 24 existing ones covers the role even
-   with a new variant.
-2. **New components must match the existing architecture.** Compound
-   sub-components in one file with a single named-export statement at the
-   bottom, `cn()` for every className merge, cva when the component has visual
-   variants, props typed inline, `"use client"` only when state/effects are
-   needed. Place it in the correct layer (see table) — page-specific pieces
-   live next to their menu component, not in `ui/`.
-3. **No hardcoded colors — tokens only.** Every color comes from a CSS
-   variable defined in `app/globals.css`, consumed as `text-(--text-primary)`,
-   `bg-(--fill-subtle)`, `border-(--divider)`, badge tokens, etc. Arbitrary
-   hex in className (`bg-[#fff]`) is already an ESLint error. If a color you
-   need does not exist, **add a token to `globals.css` (both dark and light
-   blocks)** — never inline it. Sole exception: the cyan brand-glow
-   `rgba(0,212,255,…)` literals; reuse those exact values when matching that
-   accent, and never introduce any other literal color.
+1. **Check before you create.** Read `components/ui/` first; extend an
+   existing component with a cva variant or prop. A new component is only
+   justified when nothing in the existing 24 covers the role.
+2. **No hardcoded colors — tokens only** (`text-(--text-primary)`,
+   `bg-(--fill-subtle)`, …). Missing color = add a token to `globals.css`,
+   both dark and light blocks. Sole exception: the cyan brand-glow
+   `rgba(0,212,255,…)` literals.
+3. **`parseDate: false` stays on every Eden client**, binary downloads go
+   through `fetchBlob` (never Eden), queries live in `lib/queries/{domain}.ts`
+   with `unwrap`.
+4. **No hardcoded user-facing strings** — `useI18n()`, and every new string
+   goes into both `lib/i18n/id.ts` and `en.ts`.
+5. **`proxy.ts` is a cookie-presence check, not the security boundary.** Do
+   not add authorization there; the API macro is the boundary.
+
+## Verification
+
+No test suite here: `bun run typecheck` + `bun run lint`, then the running
+app. Never `next build` while the dev server runs — it corrupts `.next` and
+every route 500s.
