@@ -785,6 +785,13 @@ export type UnitExisting = {
   modelName: string;
   brandName: string;
   simperCodeName: string | null;
+  /**
+   * Carried beside the name because the name alone no longer identifies a
+   * department: two companies may each hold a `MINING OPERATION`, and a row
+   * that keeps its department must keep *this* one, not whichever same-named
+   * one a lookup happens to find.
+   */
+  departmentId: string | null;
   departmentName: string | null;
   serial: string;
   engineBrand: string;
@@ -828,14 +835,23 @@ export type ParsedUnit = {
   pending: PendingRef[];
 };
 
-/** name (lowercased) → { id, name }, for each catalogue a unit row can name. */
+/** One department a bare name could mean, with the company that qualifies it. */
+export type UnitDepartment = { id: string; name: string; company: string };
+
+/**
+ * name (lowercased) → { id, name }, for each catalogue a unit row can name.
+ *
+ * Departments are the exception: their name is unique only within a company,
+ * and the unit sheet has no company column — so the map carries *every* record
+ * a name could mean, and the parser refuses the ones it cannot settle.
+ */
 export type Catalogues = {
   classes: Map<string, { id: string; name: string }>;
   types: Map<string, { id: string; name: string }>;
   models: Map<string, { id: string; name: string }>;
   brands: Map<string, { id: string; name: string }>;
   simperCodes: Map<string, { id: string; name: string }>;
-  departments: Map<string, { id: string; name: string }>;
+  departments: Map<string, UnitDepartment[]>;
 };
 
 /** Which catalogue each reference column draws on, for the warning and the offer. */
@@ -910,7 +926,7 @@ export function unitTarget(
        */
       const resolve = (
         column: UnitRefColumn,
-        map: Catalogues[keyof Catalogues],
+        map: Map<string, { id: string; name: string }>,
         currentName: string | null | undefined
       ): Resolution => {
         const raw = read(column);
@@ -936,16 +952,60 @@ export function unitTarget(
         };
       };
 
+      /**
+       * The department, resolved apart from the leaf catalogues above.
+       *
+       * A department belongs to a company (design D1) and its name is unique
+       * only within one (D2), while the unit sheet carries no company column —
+       * so a bare name can be ambiguous, and an unknown one can never be
+       * created from here: a department without a company is a row the
+       * database refuses, and one filed under a guessed company is worse (D7).
+       *
+       * A cell that names the unit's own current department keeps it — by id,
+       * not by lookup — so an untouched export re-imports cleanly even where
+       * the name is ambiguous. Only a cell that would *move* the unit has to
+       * settle which department it means.
+       */
+      const department = (): Resolution => {
+        const raw = read("departemen");
+        if (!raw)
+          return current?.departmentId
+            ? { id: current.departmentId, name: current.departmentName ?? "" }
+            : null;
+        if (
+          current?.departmentId &&
+          current.departmentName?.toLowerCase() === raw.toLowerCase()
+        )
+          return { id: current.departmentId, name: current.departmentName };
+        const candidates = catalogues.departments.get(raw.toLowerCase()) ?? [];
+        if (candidates.length === 1)
+          return { id: candidates[0]!.id, name: candidates[0]!.name };
+        if (candidates.length > 1)
+          return {
+            missing: raw,
+            label: "Departemen",
+            because:
+              `Departemen "${raw}" ada di beberapa perusahaan (${candidates
+                .map((c) => c.company)
+                .join(", ")}) — nama saja tidak menentukan yang mana. ` +
+              `Pindahkan unit ini lewat menu Database Unit, yang memilih departemennya langsung.`,
+          };
+        return {
+          missing: raw,
+          label: "Departemen",
+          because:
+            `Departemen "${raw}" tidak ada di master. Departemen milik sebuah perusahaan, ` +
+            `jadi tidak pernah dibuat lewat import unit — tambahkan dulu di menu Departemen ` +
+            `di bawah perusahaan yang benar, lalu import ulang.`,
+        };
+      };
+
       const resolved = {
         cls: resolve("kelas", catalogues.classes, current?.className),
         typ: resolve("jenis", catalogues.types, current?.typeName),
         mdl: resolve("model", catalogues.models, current?.modelName),
         brd: resolve("merk", catalogues.brands, current?.brandName),
-        dpt: resolve(
-          "departemen",
-          catalogues.departments,
-          current?.departmentName
-        ),
+        dpt: department(),
         spc: resolve(
           "kode_simper",
           catalogues.simperCodes,
@@ -956,7 +1016,9 @@ export function unitTarget(
       for (const value of Object.values(resolved)) {
         if (value && "missing" in value)
           return {
-            issue: `${value.label} "${value.missing}" tidak ada di master, dan Anda tidak punya akses menambahnya — minta ditambahkan di menu masternya`,
+            issue:
+              value.because ??
+              `${value.label} "${value.missing}" tidak ada di master, dan Anda tidak punya akses menambahnya — minta ditambahkan di menu masternya`,
             key: code,
             label: value.missing,
           };

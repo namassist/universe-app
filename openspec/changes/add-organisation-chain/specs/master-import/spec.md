@@ -61,6 +61,37 @@ department.
 - **WHEN** any hierarchical import is committed
 - **THEN** no existing record's parent SHALL be changed by it
 
+### Requirement: A unit row resolves its department only where the name is unambiguous
+
+The unit sheet SHALL keep its single department column — a unit sheet names no
+company, because a unit's company is not a fact the fleet records. A unit row's
+department SHALL therefore resolve by name only while exactly one department
+carries that name.
+
+A department name held by more than one company SHALL refuse the row with a
+message naming the companies, rather than resolving to any of them. A row whose
+department cell repeats the unit's **own current** department SHALL keep that
+department by its identifier, so an untouched export re-imports cleanly even
+where its name has since become ambiguous.
+
+A department SHALL never be created from a unit import, whatever the caller's
+grants: the sheet cannot name the company a new department would belong to.
+
+#### Scenario: An ambiguous department name refuses the row
+
+- **WHEN** an imported unit row names a department held by two companies, and the unit is not already in either
+- **THEN** the row SHALL be reported as an error naming both companies, and SHALL NOT be imported
+
+#### Scenario: An untouched export still round-trips
+
+- **WHEN** a unit export is re-imported while another company has since created a same-named department
+- **THEN** each row SHALL keep its unit's own department, and the preview SHALL report it unchanged
+
+#### Scenario: An unknown department refuses the row at any grant
+
+- **WHEN** an imported unit row names a department no record matches, and the caller holds `manage` on the department catalogue
+- **THEN** the row SHALL be reported as an error, the department SHALL NOT join the pending additions list, and none SHALL be created
+
 ### Requirement: An employee row resolves its department through its company
 
 An imported employee row's department SHALL be resolved within the company the

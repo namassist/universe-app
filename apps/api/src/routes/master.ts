@@ -951,30 +951,45 @@ export const masterRoutes = new Elysia({
           message: "Nama tidak boleh kosong",
         });
 
+      const changes = {
+        ...(name !== undefined ? { name } : {}),
+        ...(body.active !== undefined ? { active: body.active } : {}),
+        ...(config.extra === "description" && body.description !== undefined
+          ? { description: body.description.trim() }
+          : {}),
+        ...(config.extra === "type" && body.type !== undefined
+          ? { type: body.type }
+          : {}),
+        ...(config.hasCode && body.code !== undefined
+          ? { code: body.code.trim() }
+          : {}),
+        ...(config.hasFleetFlag && body.fleetAllocation !== undefined
+          ? { fleetAllocation: body.fleetAllocation }
+          : {}),
+        // The parent is deliberately absent: see `ParentConfig`. A
+        // department that landed under the wrong company is corrected by
+        // creating the right one and deleting the wrong one, which the
+        // reference check will refuse if anyone is already in it — and
+        // that refusal is the point.
+      };
+
+      // An edit that named only fields this kind does not hold — a stripped
+      // parent among them — has nothing to write. Drizzle refuses an empty
+      // `set`, and "you changed nothing" is a 200 with the record as it
+      // stands, not a 500.
+      if (Object.keys(changes).length === 0) {
+        const [row] = (await db
+          .select(projection(config))
+          .from(config.table)
+          .where(eq(config.table.id, params.id))) as CatalogueRow[];
+        if (!row) return status(404, notFound);
+        return toRecord(row);
+      }
+
       try {
         const [row] = (await db
           .update(config.table)
-          .set({
-            ...(name !== undefined ? { name } : {}),
-            ...(body.active !== undefined ? { active: body.active } : {}),
-            ...(config.extra === "description" && body.description !== undefined
-              ? { description: body.description.trim() }
-              : {}),
-            ...(config.extra === "type" && body.type !== undefined
-              ? { type: body.type }
-              : {}),
-            ...(config.hasCode && body.code !== undefined
-              ? { code: body.code.trim() }
-              : {}),
-            ...(config.hasFleetFlag && body.fleetAllocation !== undefined
-              ? { fleetAllocation: body.fleetAllocation }
-              : {}),
-            // The parent is deliberately absent: see `ParentConfig`. A
-            // department that landed under the wrong company is corrected by
-            // creating the right one and deleting the wrong one, which the
-            // reference check will refuse if anyone is already in it — and
-            // that refusal is the point.
-          })
+          .set(changes)
           .where(eq(config.table.id, params.id))
           .returning(projection(config))) as CatalogueRow[];
         if (!row) return status(404, notFound);

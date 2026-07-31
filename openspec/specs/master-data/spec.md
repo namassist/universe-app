@@ -2,12 +2,17 @@
 
 ## Purpose
 
-The lookup catalogues the rest of the UNIVERSE platform matches against: the
-eleven master kinds and their per-kind record shapes, how names are normalised and
-kept unique, what deactivating a record means as against deleting one, the
+The catalogues the rest of the UNIVERSE platform matches against: the eleven
+master kinds and their per-kind record shapes, how names are normalised and kept
+unique, what deactivating a record means as against deleting one, the
 referential protection that keeps a referencing record from being orphaned, and
 the rule that every screen offering a master value reads it from the API rather
 than from a compiled-in array.
+
+Eight of the kinds are flat lookup lists. The other three form the organisation
+chain — a company owns departments, a department owns positions — so for those,
+uniqueness, identity, and deletion are all read against the parent rather than
+against the catalogue as a whole.
 
 ## Requirements
 

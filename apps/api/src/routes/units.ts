@@ -35,6 +35,7 @@ import {
   unitTemplate,
   unitWorkbook,
   validateWorkbook,
+  type UnitDepartment,
   type UnitExisting,
 } from "./master-import";
 import {
@@ -197,6 +198,7 @@ const toExisting = (row: UnitJoinRow): UnitExisting => ({
   code: row.code,
   className: row.className,
   typeName: row.typeName,
+  departmentId: row.departmentId,
   modelName: row.modelName,
   brandName: row.brandName,
   simperCodeName: row.simperCodeName,
@@ -222,18 +224,42 @@ async function catalogueLookup(
 }
 
 /**
+ * Every department a bare name could mean, keyed by that name lowercased.
+ *
+ * Not `catalogueLookup`: a department's name is unique only within its company
+ * (design D2), so two companies may each hold a `MINING OPERATION` and a
+ * name-keyed map would keep whichever row loaded last. The parser gets all of
+ * them, plus the company that qualifies each, so an ambiguous cell can be
+ * refused with a message naming the choices instead of resolved by accident.
+ */
+async function departmentLookup(): Promise<Map<string, UnitDepartment[]>> {
+  const rows = await db
+    .select({ id: dpt.id, name: dpt.name, company: schema.companies.name })
+    .from(dpt)
+    .innerJoin(schema.companies, eq(schema.companies.id, dpt.companyId));
+  const byName = new Map<string, UnitDepartment[]>();
+  for (const row of rows) {
+    const key = row.name.toLowerCase();
+    byName.set(key, [...(byName.get(key) ?? []), row]);
+  }
+  return byName;
+}
+
+/**
  * Which catalogue table each addable kind writes to.
  *
- * The six a unit row can reference, and only those: this is what a unit import
- * is allowed to add to, not a general door into the master surface.
+ * The five a unit row can reference as a leaf value, and only those: this is
+ * what a unit import is allowed to add to, not a general door into the master
+ * surface. `departemen` is deliberately absent — a department belongs to a
+ * company the unit sheet never names, so an unknown one refuses its row
+ * rather than creating a record the `company_id` constraint would reject.
  */
-const CREATABLE: Record<UnitRefKind, NamedCatalogue> = {
+const CREATABLE: Partial<Record<UnitRefKind, NamedCatalogue>> = {
   "kelas-unit": cls,
   "jenis-unit": typ,
   "model-unit": mdl,
   "merk-unit": brd,
   "kode-simper": spc,
-  departemen: dpt,
 };
 
 type UnitRefKind =
@@ -255,7 +281,7 @@ async function previewUnits(file: File, permissions: EffectivePermissions) {
       catalogueLookup(mdl),
       catalogueLookup(brd),
       catalogueLookup(spc),
-      catalogueLookup(dpt),
+      departmentLookup(),
     ]);
 
   const rows = await unitQuery();
@@ -292,6 +318,10 @@ async function createPendingMasters(
   const byKey = new Map<string, string>();
   for (const item of pending) {
     const table = CREATABLE[item.kind as UnitRefKind];
+    // Belt and braces: the parser never emits a `departemen` pending entry,
+    // and if one ever reached here it would be skipped rather than inserted
+    // against the `company_id` the sheet cannot supply.
+    if (!table) continue;
     // Cast for the same reason the master routes do: `NamedCatalogue` types the
     // shared columns as `AnyPgColumn`, so a projection over them infers `{}`.
     const [created] = (await tx

@@ -431,6 +431,54 @@ describe("a catalogue that belongs to another", () => {
     expect(result.preview.errors[0]!.issue).toContain("perusahaan");
   });
 
+  test("a position that exists under another department is a new row, not an edit", async () => {
+    // The silent-move bug this key exists to prevent (design D6): `ADMIN`
+    // lives under UDU / HRM, and the sheet files one under UDU / MINING
+    // OPERATION. Matched on the name alone this would read as an *edit* — the
+    // preview would say "1 updated" and the commit would move the position,
+    // and every employee holding it, to another department.
+    const positions = new Map([
+      [
+        "pt unggul dinamika utama|hrm|admin",
+        {
+          id: "p1",
+          name: "ADMIN",
+          description: "",
+          fleetAllocation: false,
+          path: ["PT UNGGUL DINAMIKA UTAMA", "HRM"],
+          active: true,
+        },
+      ],
+    ]);
+    const shape = {
+      hasFleetFlag: true,
+      parent: {
+        columns: ["perusahaan", "departemen"] as const,
+        byPath: new Map([
+          ["pt unggul dinamika utama|hrm", "d1"],
+          ["pt unggul dinamika utama|mining operation", "d2"],
+        ]),
+        label: "Departemen",
+      },
+    };
+    const wb = await sheet(
+      ["perusahaan", "departemen", "nama", "aktif"],
+      [["PT UNGGUL DINAMIKA UTAMA", "MINING OPERATION", "ADMIN", "TRUE"]]
+    );
+    const result = validateWorkbook(
+      "j.xlsx",
+      catalogueTarget("jabatan", "description", positions, shape),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.preview.updatedCount).toBe(0);
+    expect(result.preview.newCount).toBe(1);
+    // A new row under its own department — the existing one is never touched.
+    expect(result.accepted[0]!.current).toBeUndefined();
+    expect(result.accepted[0]!.parsed.parentId).toBe("d2");
+  });
+
   test("a position's fleet flag round-trips, and a blank column keeps it", async () => {
     const positions = new Map([
       [
@@ -550,10 +598,15 @@ describe("unit import", () => {
       string,
       { id: string; name: string },
     ][]),
-    departments: new Map([named("d1", "Mining Operation")] as [
-      string,
-      { id: string; name: string },
-    ][]),
+    // Departments carry every record a bare name could mean, because the unit
+    // sheet has no company column and a department name is unique only within
+    // one company. A single entry resolves; several refuse.
+    departments: new Map([
+      [
+        "mining operation",
+        [{ id: "d1", name: "Mining Operation", company: "PT UDU" }],
+      ],
+    ]),
   };
 
   const HEADERS = [
@@ -751,6 +804,137 @@ describe("unit import", () => {
       { kind: "jenis-unit", name: "SANY", rows: 1 },
       { kind: "merk-unit", name: "SANY", rows: 1 },
     ]);
+  });
+
+  test("an unknown department fails the row, whatever the caller's grants", async () => {
+    // A department belongs to a company the unit sheet never names, so it can
+    // never be created from here — with `manage` on the department master or
+    // without it. Before this rule the pending path would have tried to
+    // insert a department with no company, which the NOT NULL constraint
+    // turns into a failed import the operator cannot act on.
+    const wb = await sheet(HEADERS, [
+      [
+        "EX8001",
+        "BIGDIGGER",
+        "EXCAVATOR",
+        "EX2600-7BH",
+        "HITACHI",
+        "EXC 2600",
+        "LOGISTIK",
+      ],
+    ]);
+    const result = validateWorkbook(
+      "u.xlsx",
+      unitTarget(empty, catalogues, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("LOGISTIK");
+    expect(result.preview.errors[0]!.issue).toContain(
+      "tidak pernah dibuat lewat import unit"
+    );
+    expect(result.preview.newMasters).toEqual([]);
+    expect(result.accepted).toEqual([]);
+  });
+
+  test("a department name two companies hold is refused, naming both", async () => {
+    // The row is not wrong — the name is genuinely insufficient: the sheet
+    // has no company column, so "MINING OPERATION" no longer says which one.
+    const ambiguous = {
+      ...catalogues,
+      departments: new Map([
+        [
+          "mining operation",
+          [
+            { id: "d1", name: "MINING OPERATION", company: "PT UDU" },
+            { id: "d2", name: "MINING OPERATION", company: "PT RBS" },
+          ],
+        ],
+      ]),
+    };
+    const wb = await sheet(HEADERS, [
+      [
+        "EX8001",
+        "BIGDIGGER",
+        "EXCAVATOR",
+        "EX2600-7BH",
+        "HITACHI",
+        "EXC 2600",
+        "MINING OPERATION",
+      ],
+    ]);
+    const result = validateWorkbook(
+      "u.xlsx",
+      unitTarget(empty, ambiguous, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(1);
+    expect(result.preview.errors[0]!.issue).toContain("PT UDU");
+    expect(result.preview.errors[0]!.issue).toContain("PT RBS");
+    expect(result.accepted).toEqual([]);
+  });
+
+  test("a cell naming the unit's own department keeps it, even when ambiguous", async () => {
+    // The other half of the ambiguity rule: an untouched export must still
+    // re-import cleanly. The unit already knows which `MINING OPERATION` it
+    // sits in, so a cell that repeats that name keeps the unit's own
+    // department by id rather than refusing or re-resolving it.
+    const ambiguous = {
+      ...catalogues,
+      departments: new Map([
+        [
+          "mining operation",
+          [
+            { id: "d1", name: "MINING OPERATION", company: "PT UDU" },
+            { id: "d2", name: "MINING OPERATION", company: "PT RBS" },
+          ],
+        ],
+      ]),
+    };
+    const existing = new Map<string, UnitExisting>([
+      [
+        "ex8001",
+        {
+          id: "u1",
+          code: "EX8001",
+          className: "BIGDIGGER",
+          typeName: "EXCAVATOR",
+          modelName: "EX2600-7BH",
+          brandName: "HITACHI",
+          simperCodeName: "EXC 2600",
+          departmentId: "d2",
+          departmentName: "MINING OPERATION",
+          serial: "",
+          engineBrand: "",
+          description: "",
+          ftw: false,
+          active: true,
+        },
+      ],
+    ]);
+    const wb = await sheet(HEADERS, [
+      [
+        "EX8001",
+        "BIGDIGGER",
+        "EXCAVATOR",
+        "EX2600-7BH",
+        "HITACHI",
+        "EXC 2600",
+        "MINING OPERATION",
+      ],
+    ]);
+    const result = validateWorkbook(
+      "u.xlsx",
+      unitTarget(existing, ambiguous, mayCreate),
+      wb
+    );
+    if ("code" in result) throw new Error(result.message);
+    expect(result.preview.errorCount).toBe(0);
+    expect(result.preview.rows[0]!.kind).toBe("unchanged");
+    // d2 — the unit's own, not d1, which a bare-name lookup would have found.
+    expect(result.accepted[0]!.parsed.departmentId).toBe("d2");
   });
 
   test("a blank departemen is a company-wide asset, not a failed row", async () => {

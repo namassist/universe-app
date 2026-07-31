@@ -11,6 +11,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
+import ExcelJS from "exceljs";
 import { eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
@@ -283,6 +284,68 @@ describe("a write cannot reach where a read cannot", () => {
       { phone: "0800-0000-0000" }
     );
     expect(response.status).toBe(200);
+  });
+});
+
+/* -------------------------------------------------------------- the sheet */
+
+describe("the sheet obeys the same scope as the single-record routes", () => {
+  /**
+   * The single-record routes above are covered row by row; this drives the
+   * same rule through `POST /import/preview`, which is where a department
+   * admin could otherwise write a whole department at a time (design D8).
+   * The preview writes nothing, so what is asserted is the refusal itself.
+   */
+  const sheet = async (rows: string[][]) => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("s");
+    ws.addRow(["nik", "nama", "perusahaan", "jabatan", "departemen"]);
+    for (const r of rows) ws.addRow(r);
+    return wb.xlsx.writeBuffer();
+  };
+
+  const preview = async (rows: string[][]) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new File([await sheet(rows)], "karyawan.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      })
+    );
+    const response = await app.handle(
+      new Request("http://localhost/employees/import/preview", {
+        method: "POST",
+        headers: { cookie: deptAdmin.cookie },
+        body: form,
+      })
+    );
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      newCount: number;
+      errorCount: number;
+      errors: { row: string; issue: string }[];
+    };
+  };
+
+  test("a row for another department is refused; one for the caller's own is not", async () => {
+    const intoOwn = `ZZSheet${uid()}`;
+    const result = await preview([
+      // Into the caller's own department — the one thing the sheet may do.
+      [intoOwn, `${tag} Sheet Baru`, tag, tag, `${tag} A`],
+      // Filed into department B: not the caller's, however correct the row.
+      [`ZZSheet${uid()}`, `${tag} Sheet Salah`, tag, tag, `${tag} B`],
+      // Bob's NIK filed into department A — a transfer smuggled in as an
+      // import, refused on the side the sheet does not state.
+      [bob.nik, bob.name, tag, tag, `${tag} A`],
+    ]);
+
+    expect(result.newCount).toBe(1);
+    expect(result.errorCount).toBe(2);
+    expect(result.errors.map((e) => e.row)).toEqual(["3", "4"]);
+    expect(result.errors[0]!.issue).toContain("bukan departemen Anda");
+    expect(result.errors[1]!.issue).toContain(
+      "pemindahan antar departemen tidak lewat import"
+    );
   });
 });
 
