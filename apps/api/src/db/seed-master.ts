@@ -18,7 +18,7 @@
  *   even if every sample code happens to be free.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type {
   AreaType,
   BloodType,
@@ -1233,6 +1233,77 @@ async function seedUnits(organisation: OrganisationIds): Promise<void> {
 }
 
 /**
+ * The two sample fleets of the static port, over the sample units above.
+ *
+ * Composition only — which digger leads which haulers where. Codes rather
+ * than ids, resolved at insert, exactly as the units resolve their catalogue
+ * names.
+ */
+const SAMPLE_FLEETS: { digger: string; area: string; units: string[] }[] = [
+  {
+    digger: "EX8001",
+    area: "Panel East Puncak Utara",
+    units: ["RD5001", "RD5002", "RD4001", "RD4002"],
+  },
+  {
+    digger: "EX7001",
+    area: "Disposal T4",
+    units: ["DT4017", "DT4018", "DT3013"],
+  },
+];
+
+/**
+ * Sample fleets, and only into an empty table — the same guard as the units.
+ *
+ * One extra out: the fleets are compositions *over the sample units*, so if
+ * those units are absent (a site running its own fleet skipped the sample
+ * seed), the fleets are skipped with a note rather than thrown over —
+ * missing sample data is not an error the way a missing catalogue row is.
+ */
+async function seedFleets(): Promise<void> {
+  const [{ count } = { count: 0 }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.fleets);
+  if (count > 0) {
+    console.log(`  fleets — ${count} already present, sample fleets skipped`);
+    return;
+  }
+
+  const codes = SAMPLE_FLEETS.flatMap((f) => [f.digger, ...f.units]);
+  const units = await db
+    .select({ id: schema.units.id, code: schema.units.code })
+    .from(schema.units)
+    .where(inArray(schema.units.code, codes));
+  const unitByCode = new Map(units.map((u) => [u.code, u.id]));
+  const areas = await idsByName(schema.workAreas);
+
+  for (const fleet of SAMPLE_FLEETS) {
+    const diggerId = unitByCode.get(fleet.digger);
+    const areaId = areas.get(fleet.area.toLowerCase());
+    const memberIds = fleet.units.map((c) => unitByCode.get(c));
+    if (!diggerId || !areaId || memberIds.some((id) => !id)) {
+      console.log(
+        `  fleets — sample units for Fleet ${fleet.digger} not present, skipped`
+      );
+      continue;
+    }
+    const [row] = await db
+      .insert(schema.fleets)
+      .values({ diggerUnitId: diggerId, workAreaId: areaId })
+      .returning({ id: schema.fleets.id });
+    await db.insert(schema.fleetUnits).values(
+      (memberIds as string[]).map((unitId) => ({
+        fleetId: row!.id,
+        unitId,
+      }))
+    );
+    console.log(
+      `  fleets — Fleet ${fleet.digger} created with ${fleet.units.length} units`
+    );
+  }
+}
+
+/**
  * The sample workforce, and only into an empty table (design D13).
  *
  * The same guard as the sample fleet, for the same reason: a database that has
@@ -1338,6 +1409,7 @@ export async function seedMasterData(): Promise<OrganisationIds> {
 
   console.log("[seed] sample fleet");
   await seedUnits(organisation);
+  await seedFleets();
 
   console.log("[seed] sample workforce");
   await seedEmployees(organisation);

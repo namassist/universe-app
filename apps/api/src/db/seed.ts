@@ -501,8 +501,10 @@ async function wipeWorkforce(): Promise<void> {
 
   // Units point at departments, so they go before the catalogues do. They are
   // sample data themselves and are re-seeded in the same run — and the bus
-  // schedule points at *them*, which is the one reference the graph above the
-  // workforce still holds.
+  // schedule and the fleets point at *them*, which are the references the
+  // graph above the workforce still holds.
+  await db.delete(schema.fleetUnits);
+  await db.delete(schema.fleets);
   await db.delete(schema.busSchedules);
   await db.delete(schema.units);
 

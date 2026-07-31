@@ -1,11 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil, Plus, Trash2, Truck, X } from "lucide-react";
+
+import { FLEET_MAX_UNITS, FLEET_MIN_UNITS } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
+import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import {
+  fleetsKey,
+  fleetsQueryOptions,
+  type FleetRow,
+} from "@/lib/queries/fleets";
 import { masterQueryOptions, recordType } from "@/lib/queries/master";
 import { unitsQueryOptions, type UnitRow } from "@/lib/queries/units";
 import { Badge } from "@/components/ui/badge";
@@ -42,27 +50,16 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
-const FLEET_MIN_UNITS = 1;
-const FLEET_MAX_UNITS = 13;
-
-type Fleet = {
-  id: string;
-  digger: string;
-  loc: string;
-  bus: string;
-  units: string[];
-  active: boolean;
-};
-
 /* ---- semua dropdown di-derive dari master (unit + area kerja) ---- */
 /**
- * The fleet's own records are still sample data; only the values it *offers*
- * come from the API now, so a unit or work area added in a master menu appears
- * here without a redeploy.
+ * The fleet records and the values the form offers both come from the API now;
+ * the dialog still *thinks* in unit codes and area names because that is what
+ * the operator reads, and translates to ids at the edge when it submits.
  *
  * Digger-ness is derived here rather than stored: it is a property of the unit
  * type and class, and the catalogues do not carry a "this is a fleet leader"
- * flag. Kept as the same rule the static module used.
+ * flag. Kept as the same rule the static module used — the API deliberately
+ * does not enforce a heuristic.
  */
 const DIGGER_CLASSES = ["BIGDIGGER", "MEDIUMDIGGER", "SMALLDIGGER"];
 const isDigger = (u: UnitRow) =>
@@ -73,31 +70,14 @@ const unitTypeLabel = (u: UnitRow) => `${u.modelName} · ${u.brandName}`;
 
 const BUS_TYPE_NAME = "BUS";
 
-const INITIAL: Fleet[] = [
-  {
-    id: "fl1",
-    digger: "EX8001",
-    loc: "Panel East Puncak Utara",
-    bus: "",
-    units: ["RD5001", "RD5002", "RD4001", "RD4002"],
-    active: true,
-  },
-  {
-    id: "fl2",
-    digger: "EX7001",
-    loc: "Disposal T4",
-    bus: "",
-    units: ["DT4017", "DT4018", "DT3013"],
-    active: true,
-  },
-];
-
 export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
+  const queryClient = useQueryClient();
   const canW = mode === "manage";
 
-  const [fleets, setFleets] = React.useState<Fleet[]>(INITIAL);
+  const fleetsQ = useQuery(fleetsQueryOptions());
+  const fleets = React.useMemo(() => fleetsQ.data ?? [], [fleetsQ.data]);
 
   // Active units and active Mining work areas — the values this screen offers.
   const unitsQ = useQuery(unitsQueryOptions({ active: true }));
@@ -126,16 +106,22 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     [units]
   );
   /* Lokasi kerja = area kerja bertipe Mining (lokasi operasi fleet). */
-  const AREA_OPTS = React.useMemo(
-    () =>
-      (areasQ.data ?? [])
-        .filter((a) => recordType(a) === "Mining")
-        .map((a) => a.name),
+  const MINING_AREAS = React.useMemo(
+    () => (areasQ.data ?? []).filter((a) => recordType(a) === "Mining"),
     [areasQ.data]
+  );
+  const AREA_OPTS = React.useMemo(
+    () => MINING_AREAS.map((a) => a.name),
+    [MINING_AREAS]
+  );
+
+  /** Code → id at the submit edge; the API speaks ids, the operator codes. */
+  const unitIdByCode = React.useMemo(
+    () => new Map(units.map((u) => [u.code, u.id])),
+    [units]
   );
 
   // add/edit dialog
-  const importRef = React.useRef<HTMLInputElement>(null);
   const [dlgOpen, setDlgOpen] = React.useState(false);
   const [editId, setEditId] = React.useState<string | null>(null);
   const [fDigger, setFDigger] = React.useState("");
@@ -146,27 +132,79 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [fActive, setFActive] = React.useState(true);
   const [errDigger, setErrDigger] = React.useState(false);
   const [errUnits, setErrUnits] = React.useState("");
-  const [delTarget, setDelTarget] = React.useState<Fleet | null>(null);
+  const [delTarget, setDelTarget] = React.useState<FleetRow | null>(null);
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: fleetsKey });
+
+  const save = useMutation({
+    mutationFn: async (input: {
+      id: string | null;
+      diggerUnitId: string;
+      workAreaId: string;
+      busUnitId: string | null;
+      unitIds: string[];
+      active: boolean;
+    }) => {
+      const body = {
+        diggerUnitId: input.diggerUnitId,
+        workAreaId: input.workAreaId,
+        busUnitId: input.busUnitId,
+        unitIds: input.unitIds,
+        active: input.active,
+      };
+      const result = input.id
+        ? await api.v1.fleets({ id: input.id }).patch(body)
+        : await api.v1.fleets.post(body);
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (_d, input) => {
+      await invalidate();
+      pushToast("success", input.id ? t.flToastEdit : t.flToastAdd, fDigger);
+      setDlgOpen(false);
+    },
+    onError: (error) =>
+      pushToast("error", t.flAdd, errorMessage(error, t.loginErr)),
+  });
+
+  const del = useMutation({
+    mutationFn: async (row: FleetRow) => {
+      const { error } = await api.v1.fleets({ id: row.id }).delete();
+      if (error) throw error;
+    },
+    onSuccess: async (_d, row) => {
+      await invalidate();
+      pushToast("success", t.flToastDel, row.diggerCode);
+      setDelTarget(null);
+    },
+    onError: (error) =>
+      pushToast("error", t.flDelT, errorMessage(error, t.loginErr)),
+  });
 
   const [listQ, setListQ] = React.useState("");
   const listNeedle = listQ.trim().toLowerCase();
   const listRows = listNeedle
     ? fleets.filter(
         (f) =>
-          f.digger.toLowerCase().includes(listNeedle) ||
-          f.loc.toLowerCase().includes(listNeedle) ||
-          f.bus.toLowerCase().includes(listNeedle)
+          f.diggerCode.toLowerCase().includes(listNeedle) ||
+          f.workAreaName.toLowerCase().includes(listNeedle) ||
+          (f.busCode ?? "").toLowerCase().includes(listNeedle)
       )
     : fleets;
   const pg = usePagination(listRows, "5");
 
   const diggerTypeOf = (code: string) => DIGGERS[code] ?? "—";
   const diggerOpts = Object.keys(DIGGERS)
-    .filter((code) => !fleets.some((f) => f.digger === code && f.id !== editId))
+    .filter(
+      (code) => !fleets.some((f) => f.diggerCode === code && f.id !== editId)
+    )
     .sort();
   /* unit milik fleet lain disembunyikan */
   const usedElsewhere = new Set(
-    fleets.filter((f) => f.id !== editId).flatMap((f) => f.units)
+    fleets
+      .filter((f) => f.id !== editId)
+      .flatMap((f) => f.units.map((u) => u.code))
   );
   const unitOpts = OHT_POOL.filter((c) => !usedElsewhere.has(c)).sort();
   const unitOptsFiltered = unitOpts.filter((c) =>
@@ -200,12 +238,12 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     setDlgOpen(true);
   }
 
-  function openEdit(f: Fleet) {
+  function openEdit(f: FleetRow) {
     setEditId(f.id);
-    setFDigger(f.digger);
-    setFBus(f.bus);
-    setFLoc(f.loc);
-    setFUnits(f.units);
+    setFDigger(f.diggerCode);
+    setFBus(f.busCode ?? "");
+    setFLoc(f.workAreaName);
+    setFUnits(f.units.map((u) => u.code));
     setUnitQ("");
     setFActive(f.active);
     setErrDigger(false);
@@ -213,11 +251,11 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     setDlgOpen(true);
   }
 
-  function save(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const digger = fDigger.trim();
     const badDigger =
-      !digger || fleets.some((f) => f.digger === digger && f.id !== editId);
+      !digger || fleets.some((f) => f.diggerCode === digger && f.id !== editId);
     setErrDigger(badDigger);
     const unitsErr =
       fUnits.length > FLEET_MAX_UNITS
@@ -228,33 +266,26 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     setErrUnits(unitsErr);
     if (badDigger || unitsErr) return;
 
-    const data = {
-      digger,
-      loc: fLoc.trim(),
-      bus: fBus,
-      units: fUnits,
-      active: fActive,
-    };
-    if (editId) {
-      setFleets((prev) =>
-        prev.map((f) => (f.id === editId ? { ...f, ...data } : f))
-      );
-      pushToast("success", t.flToastEdit, digger);
-    } else {
-      setFleets((prev) => [
-        ...prev,
-        { id: `fl${prev.length + 1}-${digger}`, ...data },
-      ]);
-      pushToast("success", t.flToastAdd, digger);
+    // The maps are built from the same lists the selects offered, so a miss
+    // here means the catalogue changed under the open dialog — surfaced as
+    // an error rather than submitted as a broken reference.
+    const diggerUnitId = unitIdByCode.get(digger);
+    const workAreaId = MINING_AREAS.find((a) => a.name === fLoc)?.id;
+    const busUnitId = fBus ? unitIdByCode.get(fBus) : null;
+    const unitIds = fUnits.map((c) => unitIdByCode.get(c));
+    if (!diggerUnitId || !workAreaId || unitIds.some((id) => !id)) {
+      pushToast("error", t.flAdd, t.loginErr);
+      return;
     }
-    setDlgOpen(false);
-  }
 
-  function doDelete() {
-    if (!delTarget) return;
-    setFleets((prev) => prev.filter((f) => f.id !== delTarget.id));
-    pushToast("success", t.flToastDel, delTarget.digger);
-    setDelTarget(null);
+    save.mutate({
+      id: editId,
+      diggerUnitId,
+      workAreaId,
+      busUnitId: busUnitId ?? null,
+      unitIds: unitIds as string[],
+      active: fActive,
+    });
   }
 
   return (
@@ -273,34 +304,12 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           <ToolbarTitle>{t.flListTitle}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
-              className="w-[240px]"
+              className="w-60"
               placeholder={t.flSearchPh}
               aria-label={t.flSearchPh}
               value={listQ}
               onChange={(e) => setListQ(e.target.value)}
             />
-            {canW ? (
-              <>
-                <input
-                  ref={importRef}
-                  type="file"
-                  accept=".csv,.xlsx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) pushToast("success", `${t.udbImport} Fleet`, f.name);
-                    e.target.value = "";
-                  }}
-                />
-                <Button
-                  variant="secondary"
-                  onClick={() => importRef.current?.click()}
-                >
-                  <Upload />
-                  {t.udbImport}
-                </Button>
-              </>
-            ) : null}
           </ToolbarGroup>
         </Toolbar>
         <Table>
@@ -318,17 +327,20 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             {pg.rows.map((f) => (
               <TableRow key={f.id}>
                 <TableCell>
-                  <NameCell name={f.digger} sub={diggerTypeOf(f.digger)} />
+                  <NameCell
+                    name={f.diggerCode}
+                    sub={diggerTypeOf(f.diggerCode)}
+                  />
                 </TableCell>
-                <TableCell>{f.loc}</TableCell>
+                <TableCell>{f.workAreaName}</TableCell>
                 <TableCell className="font-mono max-xl:hidden">
-                  {f.bus || "—"}
+                  {f.busCode ?? "—"}
                 </TableCell>
                 <TableCell>
                   <div className="flex max-w-[320px] flex-wrap gap-1">
                     {f.units.map((u) => (
-                      <Badge key={u} variant="info">
-                        {u}
+                      <Badge key={u.id} variant="info">
+                        {u.code}
                       </Badge>
                     ))}
                   </div>
@@ -391,7 +403,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           {editId ? `${t.flEditT} ${fDigger}` : t.flAdd}
         </DialogTitle>
         <DialogBody>{t.flDlgB}</DialogBody>
-        <form onSubmit={save} noValidate>
+        <form onSubmit={submit} noValidate>
           <FormGrid className="mt-4">
             <Field
               label="Digger (fleet leader)"
@@ -466,7 +478,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                         key={c}
                         onClick={() => toggleUnit(c)}
                         aria-label={`${t.empDel} ${c}`}
-                        className="flex cursor-pointer items-center gap-1 rounded-chip border border-(--badge-info-border) bg-(--badge-info-fill) px-2 py-1 font-mono text-xs font-semibold text-(--color-primary-bright) hover:border-(--badge-danger-border) hover:text-(--color-danger-text)"
+                        className="flex cursor-pointer items-center gap-1 rounded-chip border border-(--badge-info-border) bg-(--badge-info-fill) px-2 py-1 font-mono text-xs font-semibold text-primary-bright hover:border-(--badge-danger-border) hover:text-danger-text"
                       >
                         {c}
                         <X className="size-3" />
@@ -524,7 +536,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             >
               {t.btnCancel}
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={save.isPending}>
               {editId ? t.udbSaveEdit : t.flSaveAdd}
             </Button>
           </DialogActions>
@@ -541,14 +553,20 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           <Trash2 />
         </DialogIcon>
         <DialogTitle id="fld-t">
-          {t.flDelT} {delTarget?.digger}?
+          {t.flDelT} {delTarget?.diggerCode}?
         </DialogTitle>
         <DialogBody>{t.flDelB}</DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setDelTarget(null)}>
             {t.btnCancel}
           </Button>
-          <Button variant="destructive" onClick={doDelete}>
+          <Button
+            variant="destructive"
+            disabled={del.isPending}
+            onClick={() => {
+              if (delTarget) del.mutate(delTarget);
+            }}
+          >
             {t.empDelDo}
           </Button>
         </DialogActions>

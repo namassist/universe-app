@@ -9,6 +9,7 @@ export const API_VERSION = "v1" as const;
 
 export * from "./access";
 export * from "./account-import";
+export * from "./fleet";
 export * from "./master";
 export * from "./master-import";
 export * from "./roster";

@@ -414,6 +414,69 @@ export const busSchedules = pgTable("bus_schedules", {
     .defaultNow(),
 });
 
+/* -------------------------------------------------------------------- fleets */
+
+/**
+ * A fleet is a digger and the haulers that serve it, parked at a work area.
+ *
+ * The digger is a reference to a unit rather than a fleet attribute, and it is
+ * `unique`: a digger leads at most one fleet, and "which fleet" is a property
+ * of the digger rather than a name someone maintains. The fleet has no name
+ * column for the same reason — every screen calls it "Fleet EX8001".
+ *
+ * `work_area_id` is `notNull`: a fleet exists to work somewhere, and the route
+ * additionally requires the area to be of type Mining. `bus_unit_id` is
+ * nullable — a fleet without a crew bus is a real state, not missing data —
+ * and the route requires the unit it names to be of type BUS.
+ *
+ * `onDelete: "restrict"` on every unit reference, following the rest of the
+ * schema: deleting a unit that leads a fleet, rides as its bus, or hauls in it
+ * is refused with a count, not silently unlinked.
+ */
+export const fleets = pgTable("fleets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  diggerUnitId: uuid("digger_unit_id")
+    .notNull()
+    .unique()
+    .references(() => units.id, { onDelete: "restrict" }),
+  workAreaId: uuid("work_area_id")
+    .notNull()
+    .references(() => workAreas.id, { onDelete: "restrict" }),
+  busUnitId: uuid("bus_unit_id").references(() => units.id, {
+    onDelete: "restrict",
+  }),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * The haulers of one fleet, one row per unit.
+ *
+ * `unit_id` is `unique` across the whole table, not per fleet: a unit hauls
+ * for at most one fleet, and the exclusivity the screen promises ("units of
+ * other fleets are hidden") is a fact the database holds rather than a filter
+ * the client applies. The digger is deliberately *not* a member row — the
+ * route refuses a digger offered as a member, and membership rows die with
+ * their fleet (`cascade`) because they are the fleet's edge list, not records
+ * in their own right.
+ */
+export const fleetUnits = pgTable(
+  "fleet_units",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fleetId: uuid("fleet_id")
+      .notNull()
+      .references(() => fleets.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .unique()
+      .references(() => units.id, { onDelete: "restrict" }),
+  },
+  (table) => [index("fleet_units_fleet_id_idx").on(table.fleetId)]
+);
+
 /* ----------------------------------------------------------------- workforce */
 
 /**

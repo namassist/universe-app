@@ -583,6 +583,27 @@ export const BusScheduleSchema = t.Object({
   createdAt: t.String(),
 });
 
+/* -------------------------------------------------------------------- fleets */
+
+/**
+ * A fleet, with every unit reference carried as both key and code — the
+ * `UnitSchema` bargain. The screen names a fleet by its digger, filters its
+ * member picker by what other fleets already hold, and labels the location by
+ * name, so the ids alone would put a join on the client.
+ */
+export const FleetSchema = t.Object({
+  id: t.String(),
+  diggerUnitId: t.String(),
+  diggerCode: t.String(),
+  workAreaId: t.String(),
+  workAreaName: t.String(),
+  busUnitId: t.Nullable(t.String()),
+  busCode: t.Nullable(t.String()),
+  units: t.Array(t.Object({ id: t.String(), code: t.String() })),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
 /* ------------------------------------------------------------------ employees */
 
 /** A qualification code an employee holds — key and name, like every reference. */

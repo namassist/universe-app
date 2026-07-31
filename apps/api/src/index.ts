@@ -16,6 +16,7 @@ import { authRoutes } from "./routes/auth";
 import { devicesRoutes, displayRoutes } from "./routes/devices";
 import { runTextsRoutes, soundsRoutes } from "./routes/display-content";
 import { employeesRoutes } from "./routes/employees";
+import { fleetsRoutes } from "./routes/fleets";
 import { masterRoutes } from "./routes/master";
 import { rolesRoutes } from "./routes/roles";
 import { rosterRoutes } from "./routes/roster";
@@ -45,6 +46,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(rosterRevisionRoutes)
   .use(unitsRoutes)
   .use(busSchedulesRoutes)
+  .use(fleetsRoutes)
   .use(runTextsRoutes)
   .use(soundsRoutes)
   .use(timelineRoutes);
