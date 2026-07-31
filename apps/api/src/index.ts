@@ -23,6 +23,7 @@ import { rosterRoutes } from "./routes/roster";
 import { rosterImportRoutes } from "./routes/roster-import";
 import { rosterRevisionRoutes } from "./routes/roster-revision";
 import { timelineRoutes } from "./routes/timeline";
+import { unitStatusRoutes } from "./routes/unit-status";
 import { busSchedulesRoutes, unitsRoutes } from "./routes/units";
 import { usersRoutes } from "./routes/users";
 
@@ -47,6 +48,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(unitsRoutes)
   .use(busSchedulesRoutes)
   .use(fleetsRoutes)
+  .use(unitStatusRoutes)
   .use(runTextsRoutes)
   .use(soundsRoutes)
   .use(timelineRoutes);

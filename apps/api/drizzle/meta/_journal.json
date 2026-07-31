@@ -57,6 +57,13 @@
       "when": 1785477693095,
       "tag": "0007_wet_harry_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785478722808,
+      "tag": "0008_outstanding_scarecrow",
+      "breakpoints": true
     }
   ]
 }

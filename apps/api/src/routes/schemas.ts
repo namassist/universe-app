@@ -29,6 +29,7 @@ import {
   RUNTEXT_COLORS,
   SCOPES,
   TIMELINE_ACTIONS,
+  UNIT_STATUSES,
   type MenuSlug,
 } from "@universe/contracts";
 
@@ -47,6 +48,7 @@ export const RosterCodeSchema = t.UnionEnum(ROSTER_CODES);
 export const RosterCodeKindSchema = t.UnionEnum(ROSTER_CODE_KINDS);
 export const RosterDocumentStatusSchema = t.UnionEnum(ROSTER_DOCUMENT_STATUSES);
 export const RosterRevisionStatusSchema = t.UnionEnum(ROSTER_REVISION_STATUSES);
+export const UnitStatusSchema = t.UnionEnum(UNIT_STATUSES);
 
 /* --------------------------------------------------------- optional enums */
 
@@ -580,6 +582,30 @@ export const BusScheduleSchema = t.Object({
   /** "HH:MM" — the schedule is specified to the minute, and read as one. */
   departAt: t.String(),
   active: t.Boolean(),
+  createdAt: t.String(),
+});
+
+/* --------------------------------------------------------------- unit status */
+
+/**
+ * A unit as the status screen reads it. `location` is the owning fleet's work
+ * area — null for a unit no fleet holds — and `updatedAt` is the latest
+ * status change, null for a unit whose status was never touched.
+ */
+export const UnitStatusRowSchema = t.Object({
+  id: t.String(),
+  code: t.String(),
+  modelName: t.String(),
+  brandName: t.String(),
+  status: UnitStatusSchema,
+  location: t.Nullable(t.String()),
+  updatedAt: t.Nullable(t.String()),
+});
+
+export const UnitStatusHistorySchema = t.Object({
+  id: t.String(),
+  status: UnitStatusSchema,
+  reason: t.String(),
   createdAt: t.String(),
 });
 

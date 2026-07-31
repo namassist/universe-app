@@ -9,3 +9,12 @@
  */
 export const FLEET_MIN_UNITS = 1;
 export const FLEET_MAX_UNITS = 13;
+
+/**
+ * A unit's operational status, derived from two stored flags — `breakdown`
+ * wins over `standby`, and neither means `ready`. Ordered worst-first, which
+ * is also the order the status screen sorts by: a broken unit is the row the
+ * morning meeting is looking for.
+ */
+export const UNIT_STATUSES = ["breakdown", "standby", "ready"] as const;
+export type UnitStatus = (typeof UNIT_STATUSES)[number];

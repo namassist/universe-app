@@ -27,6 +27,7 @@ import {
   ROSTER_REVISION_STATUSES,
   SCOPES,
   TIMELINE_ACTIONS,
+  UNIT_STATUSES,
 } from "@universe/contracts";
 
 // Enum values come from contracts so db, API schema, and client cannot drift.
@@ -38,6 +39,7 @@ export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const employeeStatus = pgEnum("employee_status", EMPLOYEE_STATUSES);
 export const mcuResult = pgEnum("mcu_result", MCU_RESULTS);
 export const bloodType = pgEnum("blood_type", BLOOD_TYPES);
+export const unitStatus = pgEnum("unit_status", UNIT_STATUSES);
 export const rosterCode = pgEnum("roster_code", ROSTER_CODES);
 export const rosterDocumentStatus = pgEnum(
   "roster_document_status",
@@ -475,6 +477,36 @@ export const fleetUnits = pgTable(
       .references(() => units.id, { onDelete: "restrict" }),
   },
   (table) => [index("fleet_units_fleet_id_idx").on(table.fleetId)]
+);
+
+/**
+ * Every status change a unit has been through, newest first on read.
+ *
+ * The unit's *current* status stays derived from the two flags on `units` —
+ * this table is the answer to "since when, and why", which the flags cannot
+ * hold. `reason` is `notNull` because the route refuses a change without one:
+ * a breakdown with no stated cause is a row the morning meeting cannot act
+ * on. Append-only by convention — nothing updates or deletes a history row.
+ */
+export const unitStatusHistory = pgTable(
+  "unit_status_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "restrict" }),
+    status: unitStatus("status").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("unit_status_history_unit_created_idx").on(
+      table.unitId,
+      table.createdAt
+    ),
+  ]
 );
 
 /* ----------------------------------------------------------------- workforce */
