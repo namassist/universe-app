@@ -17,6 +17,9 @@ const badgeVariants = cva(
         info: "border-[rgba(0,212,255,.4)] bg-[rgba(0,212,255,.12)] text-primary-bright",
         neutral:
           "border-(--badge-neutral-border) bg-(--badge-neutral-fill) text-(--badge-neutral-text)",
+        /** Organisational tags (department badges) — never a status. */
+        accent:
+          "border-(--badge-accent-border) bg-(--badge-accent-fill) text-(--badge-accent-text)",
       },
     },
     defaultVariants: {

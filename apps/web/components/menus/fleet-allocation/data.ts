@@ -27,6 +27,8 @@ export type BoardUnit = {
   brand: string;
   loc: string;
   status: UnitStatus;
+  /** Owning department's name; null/absent means a global unit. */
+  departmentName?: string | null;
   fleet: { id: string; digger: string; area: string } | null;
   downtime?: boolean;
   slots: Slot[];
@@ -344,7 +346,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
 ];
 
 /** Pool spare — tanpa urutan prioritas (bukan senioritas). */
-export type SpareRow = { nik: string; name: string };
+export type SpareRow = { nik: string; name: string; departmentName?: string };
 export const SPARE_INIT: SpareRow[] = [
   { nik: "507230715", name: "Bagus Priyambodo" },
   { nik: "507230733", name: "Lina Kusuma" },
@@ -358,6 +360,7 @@ export type Candidate = {
   nik: string;
   name: string;
   simperJenis?: string;
+  departmentName?: string;
   eligible: boolean;
   busyAt?: string;
   here?: boolean;

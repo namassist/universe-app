@@ -527,8 +527,11 @@ export const id = {
   stMenuHelp:
     "Menu yang dimatikan disembunyikan dari sidebar untuk semua user (kecuali menu wajib).",
   stMenuLocked: "wajib — tidak bisa dimatikan",
-  faSubB:
-    "alokasi dua lapis: PLAN (unit ↔ maks. 2 operator tetap) dan ACTUAL harian (Tambah = lock lineup, Generate = substitusi spare).",
+  faDeptMismatch: "departemen tidak cocok",
+  faDeptAll: "Semua departemen",
+  faSkillMismatch: "kode SIMPER tidak cocok dengan unit ini",
+  faSimperExpired: "SIMPER kedaluwarsa",
+  faGlobalUnit: "GLOBAL",
   faShiftPagi: "Shift pagi",
   faShiftMalam: "Shift malam",
   faNoOp: "Belum ada operator",
@@ -542,6 +545,7 @@ export const id = {
     "Hanya operator dengan SIMPER yang sesuai dan belum terpasang di unit lain yang bisa dipilih.",
   faBusy: "sudah di unit lain",
   faBusyHere: "sudah di unit ini",
+  faSameShift: "shift sama dengan pasangan unit ini",
   faFilterEligible: "Layak",
   faEligibleN: "operator layak untuk unit ini",
   faComplement: "Melengkapi pasangan",

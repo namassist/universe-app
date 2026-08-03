@@ -480,6 +480,42 @@ export const fleetUnits = pgTable(
 );
 
 /**
+ * The standing PLAN pairings — which operators hold which unit, across
+ * shifts.
+ *
+ * At most two operators per unit (one Day, one Night — the route enforces
+ * both the count and the opposite-shift rule, which need the roster and so
+ * cannot live here). What the table *does* hold: `unique(employee_id)` — an
+ * operator holds at most one unit, which is what makes "busy at RD5001" a
+ * fact rather than a filter — and `unique(unit_id, employee_id)` against the
+ * same pairing twice. `restrict` on both sides: deleting a planned unit or a
+ * paired operator is refused with a count, the same as every reference here.
+ */
+export const fleetPlanSlots = pgTable(
+  "fleet_plan_slots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .unique()
+      .references(() => employees.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("fleet_plan_slots_unit_employee_idx").on(
+      table.unitId,
+      table.employeeId
+    ),
+    index("fleet_plan_slots_unit_id_idx").on(table.unitId),
+  ]
+);
+
+/**
  * Every status change a unit has been through, newest first on read.
  *
  * The unit's *current* status stays derived from the two flags on `units` —

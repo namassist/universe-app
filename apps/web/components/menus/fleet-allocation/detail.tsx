@@ -29,7 +29,7 @@ export function FleetAllocationDetail() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={`ACTUAL — ${date}`} sub={`${shiftLabel} — ${t.faSubB}`}>
+      <PageTitle title={`ACTUAL — ${date}`} sub={shiftLabel}>
         <Button
           variant="ghost"
           onClick={() => router.push(`/fleet-allocation?mode=actual`)}

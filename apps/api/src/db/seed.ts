@@ -489,6 +489,8 @@ async function wipeWorkforce(): Promise<void> {
   await db.delete(schema.rosterDays);
   await db.delete(schema.rosterDocuments);
 
+  // Plan pairings reference employees and units both, so they go first.
+  await db.delete(schema.fleetPlanSlots);
   await db.delete(schema.employeeSkills);
   await db.delete(schema.employees);
   await db

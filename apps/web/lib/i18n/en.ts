@@ -527,8 +527,11 @@ export const en: Dict = {
   stMenuHelp:
     "Disabled menus are hidden from the sidebar for all users (except required menus).",
   stMenuLocked: "required — cannot be disabled",
-  faSubB:
-    "two-layer allocation: PLAN (unit ↔ max. 2 fixed operators) and daily ACTUAL (Add = lineup lock, Generate = spare substitution).",
+  faDeptMismatch: "department mismatch",
+  faDeptAll: "All departments",
+  faSkillMismatch: "SIMPER code does not match this unit",
+  faSimperExpired: "SIMPER expired",
+  faGlobalUnit: "GLOBAL",
   faShiftPagi: "Day shift",
   faShiftMalam: "Night shift",
   faNoOp: "No operator yet",
@@ -542,6 +545,7 @@ export const en: Dict = {
     "Only operators with a matching SIMPER who are not already on another unit can be selected.",
   faBusy: "already on another unit",
   faBusyHere: "already on this unit",
+  faSameShift: "same shift as the unit's current partner",
   faFilterEligible: "Eligible",
   faEligibleN: "operators eligible for this unit",
   faComplement: "Completes the pair",

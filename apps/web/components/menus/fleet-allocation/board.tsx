@@ -2,9 +2,18 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Upload, UserPlus } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { UserPlus } from "lucide-react";
 
+import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import {
+  planBoardKey,
+  planBoardQueryOptions,
+  planCandidatesKey,
+  planCandidatesQueryOptions,
+  type PlanBoard,
+} from "@/lib/queries/fleet-allocation";
 import { cn } from "@/lib/utils";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
@@ -34,17 +43,41 @@ import {
   CANDIDATES,
   FLEET_OPTIONS,
   ftwBadge,
-  PLAN_UNITS,
   SPARE_INIT,
   type BoardUnit,
   type Candidate,
   type Slot,
+  type SpareRow,
 } from "./data";
 
 const FA_PLAN_MAX_OPS = 2;
 
 type Filter = "all" | "unalloc" | "alloc" | "issue";
 type Kind = "bd" | "none" | "warn" | "dt" | "ok";
+
+/** A dialog row — the static candidate shape plus the pair-shift flag the
+ * server adds in plan mode. */
+type DialogRow = Candidate & {
+  sameShift?: boolean;
+  deptOk?: boolean;
+  skillOk?: boolean;
+  expired?: boolean;
+};
+
+/**
+ * "MINING OPERATION" → "MO", "PIT SERVICE AND DEVELOPMENT" → "PSD" — the
+ * badge form of a department name, connector words dropped. The full name
+ * rides on the badge's title so the abbreviation never has to be guessed at.
+ */
+const CONNECTORS = new Set(["and", "dan", "of", "the", "&"]);
+function deptAbbrev(name: string): string {
+  return name
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w && !CONNECTORS.has(w.toLowerCase()))
+    .map((w) => w[0]!.toUpperCase())
+    .join("")
+    .slice(0, 4);
+}
 
 const stBadge: Record<
   BoardUnit["status"],
@@ -55,25 +88,27 @@ const stBadge: Record<
   standby: { variant: "warning", label: "Standby" },
 };
 
-/* ---------- Dialog alokasi operator (kandidat statis + search) ---------- */
+/* ---------- Dialog alokasi operator ---------- */
 function AllocDialog({
   unit,
   mode,
+  rows: allRows,
   onClose,
   onAssign,
 }: {
   unit: BoardUnit | null;
   mode: "plan" | "actual";
+  rows: DialogRow[];
   onClose: () => void;
   onAssign: (nik: string, name: string) => void;
 }) {
   const { t } = useI18n();
-  const [sel, setSel] = React.useState<Candidate | null>(null);
+  const [sel, setSel] = React.useState<DialogRow | null>(null);
   const [q, setQ] = React.useState("");
   const [view, setView] = React.useState<"eligible" | "all">("eligible");
 
   const needle = q.trim().toLowerCase();
-  const rows = CANDIDATES.filter((c) => {
+  const rows = allRows.filter((c) => {
     if (view === "eligible" && !c.eligible) return false;
     if (!needle) return true;
     return (
@@ -81,7 +116,7 @@ function AllocDialog({
       c.nik.toLowerCase().includes(needle)
     );
   });
-  const eligibleN = CANDIDATES.filter((c) => c.eligible).length;
+  const eligibleN = allRows.filter((c) => c.eligible).length;
 
   return (
     <Dialog
@@ -130,6 +165,11 @@ function AllocDialog({
           let sub = c.simperJenis ? `SIMPER ${c.simperJenis}` : t.faKompNone;
           if (c.busyAt) sub += ` · ${t.faBusy} (${c.busyAt})`;
           if (c.here) sub += ` · ${t.faBusyHere}`;
+          if (c.sameShift) sub += ` · ${t.faSameShift}`;
+          // The explicit mismatches, so "disabled" always says why.
+          if (c.deptOk === false) sub += ` · ${t.faDeptMismatch}`;
+          if (c.skillOk === false) sub += ` · ${t.faSkillMismatch}`;
+          if (c.expired) sub += ` · ${t.faSimperExpired}`;
           const ftw = mode === "actual" && c.ftw ? ftwBadge[c.ftw] : null;
           return (
             <div
@@ -160,14 +200,14 @@ function AllocDialog({
                 </b>
                 <span className="text-xs text-(--text-tertiary)">{sub}</span>
               </div>
+              {c.departmentName ? (
+                <Badge variant="accent" title={c.departmentName}>
+                  {deptAbbrev(c.departmentName)}
+                </Badge>
+              ) : null}
               {c.complement ? (
                 <Badge variant="info" title={t.faComplement}>
                   {t.faComplement}
-                </Badge>
-              ) : null}
-              {c.rosterShift ? (
-                <Badge variant="neutral">
-                  {c.rosterShift === "pagi" ? t.faShiftPagi : t.faShiftMalam}
                 </Badge>
               ) : null}
               {ftw ? (
@@ -202,7 +242,27 @@ function AllocDialog({
   );
 }
 
-/* ---------- Papan kartu unit (PLAN editable / detail ACTUAL) ---------- */
+/** Server board units, in the shape the cards render. */
+function toBoardUnits(board: PlanBoard | undefined): BoardUnit[] {
+  return (board?.units ?? []).map((u) => ({
+    code: u.code,
+    model: u.modelName,
+    brand: u.brandName,
+    loc: u.location ?? "—",
+    status: u.status,
+    departmentName: u.departmentName,
+    fleet: u.fleet
+      ? { id: u.fleet.id, digger: u.fleet.diggerCode, area: u.fleet.area }
+      : null,
+    slots: u.slots.map((s) => ({
+      nik: s.nik,
+      name: s.name,
+      ...(s.simperTypeName ? { simperJenis: s.simperTypeName } : {}),
+    })),
+  }));
+}
+
+/* ---------- Papan kartu unit (PLAN live / detail ACTUAL statis) ---------- */
 export function AllocBoard({
   mode,
   canManage,
@@ -217,18 +277,49 @@ export function AllocBoard({
 }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
-  const importRef = React.useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   const router = useRouter();
 
-  const [units, setUnits] = React.useState<BoardUnit[]>(() =>
-    (mode === "plan" ? PLAN_UNITS : ACTUAL_UNITS).map((u) => ({
-      ...u,
-      slots: [...u.slots],
-    }))
+  // PLAN reads the server; ACTUAL stays the static port until its own
+  // change lands the generation engine.
+  const planQ = useQuery({
+    ...planBoardQueryOptions(),
+    enabled: mode === "plan",
+  });
+  const [localUnits, setLocalUnits] = React.useState<BoardUnit[]>(() =>
+    mode === "plan"
+      ? []
+      : ACTUAL_UNITS.map((u) => ({ ...u, slots: [...u.slots] }))
   );
-  const [spare] = React.useState(SPARE_INIT);
-  const [spareQ, setSpareQ] = React.useState("");
+  const units = React.useMemo(
+    () => (mode === "plan" ? toBoardUnits(planQ.data) : localUnits),
+    [mode, planQ.data, localUnits]
+  );
 
+  const spare: SpareRow[] = React.useMemo(
+    () =>
+      mode === "plan"
+        ? (planQ.data?.spares ?? []).map((s) => ({
+            nik: s.nik,
+            name: s.name,
+            departmentName: s.departmentName,
+          }))
+        : SPARE_INIT,
+    [mode, planQ.data]
+  );
+  const fleetOptions = React.useMemo(
+    () =>
+      mode === "plan"
+        ? (planQ.data?.fleets ?? []).map((f) => ({
+            id: f.id,
+            digger: f.diggerCode,
+          }))
+        : FLEET_OPTIONS,
+    [mode, planQ.data]
+  );
+
+  const [spareQ, setSpareQ] = React.useState("");
+  const [spareDeptF, setSpareDeptF] = React.useState("all");
   const [filter, setFilter] = React.useState<Filter>("all");
   const [fleetF, setFleetF] = React.useState("all");
   const [q, setQ] = React.useState("");
@@ -239,6 +330,86 @@ export function AllocBoard({
   const canEdit = mode === "plan" && canManage;
   /* intervensi manual terbatas: pasca-generate, slot kosong saja */
   const canIntervene = mode === "actual" && canManage && !!generatedAt;
+
+  const invalidatePlan = (unitCode: string) =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: planBoardKey }),
+      queryClient.invalidateQueries({
+        queryKey: planCandidatesKey(unitCode),
+      }),
+    ]);
+
+  const assignM = useMutation({
+    mutationFn: async (input: {
+      unitCode: string;
+      nik: string;
+      name: string;
+    }) => {
+      const result = await api.v1["fleet-allocation"].plan.slots.post({
+        unitCode: input.unitCode,
+        nik: input.nik,
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (_d, input) => {
+      await invalidatePlan(input.unitCode);
+      pushToast("success", `${input.name} → ${input.unitCode}`, t.faToastDoD);
+      setAllocFor(null);
+    },
+    onError: (error) =>
+      pushToast("error", t.faAssign, errorMessage(error, t.loginErr)),
+  });
+
+  const releaseM = useMutation({
+    mutationFn: async (input: {
+      unitCode: string;
+      nik: string;
+      name: string;
+    }) => {
+      const { error } = await api.v1["fleet-allocation"].plan
+        .slots({ unitCode: input.unitCode })({ nik: input.nik })
+        .delete();
+      if (error) throw error;
+    },
+    onSuccess: async (_d, input) => {
+      await invalidatePlan(input.unitCode);
+      pushToast(
+        "info",
+        `${input.name} ${t.faToastRelT} ${input.unitCode}`,
+        t.faToastRelD
+      );
+    },
+    onError: (error) =>
+      pushToast("error", t.faRelease, errorMessage(error, t.loginErr)),
+  });
+
+  // The dialog's candidates: served per unit in plan mode, static in actual.
+  const candidatesQ = useQuery({
+    ...planCandidatesQueryOptions(allocFor?.code ?? ""),
+    enabled: mode === "plan" && !!allocFor,
+  });
+  const dialogRows: DialogRow[] = React.useMemo(() => {
+    if (mode !== "plan") return CANDIDATES;
+    return (candidatesQ.data ?? []).map((c) => ({
+      nik: c.nik,
+      name: c.name,
+      ...(c.simperTypeName ? { simperJenis: c.simperTypeName } : {}),
+      departmentName: c.departmentName,
+      eligible: c.eligible,
+      ...(c.busyAt ? { busyAt: c.busyAt } : {}),
+      ...(c.rosterShift
+        ? {
+            rosterShift: (c.rosterShift === "day" ? "pagi" : "malam") as
+              "pagi" | "malam",
+          }
+        : {}),
+      sameShift: c.sameShift,
+      deptOk: c.deptOk,
+      skillOk: c.skillOk,
+      expired: c.expired,
+    }));
+  }, [mode, candidatesQ.data]);
 
   function kindOf(u: BoardUnit): Kind {
     if (mode === "plan") return u.slots.length ? "ok" : "none";
@@ -281,9 +452,13 @@ export function AllocBoard({
     downtime: units.filter((u) => u.downtime).length,
   };
 
-  /* ---------- mutasi lokal (static-only) ---------- */
   function assign(unit: BoardUnit, nik: string, name: string) {
-    setUnits((prev) =>
+    if (mode === "plan") {
+      assignM.mutate({ unitCode: unit.code, nik, name });
+      return;
+    }
+    // ACTUAL: intervensi manual, masih statis sampai engine-nya ada.
+    setLocalUnits((prev) =>
       prev.map((u) =>
         u.code === unit.code && u.slots.length < FA_PLAN_MAX_OPS
           ? {
@@ -294,9 +469,8 @@ export function AllocBoard({
                   nik,
                   name,
                   simperJenis: "BII",
-                  ...(mode === "actual"
-                    ? { via: "manual" as const, ftw: "fit" as const }
-                    : {}),
+                  via: "manual" as const,
+                  ftw: "fit" as const,
                 },
               ],
             }
@@ -304,34 +478,35 @@ export function AllocBoard({
       )
     );
     setAllocFor(null);
-    if (mode === "plan")
-      pushToast("success", `${name} → ${unit.code}`, t.faToastDoD);
-    else
-      pushToast(
-        "success",
-        t.faIntToastT,
-        `${name} → ${unit.code}. ${t.faIntToastD}`
-      );
+    pushToast(
+      "success",
+      t.faIntToastT,
+      `${name} → ${unit.code}. ${t.faIntToastD}`
+    );
   }
 
   function releasePlan(unit: BoardUnit, nik: string, name: string) {
-    setUnits((prev) =>
-      prev.map((u) =>
-        u.code === unit.code
-          ? { ...u, slots: u.slots.filter((s) => s.nik !== nik) }
-          : u
-      )
-    );
-    pushToast("info", `${name} ${t.faToastRelT} ${unit.code}`, t.faToastRelD);
+    releaseM.mutate({ unitCode: unit.code, nik, name });
   }
 
+  /** The departments the spare pool spans — the filter offers what exists. */
+  const spareDepts = React.useMemo(
+    () =>
+      [
+        ...new Set(spare.map((s) => s.departmentName).filter(Boolean)),
+      ].sort() as string[],
+    [spare]
+  );
+
   const spareNeedle = spareQ.trim().toLowerCase();
-  const spareShown = spare.filter(
-    (s) =>
-      !spareNeedle ||
+  const spareShown = spare.filter((s) => {
+    if (spareDeptF !== "all" && s.departmentName !== spareDeptF) return false;
+    if (!spareNeedle) return true;
+    return (
       s.name.toLowerCase().includes(spareNeedle) ||
       s.nik.toLowerCase().includes(spareNeedle)
-  );
+    );
+  });
 
   return (
     <>
@@ -370,28 +545,6 @@ export function AllocBoard({
           )}
         </span>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {canEdit ? (
-            <>
-              <input
-                ref={importRef}
-                type="file"
-                accept=".csv,.xlsx"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) pushToast("success", `${t.udbImport} PLAN`, f.name);
-                  e.target.value = "";
-                }}
-              />
-              <Button
-                variant="secondary"
-                onClick={() => importRef.current?.click()}
-              >
-                <Upload />
-                {t.udbImport}
-              </Button>
-            </>
-          ) : null}
           <Select
             aria-label="Filter fleet"
             wrapperClassName="w-auto"
@@ -403,7 +556,7 @@ export function AllocBoard({
             }}
           >
             <option value="all">{t.faFleetAll}</option>
-            {FLEET_OPTIONS.map((f) => (
+            {fleetOptions.map((f) => (
               <option key={f.id} value={f.id}>
                 Fleet {f.digger}
               </option>
@@ -470,14 +623,24 @@ export function AllocBoard({
                 </Badge>
               </div>
 
-              {u.fleet ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="info">Fleet {u.fleet.digger}</Badge>
-                  <span className="text-xs text-(--text-tertiary)">
-                    {u.fleet.area}
-                  </span>
-                </div>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Which department may operate it — GLOBAL means anyone. */}
+                {u.departmentName ? (
+                  <Badge variant="accent" title={u.departmentName}>
+                    {deptAbbrev(u.departmentName)}
+                  </Badge>
+                ) : mode === "plan" ? (
+                  <Badge variant="neutral">{t.faGlobalUnit}</Badge>
+                ) : null}
+                {u.fleet ? (
+                  <>
+                    <Badge variant="info">Fleet {u.fleet.digger}</Badge>
+                    <span className="text-xs text-(--text-tertiary)">
+                      {u.fleet.area}
+                    </span>
+                  </>
+                ) : null}
+              </div>
 
               {mode === "plan" ? (
                 <div className="flex flex-col gap-2">
@@ -668,13 +831,29 @@ export function AllocBoard({
         </div>
       </Panel>
 
-      {/* pool spare — operator kompeten yang belum dapat unit shift ini */}
+      {/* pool spare — operator kompeten yang belum dapat unit */}
       <Panel>
         <Toolbar className="mb-2">
           <ToolbarTitle>
-            {t.faSpareTitle} ({spare.length})
+            {t.faSpareTitle} ({spareShown.length}/{spare.length})
           </ToolbarTitle>
           <ToolbarGroup>
+            {spareDepts.length ? (
+              <Select
+                aria-label={t.faDeptAll}
+                wrapperClassName="w-auto"
+                className="h-10 w-auto pr-9"
+                value={spareDeptF}
+                onChange={(e) => setSpareDeptF(e.target.value)}
+              >
+                <option value="all">{t.faDeptAll}</option>
+                {spareDepts.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
             <SearchInput
               className="w-[240px]"
               placeholder={t.searchOp}
@@ -712,6 +891,11 @@ export function AllocBoard({
                     {r.nik}
                   </span>
                 </div>
+                {r.departmentName ? (
+                  <Badge variant="accent" title={r.departmentName}>
+                    {deptAbbrev(r.departmentName)}
+                  </Badge>
+                ) : null}
               </div>
             ))}
           </div>
@@ -723,6 +907,7 @@ export function AllocBoard({
           key={allocFor?.code ?? "none"}
           unit={allocFor}
           mode={mode}
+          rows={dialogRows}
           onClose={() => setAllocFor(null)}
           onAssign={(nik, name) => {
             if (allocFor) assign(allocFor, nik, name);

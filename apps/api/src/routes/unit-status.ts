@@ -27,9 +27,11 @@ import {
   UnitStatusSchema,
 } from "./schemas";
 
-/** The reading, ranked worst-first. */
-const statusOf = (u: { breakdown: boolean; standby: boolean }): UnitStatus =>
-  u.breakdown ? "breakdown" : u.standby ? "standby" : "ready";
+/** The reading, ranked worst-first. Shared with the allocation board. */
+export const statusOf = (u: {
+  breakdown: boolean;
+  standby: boolean;
+}): UnitStatus => (u.breakdown ? "breakdown" : u.standby ? "standby" : "ready");
 
 /** The write — both flags, every time, so transitions cannot compound. */
 const FLAGS: Record<UnitStatus, { standby: boolean; breakdown: boolean }> = {

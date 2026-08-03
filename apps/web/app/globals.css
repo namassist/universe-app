@@ -109,6 +109,11 @@
   --badge-neutral-fill: rgba(255, 255, 255, 0.1);
   --badge-neutral-border: rgba(255, 255, 255, 0.28);
   --badge-neutral-text: rgba(255, 255, 255, 0.72);
+  /* accent: organisational tags (department badges) — violet, so it cannot
+     be read as a status beside success/warning/danger/info. */
+  --badge-accent-fill: rgba(167, 139, 250, 0.16);
+  --badge-accent-border: rgba(167, 139, 250, 0.4);
+  --badge-accent-text: #c4b5fd;
 
   /* ---- Tipografi ---- */
   --tracking-brand: 0.02em;
@@ -174,6 +179,9 @@
   --badge-neutral-fill: rgba(10, 27, 58, 0.06);
   --badge-neutral-border: rgba(10, 27, 58, 0.25);
   --badge-neutral-text: rgba(10, 27, 58, 0.75);
+  --badge-accent-fill: rgba(109, 40, 217, 0.1);
+  --badge-accent-border: rgba(109, 40, 217, 0.45);
+  --badge-accent-text: #5b21b6;
 
   --fill-subtle: rgba(10, 27, 58, 0.05);
   --fill-hover: rgba(10, 27, 58, 0.07);
