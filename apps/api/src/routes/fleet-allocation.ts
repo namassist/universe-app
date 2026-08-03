@@ -26,6 +26,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
   rosterCodeKind,
+  type PlanImportPreview,
   type RosterCodeKind,
   type UnitStatus,
 } from "@universe/contracts";
@@ -33,7 +34,20 @@ import {
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
 import { localDate } from "../scheduler";
-import { ErrorSchema, UnitStatusSchema } from "./schemas";
+import {
+  buildPlanTemplate,
+  pairingConflicts,
+  validatePlanWorkbook,
+  type ParsedPlanRow,
+  type PlanCatalogues,
+} from "./fleet-allocation-import";
+import { MAX_IMPORT_BYTES } from "./import-columns";
+import {
+  ErrorSchema,
+  PlanImportPreviewSchema,
+  PlanImportResultSchema,
+  UnitStatusSchema,
+} from "./schemas";
 import { statusOf } from "./unit-status";
 
 const FA_PLAN_MAX_OPS = 2;
@@ -103,7 +117,7 @@ const CandidateSchema = t.Object({
 /* ------------------------------------------------------------------ lookups */
 
 /** day/night for a set of employees on one date — other kinds read as null. */
-async function shiftKinds(
+export async function shiftKinds(
   employeeIds: string[],
   date: string
 ): Promise<Map<string, "day" | "night">> {
@@ -213,7 +227,7 @@ const unitNotFound = {
 };
 
 /** A unit as eligibility needs it, by code. */
-async function unitByCode(code: string) {
+export async function unitByCode(code: string) {
   const [unit] = await db
     .select({
       id: schema.units.id,
@@ -235,6 +249,196 @@ async function unitByCode(code: string) {
     .where(and(eq(schema.units.code, code), eq(schema.units.active, true)))
     .limit(1);
   return unit;
+}
+
+export type AllocUnit = NonNullable<Awaited<ReturnType<typeof unitByCode>>>;
+
+/** An operator as eligibility needs them, by NIK. */
+export async function personByNik(nik: string) {
+  const [person] = await db
+    .select({
+      id: schema.employees.id,
+      nik: schema.employees.nik,
+      name: schema.employees.name,
+      statusValue: schema.employees.status,
+      departmentId: schema.employees.departmentId,
+      simperExp: schema.employees.simperExp,
+      positionName: schema.positions.name,
+      fleetAllocation: schema.positions.fleetAllocation,
+    })
+    .from(schema.employees)
+    .innerJoin(
+      schema.positions,
+      eq(schema.positions.id, schema.employees.positionId)
+    )
+    .where(eq(schema.employees.nik, nik))
+    .limit(1);
+  return person;
+}
+
+export type AllocPerson = NonNullable<Awaited<ReturnType<typeof personByNik>>>;
+
+/**
+ * The eligibility rules, worded once. The single-slot route and the
+ * spreadsheet import both refuse through this — an import that validated
+ * less would be the path operators route around the dialog through.
+ *
+ * Returns the refusal message, or null when the pairing is sound.
+ */
+export async function refusePairing(
+  unit: AllocUnit,
+  person: AllocPerson
+): Promise<string | null> {
+  if (person.statusValue !== "aktif")
+    return `Karyawan ${person.nik} sudah tidak aktif`;
+  if (!person.fleetAllocation)
+    return `Posisi "${person.positionName}" tidak masuk alokasi fleet — tandai posisinya di master Posisi bila memang seharusnya`;
+  if (unit.departmentId && person.departmentId !== unit.departmentId)
+    return `Unit ${unit.code} milik departemen "${unit.departmentName}" — operatornya harus dari departemen itu`;
+  if (unit.simperCodeId) {
+    const [skill] = await db
+      .select({ employeeId: schema.employeeSkills.employeeId })
+      .from(schema.employeeSkills)
+      .where(
+        and(
+          eq(schema.employeeSkills.employeeId, person.id),
+          eq(schema.employeeSkills.simperCodeId, unit.simperCodeId)
+        )
+      )
+      .limit(1);
+    if (!skill)
+      return `${person.name} tidak memegang kode SIMPER "${unit.simperCodeName}" yang unit ini butuhkan`;
+    const today = localDate(new Date());
+    if (person.simperExp !== null && person.simperExp < today)
+      return `SIMPER ${person.name} kedaluwarsa ${person.simperExp} — perpanjang dulu sebelum dipasangkan`;
+  }
+  return null;
+}
+
+/* -------------------------------------------------------------- import */
+
+/** Everything the parser needs to resolve codes and read the current plan. */
+async function planCatalogues(): Promise<PlanCatalogues> {
+  const units = await db
+    .select({ id: schema.units.id, code: schema.units.code })
+    .from(schema.units)
+    .where(eq(schema.units.active, true));
+  const people = await db
+    .select({
+      id: schema.employees.id,
+      nik: schema.employees.nik,
+      name: schema.employees.name,
+    })
+    .from(schema.employees);
+  const slots = await db
+    .select({
+      unitId: schema.fleetPlanSlots.unitId,
+      unitCode: schema.units.code,
+      employeeId: schema.fleetPlanSlots.employeeId,
+    })
+    .from(schema.fleetPlanSlots)
+    .innerJoin(schema.units, eq(schema.units.id, schema.fleetPlanSlots.unitId));
+
+  const heldByUnit = new Map<string, string[]>();
+  for (const s of slots)
+    heldByUnit.set(s.unitId, [
+      ...(heldByUnit.get(s.unitId) ?? []),
+      s.employeeId,
+    ]);
+
+  return {
+    unitsByCode: new Map(units.map((u) => [u.code.toLowerCase(), u])),
+    peopleByNik: new Map(people.map((p) => [p.nik, p])),
+    slotOf: new Map(
+      slots.map((s) => [
+        s.employeeId,
+        { unitId: s.unitId, unitCode: s.unitCode },
+      ])
+    ),
+    heldByUnit,
+  };
+}
+
+type PlanImportOutcome = {
+  preview: PlanImportPreview;
+  rows: ParsedPlanRow[];
+};
+
+/**
+ * Parse, hold every surviving row against `refusePairing` — the same
+ * function the dialog goes through — then judge capacity and the Day/Night
+ * pair against the effective plan.
+ */
+async function parsePlanImport(
+  file: File
+): Promise<PlanImportOutcome | { code: string; message: string }> {
+  const catalogues = await planCatalogues();
+  const parsed = await validatePlanWorkbook(
+    await file.arrayBuffer(),
+    catalogues
+  );
+  if ("code" in parsed) return parsed;
+
+  const errors = [...parsed.errors];
+  const eligible: ParsedPlanRow[] = [];
+  for (const row of parsed.rows) {
+    const unit = await unitByCode(row.preview.unit);
+    const person = await personByNik(row.preview.nik);
+    // Both resolved a moment ago in the parse; vanishing between the two
+    // reads is a re-validate case, not a crash.
+    if (!unit || !person) continue;
+    const refusal = await refusePairing(unit, person);
+    if (refusal) {
+      errors.push({
+        row: String(row.preview.row),
+        nik: row.preview.nik,
+        emp: row.preview.name,
+        issue: refusal,
+        badgeVariant: "danger",
+        badge: "Error",
+      });
+      continue;
+    }
+    eligible.push(row);
+  }
+
+  const today = localDate(new Date());
+  const involved = new Set<string>(eligible.map((r) => r.employeeId));
+  for (const held of catalogues.heldByUnit.values())
+    for (const id of held) involved.add(id);
+  const shiftOf = await shiftKinds([...involved], today);
+
+  const conflicts = pairingConflicts(eligible, catalogues, shiftOf);
+  errors.push(...conflicts.errors);
+  errors.sort((a, b) => Number(a.row) - Number(b.row));
+
+  const rows = conflicts.rows;
+  return {
+    preview: {
+      fileName: file.name,
+      newCount: rows.filter((r) => r.preview.kind === "new").length,
+      movedCount: rows.filter((r) => r.preview.kind === "moved").length,
+      unchangedCount: rows.filter((r) => r.preview.kind === "unchanged").length,
+      errorCount: errors.length,
+      rows: rows.map((r) => r.preview),
+      errors,
+    },
+    rows,
+  };
+}
+
+/**
+ * A conflict the commit's own recheck finds under lock — the race between
+ * validation's read and the write. Thrown to roll the transaction back.
+ */
+class PlanImportConflict extends Error {
+  constructor(
+    readonly httpStatus: 409 | 422,
+    readonly code: string,
+    message: string
+  ) {
+    super(message);
+  }
 }
 
 export const fleetAllocationRoutes = new Elysia({
@@ -439,30 +643,201 @@ export const fleetAllocationRoutes = new Elysia({
     }
   )
 
+  /* -------------------------------------------------------------- import */
+
+  .get(
+    "/plan/import/template",
+    async ({ set }) => {
+      set.headers["content-type"] =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      set.headers["content-disposition"] =
+        'attachment; filename="template_plan.xlsx"';
+      return new Response(new Uint8Array(await buildPlanTemplate()));
+    },
+    {
+      auth: { menu: "fleet-allocation", mode: "manage" },
+      // Described by hand rather than with a `response` schema: the body is a
+      // binary workbook, and a TypeBox schema would try to validate it.
+      detail: {
+        summary: "Download the PLAN import template (.xlsx)",
+        responses: {
+          200: {
+            description: "An .xlsx with the columns unit, nik",
+            content: {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                { schema: { type: "string", format: "binary" } },
+            },
+          },
+          401: { description: "No session" },
+          403: { description: "Lacks manage on the fleet-allocation menu" },
+        },
+      },
+    }
+  )
+
+  .post(
+    "/plan/import/validate",
+    async ({ body, status }) => {
+      const outcome = await parsePlanImport(body.file);
+      if ("code" in outcome) return status(422, outcome);
+      return outcome.preview;
+    },
+    {
+      auth: { menu: "fleet-allocation", mode: "manage" },
+      body: t.Object({ file: t.File({ maxSize: MAX_IMPORT_BYTES }) }),
+      response: {
+        200: PlanImportPreviewSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: {
+        summary: "Validate a PLAN spreadsheet and preview the pairings",
+      },
+    }
+  )
+
+  .post(
+    "/plan/import/commit",
+    async ({ body, status }) => {
+      // Re-validated rather than trusted from the client: the preview the
+      // caller saw is advisory, this parse is what gets written.
+      const outcome = await parsePlanImport(body.file);
+      if ("code" in outcome) return status(422, outcome);
+      if (outcome.preview.errorCount > 0)
+        return status(422, {
+          code: "validation_failed",
+          message: `${outcome.preview.errorCount} baris masih bermasalah`,
+        });
+
+      const writes = outcome.rows.filter((r) => r.preview.kind !== "unchanged");
+      const moved = writes.filter((r) => r.fromUnitId !== null);
+      if (!writes.length) return { created: 0, moved: 0 };
+
+      const today = localDate(new Date());
+
+      try {
+        await db.transaction(async (tx) => {
+          // The unit rows are the locks, taken in one sorted set so two
+          // imports (or an import and the dialog) serialise instead of
+          // deadlocking. Everything the file touches is locked: targets,
+          // and the units moves release.
+          const lockIds = [
+            ...new Set([
+              ...writes.map((r) => r.unitId),
+              ...moved.map((r) => r.fromUnitId!),
+            ]),
+          ].sort();
+          await tx
+            .select({ id: schema.units.id })
+            .from(schema.units)
+            .where(inArray(schema.units.id, lockIds))
+            .for("update");
+
+          if (moved.length)
+            await tx.delete(schema.fleetPlanSlots).where(
+              inArray(
+                schema.fleetPlanSlots.employeeId,
+                moved.map((r) => r.employeeId)
+              )
+            );
+          await tx.insert(schema.fleetPlanSlots).values(
+            writes.map((r) => ({
+              unitId: r.unitId,
+              employeeId: r.employeeId,
+            }))
+          );
+
+          // The recheck under lock — validation read the plan a moment
+          // before this transaction, and the dialog may have written in
+          // between. Capacity and the pair rule are re-judged on what the
+          // table now actually holds; a violation rolls the whole file back.
+          const targets = [...new Set(writes.map((r) => r.unitId))];
+          const codeOf = new Map(writes.map((r) => [r.unitId, r.preview.unit]));
+          const held = await tx
+            .select({
+              unitId: schema.fleetPlanSlots.unitId,
+              employeeId: schema.fleetPlanSlots.employeeId,
+            })
+            .from(schema.fleetPlanSlots)
+            .where(inArray(schema.fleetPlanSlots.unitId, targets));
+          const byUnit = new Map<string, string[]>();
+          for (const h of held)
+            byUnit.set(h.unitId, [
+              ...(byUnit.get(h.unitId) ?? []),
+              h.employeeId,
+            ]);
+
+          for (const [unitId, ids] of byUnit)
+            if (ids.length > FA_PLAN_MAX_OPS)
+              throw new PlanImportConflict(
+                409,
+                "unit_full",
+                `Unit ${codeOf.get(unitId)} baru saja terisi penuh — validasi ulang filenya`
+              );
+
+          const kinds = await shiftKinds(
+            held.map((h) => h.employeeId),
+            today
+          );
+          for (const [unitId, ids] of byUnit) {
+            if (ids.length < 2) continue;
+            const pair = ids
+              .map((id) => kinds.get(id))
+              .filter((k): k is "day" | "night" => k !== undefined);
+            if (pair.length === 2 && pair[0] === pair[1])
+              throw new PlanImportConflict(
+                422,
+                "validation_failed",
+                `Pasangan unit ${codeOf.get(unitId)} baru saja menjadi sama-sama shift ${
+                  pair[0] === "day" ? "pagi" : "malam"
+                } — validasi ulang filenya`
+              );
+          }
+        });
+      } catch (error) {
+        if (error instanceof PlanImportConflict)
+          return status(error.httpStatus, {
+            code: error.code,
+            message: error.message,
+          });
+        // The race the locks cannot see: an operator paired with another
+        // unit between the read and this insert.
+        if (isUniqueViolation(error, "fleet_plan_slots_employee_id_unique"))
+          return status(409, {
+            code: "operator_busy",
+            message:
+              "Seorang operator dalam file ini baru saja dipasangkan dengan unit lain — validasi ulang filenya",
+          });
+        throw error;
+      }
+
+      return {
+        created: writes.length - moved.length,
+        moved: moved.length,
+      };
+    },
+    {
+      auth: { menu: "fleet-allocation", mode: "manage" },
+      body: t.Object({ file: t.File({ maxSize: MAX_IMPORT_BYTES }) }),
+      response: {
+        200: PlanImportResultSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        409: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Commit a validated PLAN spreadsheet" },
+    }
+  )
+
   .post(
     "/plan/slots",
     async ({ body, status }) => {
       const unit = await unitByCode(body.unitCode);
       if (!unit) return status(404, unitNotFound);
 
-      const [person] = await db
-        .select({
-          id: schema.employees.id,
-          nik: schema.employees.nik,
-          name: schema.employees.name,
-          statusValue: schema.employees.status,
-          departmentId: schema.employees.departmentId,
-          simperExp: schema.employees.simperExp,
-          positionName: schema.positions.name,
-          fleetAllocation: schema.positions.fleetAllocation,
-        })
-        .from(schema.employees)
-        .innerJoin(
-          schema.positions,
-          eq(schema.positions.id, schema.employees.positionId)
-        )
-        .where(eq(schema.employees.nik, body.nik))
-        .limit(1);
+      const person = await personByNik(body.nik);
       if (!person)
         return status(404, {
           code: "employee_not_found",
@@ -472,37 +847,8 @@ export const fleetAllocationRoutes = new Elysia({
       const refuse = (message: string) =>
         status(422, { code: "validation_failed", message });
 
-      if (person.statusValue !== "aktif")
-        return refuse(`Karyawan ${person.nik} sudah tidak aktif`);
-      if (!person.fleetAllocation)
-        return refuse(
-          `Posisi "${person.positionName}" tidak masuk alokasi fleet — tandai posisinya di master Posisi bila memang seharusnya`
-        );
-      if (unit.departmentId && person.departmentId !== unit.departmentId)
-        return refuse(
-          `Unit ${unit.code} milik departemen "${unit.departmentName}" — operatornya harus dari departemen itu`
-        );
-      if (unit.simperCodeId) {
-        const [skill] = await db
-          .select({ employeeId: schema.employeeSkills.employeeId })
-          .from(schema.employeeSkills)
-          .where(
-            and(
-              eq(schema.employeeSkills.employeeId, person.id),
-              eq(schema.employeeSkills.simperCodeId, unit.simperCodeId)
-            )
-          )
-          .limit(1);
-        if (!skill)
-          return refuse(
-            `${person.name} tidak memegang kode SIMPER "${unit.simperCodeName}" yang unit ini butuhkan`
-          );
-        const today = localDate(new Date());
-        if (person.simperExp !== null && person.simperExp < today)
-          return refuse(
-            `SIMPER ${person.name} kedaluwarsa ${person.simperExp} — perpanjang dulu sebelum dipasangkan`
-          );
-      }
+      const refusal = await refusePairing(unit, person);
+      if (refusal) return refuse(refusal);
 
       const today = localDate(new Date());
 

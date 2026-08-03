@@ -23,13 +23,14 @@ import {
 } from "@universe/contracts";
 
 import {
+  cellText,
+  MAX_IMPORT_BYTES,
   missingColumnsFailure,
   unknownColumnsFailure,
   type ParseFailure,
 } from "./import-columns";
 
-/** Generous for hundreds of rows, small enough that a hostile file fails fast. */
-export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+export { MAX_IMPORT_BYTES };
 
 const HEADER_ROW = 1;
 
@@ -78,22 +79,6 @@ export async function buildTemplate(): Promise<Buffer> {
   });
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
-}
-
-function cellText(value: ExcelJS.CellValue): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object") {
-    if ("text" in value && typeof value.text === "string")
-      return value.text.trim();
-    if ("result" in value) return String(value.result ?? "").trim();
-    if ("richText" in value)
-      return value.richText
-        .map((r) => r.text)
-        .join("")
-        .trim();
-    return "";
-  }
-  return String(value).trim();
 }
 
 /**

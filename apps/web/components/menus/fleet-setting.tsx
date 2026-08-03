@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, Truck, X } from "lucide-react";
+import { Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
 
 import { FLEET_MAX_UNITS, FLEET_MIN_UNITS } from "@universe/contracts";
 
@@ -74,6 +75,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const canW = mode === "manage";
 
   const fleetsQ = useQuery(fleetsQueryOptions());
@@ -292,10 +294,19 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     <div className="flex flex-col gap-6">
       <PageTitle title={t.navFleetSetting} sub={t.flSub}>
         {canW ? (
-          <Button onClick={openAdd}>
-            <Plus />
-            {t.flAdd}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => router.push("/fleet-setting/import")}
+            >
+              <Upload />
+              {t.upImport}
+            </Button>
+            <Button onClick={openAdd}>
+              <Plus />
+              {t.flAdd}
+            </Button>
+          </div>
         ) : null}
       </PageTitle>
 

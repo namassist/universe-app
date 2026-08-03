@@ -17,14 +17,30 @@
  * and class as a heuristic, and a heuristic is not a thing to refuse on.
  */
 
-import { asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
-import { FLEET_MAX_UNITS, FLEET_MIN_UNITS } from "@universe/contracts";
+import {
+  FLEET_MAX_UNITS,
+  FLEET_MIN_UNITS,
+  type FleetImportPreview,
+} from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
-import { ErrorSchema, FleetSchema } from "./schemas";
+import {
+  buildTemplate,
+  validateFleetWorkbook,
+  type FleetCatalogues,
+  type ParsedFleetRow,
+} from "./fleets-import";
+import { MAX_IMPORT_BYTES } from "./import-columns";
+import {
+  ErrorSchema,
+  FleetImportPreviewSchema,
+  FleetSchema,
+  ImportResultSchema,
+} from "./schemas";
 
 const digger = alias(schema.units, "digger_unit");
 const bus = alias(schema.units, "bus_unit");
@@ -102,16 +118,19 @@ const invalid = (message: string) => ({ code: "validation_failed", message });
  *
  * Returns the refusal message, or null when the composition is sound. The
  * caller passes its own fleet id on edit so the checks do not refuse a fleet
- * for holding the units it already holds.
+ * for holding the units it already holds — and the spreadsheet import passes
+ * *every* fleet its file replaces, so two rows may trade a hauler without
+ * either being refused for membership the same upload dissolves.
  */
-async function refuseComposition(input: {
+export async function refuseComposition(input: {
   diggerUnitId: string;
   workAreaId: string;
   busUnitId: string | null;
   unitIds: string[];
-  selfId?: string;
+  selfIds?: string[];
 }): Promise<string | null> {
-  const { diggerUnitId, workAreaId, busUnitId, unitIds, selfId } = input;
+  const { diggerUnitId, workAreaId, busUnitId, unitIds } = input;
+  const selfIds = input.selfIds ?? [];
 
   if (unitIds.includes(diggerUnitId))
     return "Digger tidak bisa sekaligus menjadi anggota fleet-nya sendiri";
@@ -155,7 +174,9 @@ async function refuseComposition(input: {
   // Exclusivity, named. The digger may not haul for anyone, and a member may
   // not already haul elsewhere or lead a fleet of its own. The unique indexes
   // hold all of this too — these queries exist for the message.
-  const othersOnly = selfId ? ne(schema.fleetUnits.fleetId, selfId) : undefined;
+  const othersOnly = selfIds.length
+    ? notInArray(schema.fleetUnits.fleetId, selfIds)
+    : undefined;
   const taken = await db
     .select({ unitId: schema.fleetUnits.unitId, code: schema.units.code })
     .from(schema.fleetUnits)
@@ -175,7 +196,7 @@ async function refuseComposition(input: {
     .select({ id: schema.fleets.id, diggerUnitId: schema.fleets.diggerUnitId })
     .from(schema.fleets)
     .where(inArray(schema.fleets.diggerUnitId, unitIds));
-  const leading = leaders.filter((l) => l.id !== selfId);
+  const leading = leaders.filter((l) => !selfIds.includes(l.id));
   if (leading.length)
     return `Unit ${leading
       .map((l) => byId.get(l.diggerUnitId)?.code ?? "?")
@@ -186,6 +207,105 @@ async function refuseComposition(input: {
 
 /** Distinct ids in submitted order — a doubled selection is not two haulers. */
 const distinct = (ids: string[]) => [...new Set(ids)];
+
+/* --------------------------------------------------------------- import */
+
+/** Everything the parser needs to resolve codes and diff against. */
+async function importCatalogues(): Promise<FleetCatalogues> {
+  const units = await db
+    .select({
+      id: schema.units.id,
+      code: schema.units.code,
+      typeName: schema.unitTypes.name,
+    })
+    .from(schema.units)
+    .innerJoin(schema.unitTypes, eq(schema.unitTypes.id, schema.units.typeId));
+  const areas = await db
+    .select({
+      id: schema.workAreas.id,
+      name: schema.workAreas.name,
+      type: schema.workAreas.type,
+    })
+    .from(schema.workAreas);
+  const fleets = await fleetQuery();
+  const members = await membersOf(fleets.map((f) => f.id));
+  return {
+    unitsByCode: new Map(units.map((u) => [u.code.toLowerCase(), u])),
+    areasByName: new Map(areas.map((a) => [a.name.toLowerCase(), a])),
+    fleetsByDigger: new Map(
+      fleets.map((f) => [
+        f.diggerCode.toLowerCase(),
+        {
+          id: f.id,
+          areaName: f.workAreaName,
+          busCode: f.busCode,
+          memberCodes: (members.get(f.id) ?? []).map((m) => m.code),
+        },
+      ])
+    ),
+  };
+}
+
+type FleetImportOutcome = {
+  preview: FleetImportPreview;
+  rows: ParsedFleetRow[];
+};
+
+/**
+ * Parse, then hold every surviving row against `refuseComposition` — the same
+ * function the form goes through. `selfIds` carries every fleet the file
+ * replaces, so exclusivity is judged against the world *after* this upload.
+ */
+async function parseFleetImport(
+  file: File
+): Promise<FleetImportOutcome | { code: string; message: string }> {
+  const parsed = await validateFleetWorkbook(
+    await file.arrayBuffer(),
+    await importCatalogues()
+  );
+  if ("code" in parsed) return parsed;
+
+  const selfIds = parsed.rows
+    .map((r) => r.selfId)
+    .filter((id): id is string => id !== null);
+
+  const rows: ParsedFleetRow[] = [];
+  const errors = [...parsed.errors];
+  for (const row of parsed.rows) {
+    const refusal = await refuseComposition({
+      diggerUnitId: row.diggerUnitId,
+      workAreaId: row.workAreaId,
+      busUnitId: row.busUnitId,
+      unitIds: row.unitIds,
+      selfIds,
+    });
+    if (refusal) {
+      errors.push({
+        row: String(row.preview.row),
+        nik: row.preview.digger,
+        emp: row.preview.units.join(", "),
+        issue: refusal,
+        badgeVariant: "danger",
+        badge: "Error",
+      });
+      continue;
+    }
+    rows.push(row);
+  }
+
+  errors.sort((a, b) => Number(a.row) - Number(b.row));
+  return {
+    preview: {
+      fileName: file.name,
+      newCount: rows.filter((r) => r.preview.kind === "new").length,
+      updatedCount: rows.filter((r) => r.preview.kind === "updated").length,
+      errorCount: errors.length,
+      rows: rows.map((r) => r.preview),
+      errors,
+    },
+    rows,
+  };
+}
 
 const fleetBody = {
   diggerUnitId: t.String({ format: "uuid" }),
@@ -216,6 +336,150 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         403: ErrorSchema,
       },
       detail: { summary: "List fleets with their member units" },
+    }
+  )
+
+  /* ---------------------------------------------------------------- import
+     Declared before /:id so "import" is never parsed as a fleet id. */
+
+  .get(
+    "/import/template",
+    async ({ set }) => {
+      set.headers["content-type"] =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      set.headers["content-disposition"] =
+        'attachment; filename="template_fleet.xlsx"';
+      return new Response(new Uint8Array(await buildTemplate()));
+    },
+    {
+      auth: { menu: "fleet-setting", mode: "manage" },
+      // Described by hand rather than with a `response` schema: the body is a
+      // binary workbook, and a TypeBox schema would try to validate it.
+      detail: {
+        summary: "Download the fleet import template (.xlsx)",
+        responses: {
+          200: {
+            description: "An .xlsx with the columns digger, area, bus, units",
+            content: {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                { schema: { type: "string", format: "binary" } },
+            },
+          },
+          401: { description: "No session" },
+          403: { description: "Lacks manage on the fleet-setting menu" },
+        },
+      },
+    }
+  )
+
+  .post(
+    "/import/validate",
+    async ({ body, status }) => {
+      const outcome = await parseFleetImport(body.file);
+      if ("code" in outcome) return status(422, outcome);
+      return outcome.preview;
+    },
+    {
+      auth: { menu: "fleet-setting", mode: "manage" },
+      body: t.Object({ file: t.File({ maxSize: MAX_IMPORT_BYTES }) }),
+      response: {
+        200: FleetImportPreviewSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: {
+        summary: "Validate a fleet spreadsheet and preview the changes",
+      },
+    }
+  )
+
+  .post(
+    "/import/commit",
+    async ({ body, status }) => {
+      // Re-validated rather than trusted from the client: the preview the
+      // caller saw is advisory, this parse is what gets written.
+      const outcome = await parseFleetImport(body.file);
+      if ("code" in outcome) return status(422, outcome);
+      if (outcome.preview.errorCount > 0)
+        return status(422, {
+          code: "validation_failed",
+          message: `${outcome.preview.errorCount} baris masih bermasalah`,
+        });
+
+      const updated = outcome.rows.filter((r) => r.selfId !== null);
+      const created = outcome.rows.filter((r) => r.selfId === null);
+
+      try {
+        // One transaction, ordered so that every membership the file
+        // dissolves is gone before any it grants exists — two fleets trading
+        // a hauler must not trip the unique index mid-write.
+        await db.transaction(async (tx) => {
+          if (updated.length)
+            await tx.delete(schema.fleetUnits).where(
+              inArray(
+                schema.fleetUnits.fleetId,
+                updated.map((r) => r.selfId!)
+              )
+            );
+          for (const row of updated)
+            await tx
+              .update(schema.fleets)
+              .set({
+                workAreaId: row.workAreaId,
+                busUnitId: row.busUnitId,
+              })
+              .where(eq(schema.fleets.id, row.selfId!));
+          for (const row of created) {
+            const [fleet] = await tx
+              .insert(schema.fleets)
+              .values({
+                diggerUnitId: row.diggerUnitId,
+                workAreaId: row.workAreaId,
+                busUnitId: row.busUnitId,
+              })
+              .returning({ id: schema.fleets.id });
+            row.selfId = fleet!.id;
+          }
+          await tx
+            .insert(schema.fleetUnits)
+            .values(
+              outcome.rows.flatMap((row) =>
+                row.unitIds.map((unitId) => ({ fleetId: row.selfId!, unitId }))
+              )
+            );
+        });
+      } catch (error) {
+        // Validation reads the database a moment before the write: another
+        // request can take a digger or a hauler in between.
+        if (isUniqueViolation(error, "fleets_digger_unit_id_unique"))
+          return status(409, {
+            code: "fleet_exists",
+            message:
+              "Sebuah digger dalam file ini baru saja memimpin fleet lain — validasi ulang filenya",
+          });
+        if (isUniqueViolation(error, "fleet_units_unit_id_unique"))
+          return status(409, {
+            code: "unit_in_fleet",
+            message:
+              "Sebuah unit dalam file ini baru saja dipakai fleet lain — validasi ulang filenya",
+          });
+        throw error;
+      }
+
+      return { created: created.length, updated: updated.length };
+    },
+    {
+      auth: { menu: "fleet-setting", mode: "manage" },
+      body: t.Object({ file: t.File({ maxSize: MAX_IMPORT_BYTES }) }),
+      response: {
+        200: ImportResultSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        409: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Commit a validated fleet spreadsheet" },
     }
   )
 
@@ -303,7 +567,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         workAreaId: body.workAreaId,
         busUnitId: body.busUnitId ?? null,
         unitIds,
-        selfId: existing.id,
+        selfIds: [existing.id],
       });
       if (refusal) return status(422, invalid(refusal));
 

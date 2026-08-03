@@ -360,6 +360,62 @@ export const ImportResultSchema = t.Object({
   updated: t.Integer(),
 });
 
+/* ----------------------------------------------------------- fleet import */
+
+/**
+ * The fleet composition and PLAN pairing imports. Their `errors` are the one
+ * shared `ImportErrorSchema` — the results table in the web app is one
+ * component, so the wire shape has to be one shape.
+ */
+const FleetImportChangeSchema = t.Object({
+  field: t.Union([t.Literal("area"), t.Literal("bus"), t.Literal("units")]),
+  from: t.Nullable(t.String()),
+  to: t.Nullable(t.String()),
+});
+
+const FleetImportPreviewRowSchema = t.Object({
+  row: t.Integer(),
+  kind: t.Union([t.Literal("new"), t.Literal("updated")]),
+  digger: t.String(),
+  area: t.String(),
+  bus: t.Nullable(t.String()),
+  units: t.Array(t.String()),
+  changes: t.Array(FleetImportChangeSchema),
+});
+
+export const FleetImportPreviewSchema = t.Object({
+  fileName: t.String(),
+  newCount: t.Integer(),
+  updatedCount: t.Integer(),
+  errorCount: t.Integer(),
+  rows: t.Array(FleetImportPreviewRowSchema),
+  errors: t.Array(ImportErrorSchema),
+});
+
+const PlanImportPreviewRowSchema = t.Object({
+  row: t.Integer(),
+  kind: t.Union([t.Literal("new"), t.Literal("moved"), t.Literal("unchanged")]),
+  unit: t.String(),
+  nik: t.String(),
+  name: t.String(),
+  fromUnit: t.Nullable(t.String()),
+});
+
+export const PlanImportPreviewSchema = t.Object({
+  fileName: t.String(),
+  newCount: t.Integer(),
+  movedCount: t.Integer(),
+  unchangedCount: t.Integer(),
+  errorCount: t.Integer(),
+  rows: t.Array(PlanImportPreviewRowSchema),
+  errors: t.Array(ImportErrorSchema),
+});
+
+export const PlanImportResultSchema = t.Object({
+  created: t.Integer(),
+  moved: t.Integer(),
+});
+
 /* ----------------------------------------------------- master data import */
 
 /**

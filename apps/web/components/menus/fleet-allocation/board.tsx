@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus } from "lucide-react";
+import { Upload, UserPlus } from "lucide-react";
 
 import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -545,6 +545,16 @@ export function AllocBoard({
           )}
         </span>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {canEdit ? (
+            <Button
+              variant="secondary"
+              className="h-10"
+              onClick={() => router.push("/fleet-allocation/import")}
+            >
+              <Upload />
+              {t.upImport}
+            </Button>
+          ) : null}
           <Select
             aria-label="Filter fleet"
             wrapperClassName="w-auto"

@@ -13,7 +13,32 @@
  * imports is exactly the confusion these are meant to remove.
  */
 
+import type ExcelJS from "exceljs";
+
 export type ParseFailure = { code: string; message: string };
+
+/** Generous for hundreds of rows, small enough that a hostile file fails fast. */
+export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+
+/**
+ * A cell as the operator meant it: formulas by their result, rich text
+ * flattened, everything else stringified and trimmed.
+ */
+export function cellText(value: ExcelJS.CellValue): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    if ("text" in value && typeof value.text === "string")
+      return value.text.trim();
+    if ("result" in value) return String(value.result ?? "").trim();
+    if ("richText" in value)
+      return value.richText
+        .map((r) => r.text)
+        .join("")
+        .trim();
+    return "";
+  }
+  return String(value).trim();
+}
 
 const accepted = (columns: readonly string[]) =>
   `Kolom yang diterima: ${columns.join(", ")}`;
