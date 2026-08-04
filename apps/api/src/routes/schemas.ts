@@ -1040,3 +1040,45 @@ export const IngestSyncResultSchema = t.Object({
 export const IngestSyncStatusSchema = t.Object({
   lastSyncedAt: t.Nullable(t.String()),
 });
+
+/** One person's FTW verdict for one day, as savera reported it. */
+export const FtwReadingSchema = t.Object({
+  nik: t.String(),
+  date: t.String(),
+  name: t.String(),
+  company: t.Nullable(t.String()),
+  department: t.Nullable(t.String()),
+  position: t.Nullable(t.String()),
+  mess: t.Nullable(t.String()),
+  shift: t.Nullable(t.String()),
+  sleepMinutes: t.Integer(),
+  sleepCategory: t.Nullable(t.String()),
+  ftwDecision: t.Nullable(t.String()),
+  /** "YYYY-MM-DD HH:MM:SS", source-local. */
+  sentAt: t.Nullable(t.String()),
+});
+
+export const FtwListSchema = t.Object({
+  rows: t.Array(FtwReadingSchema),
+  lastSyncedAt: t.Nullable(t.String()),
+});
+
+/** One person's tap summary for one day, enriched from local records. */
+export const AttendanceReadingSchema = t.Object({
+  nik: t.String(),
+  date: t.String(),
+  /** Null when the NIK matches no local employee — shown, not hidden. */
+  name: t.Nullable(t.String()),
+  department: t.Nullable(t.String()),
+  /** The roster's word for the day, when this NIK is rostered. */
+  rosterCode: t.Nullable(t.String()),
+  firstInAt: t.Nullable(t.String()),
+  firstInIp: t.Nullable(t.String()),
+  firstOutAt: t.Nullable(t.String()),
+  firstOutIp: t.Nullable(t.String()),
+});
+
+export const AttendanceListSchema = t.Object({
+  rows: t.Array(AttendanceReadingSchema),
+  lastSyncedAt: t.Nullable(t.String()),
+});

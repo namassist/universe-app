@@ -11,7 +11,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
@@ -19,6 +19,10 @@ import { redis } from "../redis";
 import { attendanceSyncRoutes, fitToWorkSyncRoutes } from "./ingest-sync";
 
 const app = new Elysia().use(fitToWorkSyncRoutes).use(attendanceSyncRoutes);
+
+/** Snapshot fixtures live on dates no source will emit again. */
+const D1 = "1998-01-01";
+const D2 = "1998-01-02";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Uji Ingest ${uid()}`;
@@ -61,6 +65,12 @@ const send = (method: string, path: string, cookie?: string) =>
   );
 
 afterAll(async () => {
+  await db
+    .delete(schema.ftwReadings)
+    .where(inArray(schema.ftwReadings.date, [D1, D2]));
+  await db
+    .delete(schema.fingerReadings)
+    .where(inArray(schema.fingerReadings.date, [D1, D2]));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
@@ -91,6 +101,184 @@ describe("authorization", () => {
     expect(
       (await send("POST", "/attendance/sync", manager.cookie)).status
     ).toBe(403);
+  });
+});
+
+describe("the FTW list", () => {
+  test("returns the range's snapshots newest-first with the sync stamp", async () => {
+    const viewer = await makeUser("fit-to-work", "view");
+    await db.insert(schema.ftwReadings).values([
+      {
+        nik: "90000001",
+        date: D1,
+        name: "UJI SATU",
+        company: "PT UJI",
+        department: "MINING",
+        position: "OPERATOR",
+        mess: "MESS 1",
+        shift: "Shift 1",
+        sleepMinutes: 426,
+        sleepCategory: "Dapat Bekerja",
+        ftwDecision: "FTW aman",
+        sentAt: `${D1} 04:12:00`,
+      },
+      {
+        nik: "90000002",
+        date: D2,
+        name: "UJI DUA",
+        sleepMinutes: 240,
+        sleepCategory: "Tidak Boleh Bekerja",
+        ftwDecision: "Belum mengisi FTW",
+        sentAt: `${D2} 04:30:00`,
+      },
+    ]);
+
+    const res = await send(
+      "GET",
+      `/fit-to-work/?from=${D1}&to=${D2}`,
+      viewer.cookie
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rows: Array<{ nik: string; date: string; sleepCategory: string | null }>;
+      lastSyncedAt: string | null;
+    };
+    const mine = body.rows.filter((r) => r.nik.startsWith("9000000"));
+    expect(mine.map((r) => r.nik)).toEqual(["90000002", "90000001"]); // newest date first
+    expect(mine[1]!.sleepCategory).toBe("Dapat Bekerja");
+    expect(body.lastSyncedAt).not.toBeNull();
+  });
+
+  test("a backwards or oversized range is refused, not truncated", async () => {
+    const viewer = await makeUser("fit-to-work", "view");
+    expect(
+      (await send("GET", `/fit-to-work/?from=${D2}&to=${D1}`, viewer.cookie))
+        .status
+    ).toBe(422);
+    expect(
+      (
+        await send(
+          "GET",
+          `/fit-to-work/?from=1998-01-01&to=1998-06-01`,
+          viewer.cookie
+        )
+      ).status
+    ).toBe(422);
+  });
+});
+
+describe("the attendance list", () => {
+  test("enriches a known NIK with name, department, and roster code; leaves an unknown NIK bare", async () => {
+    const viewer = await makeUser("attendance", "view");
+
+    // A minimal local chain for the known person.
+    const [company] = await db
+      .insert(schema.companies)
+      .values({ name: tag, code: `ZZ${uid()}` })
+      .returning({ id: schema.companies.id });
+    const [dept] = await db
+      .insert(schema.departments)
+      .values({ name: tag, companyId: company!.id })
+      .returning({ id: schema.departments.id });
+    const [position] = await db
+      .insert(schema.positions)
+      .values({ name: tag, departmentId: dept!.id })
+      .returning({ id: schema.positions.id });
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: "90000011",
+        name: "UJI DIKENAL",
+        companyId: company!.id,
+        departmentId: dept!.id,
+        positionId: position!.id,
+      })
+      .returning({ id: schema.employees.id });
+    const [uploader] = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .limit(1);
+    const [doc] = await db
+      .insert(schema.rosterDocuments)
+      .values({
+        departmentId: dept!.id,
+        month: "1998-01-01",
+        fileName: "uji.xlsx",
+        uploadedBy: uploader!.id,
+      })
+      .returning({ id: schema.rosterDocuments.id });
+    await db.insert(schema.rosterDays).values({
+      documentId: doc!.id,
+      employeeId: employee!.id,
+      date: D1,
+      code: "D",
+    });
+
+    await db.insert(schema.fingerReadings).values([
+      {
+        nik: "90000011",
+        date: D1,
+        firstInAt: `${D1} 05:15:51`,
+        firstInIp: "10.0.0.1",
+      },
+      {
+        nik: "90000099", // no local record on purpose
+        date: D1,
+        firstOutAt: `${D1} 06:26:57`,
+        firstOutIp: "10.0.0.2",
+      },
+    ]);
+
+    try {
+      const res = await send(
+        "GET",
+        `/attendance/?from=${D1}&to=${D1}`,
+        viewer.cookie
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        rows: Array<{
+          nik: string;
+          name: string | null;
+          department: string | null;
+          rosterCode: string | null;
+          firstInAt: string | null;
+          firstOutAt: string | null;
+        }>;
+      };
+      const known = body.rows.find((r) => r.nik === "90000011");
+      expect(known).toMatchObject({
+        name: "UJI DIKENAL",
+        department: tag,
+        rosterCode: "D",
+        firstInAt: `${D1} 05:15:51`,
+      });
+
+      // The unknown tap is a fact about the morning, shown bare — not hidden.
+      const unknown = body.rows.find((r) => r.nik === "90000099");
+      expect(unknown).toMatchObject({
+        name: null,
+        department: null,
+        rosterCode: null,
+        firstOutAt: `${D1} 06:26:57`,
+      });
+    } finally {
+      await db
+        .delete(schema.rosterDocuments)
+        .where(eq(schema.rosterDocuments.id, doc!.id));
+      await db
+        .delete(schema.employees)
+        .where(eq(schema.employees.id, employee!.id));
+      await db
+        .delete(schema.positions)
+        .where(eq(schema.positions.id, position!.id));
+      await db
+        .delete(schema.departments)
+        .where(eq(schema.departments.id, dept!.id));
+      await db
+        .delete(schema.companies)
+        .where(eq(schema.companies.id, company!.id));
+    }
   });
 });
 

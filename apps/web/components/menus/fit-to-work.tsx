@@ -2,12 +2,16 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw, Search } from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
+import { errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { ftwQueryOptions, syncFtw, type FtwRow } from "@/lib/queries/readiness";
 import { cn } from "@/lib/utils";
-import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
@@ -31,30 +35,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { useToast } from "@/components/ui/toast";
 
-type StKey = "fit" | "kurang" | "belum";
+import {
+  FTW_CAT_BADGE as CAT_BADGE,
+  ftwCatOf as catOf,
+  daysAgo,
+  ftwDecisionBadge as decisionBadge,
+  isoDate,
+  ftwSleepClass as sleepClass,
+  ftwSleepText as sleepText,
+  type FtwCatKey as CatKey,
+} from "./fit-to-work-shared";
+
 type Strip = "ok" | "bad" | "na";
-type Row = {
-  nik: string;
-  name: string;
-  company: string;
-  dept: string;
-  pos: string;
-  shift: "siang" | "malam";
-  sleep: string;
-  st: StKey;
-  date: string; // ISO
-  sendTime: string;
-  hist: Strip[];
-};
-
-const sleepClass = (st: StKey) =>
-  cn(
-    "font-mono",
-    st === "kurang" && "font-semibold text-(--color-danger-text)",
-    st === "belum" && "text-(--text-tertiary)",
-    st === "fit" && "text-(--text-secondary)"
-  );
 
 const STRIP_CLS: Record<Strip, string> = {
   ok: "bg-[rgba(23,206,100,.75)]",
@@ -62,160 +57,80 @@ const STRIP_CLS: Record<Strip, string> = {
   na: "bg-(--fill-hover-strong)",
 };
 
-/* ---- static sample content ---- */
-const UDU = "PT Unggul Dinamika Utama";
-const ok7: Strip[] = ["ok", "ok", "ok", "ok", "ok", "ok", "ok"];
-const ROWS: Row[] = [
-  {
-    nik: "503220421",
-    name: "Budi Santoso",
-    company: UDU,
-    dept: "Hauling",
-    pos: "Driver OHT",
-    shift: "siang",
-    sleep: "7j 20m",
-    st: "fit",
-    date: "2026-07-21",
-    sendTime: "04:41",
-    hist: ok7,
-  },
-  {
-    nik: "508210388",
-    name: "Andi Wijaya",
-    company: UDU,
-    dept: "Loading",
-    pos: "Operator Excavator",
-    shift: "siang",
-    sleep: "3j 55m",
-    st: "kurang",
-    date: "2026-07-21",
-    sendTime: "04:55",
-    hist: ["ok", "ok", "bad", "ok", "ok", "bad", "bad"],
-  },
-  {
-    nik: "505200233",
-    name: "Sari Lestari",
-    company: UDU,
-    dept: "Support",
-    pos: "Admin Site",
-    shift: "siang",
-    sleep: "—",
-    st: "belum",
-    date: "2026-07-21",
-    sendTime: "—",
-    hist: ["ok", "ok", "ok", "ok", "ok", "ok", "na"],
-  },
-  {
-    nik: "501230510",
-    name: "Rudi Hartono",
-    company: UDU,
-    dept: "Hauling",
-    pos: "Driver OHT",
-    shift: "siang",
-    sleep: "6j 45m",
-    st: "fit",
-    date: "2026-07-21",
-    sendTime: "04:38",
-    hist: ok7,
-  },
-  {
-    nik: "502210367",
-    name: "Hendra Gunawan",
-    company: UDU,
-    dept: "Loading",
-    pos: "Operator Dozer",
-    shift: "malam",
-    sleep: "4j 10m",
-    st: "kurang",
-    date: "2026-07-21",
-    sendTime: "16:12",
-    hist: ["bad", "ok", "ok", "bad", "ok", "ok", "bad"],
-  },
-  {
-    nik: "506230455",
-    name: "Fitri Handayani",
-    company: UDU,
-    dept: "Hauling",
-    pos: "Checker",
-    shift: "malam",
-    sleep: "7j 05m",
-    st: "fit",
-    date: "2026-07-21",
-    sendTime: "16:20",
-    hist: ok7,
-  },
-  {
-    nik: "511190111",
-    name: "Joko Prasetyo",
-    company: UDU,
-    dept: "Hauling",
-    pos: "Driver OHT",
-    shift: "siang",
-    sleep: "7j 05m",
-    st: "fit",
-    date: "2026-07-20",
-    sendTime: "04:47",
-    hist: ok7,
-  },
-  {
-    nik: "509220290",
-    name: "Dewi Anggraini",
-    company: UDU,
-    dept: "Support",
-    pos: "Dispatcher",
-    shift: "siang",
-    sleep: "8j 10m",
-    st: "fit",
-    date: "2026-07-20",
-    sendTime: "04:31",
-    hist: ok7,
-  },
-  {
-    nik: "510200602",
-    name: "Rina Marlina",
-    company: UDU,
-    dept: "SHE",
-    pos: "Safety Officer",
-    shift: "siang",
-    sleep: "7j 40m",
-    st: "fit",
-    date: "2026-07-20",
-    sendTime: "05:02",
-    hist: ok7,
-  },
-];
+const STRIP_DAYS = 7;
+
+/** The API refuses ranges past 62 days, and the fetch runs six days wider
+ *  than the visible range for the history strips: 55 + 6 + 1 = 62, exactly
+ *  the cap. One more visible day and a maximal range would 422. */
+const MAX_SPAN_DAYS = 55;
 
 export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
-  void mode; // log FTW bersifat baca; pelaporan ada di alur operator
+  const { pushToast } = useToast();
+  const queryClient = useQueryClient();
 
+  const today = isoDate(new Date());
   const [q, setQ] = React.useState("");
-  const [st, setSt] = React.useState("");
+  const [cat, setCat] = React.useState("");
   const [shift, setShift] = React.useState("");
-  const [d1, setD1] = React.useState("2026-07-20");
-  const [d2, setD2] = React.useState("2026-07-21");
-  const [freshTime, setFreshTime] = React.useState("");
+  const [d1, setD1] = React.useState(daysAgo(today, 6));
+  const [d2, setD2] = React.useState(today);
 
-  React.useEffect(() => {
-    const id = setTimeout(() => {
-      const d = new Date();
-      const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-      setFreshTime(`${pad(d.getHours())}:${pad(d.getMinutes())} WITA`);
-    }, 0);
-    return () => clearTimeout(id);
-  }, []);
+  const spanOk =
+    d1 <= d2 &&
+    (Date.parse(`${d2}T00:00:00Z`) - Date.parse(`${d1}T00:00:00Z`)) /
+      86_400_000 <=
+      MAX_SPAN_DAYS;
+
+  // Fetched wider than shown: the history strip needs the week before each
+  // visible day, and one fetch answers both.
+  const fetchFrom = daysAgo(d1, STRIP_DAYS - 1);
+  const listQ = useQuery({
+    ...ftwQueryOptions(fetchFrom, d2),
+    enabled: spanOk,
+  });
+
+  const sync = useMutation({
+    mutationFn: syncFtw,
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["fit-to-work"] });
+      pushToast(
+        "success",
+        t.refreshDoneT,
+        `${result.upserted} ${t.ftwSumLogs}`
+      );
+    },
+    onError: (error) =>
+      pushToast("error", t.navFtw, errorMessage(error, t.ftwLoadErr)),
+  });
+
+  const all = React.useMemo(() => listQ.data?.rows ?? [], [listQ.data]);
+
+  // nik+date → group, for the strips.
+  const catByNikDate = React.useMemo(() => {
+    const map = new Map<string, CatKey>();
+    for (const row of all)
+      map.set(`${row.nik} ${row.date}`, catOf(row.sleepCategory));
+    return map;
+  }, [all]);
+
+  const shiftOptions = React.useMemo(
+    () => [...new Set(all.flatMap((r) => (r.shift ? [r.shift] : [])))].sort(),
+    [all]
+  );
 
   const needle = q.trim().toLowerCase();
-  const rows = ROWS.filter((r) => {
-    if (r.date < d1 || r.date > d2) return false;
-    if (shift && r.shift !== shift) return false;
-    if (st && r.st !== st) return false;
-    if (!needle) return true;
-    return (
-      r.name.toLowerCase().includes(needle) ||
-      r.nik.includes(needle.toUpperCase())
+  const rows = all
+    .filter((r) => {
+      if (r.date < d1) return false; // strip context, not a visible day
+      if (shift && r.shift !== shift) return false;
+      if (cat && catOf(r.sleepCategory) !== cat) return false;
+      if (!needle) return true;
+      return r.name.toLowerCase().includes(needle) || r.nik.includes(needle);
+    })
+    .sort(
+      (a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)
     );
-  }).sort((a, b) => b.date.localeCompare(a.date));
   const pg = usePagination(rows);
 
   const loc = lang === "en" ? "en-GB" : "id-ID";
@@ -226,17 +141,25 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
       year: "numeric",
     });
 
-  const stBadge = (key: StKey) => {
-    const map: Record<StKey, { v: BadgeVariant; l: string }> = {
-      fit: { v: "success", l: t.bFit },
-      kurang: { v: "warning", l: t.ftwStatKurang },
-      belum: { v: "neutral", l: t.ftwStatBelum },
-    };
-    return (
-      <Badge variant={map[key].v} dot>
-        {map[key].l}
-      </Badge>
-    );
+  const syncedLabel = listQ.data?.lastSyncedAt
+    ? new Date(listQ.data.lastSyncedAt).toLocaleTimeString(loc, {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+
+  const stripOf = (row: FtwRow): Strip[] =>
+    Array.from({ length: STRIP_DAYS }, (_, i) => {
+      const day = daysAgo(row.date, STRIP_DAYS - 1 - i);
+      const dayCat = catByNikDate.get(`${row.nik} ${day}`);
+      return dayCat === undefined ? "na" : dayCat === "fit" ? "ok" : "bad";
+    });
+
+  const catLabel: Record<CatKey, string> = {
+    fit: t.bFit,
+    istirahat: t.ftwStatKurang,
+    tidak: "Tidak Boleh Bekerja",
+    belum: t.ftwStatBelum,
   };
 
   return (
@@ -244,7 +167,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
       <PageTitle title={t.navFtw} sub={t.ftwSub}>
         <Fresh>
           {t.dataAsOf}&nbsp;
-          <b className="font-mono text-(--text-secondary)">{freshTime}</b>
+          <b className="font-mono text-(--text-secondary)">{syncedLabel}</b>
         </Fresh>
       </PageTitle>
 
@@ -260,15 +183,17 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setQ(e.target.value)}
             />
             <Select
-              wrapperClassName="w-[170px]"
-              value={st}
-              onChange={(e) => setSt(e.target.value)}
+              wrapperClassName="w-[190px]"
+              value={cat}
+              onChange={(e) => setCat(e.target.value)}
               aria-label={t.allStatus}
             >
               <option value="">{t.allStatus}</option>
-              <option value="belum">{t.ftwStatBelum}</option>
-              <option value="kurang">{t.ftwStatKurang}</option>
-              <option value="fit">{t.bFit}</option>
+              {(Object.keys(catLabel) as CatKey[]).map((key) => (
+                <option key={key} value={key}>
+                  {catLabel[key]}
+                </option>
+              ))}
             </Select>
             <Select
               wrapperClassName="w-[150px]"
@@ -277,8 +202,9 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
               aria-label={t.allShift}
             >
               <option value="">{t.allShift}</option>
-              <option value="siang">{t.shiftDay}</option>
-              <option value="malam">{t.shiftNight}</option>
+              {shiftOptions.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
             </Select>
             <div className="flex items-center gap-2">
               <Input
@@ -297,12 +223,30 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                 aria-label={t.lblDateTo}
               />
             </div>
+            {mode === "manage" ? (
+              <Button
+                variant="secondary"
+                onClick={() => sync.mutate()}
+                disabled={sync.isPending}
+              >
+                <RefreshCw className={cn(sync.isPending && "animate-spin")} />
+                {t.refresh}
+              </Button>
+            ) : null}
           </ToolbarGroup>
         </Toolbar>
 
-        {pg.rows.length ? (
+        {listQ.isPending && spanOk ? (
+          <TableSkeleton rows={8} />
+        ) : listQ.isError ? (
+          <StateBox
+            icon={<Search className="text-(--color-primary-bright)" />}
+            title={t.ftwLoadErr}
+            body={errorMessage(listQ.error, t.ftwLoadErr)}
+          />
+        ) : pg.rows.length ? (
           <div className="overflow-x-auto">
-            <Table className="min-w-[1280px]">
+            <Table className="min-w-[1440px]">
               <TableHeader>
                 <tr>
                   <TableHead>{t.thOperator}</TableHead>
@@ -310,9 +254,11 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                   <TableHead>{t.thCompany}</TableHead>
                   <TableHead>{t.thDept}</TableHead>
                   <TableHead>{t.thPos}</TableHead>
+                  <TableHead>Mess</TableHead>
                   <TableHead>{t.thShift}</TableHead>
                   <TableHead>{t.thSleep}</TableHead>
                   <TableHead>{t.thStatus}</TableHead>
+                  <TableHead>FTW</TableHead>
                   <TableHead>{t.lblDate}</TableHead>
                   <TableHead>{t.thSendTime}</TableHead>
                   <TableHead>{t.thHist}</TableHead>
@@ -320,30 +266,46 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
               </TableHeader>
               <TableBody>
                 {pg.rows.map((r) => {
-                  const bad = r.hist.filter((s) => s === "bad").length;
+                  const rowCat = catOf(r.sleepCategory);
+                  const strip = stripOf(r);
+                  const bad = strip.filter((s) => s === "bad").length;
                   return (
                     <TableRow key={`${r.nik}-${r.date}`}>
                       <TableCell className="font-semibold">{r.name}</TableCell>
                       <TableCell className="font-mono text-(--text-secondary) tabular-nums">
                         {r.nik}
                       </TableCell>
-                      <TableCell>{r.company}</TableCell>
-                      <TableCell>{r.dept}</TableCell>
-                      <TableCell>{r.pos}</TableCell>
+                      <TableCell>{r.company ?? "—"}</TableCell>
+                      <TableCell>{r.department ?? "—"}</TableCell>
+                      <TableCell>{r.position ?? "—"}</TableCell>
+                      <TableCell>{r.mess ?? "—"}</TableCell>
+                      <TableCell>{r.shift ?? "—"}</TableCell>
+                      <TableCell className={sleepClass(rowCat)}>
+                        {sleepText(r.sleepMinutes)}
+                      </TableCell>
                       <TableCell>
-                        {r.shift === "malam" ? t.shiftNight : t.shiftDay}
+                        <Badge variant={CAT_BADGE[rowCat]} dot>
+                          {r.sleepCategory ?? t.ftwStatBelum}
+                        </Badge>
                       </TableCell>
-                      <TableCell className={sleepClass(r.st)}>
-                        {r.sleep}
+                      <TableCell>
+                        {r.ftwDecision ? (
+                          <Badge variant={decisionBadge(r.ftwDecision)}>
+                            {r.ftwDecision}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
-                      <TableCell>{stBadge(r.st)}</TableCell>
                       <TableCell className="font-mono whitespace-nowrap">
                         {dLabel(r.date)}
                       </TableCell>
-                      <TableCell className="font-mono">{r.sendTime}</TableCell>
+                      <TableCell className="font-mono">
+                        {r.sentAt ? r.sentAt.slice(11, 16) : "—"}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          {r.hist.map((s, i) => (
+                          {strip.map((s, i) => (
                             <i
                               key={i}
                               className={cn(

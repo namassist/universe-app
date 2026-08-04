@@ -2,11 +2,13 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Search } from "lucide-react";
 
+import { errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
-import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { ftwQueryOptions } from "@/lib/queries/readiness";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageButton } from "@/components/ui/pagination";
@@ -31,115 +33,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 
-type StKey = "fit" | "kurang" | "belum";
-type Row = {
-  nik: string;
-  name: string;
-  company: string;
-  dept: string;
-  pos: string;
-  shift: "siang" | "malam";
-  st: StKey;
-  sleepMin: number;
-  date: string; // ISO
-};
-
-const UDU = "PT Unggul Dinamika Utama";
-const CREW = [
-  {
-    nik: "503220421",
-    name: "Budi Santoso",
-    dept: "Hauling",
-    pos: "Driver OHT",
-  },
-  {
-    nik: "508210388",
-    name: "Andi Wijaya",
-    dept: "Loading",
-    pos: "Operator Excavator",
-  },
-  {
-    nik: "501230510",
-    name: "Rudi Hartono",
-    dept: "Hauling",
-    pos: "Driver OHT",
-  },
-  {
-    nik: "511190111",
-    name: "Joko Prasetyo",
-    dept: "Hauling",
-    pos: "Driver OHT",
-  },
-  {
-    nik: "502210367",
-    name: "Hendra Gunawan",
-    dept: "Loading",
-    pos: "Operator Dozer",
-  },
-  {
-    nik: "506230455",
-    name: "Fitri Handayani",
-    dept: "Hauling",
-    pos: "Checker",
-  },
-] as const;
-
-const sleepClass = (st: StKey) =>
-  cn(
-    "font-mono",
-    st === "kurang" && "font-semibold text-(--color-danger-text)",
-    st === "belum" && "text-(--text-tertiary)",
-    st === "fit" && "text-(--text-secondary)"
-  );
-
-function isoAddDays(iso: string, n: number): string {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-function sleepLabel(m: number, lang: string): string {
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  return lang === "en" ? `${h}h ${mm}m` : `${h}j ${mm}m`;
-}
+import {
+  daysAgo,
+  FTW_CAT_BADGE,
+  ftwCatOf,
+  ftwDecisionBadge,
+  ftwSleepClass,
+  ftwSleepText,
+  isoDate,
+  spanDays,
+  type FtwCatKey,
+} from "./fit-to-work-shared";
 
 /**
- * Riwayat FTW 90 hari — dibangkitkan deterministik per (nik, tanggal) supaya
- * stabil antar render: pola shift per paritas NIK, tidur bervariasi, sisipan
- * "kurang tidur" & "belum lapor" berkala. OFF (2 hari/minggu) dilewati.
+ * One person's (or everyone's) FTW trail, read from the same snapshots as
+ * the list — history is the range the ingest has accumulated locally, which
+ * is why this page never asks savera anything. The API caps a range at 62
+ * days, so that is the window this page shows at a time.
  */
-function historyRows(d1: string, d2: string): Row[] {
-  const rows: Row[] = [];
-  if (!d1 || !d2 || d1 > d2) return rows;
-  let guard = 0;
-  for (let iso = d2; iso >= d1 && guard < 120; iso = isoAddDays(iso, -1)) {
-    guard++;
-    const dayN = Math.floor(new Date(`${iso}T00:00:00`).getTime() / 86400000);
-    CREW.forEach((c, i) => {
-      const off = (dayN + i) % 7 >= 5; // 2 hari OFF bergilir per minggu
-      if (off) return;
-      const h = (dayN * 31 + i * 17) % 100;
-      const st: StKey =
-        h % 19 === 0 ? "kurang" : h % 23 === 0 ? "belum" : "fit";
-      const sleepMin =
-        st === "kurang" ? 200 + (h % 5) * 15 : 380 + ((h * 13) % 160);
-      rows.push({
-        nik: c.nik,
-        name: c.name,
-        company: UDU,
-        dept: c.dept,
-        pos: c.pos,
-        shift: Number(c.nik.slice(-1)) % 2 === 0 ? "siang" : "malam",
-        st,
-        sleepMin: st === "belum" ? 0 : sleepMin,
-        date: iso,
-      });
-    });
-  }
-  return rows;
-}
+const MAX_SPAN_DAYS = 61;
 
 /* Pagination berjendela — maksimal 5 nomor halaman, terpusat di halaman aktif */
 function WindowPagination({
@@ -208,31 +122,43 @@ export function FitToWorkHistory() {
   const searchParams = useSearchParams();
   const listHref = `/fit-to-work`;
 
-  const todayIso = "2026-07-21";
-  const startIso = "2026-04-22";
+  const today = isoDate(new Date());
 
   const [fhOp, setFhOp] = React.useState(searchParams.get("nik") ?? "");
   const [q, setQ] = React.useState("");
-  const [st, setSt] = React.useState("");
+  const [cat, setCat] = React.useState("");
   const [shift, setShift] = React.useState("");
-  const [d1, setD1] = React.useState(startIso);
-  const [d2, setD2] = React.useState(todayIso);
+  const [d1, setD1] = React.useState(daysAgo(today, MAX_SPAN_DAYS));
+  const [d2, setD2] = React.useState(today);
   const [per, setPer] = React.useState("10");
   const [page, setPage] = React.useState(1);
 
-  const selectedOp = CREW.find((o) => o.nik === fhOp);
+  const spanOk = d1 <= d2 && spanDays(d1, d2) <= MAX_SPAN_DAYS;
+  const listQ = useQuery({ ...ftwQueryOptions(d1, d2), enabled: spanOk });
+  const all = React.useMemo(() => listQ.data?.rows ?? [], [listQ.data]);
 
-  const stBadge = (key: StKey) => {
-    const map: Record<StKey, { v: BadgeVariant; l: string }> = {
-      fit: { v: "success", l: t.bFit },
-      kurang: { v: "warning", l: t.ftwStatKurang },
-      belum: { v: "neutral", l: t.ftwStatBelum },
-    };
-    return (
-      <Badge variant={map[key].v} dot>
-        {map[key].l}
-      </Badge>
-    );
+  /** Everyone the fetched window has seen — the operator dropdown's options. */
+  const operators = React.useMemo(() => {
+    const byNik = new Map<string, string>();
+    for (const row of all)
+      if (!byNik.has(row.nik)) byNik.set(row.nik, row.name);
+    return [...byNik.entries()]
+      .map(([nik, name]) => ({ nik, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [all]);
+
+  const shiftOptions = React.useMemo(
+    () => [...new Set(all.flatMap((r) => (r.shift ? [r.shift] : [])))].sort(),
+    [all]
+  );
+
+  const selectedOp = operators.find((o) => o.nik === fhOp);
+
+  const catLabel: Record<FtwCatKey, string> = {
+    fit: t.bFit,
+    istirahat: t.ftwStatKurang,
+    tidak: "Tidak Boleh Bekerja",
+    belum: t.ftwStatBelum,
   };
 
   const loc = lang === "en" ? "en-GB" : "id-ID";
@@ -244,16 +170,12 @@ export function FitToWorkHistory() {
     });
 
   const needle = q.trim().toLowerCase();
-  const all = React.useMemo(() => historyRows(d1, d2), [d1, d2]);
   const rows = all.filter((r) => {
     if (fhOp && r.nik !== fhOp) return false;
     if (shift && r.shift !== shift) return false;
-    if (st && r.st !== st) return false;
+    if (cat && ftwCatOf(r.sleepCategory) !== cat) return false;
     if (!needle) return true;
-    return (
-      r.name.toLowerCase().includes(needle) ||
-      r.nik.toLowerCase().includes(needle)
-    );
+    return r.name.toLowerCase().includes(needle) || r.nik.includes(needle);
   });
 
   const perN = parseInt(per, 10);
@@ -302,28 +224,30 @@ export function FitToWorkHistory() {
               aria-label={t.allOps}
             >
               <option value="">{t.allOps}</option>
-              {CREW.map((o) => (
+              {operators.map((o) => (
                 <option key={o.nik} value={o.nik}>
                   {o.name} — {o.nik}
                 </option>
               ))}
             </Select>
             <Select
-              wrapperClassName="w-[160px]"
-              value={st}
+              wrapperClassName="w-[190px]"
+              value={cat}
               onChange={(e) => {
-                setSt(e.target.value);
+                setCat(e.target.value);
                 setPage(1);
               }}
               aria-label={t.allStatus}
             >
               <option value="">{t.allStatus}</option>
-              <option value="belum">{t.ftwStatBelum}</option>
-              <option value="kurang">{t.ftwStatKurang}</option>
-              <option value="fit">{t.bFit}</option>
+              {(Object.keys(catLabel) as FtwCatKey[]).map((key) => (
+                <option key={key} value={key}>
+                  {catLabel[key]}
+                </option>
+              ))}
             </Select>
             <Select
-              wrapperClassName="w-[140px]"
+              wrapperClassName="w-[150px]"
               value={shift}
               onChange={(e) => {
                 setShift(e.target.value);
@@ -332,8 +256,9 @@ export function FitToWorkHistory() {
               aria-label={t.allShift}
             >
               <option value="">{t.allShift}</option>
-              <option value="siang">{t.shiftDay}</option>
-              <option value="malam">{t.shiftNight}</option>
+              {shiftOptions.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
             </Select>
             <div className="flex items-center gap-2">
               <Input
@@ -361,7 +286,15 @@ export function FitToWorkHistory() {
           </ToolbarGroup>
         </Toolbar>
 
-        {shown.length ? (
+        {listQ.isPending && spanOk ? (
+          <TableSkeleton rows={8} />
+        ) : listQ.isError ? (
+          <StateBox
+            icon={<Search className="text-(--color-primary-bright)" />}
+            title={t.ftwLoadErr}
+            body={errorMessage(listQ.error, t.ftwLoadErr)}
+          />
+        ) : shown.length ? (
           <div className="overflow-x-auto">
             <Table className="min-w-[1280px]">
               <TableHeader>
@@ -374,29 +307,44 @@ export function FitToWorkHistory() {
                   <TableHead>{t.thShift}</TableHead>
                   <TableHead>{t.thSleep}</TableHead>
                   <TableHead>{t.thStatus}</TableHead>
+                  <TableHead>FTW</TableHead>
                 </tr>
               </TableHeader>
               <TableBody>
-                {shown.map((r) => (
-                  <TableRow key={`${r.nik}-${r.date}`}>
-                    <TableCell className="font-mono whitespace-nowrap">
-                      {dLabel(r.date)}
-                    </TableCell>
-                    <TableCell>
-                      <NameCell name={r.name} sub={r.nik} />
-                    </TableCell>
-                    <TableCell>{r.company}</TableCell>
-                    <TableCell>{r.dept}</TableCell>
-                    <TableCell>{r.pos}</TableCell>
-                    <TableCell>
-                      {r.shift === "malam" ? t.shiftNight : t.shiftDay}
-                    </TableCell>
-                    <TableCell className={sleepClass(r.st)}>
-                      {r.st === "belum" ? "—" : sleepLabel(r.sleepMin, lang)}
-                    </TableCell>
-                    <TableCell>{stBadge(r.st)}</TableCell>
-                  </TableRow>
-                ))}
+                {shown.map((r) => {
+                  const rowCat = ftwCatOf(r.sleepCategory);
+                  return (
+                    <TableRow key={`${r.nik}-${r.date}`}>
+                      <TableCell className="font-mono whitespace-nowrap">
+                        {dLabel(r.date)}
+                      </TableCell>
+                      <TableCell>
+                        <NameCell name={r.name} sub={r.nik} />
+                      </TableCell>
+                      <TableCell>{r.company ?? "—"}</TableCell>
+                      <TableCell>{r.department ?? "—"}</TableCell>
+                      <TableCell>{r.position ?? "—"}</TableCell>
+                      <TableCell>{r.shift ?? "—"}</TableCell>
+                      <TableCell className={ftwSleepClass(rowCat)}>
+                        {ftwSleepText(r.sleepMinutes)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={FTW_CAT_BADGE[rowCat]} dot>
+                          {r.sleepCategory ?? t.ftwStatBelum}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {r.ftwDecision ? (
+                          <Badge variant={ftwDecisionBadge(r.ftwDecision)}>
+                            {r.ftwDecision}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
