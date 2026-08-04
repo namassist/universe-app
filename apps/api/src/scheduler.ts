@@ -3,9 +3,9 @@
  *
  * A tick each minute reads the active stages and fires those whose time has
  * arrived. The actions themselves are hooks: `ftw-deadline`, `finger-in`,
- * `bus-depart`, and `other` are markers, and `finger-ingest` and
- * `spare-validate` name work the allocation engine will do and which does not
- * exist yet.
+ * `bus-depart`, and `other` are markers; `ftw-ingest` and `finger-ingest`
+ * open a readiness-ingest window (`ingest.ts`); `spare-validate` names work
+ * the allocation engine will do and which does not exist yet.
  *
  * Building the trigger before the work it triggers is deliberate. The
  * alternative — persist the rows now, add firing when the engine lands — means
@@ -22,6 +22,10 @@ import { eq } from "drizzle-orm";
 import type { TimelineAction } from "@universe/contracts";
 
 import { db, schema, type TimelineStageRow } from "./db";
+// Circular on paper (ingest uses localDate from here) — harmless in practice:
+// both sides only reach through the binding inside function bodies, never at
+// module init.
+import { runIngestWindow, type IngestKind } from "./ingest";
 import { redis } from "./redis";
 
 /** One tick per minute: the schedule is specified to the minute. */
@@ -80,13 +84,28 @@ const marker: Hook = async (dispatch) => {
 };
 
 /**
+ * The two ingest stages: fire once here, then `runIngestWindow` keeps
+ * re-pulling until the window closes (each pass an idempotent upsert — see
+ * `ingest.ts`). The window runs detached: a stage that spends five minutes
+ * pulling must not hold this tick's loop hostage, and the window logs its own
+ * passes and failures, so awaiting it here would add nothing but delay for
+ * whatever stage is due in the same minute.
+ */
+const ingest =
+  (kind: IngestKind): Hook =>
+  async (dispatch) => {
+    record(dispatch, `ingest window opened (${kind})`);
+    void runIngestWindow(kind);
+  };
+
+/**
  * ── The allocation engine attaches here. ──────────────────────────────────
  *
- * `finger-ingest` pulls the morning's fingerprint records; `spare-validate`
- * matches spare operators to the units left empty. Both are the subject of
- * their own change. Implementing one means replacing the body of its hook and
- * nothing else: the scheduling, the once-per-day guarantee, the multi-process
- * lock, and the action vocabulary are all settled above and around it.
+ * `spare-validate` matches spare operators to the units left empty — the
+ * subject of the Actual-tab change. Implementing it means replacing the body
+ * of this hook and nothing else: the scheduling, the once-per-day guarantee,
+ * the multi-process lock, and the action vocabulary are all settled above and
+ * around it.
  */
 const notYetImplemented: Hook = async (dispatch) => {
   record(dispatch, "allocation engine not implemented yet — no-op");
@@ -97,7 +116,8 @@ const HOOKS: Record<TimelineAction, Hook> = {
   "finger-in": marker,
   "bus-depart": marker,
   other: marker,
-  "finger-ingest": notYetImplemented,
+  "ftw-ingest": ingest("ftw"),
+  "finger-ingest": ingest("finger"),
   "spare-validate": notYetImplemented,
 };
 

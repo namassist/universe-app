@@ -476,10 +476,13 @@ const WORK_AREAS: [name: string, type: AreaType][] = [
 
 /* -------------------------------------------------- allocation & display */
 
+// The agreed morning sequence: each ingest stage starts at its deadline and
+// re-pulls for a bounded window; everything must be done before the bus.
 const TIMELINE_STAGES: [name: string, at: string, action: TimelineAction][] = [
   ["Batas Upload FTW", "04:45", "ftw-deadline"],
-  ["Batas Finger In", "05:20", "finger-in"],
-  ["Ambil Data Finger", "05:21", "finger-ingest"],
+  ["Ambil Data FTW", "04:45", "ftw-ingest"],
+  ["Batas Finger In", "05:15", "finger-in"],
+  ["Ambil Data Finger", "05:15", "finger-ingest"],
   ["Validasi Spare", "05:25", "spare-validate"],
   ["Bus Berangkat", "05:30", "bus-depart"],
 ];

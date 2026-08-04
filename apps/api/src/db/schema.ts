@@ -889,6 +889,85 @@ export const timelineStages = pgTable("timeline_stages", {
     .defaultNow(),
 });
 
+/* ------------------------------------------------------ readiness snapshots */
+
+/**
+ * Local snapshots of the two external readiness sources, written by the
+ * `ftw-ingest` / `finger-ingest` timeline stages and the manual sync routes.
+ *
+ * Deliberately denormalized text, and deliberately no foreign key to
+ * `employees`: these rows mirror what savera / the fingerprint machines said,
+ * including people this system has no employee record for. Dropping or
+ * re-keying them would make the snapshot lie about its source. Matching to a
+ * local operator happens where it is needed, by normalized NIK.
+ *
+ * One row per person per day (`nik`, `date` unique), upserted idempotently —
+ * a re-pull inside an ingest window or a manual sync amends the row, never
+ * duplicates it. History accumulates here so historical questions are
+ * answered locally instead of by re-querying the sources.
+ */
+export const ftwReadings = pgTable(
+  "ftw_readings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Normalized (digits only, no leading zeros) — the join key to us. */
+    nik: text("nik").notNull(),
+    date: date("date").notNull(),
+    name: text("name").notNull(),
+    company: text("company"),
+    department: text("department"),
+    position: text("position"),
+    mess: text("mess"),
+    shift: text("shift"),
+    /** `summaries.sleep` — the minutes savera's rules actually ran against. */
+    sleepMinutes: integer("sleep_minutes").notNull().default(0),
+    /** savera's verdicts as text: their rules are operator-configurable, so an
+     *  enum here would break on their next edit, not ours. */
+    sleepCategory: text("sleep_category"),
+    ftwDecision: text("ftw_decision"),
+    /** When the operator uploaded, source-local time. String mode: the value
+     *  passes through verbatim — a timezone conversion here would shift the
+     *  morning's facts by the difference between server and site clocks. */
+    sentAt: timestamp("sent_at", { mode: "string" }),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ftw_readings_nik_date_idx").on(table.nik, table.date),
+    index("ftw_readings_date_idx").on(table.date),
+  ]
+);
+
+/**
+ * First IN and first OUT tap per person per day, raw as the machines recorded
+ * them — including a night-shift worker whose first tap of the day is an OUT,
+ * and the occasional wrong button. Which taps *mean* presence for a shift is
+ * roster-aware interpretation and belongs to the consumer (the Actual tab),
+ * not to the snapshot.
+ */
+export const fingerReadings = pgTable(
+  "finger_readings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Normalized (digits only, no leading zeros) — the join key to us. */
+    nik: text("nik").notNull(),
+    date: date("date").notNull(),
+    /** Source-local tap times, string mode — see `ftwReadings.sentAt`. */
+    firstInAt: timestamp("first_in_at", { mode: "string" }),
+    firstInIp: text("first_in_ip"),
+    firstOutAt: timestamp("first_out_at", { mode: "string" }),
+    firstOutIp: text("first_out_ip"),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finger_readings_nik_date_idx").on(table.nik, table.date),
+    index("finger_readings_date_idx").on(table.date),
+  ]
+);
+
 export type RoleRow = typeof roles.$inferSelect;
 export type RolePermissionRow = typeof rolePermissions.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
@@ -913,6 +992,8 @@ export type RunTextRow = typeof runTexts.$inferSelect;
 export type DeviceRunTextRow = typeof deviceRunTexts.$inferSelect;
 export type SoundRow = typeof sounds.$inferSelect;
 export type TimelineStageRow = typeof timelineStages.$inferSelect;
+export type FtwReadingRow = typeof ftwReadings.$inferSelect;
+export type FingerReadingRow = typeof fingerReadings.$inferSelect;
 export type RosterDocumentRow = typeof rosterDocuments.$inferSelect;
 export type RosterDayRow = typeof rosterDays.$inferSelect;
 export type RosterRevisionRow = typeof rosterRevisions.$inferSelect;

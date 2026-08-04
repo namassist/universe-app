@@ -57,12 +57,15 @@ export function isBloodType(value: string): value is BloodType {
 /**
  * What a timeline stage *does* when its time arrives.
  *
- * `finger-ingest` and `spare-validate` name work the allocation engine will
- * perform; until it exists they dispatch to logged no-ops. The values are the
- * contract — labels below are presentation and may be reworded freely.
+ * `ftw-ingest` and `finger-ingest` pull the day's readiness data from the
+ * external sources into the local snapshots. `spare-validate` names work the
+ * allocation engine will perform; until it exists it dispatches to a logged
+ * no-op. The values are the contract — labels below are presentation and may
+ * be reworded freely.
  */
 export const TIMELINE_ACTIONS = [
   "ftw-deadline",
+  "ftw-ingest",
   "finger-in",
   "finger-ingest",
   "spare-validate",
@@ -74,6 +77,7 @@ export type TimelineAction = (typeof TIMELINE_ACTIONS)[number];
 /** Indonesian labels, keyed by the value dispatch actually matches on. */
 export const TIMELINE_ACTION_LABELS: Record<TimelineAction, string> = {
   "ftw-deadline": "Batas upload FTW",
+  "ftw-ingest": "Ambil data FTW",
   "finger-in": "Batas finger in",
   "finger-ingest": "Ambil data finger",
   "spare-validate": "Validasi spare ke unit",

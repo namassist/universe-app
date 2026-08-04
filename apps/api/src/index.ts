@@ -18,6 +18,10 @@ import { runTextsRoutes, soundsRoutes } from "./routes/display-content";
 import { employeesRoutes } from "./routes/employees";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { fleetsRoutes } from "./routes/fleets";
+import {
+  attendanceSyncRoutes,
+  fitToWorkSyncRoutes,
+} from "./routes/ingest-sync";
 import { masterRoutes } from "./routes/master";
 import { rolesRoutes } from "./routes/roles";
 import { rosterRoutes } from "./routes/roster";
@@ -51,6 +55,8 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(fleetsRoutes)
   .use(unitStatusRoutes)
   .use(fleetAllocationRoutes)
+  .use(fitToWorkSyncRoutes)
+  .use(attendanceSyncRoutes)
   .use(runTextsRoutes)
   .use(soundsRoutes)
   .use(timelineRoutes);
@@ -86,6 +92,14 @@ export const app = new Elysia()
           { name: "bus", description: "Bus departure schedules" },
           { name: "sounds", description: "Sound clips and their audio" },
           { name: "timeline", description: "Morning allocation schedule" },
+          {
+            name: "fit-to-work",
+            description: "FTW verdict snapshots from savera",
+          },
+          {
+            name: "attendance",
+            description: "Fingerprint tap snapshots from Nakula",
+          },
         ],
       },
     })

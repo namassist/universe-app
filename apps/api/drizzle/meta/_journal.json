@@ -71,6 +71,13 @@
       "when": 1785479380551,
       "tag": "0009_faithful_karen_page",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785812182341,
+      "tag": "0010_freezing_lake",
+      "breakpoints": true
     }
   ]
 }

@@ -89,6 +89,25 @@ export const env = {
    *  apart. */
   PHOTO_DIR: required("PHOTO_DIR", "./storage/photos"),
 
+  /** The two external readiness sources (read-only, snapshot on ingest).
+   *
+   *  Required with no fallback for the same reason DATABASE_URL is: a default
+   *  would silently point at the wrong database, and here "wrong" means
+   *  another site's attendance machines. Connections are lazy — the API boots
+   *  and serves without reach; only an ingest run needs the network. */
+  FTW_SOURCE_URL: required("FTW_SOURCE_URL"),
+  ATTENDANCE_SOURCE_URL: required("ATTENDANCE_SOURCE_URL"),
+
+  /** savera hosts several companies in one database; this site is one of
+   *  them. Ingesting the others would snapshot people who can never hold a
+   *  unit here. */
+  FTW_SOURCE_COMPANY_ID: number("FTW_SOURCE_COMPANY_ID", "2"),
+
+  /** How long an ingest stage keeps re-pulling after it fires (design: the
+   *  window is retry and late-arrival tolerance in one — every pass is an
+   *  idempotent upsert). Bounded so everything is settled before the bus. */
+  INGEST_WINDOW_MINUTES: number("INGEST_WINDOW_MINUTES", "5"),
+
   /** Where a roster upload waits between its preview and its commit (D8).
    *
    *  Explicit like the two above, and the least precious of the three: nothing

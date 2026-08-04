@@ -88,6 +88,7 @@ const RunTextColorUnion = t.Union([
 
 const TimelineActionUnion = t.Union([
   t.Literal("ftw-deadline"),
+  t.Literal("ftw-ingest"),
   t.Literal("finger-in"),
   t.Literal("finger-ingest"),
   t.Literal("spare-validate"),
@@ -1023,4 +1024,19 @@ export const RosterConflictSchema = t.Object({
   message: t.String(),
   recordedCode: RosterCodeSchema,
   currentCode: RosterCodeSchema,
+});
+
+/* ------------------------------------------------------ readiness ingest */
+
+/** One sync pass's honest accounting — skipped rows are counted, not hidden. */
+export const IngestSyncResultSchema = t.Object({
+  fetched: t.Integer(),
+  upserted: t.Integer(),
+  skipped: t.Integer(),
+  syncedAt: t.String(),
+});
+
+/** Null until the first sync ever lands — a fact the screens must render. */
+export const IngestSyncStatusSchema = t.Object({
+  lastSyncedAt: t.Nullable(t.String()),
 });
