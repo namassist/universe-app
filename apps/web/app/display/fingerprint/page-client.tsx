@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, LayoutGrid, Wifi, WifiOff } from "lucide-react";
 
+import { isStatus } from "@/lib/api";
 import {
   fingerprintDisplayQueryOptions,
   type FingerprintDisplayMachine,
@@ -175,7 +176,20 @@ function OnlineCard({ machine }: { machine: FingerprintDisplayMachine }) {
 
 export default function DisplayFingerprintPage() {
   const params = useSearchParams();
-  const { data } = useQuery(fingerprintDisplayQueryOptions());
+  const { data, error, isError, dataUpdatedAt } = useQuery(
+    fingerprintDisplayQueryOptions()
+  );
+
+  /*
+   * "Cannot reach the API" and "this screen is not paired" are different
+   * facts and must not wear the same banner. A 401/403 is an unpaired or
+   * revoked screen — a person has to go and pair it, and shouting about the
+   * network would send them looking in the wrong place. Anything else (the
+   * API down, the host unreachable, a 5xx) is a real loss of contact, and the
+   * poll keeps running underneath, so the screen recovers on its own.
+   */
+  const authProblem = isStatus(error, 401) || isStatus(error, 403);
+  const disconnected = isError && !authProblem;
 
   const machines = React.useMemo(() => data?.machines ?? [], [data?.machines]);
   const offline = React.useMemo(
@@ -238,6 +252,8 @@ export default function DisplayFingerprintPage() {
       }
       deviceName={params.get("name") ?? undefined}
       displayKind="fingerprint"
+      disconnected={disconnected}
+      staleSince={dataUpdatedAt || null}
       /* Rotation progress for the healthy half — the segmented story bar the
          fleet screen uses to show which subject is on screen. */
       topBar={
@@ -360,14 +376,19 @@ export default function DisplayFingerprintPage() {
         /* No rows is itself a reading — an unpaired screen, or a registry
            nobody has filled in. Saying so beats an empty black canvas. */
         <div className="grid min-h-0 flex-1 place-items-center">
-          <div className="text-center">
-            <div className="text-3xl font-bold text-(--text-secondary)">
-              Belum ada data mesin
+          {/* Silent when disconnected: the banner above already explains the
+              blank screen, and "no machines registered" would be a claim we
+              cannot actually make without having read the registry. */}
+          {disconnected ? null : (
+            <div className="text-center">
+              <div className="text-3xl font-bold text-(--text-secondary)">
+                Belum ada data mesin
+              </div>
+              <div className="mt-2 text-xl text-(--text-tertiary)">
+                Daftarkan mesin di menu Mesin Fingerprint.
+              </div>
             </div>
-            <div className="mt-2 text-xl text-(--text-tertiary)">
-              Daftarkan mesin di menu Mesin Fingerprint.
-            </div>
-          </div>
+          )}
         </div>
       )}
     </DisplayShell>

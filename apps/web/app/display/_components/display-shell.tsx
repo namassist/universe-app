@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Monitor } from "lucide-react";
+import { Monitor, WifiOff } from "lucide-react";
 
 import type { DeviceKind } from "@universe/contracts";
 
@@ -41,6 +41,16 @@ export function DisplayShell({
   displayKind,
   stats,
   topBar,
+  /**
+   * The screen has lost contact with the API and is showing the last data it
+   * received. Driven by the page's own query state — a kiosk that keeps
+   * displaying a stale wall as though nothing were wrong is worse than one
+   * that admits it, because the whole point of a monitoring screen is that a
+   * glance at it is trustworthy.
+   */
+  disconnected = false,
+  /** When that last data arrived (`dataUpdatedAt`), so the banner says how old. */
+  staleSince,
   children,
 }: {
   title: string;
@@ -49,6 +59,8 @@ export function DisplayShell({
   displayKind: DeviceKind;
   stats: DisplayStat[];
   topBar?: React.ReactNode;
+  disconnected?: boolean;
+  staleSince?: number | null;
   children: React.ReactNode;
 }) {
   const canvasRef = React.useRef<HTMLDivElement>(null);
@@ -166,6 +178,29 @@ export function DisplayShell({
               </div>
             </div>
           </header>
+
+          {disconnected ? (
+            <div
+              role="alert"
+              className="flex flex-none items-center gap-4 rounded-card border border-(--badge-danger-border) bg-(--badge-danger-fill) px-7 py-4.5"
+            >
+              <WifiOff
+                className="size-8 flex-none text-danger-text"
+                strokeWidth={2}
+              />
+              <div>
+                <b className="text-[26px] font-bold text-danger-text">
+                  Koneksi terputus — data tidak diperbarui
+                </b>
+                <br />
+                <span className="text-xl text-danger-text opacity-85">
+                  {staleSince
+                    ? `Menampilkan data terakhir ${fmt(new Date(staleSince))} WITA. Menghubungkan ulang…`
+                    : "Belum ada data yang berhasil dimuat. Menghubungkan ulang…"}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {/* stat kiosk */}
           {/* Columns follow the stats passed in: this screen dropped from
