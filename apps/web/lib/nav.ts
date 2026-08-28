@@ -103,6 +103,7 @@ export const NAV: NavEntry[] = [
       leaf("running-text"),
       leaf("sound"),
       leaf("timeline"),
+      leaf("mesin-fingerprint"),
     ],
   },
   {

@@ -141,6 +141,52 @@ export const devices = pgTable("devices", {
     .defaultNow(),
 });
 
+/**
+ * The fingerprint machines on site — the registry the monitoring TV reads.
+ *
+ * Not a `catalogueColumns()` catalogue: a catalogue row is a name, and this is
+ * a name plus the address the prober talks to. It is also deliberately not a
+ * read of Nakula's `tbl_m_absen_to_finger`, which holds rows for machines dead
+ * since early 2026 — this table is owned here and edited here.
+ *
+ * `ip` is unique because it is the machine's identity for probing: two rows
+ * with one address would be probed twice and reported as two machines. The
+ * constraint is what makes a duplicate a 409 instead of a silent second card
+ * on the wall.
+ *
+ * The reachability columns are written only by the prober (`prober.ts`) and
+ * read by everything else; no request path ever opens a socket to a machine.
+ */
+export const fingerprintMachines = pgTable("fingerprint_machines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  ip: text("ip").notNull().unique(),
+  active: boolean("active").notNull().default(true),
+  /* ---- written by the prober, read by the wall ---- */
+  /** Last probe verdict, after the miss-count debounce. */
+  online: boolean("online").notNull().default(false),
+  /** Last probe that actually reached the machine. */
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  /** Last probe attempt, reachable or not — the freshness of `online`. */
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+  /**
+   * When the current `online` value began. Moves only on a transition, never
+   * on an unchanged cycle — otherwise "offline for 2 h" resets every minute
+   * and the wall can never show how long a machine has been down.
+   */
+  statusSince: timestamp("status_since", { withTimezone: true }),
+  /**
+   * Consecutive failed probes. Persisted rather than held in memory so a
+   * process restart cannot silently walk a machine back to online; the flip
+   * happens only once this reaches the configured threshold, which is what
+   * keeps one dropped packet off a wall-mounted TV.
+   */
+  missCount: integer("miss_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 /* ------------------------------------------------------------ catalogues */
 
 /**
@@ -972,6 +1018,7 @@ export type RoleRow = typeof roles.$inferSelect;
 export type RolePermissionRow = typeof rolePermissions.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type DeviceRow = typeof devices.$inferSelect;
+export type FingerprintMachineRow = typeof fingerprintMachines.$inferSelect;
 
 export type UnitTypeRow = typeof unitTypes.$inferSelect;
 export type UnitModelRow = typeof unitModels.$inferSelect;

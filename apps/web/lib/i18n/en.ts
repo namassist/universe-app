@@ -324,6 +324,19 @@ export const en: Dict = {
   sndErrRequired: "Choose an audio file first",
   tlSub: "Shift-start allocation schedule — these stages fire automatically",
   tlDlgB: "The stage fires automatically at the time set here.",
+  mfSub: "Fingerprint machine registry — what the monitoring screen reads",
+  mfDlgB:
+    "The IP address is how a machine is checked, so one IP is one machine.",
+  mfReach: "Reachability",
+  mfOnline: "Online",
+  mfOffline: "Offline",
+  mfNotChecked: "Not checked yet",
+  mfName: "Machine name",
+  mfIp: "IP address",
+  mfErrIp: "Not a valid IPv4 address (e.g. 192.168.179.229)",
+  mfEmptyB: "No fingerprint machines registered yet.",
+  mfNonaktifNote:
+    "An inactive machine is not checked and does not appear on the TV.",
   busSub: "Bus departure schedule — one time per unit",
   busDlgB: "Pick a unit of type BUS, then set its departure time.",
   busEmptyB: "No departure schedules yet.",
@@ -376,6 +389,12 @@ export const en: Dict = {
     "Manage attendance, fit-to-work, and fingerprint kiosk TVs — content, running text, and status per display.",
   dspSubFleet:
     "Manage unit-status kiosk TVs — content, running text, and status per display.",
+  navDispFitwork: "Fit To Work Display",
+  navDispFinger: "Fingerprint Monitoring",
+  dspSubFitwork:
+    "Manage fit-to-work kiosk TVs — content, running text, and status per display.",
+  dspSubFinger:
+    "The TV that shows fingerprint machine status — pair a device so the screen can open.",
   dspCloseKiosk: "Close kiosk",
   dspPreview: "Kiosk preview",
   dspListTitle: "Registered displays",

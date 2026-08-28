@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Monitor, WifiOff } from "lucide-react";
+import { Monitor } from "lucide-react";
 
 import type { DeviceKind } from "@universe/contracts";
 
@@ -53,9 +53,7 @@ export function DisplayShell({
 }) {
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const [clock, setClock] = React.useState("--:--:--");
-  const [stale, setStale] = React.useState("—");
   const [dateLine, setDateLine] = React.useState("");
-  const [online, setOnline] = React.useState(true);
 
   /* fullscreen tanpa letterbox: lebar kanvas tetap 1920, tinggi mengikuti
      rasio layar — konten kolom flex meregang, tanpa bar hitam */
@@ -117,11 +115,6 @@ export function DisplayShell({
     };
   }, []);
 
-  function setConn(on: boolean) {
-    setOnline(on);
-    if (!on) setStale(`${fmt(new Date())} WITA`);
-  }
-
   return (
     <div
       data-theme="dark"
@@ -174,30 +167,15 @@ export function DisplayShell({
             </div>
           </header>
 
-          {/* banner koneksi terputus */}
-          {!online ? (
-            <div
-              role="alert"
-              className="flex flex-none items-center gap-4 rounded-card border border-(--badge-danger-border) bg-(--badge-danger-fill) px-7 py-4.5"
-            >
-              <WifiOff
-                className="size-8 flex-none text-danger-text"
-                strokeWidth={2}
-              />
-              <div>
-                <b className="text-[26px] font-bold text-danger-text">
-                  Koneksi terputus — data tidak diperbarui
-                </b>
-                <br />
-                <span className="text-xl text-danger-text opacity-85">
-                  Menampilkan data terakhir {stale}. Menghubungkan ulang…
-                </span>
-              </div>
-            </div>
-          ) : null}
-
           {/* stat kiosk */}
-          <div className="grid flex-none grid-cols-4 gap-5">
+          {/* Columns follow the stats passed in: this screen dropped from
+              four to three, and a hardcoded four left a hole on the right. */}
+          <div
+            className="grid flex-none gap-5"
+            style={{
+              gridTemplateColumns: `repeat(${stats.length}, minmax(0,1fr))`,
+            }}
+          >
             {stats.map((s) => (
               <div
                 key={s.label}
@@ -230,36 +208,6 @@ export function DisplayShell({
             display kalau ada, kalau tidak master). Poll-nya sekaligus heartbeat
             perangkat ini. */}
         <RunningTicker kind={displayKind} />
-      </div>
-
-      {/* demo switch (bukan bagian desain kiosk) */}
-      <div
-        role="group"
-        aria-label="Demo koneksi"
-        className="fixed right-4 bottom-4 z-90 flex gap-1.5 rounded-xl border border-(--glass-2-border) bg-(--overlay-fill) p-1.5 shadow-(--shadow-modal)"
-      >
-        <span className="self-center px-1.5 pl-2 text-[11px] text-(--text-tertiary)">
-          Demo:
-        </span>
-        {(
-          [
-            [true, "Online"],
-            [false, "Terputus"],
-          ] as [boolean, string][]
-        ).map(([on, label]) => (
-          <button
-            key={label}
-            onClick={() => setConn(on)}
-            className={cn(
-              "cursor-pointer rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-semibold",
-              online === on
-                ? "border-[rgba(0,212,255,.4)] bg-[rgba(0,212,255,.12)] text-primary-bright"
-                : "text-(--text-secondary) hover:bg-[rgba(255,255,255,.08)] hover:text-(--text-primary)"
-            )}
-          >
-            {label}
-          </button>
-        ))}
       </div>
     </div>
   );

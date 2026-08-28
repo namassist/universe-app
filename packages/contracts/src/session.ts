@@ -8,9 +8,41 @@
 
 import type { EffectivePermissions, Scope } from "./access";
 
-/** The four kiosk kinds. Only `att` and `fleet` have an admin UI. */
+/**
+ * The four kiosk kinds. Every one of them pairs the same way and has a
+ * fullscreen screen; which admin page manages a kind's devices is a web
+ * concern, registered per slug in `components/menus/registry.tsx`.
+ */
 export const DEVICE_KINDS = ["att", "fleet", "fitwork", "fingerprint"] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
+
+/**
+ * Where a paired device of each kind belongs.
+ *
+ * Shared rather than per-app: the API redirects here after consuming a pairing
+ * link, and the web admin links here to preview a screen. Two copies of this
+ * mapping drift the moment a route is renamed, and the drift is silent — the
+ * link simply lands on a 404 nobody is watching, on a TV.
+ */
+export const DISPLAY_ROUTE_OF_KIND: Record<DeviceKind, string> = {
+  att: "/display/attendance",
+  fleet: "/display/fleet",
+  fitwork: "/display/fitwork",
+  fingerprint: "/display/fingerprint",
+};
+
+/**
+ * The id prefix each kind's devices are numbered under (`DSP-P01`, …).
+ *
+ * A device id is operator-visible and typed on the device itself, so it is
+ * assigned rather than generated. These are the prefixes already in use.
+ */
+export const DEVICE_ID_PREFIX: Record<DeviceKind, string> = {
+  att: "DSP-A",
+  fleet: "DSP-F",
+  fitwork: "DSP-W",
+  fingerprint: "DSP-P",
+};
 
 /** Which transport a login wants its session delivered over. */
 export const SESSION_TRANSPORTS = ["cookie", "bearer"] as const;

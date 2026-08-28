@@ -108,6 +108,37 @@ export const env = {
    *  idempotent upsert). Bounded so everything is settled before the bus. */
   INGEST_WINDOW_MINUTES: number("INGEST_WINDOW_MINUTES", "5"),
 
+  /* ---- fingerprint machine probing ---- */
+
+  /** How often every active machine is probed. The monitoring TV is a
+   *  continuous reading, not a deadline, so this is an interval rather than a
+   *  timeline stage.
+   *
+   *  A full sweep of ~58 machines takes about 3.5 s, so a 30 s cycle leaves
+   *  the prober idle roughly nine tenths of the time — the interval is chosen
+   *  for how fast an outage should surface, not for cost. */
+  PROBE_INTERVAL_SECONDS: number("PROBE_INTERVAL_SECONDS", "30"),
+
+  /** How long one TCP connect may take before it counts as a miss.
+   *
+   *  Measured on site: the slowest machines answer in ~1.2 s when asked alone,
+   *  so this is generous on purpose — a timeout that merely *usually* clears
+   *  manufactures offline machines that are not offline. */
+  PROBE_TIMEOUT_MS: number("PROBE_TIMEOUT_MS", "5000"),
+
+  /** How many machines are probed at once.
+   *
+   *  Not all of them: firing 58 simultaneous connects was measured to push the
+   *  slower machines past a 3 s timeout and report them offline while `nc`
+   *  reached them fine. Batching keeps each probe honest, and a full cycle
+   *  still finishes far inside its interval. */
+  PROBE_CONCURRENCY: number("PROBE_CONCURRENCY", "10"),
+
+  /** Consecutive misses before a machine is called offline. Site links drop
+   *  the occasional packet; one miss must not flash red on a wall-mounted
+   *  TV, and two still surfaces a real outage inside a couple of minutes. */
+  PROBE_MISSES_BEFORE_OFFLINE: number("PROBE_MISSES_BEFORE_OFFLINE", "2"),
+
   /** Where a roster upload waits between its preview and its commit (D8).
    *
    *  Explicit like the two above, and the least precious of the three: nothing

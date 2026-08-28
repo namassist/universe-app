@@ -128,9 +128,18 @@ export function Sidebar() {
         <div
           className={cn(
             "flex-none overflow-hidden transition-[max-height] duration-250 ease-in-out",
-            expanded ? "max-h-[760px] py-2 pb-3" : "max-h-0",
+            expanded ? "py-2 pb-3" : "",
             collapsed && "hidden max-xl:block"
           )}
+          /*
+           * Computed, not a fixed cap: the box is `overflow-hidden`, so a
+           * group taller than its max-height loses its last entries silently —
+           * they render in the DOM and are simply never seen. A hardcoded
+           * 760px fitted the Master group until it grew past sixteen items.
+           * Each child is h-10 (40px) with mt-2 (8px) between, plus the
+           * wrapper's py-2/pb-3; overshooting is free, clipping is not.
+           */
+          style={{ maxHeight: expanded ? kids.length * 48 + 24 : 0 }}
         >
           {kids.map((c) => {
             const kidClass = cn(

@@ -36,6 +36,7 @@ export type {
   DeviceRunTextRow,
   EmployeeRow,
   EmployeeSkillRow,
+  FingerprintMachineRow,
   MessRow,
   PositionRow,
   RolePermissionRow,

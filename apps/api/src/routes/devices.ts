@@ -1,11 +1,12 @@
 import { asc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import type {
-  AccessMode,
-  DeviceKind,
-  EffectivePermissions,
-  MenuSlug,
-  RunTextColor,
+import {
+  DISPLAY_ROUTE_OF_KIND,
+  type AccessMode,
+  type DeviceKind,
+  type EffectivePermissions,
+  type MenuSlug,
+  type RunTextColor,
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
@@ -96,13 +97,6 @@ async function refuseUnlessOwned(
     };
   return null;
 }
-
-const DISPLAY_ROUTE_OF_KIND: Record<DeviceKind, string> = {
-  att: "/display/attendance",
-  fleet: "/display/fleet",
-  fitwork: "/display/fitwork",
-  fingerprint: "/display/fingerprint",
-};
 
 function lastSeenLabel(at: Date | null): string {
   if (!at) return "belum pernah";

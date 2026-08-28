@@ -6,6 +6,7 @@ import { API_VERSION } from "@universe/contracts";
 import { env, isProd } from "./env";
 import { pingDb } from "./db";
 import { pingRedis } from "./redis";
+import { startProber } from "./prober";
 import { startScheduler } from "./scheduler";
 import {
   pingImportStorage,
@@ -16,6 +17,7 @@ import { authRoutes } from "./routes/auth";
 import { devicesRoutes, displayRoutes } from "./routes/devices";
 import { runTextsRoutes, soundsRoutes } from "./routes/display-content";
 import { employeesRoutes } from "./routes/employees";
+import { fingerprintMachineRoutes } from "./routes/fingerprint-machines";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { fleetsRoutes } from "./routes/fleets";
 import {
@@ -59,7 +61,8 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(attendanceSyncRoutes)
   .use(runTextsRoutes)
   .use(soundsRoutes)
-  .use(timelineRoutes);
+  .use(timelineRoutes)
+  .use(fingerprintMachineRoutes);
 
 export const app = new Elysia()
   .use(
@@ -99,6 +102,10 @@ export const app = new Elysia()
           {
             name: "attendance",
             description: "Fingerprint tap snapshots from Nakula",
+          },
+          {
+            name: "fingerprint",
+            description: "Fingerprint machine registry for the monitoring TV",
           },
         ],
       },
@@ -170,6 +177,10 @@ export const app = new Elysia()
 // Redis key, and the lock is what makes several API processes safe (design D9),
 // so a separate deployable would add an operational unit for no guarantee.
 startScheduler();
+
+// Likewise in-process, and behind the same kind of Redis lease: the prober is
+// an interval and fifty-eight short-lived sockets, not a service.
+startProber();
 
 console.log(`[api] listening on http://localhost:${env.PORT}`);
 console.log(`[api] openapi docs at http://localhost:${env.PORT}/openapi`);

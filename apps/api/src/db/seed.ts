@@ -118,6 +118,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "running-text",
       "sound",
       "timeline",
+      "mesin-fingerprint",
       "setting",
     ],
   },
@@ -173,6 +174,7 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
     { slug: "kode-simper", mode: "manage", roles: ["manpower"] },
     { slug: "perusahaan", mode: "manage", roles: ["manpower"] },
     { slug: "jabatan", mode: "manage", roles: ["manpower"] },
+    { slug: "mesin-fingerprint", mode: "manage", roles: ["manpower"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */

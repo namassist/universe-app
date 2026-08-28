@@ -819,6 +819,32 @@ export const DeviceSchema = t.Object({
   createdAt: t.String(),
 });
 
+export const FingerprintMachineSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  /** IPv4 host address — the prober's target, and the machine's identity. */
+  ip: t.String(),
+  active: t.Boolean(),
+  /** Last probe verdict, after the miss-count debounce. */
+  online: t.Boolean(),
+  /** Last probe that reached the machine; null until one ever has. */
+  lastSeenAt: t.Nullable(t.String()),
+  /** Last probe attempt — how fresh `online` is. */
+  checkedAt: t.Nullable(t.String()),
+  /** When the current status began, so a screen can say how long. */
+  statusSince: t.Nullable(t.String()),
+  createdAt: t.String(),
+});
+
+/** What the monitoring TV renders: the machines, plus its headline counts. */
+export const FingerprintDisplaySchema = t.Object({
+  servedAt: t.String(),
+  total: t.Integer(),
+  online: t.Integer(),
+  offline: t.Integer(),
+  machines: t.Array(FingerprintMachineSchema),
+});
+
 /* ---------------------------------------------------------------- roster */
 
 /**

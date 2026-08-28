@@ -15,6 +15,8 @@ import {
 
 import {
   COLOR_VAL,
+  DEVICE_ID_PREFIX,
+  DISPLAY_ROUTE_OF_KIND,
   RUNTEXT_COLORS,
   type DeviceKind,
   type RunTextColor,
@@ -84,12 +86,20 @@ type CustomRunText = { text: string; color: RunTextColor };
  * persisted by this change; those controls stay local, as the rest of the
  * static port is, until the display-configuration change lands.
  */
+/** Example names, per kind — a hint at the naming convention in use. */
+const NAME_PLACEHOLDER: Record<DeviceKind, string> = {
+  att: "TV Gate Utara",
+  fleet: "Fleet EX-22",
+  fitwork: "TV Fit To Work",
+  fingerprint: "TV Monitoring Fingerprint",
+};
+
 export function DisplayAdminMenu({
   mode,
   kind,
 }: {
   mode: AccessMode;
-  kind: Extract<DeviceKind, "att" | "fleet">;
+  kind: DeviceKind;
 }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
@@ -234,7 +244,7 @@ export function DisplayAdminMenu({
     setFRuntexts((p) => p.filter((_, j) => j !== i));
 
   const nextId = () => {
-    const prefix = kind === "att" ? "DSP-A" : "DSP-F";
+    const prefix = DEVICE_ID_PREFIX[kind];
     const taken = devices
       .map((d) => Number(d.id.replace(prefix, "")))
       .filter((n) => Number.isFinite(n));
@@ -304,18 +314,29 @@ export function DisplayAdminMenu({
     setTimeout(() => setCopied(false), 1600);
   }
 
+  const title = {
+    att: t.navDispAtt,
+    fleet: t.navDispFleet,
+    fitwork: t.navDispFitwork,
+    fingerprint: t.navDispFinger,
+  }[kind];
+  const sub = {
+    att: t.dspSubAtt,
+    fleet: t.dspSubFleet,
+    fitwork: t.dspSubFitwork,
+    fingerprint: t.dspSubFinger,
+  }[kind];
+  const addButton = canW ? (
+    <Button onClick={openAdd}>
+      <Plus />
+      {t.dspAdd}
+    </Button>
+  ) : null;
+
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title={kind === "att" ? t.navDispAtt : t.navDispFleet}
-        sub={kind === "att" ? t.dspSubAtt : t.dspSubFleet}
-      >
-        {canW ? (
-          <Button onClick={openAdd}>
-            <Plus />
-            {t.dspAdd}
-          </Button>
-        ) : null}
+      <PageTitle title={title} sub={sub}>
+        {addButton}
       </PageTitle>
 
       <Panel>
@@ -392,7 +413,7 @@ export function DisplayAdminMenu({
                         onClick={() =>
                           /* layar kiosk sungguhan (dark-only) — tab baru, fullscreen */
                           openDisplay(
-                            `/display/${kind === "att" ? "attendance" : "fleet"}?name=${encodeURIComponent(d.name)}`
+                            `${DISPLAY_ROUTE_OF_KIND[kind]}?name=${encodeURIComponent(d.name)}`
                           )
                         }
                       >
@@ -517,13 +538,13 @@ export function DisplayAdminMenu({
             <Field
               label={t.dspName}
               htmlFor="dsp-name"
-              required={kind === "att"}
+              required={kind !== "fleet"}
               error={nameErr}
               errorMessage={t.mdErrName}
             >
               <Input
                 id="dsp-name"
-                placeholder={kind === "att" ? "TV Gate Utara" : "Fleet EX-22"}
+                placeholder={NAME_PLACEHOLDER[kind]}
                 value={fName}
                 onChange={(e) => {
                   setFName(e.target.value);

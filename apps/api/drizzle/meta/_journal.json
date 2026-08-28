@@ -78,6 +78,20 @@
       "when": 1785812182341,
       "tag": "0010_freezing_lake",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787812059551,
+      "tag": "0011_curved_mister_fear",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787816918682,
+      "tag": "0012_smooth_jane_foster",
+      "breakpoints": true
     }
   ]
 }

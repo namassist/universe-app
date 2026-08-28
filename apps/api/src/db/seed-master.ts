@@ -492,6 +492,78 @@ const RUN_TEXTS: [text: string, color: string][] = [
   ["Utamakan keselamatan kerja", "Oranye"],
 ];
 
+/**
+ * The fingerprint machines on site, as supplied by the owner (2026-08-27).
+ *
+ * Real operational data rather than sample rows, which is why this seeds like
+ * the timeline (insert what is missing) and not like the sample fleet (only
+ * into an empty table): a site that already registered its machines keeps
+ * every rename and re-IP, and a machine added to this list later still lands.
+ *
+ * They span three subnets — 179.x at KM 31, 150.x across the workshops, port
+ * and messes, and 109.x for FAS/TF.
+ */
+const FINGERPRINT_MACHINES: [name: string, ip: string][] = [
+  ["MESIN 2 PORT (STOCKPILE)", "192.168.150.118"],
+  ["MAIN OFFICE", "192.168.150.166"],
+  ["MESIN 21 KM 31", "192.168.179.237"],
+  ["MESIN 20 KM 31", "192.168.179.232"],
+  ["MESIN 2 WORKSHOP MAINTENANCE", "192.168.150.163"],
+  ["MESIN 22 KM 31", "192.168.179.213"],
+  ["MESIN 3 KM 31", "192.168.179.228"],
+  ["MESIN 2 KM 31", "192.168.179.201"],
+  ["MESS KM13 - 2", "192.168.150.86"],
+  ["MESS KM13 - 1", "192.168.150.88"],
+  ["MESIN 9 KM 31", "192.168.179.248"],
+  ["MESIN 5 KM 31", "192.168.179.227"],
+  ["MESIN 40 KM 31", "192.168.179.243"],
+  ["MESIN 38 KM 31", "192.168.179.244"],
+  ["MESIN 37 KM 31", "192.168.179.219"],
+  ["MESIN 29 KM 31", "192.168.179.242"],
+  ["MESIN 28 KM 31", "192.168.179.216"],
+  ["MESIN 24 KM 31", "192.168.179.214"],
+  ["MESIN 23 KM 31", "192.168.179.238"],
+  ["MESIN 2 CHIPSEAL", "192.168.150.224"],
+  ["MESIN 19 KM 31", "192.168.179.208"],
+  ["MESIN 15 KM 31", "192.168.179.210"],
+  ["MESIN 14 KM 31", "192.168.179.57"],
+  ["MESIN 1 WORKSHOP MAINTENANCE", "192.168.150.162"],
+  ["MESIN 1 WAREHOUSE SCM", "192.168.150.161"],
+  ["MESIN 3 WORKSHOP MAINTENANCE", "192.168.179.51"],
+  ["MESIN 1 PORT (WORKSHOP)", "192.168.150.230"],
+  ["MESIN 1 KM 31", "192.168.179.229"],
+  ["MESIN FINGER OFFICE FMS", "192.168.179.250"],
+  ["MESIN 4 WORKSHOP MAINTENANCE", "192.168.179.54"],
+  ["MESIN 12 KM 31", "192.168.179.236"],
+  ["MESIN 27 KM 31", "192.168.179.241"],
+  ["MESIN 26 KM 31", "192.168.179.215"],
+  ["MESIN 25 KM 31", "192.168.179.239"],
+  ["MESIN 1 CHIPSEAL", "192.168.150.87"],
+  ["MAINTANK PORT", "192.168.179.252"],
+  ["MESIN 36 KM 31", "192.168.179.245"],
+  ["MESIN 35 KM 31", "192.168.179.223"],
+  ["MESIN 34 KM 31", "192.168.179.246"],
+  ["MESIN 8 KM 31", "192.168.179.235"],
+  ["MESIN 7 KM 31", "192.168.179.220"],
+  ["MESIN 6 KM 31", "192.168.179.205"],
+  ["MESIN 13 KM 31", "192.168.179.211"],
+  ["MESIN 11 KM 31", "192.168.179.212"],
+  ["MESIN 10 KM 31", "192.168.179.207"],
+  ["MESIN 5 WORKSHOP MAINTENANCE", "192.168.179.55"],
+  ["MESIN 4 KM 31", "192.168.179.202"],
+  ["MESIN 39 KM 31", "192.168.179.226"],
+  ["MESIN 18 KM 31", "192.168.179.233"],
+  ["MESIN 17 KM 31", "192.168.179.209"],
+  ["MESIN 16 KM 31", "192.168.179.234"],
+  ["MESIN 33 KM 31", "192.168.179.224"],
+  ["MESIN 32 KM 31", "192.168.179.247"],
+  ["MESIN 31 KM 31", "192.168.179.225"],
+  ["MESIN 30 KM 31", "192.168.179.217"],
+  ["MESIN 3 CHIPSEAL (OFFICE)", "192.168.150.227"],
+  ["FAS", "192.168.109.26"],
+  ["TF", "192.168.109.25"],
+];
+
 /* ------------------------------------------------------------ sample fleet */
 
 type UnitSeed = {
@@ -1170,6 +1242,30 @@ async function seedSchedule(): Promise<void> {
 }
 
 /**
+ * The fingerprint machine registry.
+ *
+ * Keyed on IP, not name: the address is the machine's identity here (it is
+ * what the prober dials and what the table's unique constraint enforces), so a
+ * machine an operator renamed on the registry screen is still recognised as
+ * present and is not inserted a second time under its seeded name.
+ */
+async function seedFingerprintMachines(): Promise<void> {
+  const rows = await db
+    .select({ ip: schema.fingerprintMachines.ip })
+    .from(schema.fingerprintMachines);
+  const known = new Set(rows.map((r) => r.ip));
+  const missing = FINGERPRINT_MACHINES.filter(([, ip]) => !known.has(ip));
+  if (missing.length)
+    await db
+      .insert(schema.fingerprintMachines)
+      .values(missing.map(([name, ip]) => ({ name, ip })));
+  console.log(
+    `  mesin fingerprint — ${missing.length} created, ` +
+      `${FINGERPRINT_MACHINES.length - missing.length} already present`
+  );
+}
+
+/**
  * The sample fleet, and only into an empty table (design D14).
  *
  * The guard is emptiness rather than per-code absence on purpose: a production
@@ -1409,6 +1505,9 @@ export async function seedMasterData(): Promise<OrganisationIds> {
 
   console.log("[seed] timeline & running text");
   await seedSchedule();
+
+  console.log("[seed] fingerprint machines");
+  await seedFingerprintMachines();
 
   console.log("[seed] sample fleet");
   await seedUnits(organisation);

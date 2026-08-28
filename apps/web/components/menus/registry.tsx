@@ -12,6 +12,7 @@ import { DashboardMenu } from "./dashboard";
 import { DatabaseUnitMenu } from "./database-unit";
 import { DisplayAdminMenu } from "./display-admin";
 import { EmployeesMenu } from "./employees";
+import { FingerprintMachinesMenu } from "./fingerprint-machines";
 import { FitToWorkMenu } from "./fit-to-work";
 import { FleetAllocationMenu } from "./fleet-allocation";
 import { FleetSettingMenu } from "./fleet-setting";
@@ -69,6 +70,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "running-text": RunTextsMenu,
   sound: SoundsMenu,
   timeline: TimelineMenu,
+  "mesin-fingerprint": FingerprintMachinesMenu,
   users: UmUsersMenu,
   roles: UmRolesMenu,
   setting: SettingMenu,
