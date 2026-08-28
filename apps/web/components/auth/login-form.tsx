@@ -14,6 +14,22 @@ import { Input } from "@/components/ui/input";
 import { LogoBadge } from "@/components/ui/logo";
 
 /**
+ * `?next=` is attacker-supplied — the proxy only ever writes a real pathname
+ * there, but nothing stops a link from carrying anything else, and this runs
+ * the moment a person has just typed their password.
+ *
+ * A leading slash alone is not enough to prove a destination is ours:
+ * `//evil.com` starts with one and browsers read it as protocol-relative, so
+ * it navigates off-site. `/\evil.com` is normalized the same way. Demand a
+ * single slash followed by something that is not another separator.
+ */
+function safeNext(next: string | null): string | null {
+  if (!next || !next.startsWith("/")) return null;
+  if (next[1] === "/" || next[1] === "\\") return null;
+  return next;
+}
+
+/**
  * One identifier field, not two. An account is credentialed by email *or* NIK,
  * and asking the operator to pick which kind they hold is a question the server
  * can answer for itself — it resolves against email first, then NIK.
@@ -58,8 +74,7 @@ export function LoginForm() {
       router.replace("/change-password");
       return;
     }
-    const next = params.get("next");
-    router.replace(next && next.startsWith("/") ? next : "/dashboard");
+    router.replace(safeNext(params.get("next")) ?? "/dashboard");
   }
 
   return (
