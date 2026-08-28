@@ -22,10 +22,14 @@ build/
 # Personal AI-workflow files at the repo root only (leading slash = root). The
 # SDLC framework references the gitignored .claude/ agents, so it stays local,
 # not shared. Per-app apps/*/AGENTS.md are project files and remain tracked.
+#
+# `docs` used to sit here, and being slashless it matched at every depth: it hid
+# the root docs/ *and* apps/*/docs/. Those are the durable requirement record
+# that replaced the frozen OpenSpec archive — the one thing a change is supposed
+# to keep up to date — so they belong in the repository, not on one machine.
 /AGENTS.md
 /CLAUDE.md
-docs
-CONTEXT.md
+/CONTEXT.md
 
 # Uploaded sound files (SOUND_DIR). Runtime data, not source.
 apps/api/storage/

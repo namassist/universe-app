@@ -1,0 +1,159 @@
+# Product requirements — durable record
+
+OpenSpec (`openspec/specs/`) is frozen as the historical requirement archive.
+Requirements agreed after that freeze accumulate here, per feature area, and
+each change keeps this file and the per-app `docs/` up to date.
+
+## Asset & Fleet
+
+**Goal:** allocate every unit an operator at the start of each shift — zero
+avoidable unit downtime.
+
+**Pain point:** units standing idle at shift start because their operator is
+off, on leave, or failed fitness/attendance checks, with no systematic way to
+fill the gap from the spare pool.
+
+### Fleet composition (Fleet Settings) — shipped
+
+- A fleet is one **digger** (leader), 1–13 **member units** (haulers/support),
+  a **Mining work area**, and optionally a **crew bus** (a unit of type BUS).
+  Bounds live in `@universe/contracts` (`FLEET_MIN_UNITS`/`FLEET_MAX_UNITS`).
+- A digger leads at most one fleet; a unit hauls for at most one fleet; a
+  fleet leader never hauls for another fleet. All held by unique indexes, with
+  route prechecks that name the offending unit in the refusal.
+- "Digger-ness" (type EXCAVATOR / digger classes) is a UI heuristic, not an
+  API rule — the catalogues carry no fleet-leader flag.
+- Deleting a fleet releases its members; the units themselves are untouched.
+
+### Unit status — shipped
+
+- A unit's status is **derived**: `breakdown` > `standby` > `ready`, from the
+  two existing boolean columns. A transition rewrites both flags every time,
+  so past changes cannot compound into a unit both broken and standing by.
+- Changing status requires a reason; every change appends to a per-unit
+  history timeline (`unit_status_history`), written in the same transaction
+  as the flags. The list reports only active units.
+- A unit's displayed location is its fleet's work area — whether it leads the
+  fleet or hauls in it; a unit in no fleet shows none.
+
+### Fleet allocation — Plan tab shipped, Actual deferred
+
+- **Plan** holds the standing unit ↔ operator pairs (`fleet_plan_slots`): at
+  most 2 operators per unit, one Day and one Night. On the assignment date,
+  two operators whose roster codes resolve to the same shift kind are
+  refused; an operator with no roster row is allowed and flagged
+  (`sameShift` in the candidate list). The board arrives composed from
+  `GET /v1/fleet-allocation/plan` — units with status/location/fleet embeds
+  and resolved pairs, the fleet filter options, and the spare pool.
+- **Candidate eligibility:** position carries `fleetAllocation`; if the unit
+  requires a SIMPER code, the operator holds it (`employee_skills`) and their
+  SIMPER is not expired; a unit owned by a department only accepts operators
+  of that department (a unit with no department is global); an operator pairs
+  with at most one unit.
+- **Spare pool** = fleet-allocation-position operators with no assigned unit.
+  Spares follow their own roster and cannot be called outside their shift.
+
+### FTW + attendance ingestion — shipped
+
+- Both readiness signals are **snapshotted into local tables** (`ftw_readings`,
+  `finger_readings`, keyed `nik` × `date`) — external sources are read-only
+  and never queried from a request path; historical questions are answered
+  locally.
+- **FTW** comes from savera's `saverawatch` DB (`summary_insights_v2` +
+  joins), manual uploads only, filtered to this site's company. The verdict
+  is ingested as text (sleep minutes, sleep category, FTW decision) — savera's
+  rules are operator-configurable, so re-encoding them here would drift.
+- **Attendance** comes from Nakula's raw tap log (`tbl_absen_all`), reduced to
+  first IN / first OUT per person per day with device IPs — deliberately not
+  Nakula's interpreted view (30 s a query vs milliseconds). Raw as recorded;
+  shift-aware interpretation belongs to the consumer.
+- **Timeline-driven, deadline-final:** the `ftw-ingest` (04:45) and
+  `finger-ingest` (05:15) stages fire once and re-pull each minute for a
+  bounded window (`INGEST_WINDOW_MINUTES`, default 5) — retry and
+  late-arrival tolerance in one, everything settled before the 05:30 bus.
+  A post-deadline upload does not count: the snapshot is final by rule, not
+  stale. Manual sync routes (manage mode) cover pulls outside the timeline
+  and recovery.
+- NIKs normalize digits-only / no leading zeros (savera's production-proven
+  recipe) — the cross-system join key.
+
+### Deferred until the Actual-tab engine exists
+
+- **Actual tab:** generated per shift by Manpower — assigned operators who
+  pass FTW/attendance keep their unit; vacancies fill from the spare pool
+  **FCFS by the moment they pass** FTW + fingerprint, subject to the same
+  SIMPER and department rules. Consumes `ftw_readings` + `finger_readings`;
+  needs no new external queries. Some units require FTW + fingerprint; others
+  fingerprint only (`units.ftw` flag).
+- The scheduler's `spare-validate` hook (05:25) stays no-op until this engine
+  lands.
+
+## Kiosk access
+
+**A kiosk admits two kinds of viewer, because it has two.** A wall-mounted TV
+logs in as nobody: it carries the device cookie a pairing link minted, and that
+is all it will ever have. A person checking the same wall from their desk
+carries a session instead.
+
+- `/display/*` is served to **either** credential; a request with neither is
+  redirected to the login page carrying `?next=`, exactly like any other route.
+  Admitting only the device cookie made every human visit a redirect to a login
+  page that could not help — signing in produced a session, and a session was
+  what the check refused.
+- The presence check in `apps/web/proxy.ts` is user experience, not the
+  boundary. Every kiosk endpoint re-decides independently: a person still needs
+  the menu's `view` grant, and a device is still refused on any write and on any
+  route not marked `allowDevice`.
+- **The user session is resolved before the device session.** Signing a
+  _low-privileged_ account into a paired TV's own browser therefore darkens that
+  screen — the session wins, fails the grant check, and the device cookie beside
+  it is never consulted. Pair TVs, and leave them logged out.
+
+## Fingerprint monitoring
+
+**Goal:** an outage on any of the ~58 fingerprint machines is visible within
+about a minute, on a TV, without asking another team.
+
+**Pain point:** when a machine dies, nobody knows until workers pile up at a
+gate unable to tap. Nakula's tables cannot answer the question honestly —
+`tbl_finger_last_seen` records the last _tap_ (activity, not reachability) and
+`tbl_finger_log_error` logs only ping failures, from an external agent that
+runs intermittently.
+
+### Machine registry (Mesin Fingerprint) — shipped
+
+- The registry is **owned by universe-app**, not read from Nakula: menu
+  `mesin-fingerprint` in the Master group with full CRUD over name, IP, and an
+  active flag, seeded with the 58 machines in use across three subnets
+  (179.x at KM 31, 150.x workshops/port/mess, 109.x FAS/TF).
+- **The IP is the machine's identity** and is unique — it is what a probe will
+  dial, so two rows on one address would be probed twice and reported as two
+  machines. A duplicate is a 409, a malformed address a 422. Validation runs
+  after trimming, so an address pasted from a spreadsheet is accepted.
+- Deactivating beats deleting for a machine that is merely unplugged: the row
+  keeps its identity and drops out of probing and off the wall.
+- The page carries the registry and nothing else. A pairing panel was built
+  here and then removed at the owner's request — kiosk access is a person's
+  session now, not a second device to administer (see _Kiosk access_ above).
+
+### Reachability probing — shipped
+
+- Machines are ZKTeco-compatible (Solution X100-C) and answer **TCP on port
+  4370**. A connect-and-close probe is the reachability signal; no ZK
+  handshake, so the probe cannot contend with whatever collects taps into
+  Nakula. Ping is the wrong test — at least one machine blocks ICMP while
+  accepting 4370.
+- A background loop (not a timeline stage — monitoring is continuous, not
+  deadline-driven) probes every active machine every **30 s** and records
+  `online`, `last_seen_at`, `checked_at`, `status_since`. A machine flips
+  offline only after two consecutive misses, so one dropped packet does not
+  flash red on a wall-mounted TV. The kiosk polls on the same 30 s cadence, so
+  an outage reaches the wall in about a minute and a half at worst.
+- The kiosk reads those stored rows; the request path opens no sockets, the
+  same principle as never querying an external source from a request path.
+- **Probes are pooled, not fired all at once.** Measured on site: the slower
+  machines answer a lone connect in ~1.2 s, but fifty-eight simultaneous
+  connects pushed them past a 3 s timeout and reported four reachable machines
+  as offline. `PROBE_CONCURRENCY` (10) and a 5 s timeout removed the false
+  alarms; a full cycle takes ~3.4 s, far inside its interval. A monitoring wall
+  that cries wolf is worse than one that answers a second later.
