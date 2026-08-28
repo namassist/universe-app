@@ -20,18 +20,23 @@ const DEVICE_COOKIE = "universe_device";
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // `/display/` with the slash, not `/display` as a prefix: the shell's own
-  // `display-attendance` and `display-fleet` pages start with the same eight
-  // characters, and treating them as kiosks locks admins out of two menus.
-  if (pathname.startsWith("/display/")) {
-    if (request.cookies.has(DEVICE_COOKIE)) return NextResponse.next();
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
-  }
-
-  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
+  /*
+   * A kiosk has two legitimate kinds of viewer, so it accepts two credentials.
+   *
+   * A wall-mounted TV logs in as nobody: it carries the device cookie a
+   * pairing link minted, and that is the only thing it will ever have. A
+   * person checking the same wall from their desk carries a session instead.
+   * Admitting only the device cookie turned every such visit into a redirect
+   * to a login page that could not help — signing in produced a session, and
+   * a session was precisely what this branch refused.
+   *
+   * `/display/` with the slash, not `/display` as a prefix: the shell's own
+   * `display-attendance` and `display-fleet` pages start with the same eight
+   * characters, and treating them as kiosks locks admins out of two menus.
+   */
+  const paired =
+    pathname.startsWith("/display/") && request.cookies.has(DEVICE_COOKIE);
+  if (paired || request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
 
   const url = request.nextUrl.clone();
   url.pathname = "/login";
