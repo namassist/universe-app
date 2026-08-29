@@ -818,6 +818,64 @@ export const TimelineStageSchema = t.Object({
   createdAt: t.String(),
 });
 
+/* ------------------------------------------------------ actual allocation */
+
+export const ActualDocumentSchema = t.Object({
+  date: t.String(),
+  shift: ShiftKindSchema,
+  generatedAt: t.String(),
+  total: t.Number(),
+  viaPlan: t.Number(),
+  viaSpare: t.Number(),
+  viaManual: t.Number(),
+  /** Units with nobody on them — the number the screen exists to show. */
+  idle: t.Number(),
+});
+
+export const ActualSlotSchema = t.Object({
+  unitId: t.String(),
+  unitCode: t.String(),
+  requiresFtw: t.Boolean(),
+  simperCodeName: t.Nullable(t.String()),
+  departmentName: t.Nullable(t.String()),
+  employeeId: t.Nullable(t.String()),
+  employeeNik: t.Nullable(t.String()),
+  employeeName: t.Nullable(t.String()),
+  source: t.Nullable(t.UnionEnum(["plan", "spare", "manual"] as const)),
+  tappedAt: t.Nullable(t.String()),
+});
+
+export const ActualBoardSchema = t.Object({
+  date: t.String(),
+  shift: ShiftKindSchema,
+  generatedAt: t.String(),
+  slots: t.Array(ActualSlotSchema),
+});
+
+export const ActualCandidateSchema = t.Object({
+  employeeId: t.String(),
+  nik: t.String(),
+  name: t.String(),
+  tappedAt: t.Nullable(t.String()),
+  ftw: t.UnionEnum([
+    "pass",
+    "fail",
+    "missing",
+    "unreadable",
+    "not-required",
+  ] as const),
+  finger: t.UnionEnum(["pass", "late", "missing"] as const),
+  /**
+   * The *readiness* verdict only — FTW and the tap. It is not "may take this
+   * unit": someone can be ready and still refused by the eligibility rule
+   * below, and a consumer reading this alone would place them.
+   */
+  ready: t.Boolean(),
+  /** The eligibility rule's own words, or null when nothing stands in the way. */
+  refusal: t.Nullable(t.String()),
+  onAnotherUnit: t.Boolean(),
+});
+
 export const DeviceSchema = t.Object({
   id: t.String(),
   name: t.String(),

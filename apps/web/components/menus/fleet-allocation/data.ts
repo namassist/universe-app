@@ -438,59 +438,6 @@ export const CANDIDATES: Candidate[] = [
 ];
 
 /** Riwayat ACTUAL per tanggal+shift. */
-export type ActualRow = {
-  date: string;
-  shift: FaShift;
-  createdAt: string; // HH:mm
-  generatedAt: string | null;
-  total: number;
-  viaPlan: number;
-  viaSpare: number;
-  downtime: number;
-};
-
-export const ACTUAL_INIT: ActualRow[] = [
-  {
-    date: "2026-07-21",
-    shift: "pagi",
-    createdAt: "04:30",
-    generatedAt: "05:02",
-    total: 9,
-    viaPlan: 6,
-    viaSpare: 2,
-    downtime: 1,
-  },
-  {
-    date: "2026-07-20",
-    shift: "malam",
-    createdAt: "16:30",
-    generatedAt: null,
-    total: 0,
-    viaPlan: 0,
-    viaSpare: 0,
-    downtime: 0,
-  },
-  {
-    date: "2026-07-20",
-    shift: "pagi",
-    createdAt: "04:30",
-    generatedAt: "05:04",
-    total: 9,
-    viaPlan: 8,
-    viaSpare: 1,
-    downtime: 0,
-  },
-  {
-    date: "2026-07-19",
-    shift: "malam",
-    createdAt: "16:30",
-    generatedAt: "17:03",
-    total: 8,
-    viaPlan: 7,
-    viaSpare: 0,
-    downtime: 2,
-  },
-];
 
 export const ftwBadge: Record<
   "fit" | "kurang" | "belum",

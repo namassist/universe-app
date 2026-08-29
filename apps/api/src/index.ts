@@ -18,6 +18,7 @@ import { devicesRoutes, displayRoutes } from "./routes/devices";
 import { runTextsRoutes, soundsRoutes } from "./routes/display-content";
 import { employeesRoutes } from "./routes/employees";
 import { fingerprintMachineRoutes } from "./routes/fingerprint-machines";
+import { fleetActualRoutes } from "./routes/fleet-actual";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { fleetsRoutes } from "./routes/fleets";
 import {
@@ -57,6 +58,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(fleetsRoutes)
   .use(unitStatusRoutes)
   .use(fleetAllocationRoutes)
+  .use(fleetActualRoutes)
   .use(fitToWorkSyncRoutes)
   .use(attendanceSyncRoutes)
   .use(runTextsRoutes)

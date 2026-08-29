@@ -159,6 +159,30 @@ fill the gap from the spare pool.
   date the readings cover, so a live run produces an empty board without error.
   An August roster and PLAN data are the prerequisite for acceptance testing.
 
+### The Actual tab — shipped
+
+- The tab lists the generated boards (newest first, with the **idle count**
+  spelled out — the number the screen exists for), and one board opens unit by
+  unit with vacancies as rows like any other.
+- **Editing is unconditional.** The board is never frozen, so there is no state
+  in which a supervisor is told the morning is closed. A person placed by hand
+  is recorded as `manual`, never as `plan` or `spare`: the board must not claim
+  the engine chose someone it did not.
+- **The candidate list shows refusals rather than hiding them.** Every operator
+  rostered to the shift appears, with the readiness verdict and the eligibility
+  rule's own words beside them. Someone overriding the engine is entitled to
+  see what the engine saw — and may place a person it refused, which is the
+  point of an override. `ready` is the readiness verdict alone and is not
+  "may take this unit"; the refusal is a separate axis.
+- One person, one unit per board: enforced by a partial unique index and
+  answered as a 409 naming the unit they are already on.
+- Generating from the screen **replaces**, the same as the timeline stage, and
+  refuses when the shift has no active `finger-in` deadline rather than
+  defaulting to one.
+- The static port's mock (`ACTUAL_INIT`) and its "create then lock" flow are
+  gone. There was never a lock — the board is generated twice a day and stays
+  editable.
+
 ### Deferred until the Actual-tab engine exists
 
 - **Actual tab:** generated per shift by Manpower — assigned operators who

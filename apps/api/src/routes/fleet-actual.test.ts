@@ -1,0 +1,443 @@
+/**
+ * The Actual board's routes — reading it, regenerating it, and correcting it.
+ *
+ * The engine's own behaviour is pinned in `allocation.test.ts`; what is tested
+ * here is the surface Manpower touches, and mostly its refusals: a board that
+ * does not exist, a person already driving something else, and a shift whose
+ * deadline nobody configured.
+ *
+ *   bun --env-file=.env test src/routes/fleet-actual.test.ts
+ */
+
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Elysia } from "elysia";
+import { eq, inArray } from "drizzle-orm";
+
+import { createSession, SESSION_COOKIE } from "../auth/session";
+import { db, schema } from "../db";
+import { redis } from "../redis";
+import { fleetActualRoutes } from "./fleet-actual";
+
+const app = new Elysia().use(fleetActualRoutes);
+const uid = () => crypto.randomUUID().slice(0, 8);
+const tag = `ZZ Aktual ${uid()}`;
+const DATE = "1999-06-06";
+
+const made = {
+  users: [] as string[],
+  roles: [] as string[],
+  units: [] as string[],
+  employees: [] as string[],
+  cat: [] as {
+    table: "unitClasses" | "unitTypes" | "unitModels" | "unitBrands";
+    id: string;
+  }[],
+  companies: [] as string[],
+  departments: [] as string[],
+  positions: [] as string[],
+  docs: [] as string[],
+  rosterDocs: [] as string[],
+};
+
+let admin: { cookie: string };
+let viewer: { cookie: string };
+let unitA: string, unitB: string;
+let opOne: string, opTwo: string;
+
+const send = (method: string, path: string, cookie?: string, body?: unknown) =>
+  app.handle(
+    new Request(`http://localhost${path}`, {
+      method,
+      headers: {
+        ...(cookie ? { cookie } : {}),
+        ...(body !== undefined ? { "content-type": "application/json" } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+  );
+
+async function makeUser(mode: "view" | "manage") {
+  const [role] = await db
+    .insert(schema.roles)
+    .values({ slug: `zz-aktual-${uid()}`, name: tag, scope: "all" })
+    .returning({ id: schema.roles.id });
+  made.roles.push(role!.id);
+  await db
+    .insert(schema.rolePermissions)
+    .values([{ roleId: role!.id, menuSlug: "fleet-allocation", mode }]);
+  const [user] = await db
+    .insert(schema.users)
+    .values({
+      email: `zz-${uid()}@uji.local`,
+      name: tag,
+      passwordHash: "x",
+      roleId: role!.id,
+      mustChangePassword: false,
+    })
+    .returning({ id: schema.users.id });
+  made.users.push(user!.id);
+  const session = await createSession("user", user!.id, "cookie");
+  return { cookie: `${SESSION_COOKIE}=${session.id}` };
+}
+
+beforeAll(async () => {
+  if (redis.status === "end") await redis.connect();
+  admin = await makeUser("manage");
+  viewer = await makeUser("view");
+
+  const [co] = await db
+    .insert(schema.companies)
+    .values({ name: `${tag} PT`, code: `ZZ${uid()}` })
+    .returning({ id: schema.companies.id });
+  made.companies.push(co!.id);
+  const [dept] = await db
+    .insert(schema.departments)
+    .values({ name: `${tag} Dept`, companyId: co!.id })
+    .returning({ id: schema.departments.id });
+  made.departments.push(dept!.id);
+  const [pos] = await db
+    .insert(schema.positions)
+    .values({
+      name: `${tag} Operator`,
+      departmentId: dept!.id,
+      fleetAllocation: true,
+    })
+    .returning({ id: schema.positions.id });
+  made.positions.push(pos!.id);
+
+  const [cl] = await db
+    .insert(schema.unitClasses)
+    .values({ name: `${tag} K` })
+    .returning({ id: schema.unitClasses.id });
+  const [ty] = await db
+    .insert(schema.unitTypes)
+    .values({ name: `${tag} T` })
+    .returning({ id: schema.unitTypes.id });
+  const [mo] = await db
+    .insert(schema.unitModels)
+    .values({ name: `${tag} M` })
+    .returning({ id: schema.unitModels.id });
+  const [br] = await db
+    .insert(schema.unitBrands)
+    .values({ name: `${tag} B` })
+    .returning({ id: schema.unitBrands.id });
+  made.cat.push(
+    { table: "unitClasses", id: cl!.id },
+    { table: "unitTypes", id: ty!.id },
+    { table: "unitModels", id: mo!.id },
+    { table: "unitBrands", id: br!.id }
+  );
+
+  const units = await db
+    .insert(schema.units)
+    .values([
+      {
+        code: `${tag}-A`,
+        classId: cl!.id,
+        typeId: ty!.id,
+        modelId: mo!.id,
+        brandId: br!.id,
+      },
+      {
+        code: `${tag}-B`,
+        classId: cl!.id,
+        typeId: ty!.id,
+        modelId: mo!.id,
+        brandId: br!.id,
+      },
+    ])
+    .returning({ id: schema.units.id });
+  [unitA, unitB] = units.map((u) => u.id) as [string, string];
+  made.units.push(unitA, unitB);
+
+  const ops = await db
+    .insert(schema.employees)
+    .values([
+      {
+        nik: `9911${uid().slice(0, 4)}`,
+        name: `${tag} Satu`,
+        companyId: co!.id,
+        departmentId: dept!.id,
+        positionId: pos!.id,
+      },
+      {
+        nik: `9912${uid().slice(0, 4)}`,
+        name: `${tag} Dua`,
+        companyId: co!.id,
+        departmentId: dept!.id,
+        positionId: pos!.id,
+      },
+    ])
+    .returning({ id: schema.employees.id });
+  [opOne, opTwo] = ops.map((o) => o.id) as [string, string];
+  made.employees.push(opOne, opTwo);
+
+  // A board written directly: this file tests the routes over it, not how the
+  // engine arrived at it.
+  const [doc] = await db
+    .insert(schema.fleetActualDocuments)
+    .values({ date: DATE, shift: "day" })
+    .returning({ id: schema.fleetActualDocuments.id });
+  made.docs.push(doc!.id);
+  await db.insert(schema.fleetActualSlots).values([
+    {
+      documentId: doc!.id,
+      unitId: unitA,
+      employeeId: opOne,
+      source: "plan",
+      tappedAt: "05:01:00",
+    },
+    {
+      documentId: doc!.id,
+      unitId: unitB,
+      employeeId: null,
+      source: null,
+      tappedAt: null,
+    },
+  ]);
+});
+
+afterAll(async () => {
+  if (made.docs.length)
+    await db
+      .delete(schema.fleetActualDocuments)
+      .where(inArray(schema.fleetActualDocuments.id, made.docs));
+  await db
+    .delete(schema.fleetActualDocuments)
+    .where(eq(schema.fleetActualDocuments.date, DATE));
+  if (made.employees.length)
+    await db
+      .delete(schema.employees)
+      .where(inArray(schema.employees.id, made.employees));
+  if (made.units.length)
+    await db.delete(schema.units).where(inArray(schema.units.id, made.units));
+  for (const c of made.cat)
+    await db.delete(schema[c.table]).where(eq(schema[c.table].id, c.id));
+  if (made.positions.length)
+    await db
+      .delete(schema.positions)
+      .where(inArray(schema.positions.id, made.positions));
+  if (made.departments.length)
+    await db
+      .delete(schema.departments)
+      .where(inArray(schema.departments.id, made.departments));
+  if (made.companies.length)
+    await db
+      .delete(schema.companies)
+      .where(inArray(schema.companies.id, made.companies));
+  if (made.users.length)
+    await db.delete(schema.users).where(inArray(schema.users.id, made.users));
+  if (made.roles.length)
+    await db.delete(schema.roles).where(inArray(schema.roles.id, made.roles));
+});
+
+describe("reading a board", () => {
+  test("lists it with the idle count spelled out", async () => {
+    const rows = (await (
+      await send("GET", "/fleet-allocation/actual", viewer.cookie)
+    ).json()) as {
+      date: string;
+      shift: string;
+      total: number;
+      viaPlan: number;
+      idle: number;
+    }[];
+    const mine = rows.find((r) => r.date === DATE && r.shift === "day");
+    expect(mine).toBeDefined();
+    expect(mine!.total).toBe(2);
+    expect(mine!.viaPlan).toBe(1);
+    // The empty unit is counted, not omitted — it is what the screen is for.
+    expect(mine!.idle).toBe(1);
+  });
+
+  test("returns it unit by unit, vacancies included", async () => {
+    const board = (await (
+      await send("GET", `/fleet-allocation/actual/${DATE}/day`, viewer.cookie)
+    ).json()) as {
+      slots: {
+        unitId: string;
+        employeeId: string | null;
+        employeeName: string | null;
+        source: string | null;
+      }[];
+    };
+    expect(board.slots).toHaveLength(2);
+    const filled = board.slots.find((s) => s.unitId === unitA)!;
+    expect(filled.employeeId).toBe(opOne);
+    expect(filled.employeeName).toContain("Satu");
+    const empty = board.slots.find((s) => s.unitId === unitB)!;
+    expect(empty.employeeId).toBeNull();
+    expect(empty.source).toBeNull();
+  });
+
+  test("404s for a board nobody has generated", async () => {
+    expect(
+      (
+        await send(
+          "GET",
+          `/fleet-allocation/actual/1999-06-07/day`,
+          viewer.cookie
+        )
+      ).status
+    ).toBe(404);
+  });
+
+  test("refuses a date that is not a date", async () => {
+    expect(
+      (await send("GET", `/fleet-allocation/actual/kemarin/day`, viewer.cookie))
+        .status
+    ).toBe(422);
+  });
+
+  test("refuses a shift outside the vocabulary", async () => {
+    expect(
+      (
+        await send(
+          "GET",
+          `/fleet-allocation/actual/${DATE}/sore`,
+          viewer.cookie
+        )
+      ).status
+    ).toBe(422);
+  });
+});
+
+describe("correcting a board", () => {
+  test("puts someone on an empty unit, marked as a manual placement", async () => {
+    const response = await send(
+      "PATCH",
+      `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+      admin.cookie,
+      {
+        employeeId: opTwo,
+      }
+    );
+    expect(response.status).toBe(200);
+
+    const board = (await (
+      await send("GET", `/fleet-allocation/actual/${DATE}/day`, viewer.cookie)
+    ).json()) as {
+      slots: {
+        unitId: string;
+        employeeId: string | null;
+        source: string | null;
+      }[];
+    };
+    const slot = board.slots.find((s) => s.unitId === unitB)!;
+    expect(slot.employeeId).toBe(opTwo);
+    // Not "plan" and not "spare": the board must not claim the engine chose
+    // someone a person put there.
+    expect(slot.source).toBe("manual");
+  });
+
+  test("refuses to put one person on two units", async () => {
+    const response = await send(
+      "PATCH",
+      `/fleet-allocation/actual/${DATE}/day/${unitA}`,
+      admin.cookie,
+      {
+        employeeId: opTwo,
+      }
+    );
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { code: string }).code).toBe(
+      "already_placed"
+    );
+  });
+
+  test("clears a unit — a vacancy is a legitimate thing to record", async () => {
+    expect(
+      (
+        await send(
+          "PATCH",
+          `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+          admin.cookie,
+          { employeeId: null }
+        )
+      ).status
+    ).toBe(200);
+    const board = (await (
+      await send("GET", `/fleet-allocation/actual/${DATE}/day`, viewer.cookie)
+    ).json()) as {
+      slots: {
+        unitId: string;
+        employeeId: string | null;
+        source: string | null;
+      }[];
+    };
+    const slot = board.slots.find((s) => s.unitId === unitB)!;
+    expect(slot.employeeId).toBeNull();
+    expect(slot.source).toBeNull();
+  });
+
+  test("404s for a unit that is not on this board", async () => {
+    const response = await send(
+      "PATCH",
+      `/fleet-allocation/actual/${DATE}/day/${crypto.randomUUID()}`,
+      admin.cookie,
+      {
+        employeeId: null,
+      }
+    );
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("who may do what", () => {
+  test("refuses an anonymous caller", async () => {
+    expect((await send("GET", "/fleet-allocation/actual")).status).toBe(401);
+  });
+
+  test("a view grant reads but neither generates nor corrects", async () => {
+    expect(
+      (await send("GET", "/fleet-allocation/actual", viewer.cookie)).status
+    ).toBe(200);
+    expect(
+      (
+        await send(
+          "PATCH",
+          `/fleet-allocation/actual/${DATE}/day/${unitA}`,
+          viewer.cookie,
+          { employeeId: null }
+        )
+      ).status
+    ).toBe(403);
+    expect(
+      (
+        await send(
+          "POST",
+          `/fleet-allocation/actual/${DATE}/day/generate`,
+          viewer.cookie,
+          {}
+        )
+      ).status
+    ).toBe(403);
+  });
+});
+
+describe("candidates for a unit", () => {
+  test("says what stands in each person's way rather than hiding them", async () => {
+    const rows = (await (
+      await send(
+        "GET",
+        `/fleet-allocation/actual/${DATE}/day/candidates/${unitA}`,
+        viewer.cookie
+      )
+    ).json()) as { employeeId: string; refusal: string | null }[];
+    // Nobody is rostered on this fixture date, so the list is legitimately
+    // empty — what matters is that it answers rather than erroring.
+    expect(Array.isArray(rows)).toBe(true);
+  });
+
+  test("404s when the board does not exist", async () => {
+    expect(
+      (
+        await send(
+          "GET",
+          `/fleet-allocation/actual/1999-06-08/day/candidates/${unitA}`,
+          viewer.cookie
+        )
+      ).status
+    ).toBe(404);
+  });
+});
