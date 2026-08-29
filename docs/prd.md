@@ -100,6 +100,39 @@ fill the gap from the spare pool.
   13:00–17:00. Shift comes from our own roster (`roster_days` +
   `rosterShift()`), the same authority the PLAN board uses.
 
+### The pass rule — shipped
+
+- **May this person take a unit on this shift?** One named, tested function
+  (`readiness.ts`), not a `where` clause inlined at the single place that
+  needs it today. FTW passes when the decision is `FTW aman` **and** the sleep
+  category is `Dapat Bekerja`; the fingerprint passes when the first IN tap is
+  **strictly before** that shift's `finger-in` deadline, read from the master
+  timeline. Both for a unit whose `ftw` flag is set, the tap alone otherwise.
+- **The two FTW verdicts are separate axes and they disagree.** In seven days,
+  234 readings say `FTW aman` beside a sleep category forbidding work — 105 of
+  them `Tidak Boleh Bekerja`. Reading the decision alone is the obvious
+  implementation and puts all 234 on a machine. `Istirahat Minimal 1/2 Jam` is
+  a failure, not a conditional pass: the rule does not model "may work after
+  resting" (owner, 2026-08-29).
+- **A missing FTW row is a failure, not an exemption**, and a late upload never
+  counts — the ingest window's "final by rule, not by staleness", carried
+  through.
+- **A verdict savera has reworded reads as `unreadable`, never as a quiet
+  failure.** The readings are text precisely because savera's rules are
+  operator-configurable; the cost is that a rewording stops matching, and this
+  is where that cost becomes visible instead of emptying a board with no clue.
+  All four verdict values observed in live data are known; comparison ignores
+  casing and padding.
+- **A row carrying only an OUT tap is `missing`, not `late`** — 1,466 of 8,906
+  rows. It says nothing about arrival rather than denying it.
+- **No deadline in code.** `fingerInDeadline(shift)` returns null when the
+  stage is missing or switched off, and a caller must refuse to build a board
+  rather than invent one: an early default fails everyone, a late one passes
+  everyone, and neither is visible.
+- Checked against every live row, not only fixtures: the rule and the
+  equivalent SQL agree exactly — FTW 3,406 pass / 378 fail of 3,784, and
+  fingerprint 5,053 pass / 2,387 late / 1,466 missing of 8,906.
+
 ### Deferred until the Actual-tab engine exists
 
 - **Actual tab:** generated per shift by Manpower — assigned operators who
