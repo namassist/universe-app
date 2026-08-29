@@ -324,6 +324,9 @@ export const en: Dict = {
   sndErrRequired: "Choose an audio file first",
   tlSub: "Shift-start allocation schedule — these stages fire automatically",
   tlDlgB: "The stage fires automatically at the time set here.",
+  tlShift: "Shift",
+  tlShiftNone: "Not shift-specific",
+  tlShiftHint: "Leave empty if this stage governs neither shift in particular.",
   mfSub: "Fingerprint machine registry — what the monitoring screen reads",
   mfDlgB:
     "The IP address is how a machine is checked, so one IP is one machine.",

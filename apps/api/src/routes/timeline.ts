@@ -1,9 +1,14 @@
 /**
- * The morning allocation schedule as configuration.
+ * The allocation schedule as configuration — both shifts of it.
  *
  * These rows are what `scheduler.ts` reads each minute. Editing a stage's time
  * changes when it next fires with no deploy, which is the point — the schedule
  * is an operational decision, not a constant.
+ *
+ * `shift` is what lets two rows carry the same action twelve hours apart: the
+ * day's finger-in deadline and the night's are the same kind of thing at
+ * different times, and a reader asking for one must not have to compare clocks
+ * to work out which is which.
  */
 
 import { asc, eq } from "drizzle-orm";
@@ -13,6 +18,7 @@ import { requireAuth } from "../auth/macro";
 import { db, schema, type TimelineStageRow } from "../db";
 import {
   ErrorSchema,
+  OptionalShiftKindSchema,
   OptionalTimelineActionSchema,
   TimelineActionSchema,
   TimelineStageSchema,
@@ -24,6 +30,7 @@ const toStage = (row: TimelineStageRow) => ({
   name: row.name,
   at: row.at.slice(0, 5),
   action: row.action,
+  shift: row.shift,
   active: row.active,
   createdAt: row.createdAt.toISOString(),
 });
@@ -76,6 +83,7 @@ export const timelineRoutes = new Elysia({
           name,
           at: `${body.at}:00`,
           action: body.action,
+          shift: body.shift ?? null,
           active: body.active ?? true,
         })
         .returning();
@@ -90,6 +98,12 @@ export const timelineRoutes = new Elysia({
         name: t.String({ minLength: 1 }),
         at: t.String({ pattern: AT_PATTERN }),
         action: TimelineActionSchema,
+        // Optional *and* nullable, unlike `action`: a stage governing neither
+        // shift is a real thing (the `other` markers), so absent means null
+        // rather than a value the caller never chose. It must be the
+        // spelled-out union — `t.UnionEnum` injects its first value when the
+        // field is absent, which made an unspecified stage a day stage.
+        shift: OptionalShiftKindSchema,
         active: t.Optional(t.Boolean()),
       }),
       response: {
@@ -111,6 +125,7 @@ export const timelineRoutes = new Elysia({
           ...(body.name !== undefined ? { name: body.name.trim() } : {}),
           ...(body.at !== undefined ? { at: `${body.at}:00` } : {}),
           ...(body.action !== undefined ? { action: body.action } : {}),
+          ...(body.shift !== undefined ? { shift: body.shift } : {}),
           ...(body.active !== undefined ? { active: body.active } : {}),
         })
         .where(eq(schema.timelineStages.id, params.id))
@@ -125,6 +140,7 @@ export const timelineRoutes = new Elysia({
         name: t.Optional(t.String({ minLength: 1 })),
         at: t.Optional(t.String({ pattern: AT_PATTERN })),
         action: OptionalTimelineActionSchema,
+        shift: OptionalShiftKindSchema,
         active: t.Optional(t.Boolean()),
       }),
       response: {

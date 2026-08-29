@@ -77,6 +77,29 @@ fill the gap from the spare pool.
 - NIKs normalize digits-only / no leading zeros (savera's production-proven
   recipe) — the cross-system join key.
 
+### Readiness on both shifts — shipped
+
+- **FTW and fingerprint are required morning and night** (owner, 2026-08-29).
+  The timeline is no longer the morning's alone: the day's six stages have a
+  mirror twelve hours later (16:45 FTW, 17:15 finger, 17:25 spare validation,
+  17:30 bus). Without an afternoon ingest a night worker's 15:00 FTW upload and
+  17:00 tap are not pulled until the _next_ morning's run — about fourteen
+  hours after a night board would need them.
+- **The shift lives on the stage, not in the action.** `timeline_stages.shift`
+  (`day | night`, nullable) is what tells two rows carrying the same action
+  apart. A night-suffixed action per stage would have grown the vocabulary once
+  per action and left "day" as the unmarked default, which it is not.
+- Nothing in the scheduler changed. Stages are claimed per row
+  (`stage:${id}:${date}`), so a second row with the same action fires on its
+  own, and both ingest hooks are idempotent upserts. `Dispatch` now carries
+  `shift` so a hook doing real work knows which half of the day fired it.
+- **`ftw_readings.shift` is not the shift and must never be read as one.**
+  savera defines a `Shift 2` and no row has ever carried it: every upload is
+  labelled `Shift 1` whatever the hour. The signal that night workers do fill
+  FTW is the upload _time_ — savera's uploads peak twice, 03:00–05:00 and
+  13:00–17:00. Shift comes from our own roster (`roster_days` +
+  `rosterShift()`), the same authority the PLAN board uses.
+
 ### Deferred until the Actual-tab engine exists
 
 - **Actual tab:** generated per shift by Manpower — assigned operators who

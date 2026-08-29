@@ -24,6 +24,7 @@ import type {
   BloodType,
   EmployeeStatus,
   McuResult,
+  ShiftKind,
   TimelineAction,
 } from "@universe/contracts";
 
@@ -478,13 +479,39 @@ const WORK_AREAS: [name: string, type: AreaType][] = [
 
 // The agreed morning sequence: each ingest stage starts at its deadline and
 // re-pulls for a bounded window; everything must be done before the bus.
-const TIMELINE_STAGES: [name: string, at: string, action: TimelineAction][] = [
-  ["Batas Upload FTW", "04:45", "ftw-deadline"],
-  ["Ambil Data FTW", "04:45", "ftw-ingest"],
-  ["Batas Finger In", "05:15", "finger-in"],
-  ["Ambil Data Finger", "05:15", "finger-ingest"],
-  ["Validasi Spare", "05:25", "spare-validate"],
-  ["Bus Berangkat", "05:30", "bus-depart"],
+/**
+ * The schedule, both halves of it.
+ *
+ * FTW and fingerprint are required on the night shift as well as the day one
+ * (owner, 2026-08-29), so the morning's six stages have a mirror twelve hours
+ * later. The night rows are not a copy for symmetry's sake: without an
+ * afternoon ingest, a night worker's 15:00 FTW upload and 17:00 tap are not
+ * pulled until the *next* morning's run, roughly fourteen hours after the
+ * night board needs them.
+ *
+ * Nothing in `scheduler.ts` changes to support this. Stages are claimed per
+ * row (`stage:${id}:${date}`), so a second row carrying the same action fires
+ * on its own, and both ingest hooks are idempotent upserts.
+ */
+const TIMELINE_STAGES: [
+  name: string,
+  at: string,
+  action: TimelineAction,
+  shift: ShiftKind,
+][] = [
+  ["Batas Upload FTW", "04:45", "ftw-deadline", "day"],
+  ["Ambil Data FTW", "04:45", "ftw-ingest", "day"],
+  ["Batas Finger In", "05:15", "finger-in", "day"],
+  ["Ambil Data Finger", "05:15", "finger-ingest", "day"],
+  ["Validasi Spare", "05:25", "spare-validate", "day"],
+  ["Bus Berangkat", "05:30", "bus-depart", "day"],
+
+  ["Batas Upload FTW Malam", "16:45", "ftw-deadline", "night"],
+  ["Ambil Data FTW Malam", "16:45", "ftw-ingest", "night"],
+  ["Batas Finger In Malam", "17:15", "finger-in", "night"],
+  ["Ambil Data Finger Malam", "17:15", "finger-ingest", "night"],
+  ["Validasi Spare Malam", "17:25", "spare-validate", "night"],
+  ["Bus Berangkat Malam", "17:30", "bus-depart", "night"],
 ];
 
 const RUN_TEXTS: [text: string, color: string][] = [
@@ -1213,11 +1240,12 @@ async function seedSchedule(): Promise<void> {
   );
   if (missing.length)
     await db.insert(schema.timelineStages).values(
-      missing.map(([name, at, action]) => ({
+      missing.map(([name, at, action, shift]) => ({
         name,
         // Postgres `time` wants seconds; the schedule is specified to the minute.
         at: `${at}:00`,
         action,
+        shift,
       }))
     );
   console.log(

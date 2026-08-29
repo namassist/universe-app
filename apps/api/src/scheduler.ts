@@ -65,7 +65,14 @@ export function stageMinutes(at: string): number {
 /* ------------------------------------------------------------- the hooks */
 
 export type Dispatch = {
-  stage: Pick<TimelineStageRow, "id" | "name" | "action">;
+  /**
+   * `shift` is carried, not just the action: two rows now share an action
+   * twelve hours apart, so a hook that does real work needs to know which half
+   * of the day fired it. `spare-validate` is the one that will — it generates
+   * a board for one shift, and reading the clock to guess which would be a
+   * second, worse copy of the answer the row already holds.
+   */
+  stage: Pick<TimelineStageRow, "id" | "name" | "action" | "shift">;
   date: string;
 };
 

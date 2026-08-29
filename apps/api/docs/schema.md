@@ -57,9 +57,14 @@ the definition — when they disagree, the code wins. Change flow: edit
 
 - `run_texts`, `device_run_texts`, `sounds` — kiosk content (sound files on
   disk under `SOUND_DIR`).
-- `timeline_stages` — the editable morning timeline (04:45 FTW deadline +
-  FTW ingest, 05:15 finger-in deadline + finger ingest, 05:25 spare
-  validation, 05:30 bus departure), acted on by the scheduler.
+- `timeline_stages` — the editable timeline, acted on by the scheduler.
+  **Two halves**, because FTW and fingerprint are required on both shifts: the
+  day's (04:45 FTW deadline + ingest, 05:15 finger-in deadline + ingest, 05:25
+  spare validation, 05:30 bus) and the night's, the same six twelve hours later
+  (16:45 / 17:15 / 17:25 / 17:30). `shift` (`day | night`, nullable) is what
+  tells two rows carrying the same action apart — the alternative, comparing
+  their clock times, is the same answer derived worse. Null means the stage
+  governs neither shift in particular, which is what an `other` marker is.
 - `fingerprint_machines` — the fingerprint machines on site: name, `ip`
   (**unique** — the address is the machine's identity, and what a reachability
   probe will dial), `active`. Owned here rather than read from Nakula's

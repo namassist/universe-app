@@ -26,6 +26,7 @@ import {
   ROSTER_DOCUMENT_STATUSES,
   ROSTER_REVISION_STATUSES,
   SCOPES,
+  SHIFT_KINDS,
   TIMELINE_ACTIONS,
   UNIT_STATUSES,
 } from "@universe/contracts";
@@ -36,6 +37,7 @@ export const accessMode = pgEnum("access_mode", ACCESS_MODES);
 export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const areaType = pgEnum("area_type", AREA_TYPES);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
+export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
 export const employeeStatus = pgEnum("employee_status", EMPLOYEE_STATUSES);
 export const mcuResult = pgEnum("mcu_result", MCU_RESULTS);
 export const bloodType = pgEnum("blood_type", BLOOD_TYPES);
@@ -929,6 +931,19 @@ export const timelineStages = pgTable("timeline_stages", {
   name: text("name").notNull(),
   at: time("at").notNull(),
   action: timelineAction("action").notNull(),
+  /**
+   * Which half of the day this stage governs.
+   *
+   * The schedule used to be the morning's alone, so the shift was implicit in
+   * the clock. Now that FTW and fingerprint are required on both shifts, two
+   * rows can carry the same action twelve hours apart, and the reader that
+   * asks "when is the finger-in deadline for the night shift" needs an answer
+   * that does not depend on comparing times and guessing.
+   *
+   * Nullable, and null means "neither in particular" — the `other` markers an
+   * operator adds govern no shift and should not have to claim one.
+   */
+  shift: shiftKind("shift"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

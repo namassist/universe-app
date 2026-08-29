@@ -6,8 +6,11 @@ import { Clock, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import {
   MENU_LABELS,
+  SHIFT_KIND_LABELS,
+  SHIFT_KINDS,
   TIMELINE_ACTIONS,
   timelineActionLabel,
+  type ShiftKind,
   type TimelineAction,
 } from "@universe/contracts";
 
@@ -81,6 +84,8 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
   const [fAction, setFAction] = React.useState<TimelineAction>(
     TIMELINE_ACTIONS[0]
   );
+  /** "" is the wire's `null`: a stage that governs neither shift. */
+  const [fShift, setFShift] = React.useState<ShiftKind | "">("");
   const [fActive, setFActive] = React.useState(true);
   const [errName, setErrName] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<TimelineStageRow | null>(
@@ -96,12 +101,14 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       name: string;
       at: string;
       action: TimelineAction;
+      shift: ShiftKind | null;
       active: boolean;
     }) => {
       const body = {
         name: input.name,
         at: input.at,
         action: input.action,
+        shift: input.shift,
         active: input.active,
       };
       const result = input.id
@@ -155,6 +162,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     setFName("");
     setFAt("05:00");
     setFAction(TIMELINE_ACTIONS[0]);
+    setFShift("");
     setFActive(true);
     setErrName(false);
     setDlgOpen(true);
@@ -164,6 +172,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     setFName(r.name);
     setFAt(r.at);
     setFAction(r.action);
+    setFShift(r.shift ?? "");
     setFActive(r.active);
     setErrName(false);
     setDlgOpen(true);
@@ -178,6 +187,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       name,
       at: fAt,
       action: fAction,
+      shift: fShift === "" ? null : fShift,
       active: fActive,
     });
   }
@@ -224,6 +234,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
                 <TableHead>Nama Tahap</TableHead>
                 <TableHead>{t.mdJam}</TableHead>
                 <TableHead>Aksi</TableHead>
+                <TableHead>{t.tlShift}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
               </tr>
@@ -237,6 +248,13 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
                   <TableCell className="font-mono">{r.at}</TableCell>
                   <TableCell className="text-(--text-secondary)">
                     {timelineActionLabel(r.action)}
+                  </TableCell>
+                  <TableCell>
+                    {r.shift ? (
+                      SHIFT_KIND_LABELS[r.shift]
+                    ) : (
+                      <span className="text-(--text-tertiary)">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={r.active ? "success" : "danger"} dot>
@@ -342,6 +360,21 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
               ))}
             </Select>
           </Field>
+          <Field className="mt-4" label={t.tlShift} htmlFor="tl-shift">
+            <Select
+              id="tl-shift"
+              value={fShift}
+              onChange={(e) => setFShift(e.target.value as ShiftKind | "")}
+            >
+              <option value="">{t.tlShiftNone}</option>
+              {SHIFT_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {SHIFT_KIND_LABELS[k]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <p className="mt-2 text-xs text-(--text-tertiary)">{t.tlShiftHint}</p>
           <ToggleRow className="mt-4" htmlFor="tl-active">
             <Checkbox
               id="tl-active"

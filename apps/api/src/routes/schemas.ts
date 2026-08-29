@@ -26,6 +26,7 @@ import {
   ROSTER_CODES,
   ROSTER_DOCUMENT_STATUSES,
   ROSTER_REVISION_STATUSES,
+  SHIFT_KINDS,
   RUNTEXT_COLORS,
   SCOPES,
   TIMELINE_ACTIONS,
@@ -41,6 +42,7 @@ export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
 export const AreaTypeSchema = t.UnionEnum(AREA_TYPES);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
 export const TimelineActionSchema = t.UnionEnum(TIMELINE_ACTIONS);
+export const ShiftKindSchema = t.UnionEnum(SHIFT_KINDS);
 export const EmployeeStatusSchema = t.UnionEnum(EMPLOYEE_STATUSES);
 export const McuResultSchema = t.UnionEnum(MCU_RESULTS);
 export const BloodTypeSchema = t.UnionEnum(BLOOD_TYPES);
@@ -95,6 +97,8 @@ const TimelineActionUnion = t.Union([
   t.Literal("bus-depart"),
   t.Literal("other"),
 ]);
+
+const ShiftKindUnion = t.Union([t.Literal("day"), t.Literal("night")]);
 
 const EmployeeStatusUnion = t.Union([
   t.Literal("aktif"),
@@ -187,6 +191,9 @@ type _TimelineActionInSync = Assert<
     (typeof TIMELINE_ACTIONS)[number]
   >
 >;
+type _ShiftKindInSync = Assert<
+  IsExact<(typeof ShiftKindUnion)["static"], (typeof SHIFT_KINDS)[number]>
+>;
 type _EmployeeStatusInSync = Assert<
   IsExact<
     (typeof EmployeeStatusUnion)["static"],
@@ -221,6 +228,8 @@ export const OptionalDeviceKindSchema = t.Optional(DeviceKindUnion);
 export const OptionalAreaTypeSchema = t.Optional(AreaTypeUnion);
 export const OptionalRunTextColorSchema = t.Optional(RunTextColorUnion);
 export const OptionalTimelineActionSchema = t.Optional(TimelineActionUnion);
+/** Nullable as well as optional: absent leaves the shift, `null` clears it. */
+export const OptionalShiftKindSchema = t.Optional(t.Nullable(ShiftKindUnion));
 export const OptionalEmployeeStatusSchema = t.Optional(EmployeeStatusUnion);
 /** Nullable as well as optional: absent leaves it, `null` clears it. */
 export const OptionalMcuResultSchema = t.Optional(t.Nullable(McuResultUnion));
@@ -803,6 +812,8 @@ export const TimelineStageSchema = t.Object({
   /** "HH:MM" — a time of day, not an instant: a stage recurs every morning. */
   at: t.String(),
   action: TimelineActionSchema,
+  /** Which half of the day the stage governs; null means neither. */
+  shift: t.Nullable(ShiftKindSchema),
   active: t.Boolean(),
   createdAt: t.String(),
 });

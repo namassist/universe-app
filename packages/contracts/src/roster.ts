@@ -141,8 +141,24 @@ export const rosterCodeKind = (code: RosterCode): RosterCodeKind =>
 export const DAY_SHIFT_CODE: RosterCode = "D";
 export const NIGHT_SHIFT_CODE: RosterCode = "N";
 
+/**
+ * The two shifts a day is divided into, as their own vocabulary.
+ *
+ * They were already here twice over — as the first two `ROSTER_CODE_KINDS` and
+ * as a `"day" | "night"` literal repeated at every call site. A shift is now a
+ * thing the timeline carries too, so it gets a name rather than a fourth copy.
+ */
+export const SHIFT_KINDS = ["day", "night"] as const;
+export type ShiftKind = (typeof SHIFT_KINDS)[number];
+
+/** Indonesian labels — presentation, unlike the values above. */
+export const SHIFT_KIND_LABELS: Record<ShiftKind, string> = {
+  day: "Siang",
+  night: "Malam",
+};
+
 /** The shift a code schedules, or `null` if it schedules none. */
-export function rosterShift(code: RosterCode): "day" | "night" | null {
+export function rosterShift(code: RosterCode): ShiftKind | null {
   const kind = ROSTER_CODE_KIND[code];
   return kind === "day" || kind === "night" ? kind : null;
 }
@@ -153,7 +169,7 @@ export function isScheduledCode(code: RosterCode): boolean {
 }
 
 /** The code that schedules a given shift — the inverse of `rosterShift`. */
-export function shiftCode(shift: "day" | "night"): RosterCode {
+export function shiftCode(shift: ShiftKind): RosterCode {
   return shift === "day" ? DAY_SHIFT_CODE : NIGHT_SHIFT_CODE;
 }
 

@@ -24,6 +24,7 @@ async function addStage(input: {
   name: string;
   minutesFromMidnight: number;
   action: "other" | "spare-validate";
+  shift?: "day" | "night";
   active?: boolean;
 }) {
   const hh = String(Math.floor(input.minutesFromMidnight / 60)).padStart(
@@ -37,6 +38,7 @@ async function addStage(input: {
       name: input.name,
       at: `${hh}:${mm}:00`,
       action: input.action,
+      shift: input.shift ?? null,
       active: input.active ?? true,
     })
     .returning();
@@ -162,6 +164,35 @@ describe("dispatch", () => {
     const [a, b] = await Promise.all([tick(), tick()]);
     const dispatches = [...a, ...b].filter((d) => d.stage.id === stage.id);
     expect(dispatches.length).toBe(1);
+  });
+
+  test("two stages sharing an action both fire — the night half needs this", async () => {
+    // The whole night schedule rests on this: `spare-validate` at 05:25 and
+    // again at 17:25 are two rows, not two actions. The claim is per stage id
+    // (`stage:${id}:${date}`), so nothing here had to change to allow it —
+    // but nothing said so either, and a claim keyed on the action instead
+    // would silently drop whichever half ran second.
+    const day = await addStage({
+      name: `zz-pagi-${crypto.randomUUID().slice(0, 8)}`,
+      minutesFromMidnight: alreadyPassed(),
+      action: "spare-validate",
+      shift: "day",
+    });
+    const night = await addStage({
+      name: `zz-malam-${crypto.randomUUID().slice(0, 8)}`,
+      minutesFromMidnight: Math.max(0, alreadyPassed() - 1),
+      action: "spare-validate",
+      shift: "night",
+    });
+
+    const fired = await tick();
+    const ids = fired.map((d) => d.stage.id);
+    expect(ids).toContain(day.id);
+    expect(ids).toContain(night.id);
+    expect(fired.find((d) => d.stage.id === day.id)?.stage.shift).toBe("day");
+    expect(fired.find((d) => d.stage.id === night.id)?.stage.shift).toBe(
+      "night"
+    );
   });
 
   test("a time edited backwards fires once, not repeatedly", async () => {
