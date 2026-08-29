@@ -133,6 +133,32 @@ fill the gap from the spare pool.
   equivalent SQL agree exactly — FTW 3,406 pass / 378 fail of 3,784, and
   fingerprint 5,053 pass / 2,387 late / 1,466 missing of 8,906.
 
+### The allocation engine — shipped
+
+- `spare-validate` is no longer a no-op. It builds and stores one shift's
+  board: every unit holding a PLAN slot (minus `breakdown` and `standby`, which
+  need no operator), its planned operator kept if they pass, and every vacancy
+  offered to the spare pool **first come first served by `first_in_at`**,
+  subject to the same SIMPER and department rules PLAN enforces.
+- **The eligibility rules stayed one implementation.** `refusePairing` ran a
+  SIMPER query per call, which the engine would have asked thousands of times
+  in the one code path that runs against a clock. The rule was extracted as a
+  pure predicate over preloaded data (`pairingRefusal`) with `refusePairing` as
+  its fetching wrapper — rather than a second bulk copy, whose drift would show
+  up as an operator who may be paired by hand but never by the engine.
+- **Two refusals rather than a board built on a guess:** a stage carrying no
+  shift cannot say which board it is building, and a shift with no active
+  `finger-in` stage has no deadline and therefore no pass rule. Both log and
+  stop. A full screen of confident nonsense is worse than an empty one.
+- **Placement is deterministic** — `tapped_at` then NIK — so a regenerated
+  board is identical to the one people already read.
+- **The plan is standing, so it has no date**: every unit in `fleet_plan_slots`
+  appears on every board. Correct for the yard, and the thing that makes shared
+  fixtures in tests lie.
+- **Not yet verified end to end.** Dev holds no PLAN slots and no roster for a
+  date the readings cover, so a live run produces an empty board without error.
+  An August roster and PLAN data are the prerequisite for acceptance testing.
+
 ### Deferred until the Actual-tab engine exists
 
 - **Actual tab:** generated per shift by Manpower — assigned operators who

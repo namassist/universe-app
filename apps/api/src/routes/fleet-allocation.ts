@@ -279,22 +279,54 @@ export async function personByNik(nik: string) {
 export type AllocPerson = NonNullable<Awaited<ReturnType<typeof personByNik>>>;
 
 /**
- * The eligibility rules, worded once. The single-slot route and the
- * spreadsheet import both refuse through this — an import that validated
- * less would be the path operators route around the dialog through.
+ * The eligibility rules, worded once — and *only* once.
+ *
+ * Pure, over data the caller has already loaded, because there are now two
+ * kinds of caller with opposite shapes. The single-slot route and the
+ * spreadsheet import ask about one pairing and are happy to fetch as they go
+ * (`refusePairing` below wraps this for them). The allocation engine asks
+ * about vacancies × spares — thousands of pairings in one pass — and a query
+ * per question would be an N+1 in the one code path that runs against the
+ * clock, minutes before a bus leaves.
+ *
+ * The alternative was a second copy of the rules written for bulk. Two
+ * implementations of one rule drift, and the drift shows up as an operator who
+ * may be paired by hand but never by the engine, which reads as a bug in
+ * neither place.
  *
  * Returns the refusal message, or null when the pairing is sound.
  */
-export async function refusePairing(
+export function pairingRefusal(
   unit: AllocUnit,
-  person: AllocPerson
-): Promise<string | null> {
+  person: AllocPerson,
+  facts: {
+    /** Whether the person holds the unit's required SIMPER code. */
+    holdsCode: boolean;
+    /** Site-local today, for the SIMPER expiry comparison. */
+    today: string;
+  }
+): string | null {
   if (person.statusValue !== "aktif")
     return `Karyawan ${person.nik} sudah tidak aktif`;
   if (!person.fleetAllocation)
     return `Posisi "${person.positionName}" tidak masuk alokasi fleet — tandai posisinya di master Posisi bila memang seharusnya`;
   if (unit.departmentId && person.departmentId !== unit.departmentId)
     return `Unit ${unit.code} milik departemen "${unit.departmentName}" — operatornya harus dari departemen itu`;
+  if (unit.simperCodeId) {
+    if (!facts.holdsCode)
+      return `${person.name} tidak memegang kode SIMPER "${unit.simperCodeName}" yang unit ini butuhkan`;
+    if (person.simperExp !== null && person.simperExp < facts.today)
+      return `SIMPER ${person.name} kedaluwarsa ${person.simperExp} — perpanjang dulu sebelum dipasangkan`;
+  }
+  return null;
+}
+
+/** `pairingRefusal` for one pairing, fetching the SIMPER fact it needs. */
+export async function refusePairing(
+  unit: AllocUnit,
+  person: AllocPerson
+): Promise<string | null> {
+  let holdsCode = false;
   if (unit.simperCodeId) {
     const [skill] = await db
       .select({ employeeId: schema.employeeSkills.employeeId })
@@ -306,13 +338,12 @@ export async function refusePairing(
         )
       )
       .limit(1);
-    if (!skill)
-      return `${person.name} tidak memegang kode SIMPER "${unit.simperCodeName}" yang unit ini butuhkan`;
-    const today = localDate(new Date());
-    if (person.simperExp !== null && person.simperExp < today)
-      return `SIMPER ${person.name} kedaluwarsa ${person.simperExp} — perpanjang dulu sebelum dipasangkan`;
+    holdsCode = !!skill;
   }
-  return null;
+  return pairingRefusal(unit, person, {
+    holdsCode,
+    today: localDate(new Date()),
+  });
 }
 
 /* -------------------------------------------------------------- import */

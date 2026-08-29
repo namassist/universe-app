@@ -25,7 +25,9 @@ import { db, schema, type TimelineStageRow } from "./db";
 // Circular on paper (ingest uses localDate from here) — harmless in practice:
 // both sides only reach through the binding inside function bodies, never at
 // module init.
+import { buildBoard, storeBoard } from "./allocation";
 import { runIngestWindow, type IngestKind } from "./ingest";
+import { fingerInDeadline } from "./readiness";
 import { redis } from "./redis";
 
 /** One tick per minute: the schedule is specified to the minute. */
@@ -106,16 +108,42 @@ const ingest =
   };
 
 /**
- * ── The allocation engine attaches here. ──────────────────────────────────
+ * ── The allocation engine. ────────────────────────────────────────────────
  *
- * `spare-validate` matches spare operators to the units left empty — the
- * subject of the Actual-tab change. Implementing it means replacing the body
- * of this hook and nothing else: the scheduling, the once-per-day guarantee,
- * the multi-process lock, and the action vocabulary are all settled above and
- * around it.
+ * Builds the shift's board and stores it: planned operators who passed keep
+ * their unit, and the vacancies are filled from the spare pool first come
+ * first served. `dispatch.stage.shift` is what says *which* board — two rows
+ * carry this action, twelve hours apart.
+ *
+ * Two refusals rather than a board built on a guess. A stage with no shift
+ * cannot say what it is generating, and a shift with no active `finger-in`
+ * deadline has no pass rule — inventing either produces a full screen of
+ * confident nonsense, which is worse than an empty one and much harder to
+ * notice.
  */
-const notYetImplemented: Hook = async (dispatch) => {
-  record(dispatch, "allocation engine not implemented yet — no-op");
+const allocate: Hook = async (dispatch) => {
+  const shift = dispatch.stage.shift;
+  if (!shift)
+    return record(
+      dispatch,
+      "stage carries no shift — cannot tell which board to build; set it on the timeline"
+    );
+
+  const deadline = await fingerInDeadline(shift);
+  if (!deadline)
+    return record(
+      dispatch,
+      `no active finger-in stage for the ${shift} shift — no deadline, so no pass rule`
+    );
+
+  const board = await buildBoard(dispatch.date, shift, deadline);
+  await storeBoard(board);
+  const filled = board.slots.filter((s) => s.employeeId).length;
+  record(
+    dispatch,
+    `${shift} board: ${filled} of ${board.slots.length} units crewed ` +
+      `(${board.slots.filter((s) => s.source === "spare").length} from the spare pool)`
+  );
 };
 
 const HOOKS: Record<TimelineAction, Hook> = {
@@ -125,7 +153,7 @@ const HOOKS: Record<TimelineAction, Hook> = {
   other: marker,
   "ftw-ingest": ingest("ftw"),
   "finger-ingest": ingest("finger"),
-  "spare-validate": notYetImplemented,
+  "spare-validate": allocate,
 };
 
 /* -------------------------------------------------------------- the tick */

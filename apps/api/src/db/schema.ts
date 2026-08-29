@@ -38,6 +38,11 @@ export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const areaType = pgEnum("area_type", AREA_TYPES);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
+export const actualSlotSource = pgEnum("actual_slot_source", [
+  "plan",
+  "spare",
+  "manual",
+]);
 export const employeeStatus = pgEnum("employee_status", EMPLOYEE_STATUSES);
 export const mcuResult = pgEnum("mcu_result", MCU_RESULTS);
 export const bloodType = pgEnum("blood_type", BLOOD_TYPES);
@@ -949,6 +954,88 @@ export const timelineStages = pgTable("timeline_stages", {
     .notNull()
     .defaultNow(),
 });
+
+/* ------------------------------------------------------- actual allocation */
+
+/**
+ * One shift's board: who actually took each unit, as the engine resolved it.
+ *
+ * PLAN holds the standing pairings; this holds what became of them on one
+ * date, for one shift, once readiness was known. One document per date × shift
+ * — regenerating replaces its slots rather than accumulating a second opinion
+ * about the same morning.
+ *
+ * The board is **never frozen** (owner, 2026-08-29): Manpower keeps editing it
+ * so the shift can be adjusted for whatever the day brings, and no history is
+ * kept of those edits. A later edit therefore overwrites what the engine
+ * decided, deliberately — see `docs/known-issues.md`.
+ */
+export const fleetActualDocuments = pgTable(
+  "fleet_actual_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    date: date("date").notNull(),
+    shift: shiftKind("shift").notNull(),
+    /** When the engine last built it — not when a person last edited it. */
+    generatedAt: timestamp("generated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("fleet_actual_documents_date_shift_idx").on(
+      table.date,
+      table.shift
+    ),
+  ]
+);
+
+/**
+ * One unit's line on the board.
+ *
+ * `employee_id` is nullable and **null is the point**: a unit nobody could be
+ * found for is exactly what this board exists to surface, and a board that
+ * simply omitted it would report a quiet success. `source` says how the
+ * operator got there — the standing plan, the spare pool, or a person
+ * overriding the engine — so "the engine placed nobody here and a supervisor
+ * fixed it" stays distinguishable from "the engine placed them".
+ *
+ * `tapped_at` is the fingerprint moment the FCFS order was decided by, kept so
+ * a placement can be explained after the fact rather than only asserted.
+ */
+export const fleetActualSlots = pgTable(
+  "fleet_actual_slots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => fleetActualDocuments.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, {
+      onDelete: "restrict",
+    }),
+    source: actualSlotSource("source"),
+    /** "HH:MM:SS", site-local — the tap, not an instant on our clock. */
+    tappedAt: time("tapped_at"),
+  },
+  (table) => [
+    /** One line per unit per board. */
+    uniqueIndex("fleet_actual_slots_document_unit_idx").on(
+      table.documentId,
+      table.unitId
+    ),
+    /**
+     * A person drives one unit per shift. Partial, because the vacancies are
+     * many and all of them are null — a total unique index would allow exactly
+     * one empty unit per board.
+     */
+    uniqueIndex("fleet_actual_slots_document_employee_idx")
+      .on(table.documentId, table.employeeId)
+      .where(sql`${table.employeeId} is not null`),
+    index("fleet_actual_slots_document_id_idx").on(table.documentId),
+  ]
+);
 
 /* ------------------------------------------------------ readiness snapshots */
 

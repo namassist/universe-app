@@ -65,6 +65,15 @@ the definition — when they disagree, the code wins. Change flow: edit
   tells two rows carrying the same action apart — the alternative, comparing
   their clock times, is the same answer derived worse. Null means the stage
   governs neither shift in particular, which is what an `other` marker is.
+- `fleet_actual_documents` / `fleet_actual_slots` — one shift's board: who
+  actually took each unit once readiness was known. One document per `date` ×
+  `shift` (unique), and regenerating **replaces** it rather than filing a second
+  opinion about the same morning. A slot's `employee_id` is **nullable, and null
+  is the point** — a unit nobody could be found for is what the board exists to
+  surface. `source` (`plan | spare | manual`) keeps "the engine placed them"
+  distinguishable from "a supervisor did"; `tapped_at` is the fingerprint moment
+  the FCFS order was decided by, so a placement can be explained later rather
+  than only asserted. The board is never frozen and keeps no history (owner).
 - `fingerprint_machines` — the fingerprint machines on site: name, `ip`
   (**unique** — the address is the machine's identity, and what a reachability
   probe will dial), `active`. Owned here rather than read from Nakula's
