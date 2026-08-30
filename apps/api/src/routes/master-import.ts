@@ -1290,6 +1290,32 @@ function dateValue(
   if (!raw) return { date: current ?? null };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw))
     return { issue: `Tanggal "${raw}" harus berformat YYYY-MM-DD` };
+  /*
+   * The shape is not the date. "2027-01-32" matches the pattern above
+   * perfectly, and only Postgres knows January has 31 days — so it used to
+   * pass validation, reach the driver mid-sheet, and come back as a raw
+   * `date/time field value out of range`, with no row and no column named.
+   * That is precisely the failure this validator exists to prevent, and the
+   * spreadsheets that produce it are common: a generator that counts days
+   * upward without rolling the month emits a run of them.
+   *
+   * Round-tripping through `Date.UTC` is the check — it normalizes rather than
+   * rejects, so a value that comes back different is a value that does not
+   * exist. UTC, not local: a local-midnight construction shifts the day either
+   * side of the date line and would reject or accept by the server's timezone.
+   */
+  const [year, month, day] = raw.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  )
+    return { issue: `Tanggal "${raw}" tidak ada dalam kalender` };
   return { date: raw };
 }
 

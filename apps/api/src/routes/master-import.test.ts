@@ -1369,6 +1369,32 @@ describe("employee import", () => {
     expect(result.preview.errors[0]!.issue).toContain("YYYY-MM-DD");
   });
 
+  test("a date shaped right but absent from the calendar fails its row", async () => {
+    // The shape check alone let "2027-01-32" through: it matches
+    // YYYY-MM-DD perfectly and only Postgres knows January has 31 days. The
+    // import's whole job is to refuse a bad cell by name, not to hand the
+    // driver something it will throw on halfway through a sheet.
+    for (const bad of [
+      "2027-01-32",
+      "2026-02-30",
+      "2026-13-01",
+      "2026-00-10",
+    ]) {
+      const wb = await sheet(
+        [...HEADERS, "tanggal_masuk"],
+        [[...row(`61${bad.slice(-2)}`, "Tanggal Mustahil"), bad]]
+      );
+      const result = validateWorkbook(
+        "k.xlsx",
+        employeeTarget(empty, catalogues, mayCreate),
+        wb
+      );
+      if ("code" in result) throw new Error(result.message);
+      expect(result.preview.errorCount).toBe(1);
+      expect(result.preview.errors[0]!.issue).toContain(bad);
+    }
+  });
+
   test("a reordered skills cell is not a change", async () => {
     const wb = await sheet(
       ["nik", "kode_simper"],
