@@ -18,6 +18,15 @@ export type NavLeaf = {
   label: string;
   /* kiosk screens open in a new tab (openDisplay) instead of routing */
   displayUrl?: string;
+  /**
+   * The heading this leaf begins a run under.
+   *
+   * Carried by the leaf rather than held in a separate list of headings so
+   * that access filtering needs no second pass: the sidebar draws a heading
+   * only when a *visible* child announces one, and a section whose every menu
+   * is hidden from this role leaves no orphaned label behind.
+   */
+  section?: string;
 };
 export type NavEntry =
   | { kind: "item"; slug: MenuSlug; label: string; icon: LucideIcon }
@@ -30,6 +39,17 @@ export type NavEntry =
     };
 
 const leaf = (slug: MenuSlug): NavLeaf => ({ slug, label: MENU_LABELS[slug] });
+
+/**
+ * Tag a run of menus with the heading they sit under.
+ *
+ * *Every* leaf carries it, not just the first: access filtering removes
+ * individual menus, so a section whose opening menu this role cannot see would
+ * otherwise lose its heading and leave the rest of its run hanging under the
+ * previous one.
+ */
+const section = (section: string, ...slugs: MenuSlug[]): NavLeaf[] =>
+  slugs.map((slug) => ({ ...leaf(slug), section }));
 const item = (slug: MenuSlug, icon: LucideIcon): NavEntry => ({
   kind: "item",
   slug,
@@ -86,24 +106,38 @@ export const NAV: NavEntry[] = [
     key: "master",
     label: "Master",
     icon: Database,
+    /*
+     * Seventeen menus in one flat list, in no order anyone could predict —
+     * `merk-unit` sat between `model-unit` and `kelas-unit`, `perusahaan`
+     * after `mess`. Sections group them by the thing they describe, so
+     * finding one is a matter of knowing what it is rather than remembering
+     * where it landed.
+     *
+     * Headings, not nested groups: a second level of expanding would put every
+     * catalogue two clicks away and hide which sections exist until you open
+     * them. The order within a section is alphabetical, except the
+     * organisation chain, which reads the way it nests — a company owns
+     * departments, a department owns positions.
+     */
     children: [
-      leaf("database-unit"),
-      leaf("jenis-unit"),
-      leaf("model-unit"),
-      leaf("merk-unit"),
-      leaf("kelas-unit"),
-      leaf("simper"),
-      leaf("kode-simper"),
-      leaf("departemen"),
-      leaf("area-kerja"),
-      leaf("bus"),
-      leaf("mess"),
-      leaf("perusahaan"),
-      leaf("jabatan"),
-      leaf("running-text"),
-      leaf("sound"),
-      leaf("timeline"),
-      leaf("mesin-fingerprint"),
+      ...section(
+        "Unit",
+        "database-unit",
+        "jenis-unit",
+        "kelas-unit",
+        "merk-unit",
+        "model-unit"
+      ),
+      ...section("Organisasi", "perusahaan", "departemen", "jabatan"),
+      ...section("SIMPER", "simper", "kode-simper"),
+      ...section("Lokasi & Fasilitas", "area-kerja", "bus", "mess"),
+      ...section(
+        "Perangkat & Konten",
+        "mesin-fingerprint",
+        "running-text",
+        "sound"
+      ),
+      ...section("Jadwal", "timeline"),
     ],
   },
   {

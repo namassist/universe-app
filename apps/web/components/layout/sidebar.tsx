@@ -94,6 +94,11 @@ export function Sidebar() {
 
     const kids = entry.children.filter((c) => access(c.slug));
     if (!kids.length) return null;
+    /* Only sections a *visible* child opens: one whose every menu this role
+       cannot see leaves no orphaned label behind. */
+    const headings = kids.filter(
+      (c, i) => c.section && c.section !== kids[i - 1]?.section
+    ).length;
     const Icon = entry.icon;
     const expanded = openGroup === entry.key;
     return (
@@ -137,34 +142,54 @@ export function Sidebar() {
            * they render in the DOM and are simply never seen. A hardcoded
            * 760px fitted the Master group until it grew past sixteen items.
            * Each child is h-10 (40px) with mt-2 (8px) between, plus the
-           * wrapper's py-2/pb-3; overshooting is free, clipping is not.
+           * wrapper's py-2/pb-3, plus ~40px for every section heading;
+           * overshooting is free, clipping is not.
            */
-          style={{ maxHeight: expanded ? kids.length * 48 + 24 : 0 }}
+          style={{
+            maxHeight: expanded ? kids.length * 48 + headings * 40 + 24 : 0,
+          }}
         >
-          {kids.map((c) => {
+          {kids.map((c, i) => {
+            const heading =
+              c.section && c.section !== kids[i - 1]?.section
+                ? c.section
+                : null;
             const kidClass = cn(
               "relative ml-7.5 flex h-10 w-[calc(100%-30px)] items-center gap-2 rounded-control border border-transparent px-3 text-left text-[13px] text-(--text-secondary) no-underline transition-colors duration-100 hover:bg-(--fill-hover) hover:text-(--text-primary) hover:no-underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-primary) [&+a]:mt-2 [&+button]:mt-2"
             );
             /* kiosk screen: button opens a fullscreen new tab, no in-shell route */
-            if (c.displayUrl) {
-              return (
-                <button
-                  key={c.slug}
-                  onClick={() => openDisplay(c.displayUrl!)}
-                  className={cn(kidClass, "cursor-pointer")}
-                >
-                  {c.label}
-                </button>
-              );
-            }
-            return (
+            const body = c.displayUrl ? (
+              <button
+                onClick={() => openDisplay(c.displayUrl!)}
+                className={cn(kidClass, "cursor-pointer")}
+              >
+                {c.label}
+              </button>
+            ) : (
               <Link
-                key={c.slug}
                 href={hrefOf(c.slug)}
                 className={cn(kidClass, isActive(c.slug) && activeClass)}
               >
                 {c.label}
               </Link>
+            );
+            return (
+              <React.Fragment key={c.slug}>
+                {heading ? (
+                  /* A label with a rule running to the edge, not floating grey
+                     text at the same indent as the menus: at that indent and
+                     weight a heading reads as one more (dimmer) row, which is
+                     the opposite of what a divider is for. The rule is what
+                     makes the break unmistakable at a glance. */
+                  <div className="mt-4 mb-2 ml-7.5 flex items-center gap-2.5 pr-3 first:mt-0.5">
+                    <span className="text-[10px] font-bold tracking-[0.14em] whitespace-nowrap text-(--text-secondary) uppercase">
+                      {heading}
+                    </span>
+                    <span className="h-px flex-1 bg-(--divider)" />
+                  </div>
+                ) : null}
+                {body}
+              </React.Fragment>
             );
           })}
         </div>
