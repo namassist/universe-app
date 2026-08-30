@@ -3,10 +3,18 @@
 import * as React from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronsUpDown,
+  ChevronUp,
+  Clock,
+  Download,
+  RefreshCcw,
+  Search,
+} from "lucide-react";
 
 import type { AccessMode } from "@/lib/access";
-import { errorMessage } from "@/lib/api";
+import { errorMessage, fetchBlob } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ftwQueryOptions, syncFtw, type FtwRow } from "@/lib/queries/readiness";
 import { cn } from "@/lib/utils";
@@ -44,8 +52,12 @@ import {
   daysAgo,
   ftwDecisionBadge as decisionBadge,
   isoDate,
+  ftwSeverity as severity,
+  ftwShiftLabel as shiftLabel,
   ftwSleepClass as sleepClass,
   ftwSleepText as sleepText,
+  ftwUploadShift as uploadShift,
+  ftwUploadShiftNow as uploadShiftNow,
   type FtwCatKey as CatKey,
 } from "./fit-to-work-shared";
 
@@ -64,6 +76,71 @@ const STRIP_DAYS = 7;
  *  the cap. One more visible day and a maximal range would 422. */
 const MAX_SPAN_DAYS = 55;
 
+type SortKey = "date" | "sent" | "sleep";
+type SortDir = "asc" | "desc";
+type Sort = { key: SortKey; dir: SortDir } | null;
+
+/**
+ * Which way each column sorts on its first click.
+ *
+ * Not uniformly descending: for a date or an upload time the interesting end
+ * is the latest, but for sleep it is the *shortest* — a column whose first
+ * click showed the best-rested operators would need a second click every time
+ * to answer the only question anyone asks of it.
+ */
+const FIRST_DIR: Record<SortKey, SortDir> = {
+  date: "desc",
+  sent: "desc",
+  sleep: "asc",
+};
+
+/** Third click returns to the default order rather than sticking. */
+const nextSort = (current: Sort, key: SortKey): Sort => {
+  if (!current || current.key !== key) return { key, dir: FIRST_DIR[key] };
+  if (current.dir === FIRST_DIR[key])
+    return { key, dir: current.dir === "asc" ? "desc" : "asc" };
+  return null;
+};
+
+function SortHead({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: React.ReactNode;
+  sortKey: SortKey;
+  sort: Sort;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = sort?.key === sortKey ? sort.dir : null;
+  return (
+    <TableHead
+      className={className}
+      aria-sort={
+        active ? (active === "asc" ? "ascending" : "descending") : "none"
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="inline-flex cursor-pointer items-center gap-1.5 uppercase hover:text-(--color-primary-bright)"
+      >
+        {label}
+        {active === "asc" ? (
+          <ChevronUp className="size-3.5" />
+        ) : active === "desc" ? (
+          <ChevronDown className="size-3.5" />
+        ) : (
+          <ChevronsUpDown className="size-3.5 text-(--text-tertiary)" />
+        )}
+      </button>
+    </TableHead>
+  );
+}
+
 export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
@@ -72,8 +149,20 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
   const today = isoDate(new Date());
   const [q, setQ] = React.useState("");
   const [cat, setCat] = React.useState("");
-  const [shift, setShift] = React.useState("");
-  const [d1, setD1] = React.useState(daysAgo(today, 6));
+  /* Opens on the half of the day it is opened in (owner, 2026-08-30) —
+     before noon shows the morning's uploads, after noon the afternoon's.
+     Read once on mount: the filter is where you arrive, not something that
+     should move under you while you read it. */
+  const [shift, setShift] = React.useState(String(uploadShiftNow()));
+  const [company, setCompany] = React.useState("");
+  const [sort, setSort] = React.useState<Sort>(null);
+  const [dept, setDept] = React.useState("");
+  /* Today only (owner, 2026-08-30). The screen is read to act on this
+     morning; a week of history is a question you go and ask, not the one you
+     arrive with — and 353 rows a day means the default range decided whether
+     anything on screen was actionable. The history strip still reaches back a
+     week, because it is fetched wider than the visible range. */
+  const [d1, setD1] = React.useState(today);
   const [d2, setD2] = React.useState(today);
 
   const spanOk =
@@ -94,15 +183,61 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
     mutationFn: syncFtw,
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["fit-to-work"] });
+      /* The count that answers "did my sync find anything": every pass
+         upserts the whole window, so `upserted` is near-constant and a sync
+         that pulled thirty late uploads used to look like one that pulled
+         nothing. */
       pushToast(
         "success",
         t.refreshDoneT,
-        `${result.upserted} ${t.ftwSumLogs}`
+        result.inserted
+          ? `${result.inserted} ${t.ftwSyncNew} · ${result.upserted} ${t.ftwSyncSeen}`
+          : `${t.ftwSyncNone} · ${result.upserted} ${t.ftwSyncSeen}`
       );
     },
     onError: (error) =>
       pushToast("error", t.navFtw, errorMessage(error, t.ftwLoadErr)),
   });
+
+  const [exporting, setExporting] = React.useState(false);
+
+  /**
+   * Exports what is on screen, not what is in the table.
+   *
+   * Every active filter travels with the request — an export that quietly
+   * ignored them would hand someone the whole range when they had narrowed to
+   * nine names, and they would not find out until they opened the file.
+   */
+  async function exportSheet() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ from: d1, to: d2 });
+      if (company) params.set("company", company);
+      if (dept) params.set("department", dept);
+      if (shift) params.set("shift", shift);
+      if (cat) params.set("category", cat);
+      if (q.trim()) params.set("q", q.trim());
+      // fetchBlob, not Eden — Treaty decodes an unrecognised body as text and
+      // mangles the workbook past recovery (lib/api.ts).
+      const blob = await fetchBlob(`/v1/fit-to-work/export?${params}`);
+      const url = URL.createObjectURL(blob);
+      const name = `ftw-${d1}${d1 === d2 ? "" : `-sd-${d2}`}.xlsx`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+      pushToast("success", t.toastExportT, `${name} · ${rows.length} baris`);
+    } catch (error) {
+      pushToast(
+        "error",
+        t.toastExportT,
+        error instanceof Error ? error.message : t.ftwLoadErr
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const all = React.useMemo(() => listQ.data?.rows ?? [], [listQ.data]);
 
@@ -114,23 +249,81 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
     return map;
   }, [all]);
 
-  const shiftOptions = React.useMemo(
-    () => [...new Set(all.flatMap((r) => (r.shift ? [r.shift] : [])))].sort(),
+  /* Options come from the rows, not from the master catalogue: these columns
+     are savera's own text, and offering a department that never appears in the
+     data would be a filter that can only ever return nothing. */
+  const companyOptions = React.useMemo(
+    () =>
+      [...new Set(all.flatMap((r) => (r.company ? [r.company] : [])))].sort(),
     [all]
+  );
+  /* Narrowed by the chosen company, the way a department belongs to one. */
+  const deptOptions = React.useMemo(
+    () =>
+      [
+        ...new Set(
+          all
+            .filter((r) => !company || r.company === company)
+            .flatMap((r) => (r.department ? [r.department] : []))
+        ),
+      ].sort(),
+    [all, company]
   );
 
   const needle = q.trim().toLowerCase();
-  const rows = all
-    .filter((r) => {
-      if (r.date < d1) return false; // strip context, not a visible day
-      if (shift && r.shift !== shift) return false;
-      if (cat && catOf(r.sleepCategory) !== cat) return false;
-      if (!needle) return true;
-      return r.name.toLowerCase().includes(needle) || r.nik.includes(needle);
-    })
-    .sort(
-      (a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)
-    );
+
+  /* Every filter but the shift one, so an empty table can tell the two
+     emptinesses apart: "nothing matches what you asked for" and "this half of
+     the day has no uploads yet" send a supervisor to different places. */
+  const exceptShift = all.filter((r) => {
+    if (r.date < d1) return false; // strip context, not a visible day
+    if (company && r.company !== company) return false;
+    if (dept && r.department !== dept) return false;
+    if (cat === "late" ? !r.late : cat && catOf(r.sleepCategory) !== cat)
+      return false;
+    if (!needle) return true;
+    return r.name.toLowerCase().includes(needle) || r.nik.includes(needle);
+  });
+
+  const rows = exceptShift
+    .filter((r) => !shift || String(uploadShift(r.sentAt) ?? "") === shift)
+    /*
+     * Default: newest day first, then worst first inside it. Date leads
+     * because the screen is operational — a refusal from six days ago must not
+     * sit above this morning's — and severity decides the order of the day you
+     * are actually looking at.
+     *
+     * A chosen column replaces that ordering rather than layering on top of
+     * it: a sort that silently kept severity above the column you clicked
+     * would look broken. Name still breaks ties, so the order is total and a
+     * re-render never reshuffles equal rows.
+     */
+    .sort((a, b) => {
+      if (!sort)
+        return (
+          b.date.localeCompare(a.date) ||
+          severity(a.sleepCategory, a.late) -
+            severity(b.sleepCategory, b.late) ||
+          a.name.localeCompare(b.name)
+        );
+      const dir = sort.dir === "asc" ? 1 : -1;
+      if (sort.key === "sleep")
+        return (
+          (a.sleepMinutes - b.sleepMinutes) * dir ||
+          a.name.localeCompare(b.name)
+        );
+      if (sort.key === "date")
+        return (
+          a.date.localeCompare(b.date) * dir || a.name.localeCompare(b.name)
+        );
+      // Rows with no upload time have nothing to sort by, so they sit at the
+      // end whichever way the column points rather than crowding the top.
+      if (!a.sentAt || !b.sentAt)
+        return a.sentAt ? -1 : b.sentAt ? 1 : a.name.localeCompare(b.name);
+      return (
+        a.sentAt.localeCompare(b.sentAt) * dir || a.name.localeCompare(b.name)
+      );
+    });
   const pg = usePagination(rows);
 
   const loc = lang === "en" ? "en-GB" : "id-ID";
@@ -164,11 +357,38 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* The sync sits above the freshness line it governs: pressing it is
+          what moves that clock, and it belongs beside the number it changes
+          rather than buried among the filters, which change nothing. */}
       <PageTitle title={t.navFtw} sub={t.ftwSub}>
-        <Fresh>
-          {t.dataAsOf}&nbsp;
-          <b className="font-mono text-(--text-secondary)">{syncedLabel}</b>
-        </Fresh>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            {/* Export sits beside Sync, not among the filters: both act on the
+                data as a whole, while a filter only changes the view. */}
+            <Button
+              variant="secondary"
+              onClick={exportSheet}
+              disabled={exporting || !rows.length}
+            >
+              <Download />
+              {t.export}
+            </Button>
+            {mode === "manage" ? (
+              <Button
+                variant="secondary"
+                onClick={() => sync.mutate()}
+                disabled={sync.isPending}
+              >
+                <RefreshCcw className={cn(sync.isPending && "animate-spin")} />
+                {t.ftwSync}
+              </Button>
+            ) : null}
+          </div>
+          <Fresh>
+            {t.dataAsOf}&nbsp;
+            <b className="font-mono text-(--text-secondary)">{syncedLabel}</b>
+          </Fresh>
+        </div>
       </PageTitle>
 
       <Panel>
@@ -194,17 +414,52 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                   {catLabel[key]}
                 </option>
               ))}
+              {/* Not a sleep category — an administrative state, and the one
+                  a supervisor comes to this screen to act on. */}
+              <option value="late">{t.ftwStatLate}</option>
+            </Select>
+            {/* Only when there is a choice to make: one company on site is the
+                common case, and a select with a single option is furniture. */}
+            {companyOptions.length > 1 ? (
+              <Select
+                wrapperClassName="w-[200px]"
+                value={company}
+                onChange={(e) => {
+                  setCompany(e.target.value);
+                  // The chosen department may not exist under the new company.
+                  setDept("");
+                }}
+                aria-label={t.allCompanies}
+              >
+                <option value="">{t.allCompanies}</option>
+                {companyOptions.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+            ) : null}
+            <Select
+              wrapperClassName="w-[200px]"
+              value={dept}
+              onChange={(e) => setDept(e.target.value)}
+              aria-label={t.allDepts}
+            >
+              <option value="">{t.allDepts}</option>
+              {deptOptions.map((d) => (
+                <option key={d}>{d}</option>
+              ))}
             </Select>
             <Select
-              wrapperClassName="w-[150px]"
+              wrapperClassName="w-[210px]"
               value={shift}
               onChange={(e) => setShift(e.target.value)}
               aria-label={t.allShift}
             >
               <option value="">{t.allShift}</option>
-              {shiftOptions.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
+              {/* Fixed halves of the day rather than whatever savera wrote:
+                  the value is derived from the upload time, so the two options
+                  always exist and always mean the same thing. */}
+              <option value="1">{t.ftwShift1}</option>
+              <option value="2">{t.ftwShift2}</option>
             </Select>
             <div className="flex items-center gap-2">
               <Input
@@ -223,16 +478,6 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                 aria-label={t.lblDateTo}
               />
             </div>
-            {mode === "manage" ? (
-              <Button
-                variant="secondary"
-                onClick={() => sync.mutate()}
-                disabled={sync.isPending}
-              >
-                <RefreshCw className={cn(sync.isPending && "animate-spin")} />
-                {t.refresh}
-              </Button>
-            ) : null}
           </ToolbarGroup>
         </Toolbar>
 
@@ -256,11 +501,26 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                   <TableHead>{t.thPos}</TableHead>
                   <TableHead>Mess</TableHead>
                   <TableHead>{t.thShift}</TableHead>
-                  <TableHead>{t.thSleep}</TableHead>
+                  <SortHead
+                    label={t.thSleep}
+                    sortKey="sleep"
+                    sort={sort}
+                    onSort={(k) => setSort((cur) => nextSort(cur, k))}
+                  />
                   <TableHead>{t.thStatus}</TableHead>
                   <TableHead>FTW</TableHead>
-                  <TableHead>{t.lblDate}</TableHead>
-                  <TableHead>{t.thSendTime}</TableHead>
+                  <SortHead
+                    label={t.lblDate}
+                    sortKey="date"
+                    sort={sort}
+                    onSort={(k) => setSort((cur) => nextSort(cur, k))}
+                  />
+                  <SortHead
+                    label={t.thSendTime}
+                    sortKey="sent"
+                    sort={sort}
+                    onSort={(k) => setSort((cur) => nextSort(cur, k))}
+                  />
                   <TableHead>{t.thHist}</TableHead>
                 </tr>
               </TableHeader>
@@ -279,7 +539,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                       <TableCell>{r.department ?? "—"}</TableCell>
                       <TableCell>{r.position ?? "—"}</TableCell>
                       <TableCell>{r.mess ?? "—"}</TableCell>
-                      <TableCell>{r.shift ?? "—"}</TableCell>
+                      <TableCell>{shiftLabel(r.sentAt)}</TableCell>
                       <TableCell className={sleepClass(rowCat)}>
                         {sleepText(r.sleepMinutes)}
                       </TableCell>
@@ -300,8 +560,20 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                       <TableCell className="font-mono whitespace-nowrap">
                         {dLabel(r.date)}
                       </TableCell>
-                      <TableCell className="font-mono">
-                        {r.sentAt ? r.sentAt.slice(11, 16) : "—"}
+                      {/* The upload time is where lateness is legible, so the
+                          flag sits on it rather than in a column of its own. */}
+                      <TableCell className="font-mono whitespace-nowrap">
+                        {r.sentAt ? (
+                          r.late ? (
+                            <Badge variant="warning" dot>
+                              {r.sentAt.slice(11, 16)}
+                            </Badge>
+                          ) : (
+                            r.sentAt.slice(11, 16)
+                          )
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -331,6 +603,19 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
               </TableBody>
             </Table>
           </div>
+        ) : shift && exceptShift.length ? (
+          /* The shift filter is what emptied the table, and it was chosen by
+             the clock rather than by the reader — so the screen says so and
+             offers the way out, instead of looking like missing data. */
+          <StateBox
+            icon={<Clock className="text-(--color-primary-bright)" />}
+            title={shift === "1" ? t.ftwNoShift1T : t.ftwNoShift2T}
+            body={t.ftwNoShiftB}
+          >
+            <Button variant="secondary" onClick={() => setShift("")}>
+              {t.ftwShowAllShifts} ({exceptShift.length})
+            </Button>
+          </StateBox>
         ) : (
           <StateBox
             icon={<Search className="text-(--color-primary-bright)" />}
