@@ -16,9 +16,11 @@ import {
   actualListKey,
   type ActualSlot,
 } from "@/lib/queries/fleet-actual";
+import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
+import { Avatar, initialsOf } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogActions,
@@ -26,7 +28,11 @@ import {
   DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FootSum, PageTitle, Panel, PanelFoot } from "@/components/ui/panel";
+import { Pagination } from "@/components/ui/pagination";
+import { FootSum, PageTitle, Panel } from "@/components/ui/panel";
+import { SearchInput } from "@/components/ui/search-input";
+import { Segmented, SegmentedButton } from "@/components/ui/segmented";
+import { Select } from "@/components/ui/select";
 import { StateBox } from "@/components/ui/state-box";
 import {
   Table,
@@ -37,6 +43,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
+
+/** "PIT SERVICE AND DEVELOPMENT" → "PSD", so a badge stays a badge. */
+function deptAbbrev(name: string): string {
+  const words = name.split(/\s+/).filter((w) => w.length > 2);
+  return words.length > 1
+    ? words.map((w) => w[0]!.toUpperCase()).join("")
+    : name.slice(0, 4).toUpperCase();
+}
 
 /**
  * One shift's board, unit by unit.
@@ -73,6 +87,13 @@ export function FleetAllocationDetail() {
   );
 
   const [picking, setPicking] = React.useState<ActualSlot | null>(null);
+  const [fleetF, setFleetF] = React.useState("all");
+  const [filter, setFilter] = React.useState<
+    "all" | "unalloc" | "alloc" | "subbed"
+  >("all");
+  const [q, setQ] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const [per, setPer] = React.useState("12");
 
   const assign = useMutation({
     mutationFn: async (input: {
@@ -96,7 +117,42 @@ export function FleetAllocationDetail() {
       pushToast("error", t.faActPick, errorMessage(error, t.loginErr)),
   });
 
-  const crewed = slots.filter((s) => s.employeeId).length;
+  /*
+   * The same four controls the PLAN board carries, over the same units, so a
+   * person moving between the two tabs is not learning a second screen. The
+   * summary counts the whole board rather than the filtered view — narrowing
+   * to one fleet must not make the site look better crewed than it is.
+   */
+  const needle = q.trim().toLowerCase();
+  const shown = slots.filter((s) => {
+    if (
+      fleetF === "none" ? !!s.fleet : fleetF !== "all" && s.fleet?.id !== fleetF
+    )
+      return false;
+    if (filter === "unalloc" && s.employeeId) return false;
+    if (filter === "alloc" && !s.employeeId) return false;
+    if (filter === "subbed" && s.source !== "spare" && s.source !== "manual")
+      return false;
+    if (!needle) return true;
+    return (
+      s.unitCode.toLowerCase().includes(needle) ||
+      (s.employeeName ?? "").toLowerCase().includes(needle) ||
+      (s.employeeNik ?? "").toLowerCase().includes(needle) ||
+      (s.simperCodeName ?? "").toLowerCase().includes(needle) ||
+      (s.modelName ?? "").toLowerCase().includes(needle)
+    );
+  });
+
+  const allocated = slots.filter((s) => s.employeeId).length;
+  const idle = slots.length - allocated;
+
+  const perN = Number(per);
+  const pageCount = Math.max(1, Math.ceil(shown.length / perN));
+  const cur = Math.min(page, pageCount);
+  const cards = shown.slice((cur - 1) * perN, cur * perN);
+  const range = shown.length
+    ? `${(cur - 1) * perN + 1}–${(cur - 1) * perN + cards.length}`
+    : "0";
 
   const sourceBadge = (source: ActualSlot["source"]) => {
     if (source === "plan") return <Badge variant="success">PLAN</Badge>;
@@ -104,15 +160,12 @@ export function FleetAllocationDetail() {
       return <Badge variant="warning">{t.faViaSpare}</Badge>;
     if (source === "manual")
       return <Badge variant="info">{t.faViaManual}</Badge>;
-    return <span className="text-(--text-tertiary)">—</span>;
+    return null;
   };
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title={`ACTUAL — ${date || "—"}`}
-        sub={`${shiftLabel}${boardQ.data ? ` · ${t.fahThGen} ${boardQ.data.generatedAt.slice(11, 16)}` : ""}`}
-      >
+      <PageTitle title={`ACTUAL — ${date || "—"}`} sub={shiftLabel}>
         <Button
           variant="ghost"
           onClick={() => router.push(`/fleet-allocation?mode=actual`)}
@@ -122,95 +175,206 @@ export function FleetAllocationDetail() {
         </Button>
       </PageTitle>
 
-      <Panel>
-        {slots.length ? (
-          <div className="overflow-x-auto">
-            <Table className="min-w-[900px]">
-              <TableHeader>
-                <tr>
-                  <TableHead>{t.faActThUnit}</TableHead>
-                  <TableHead>{t.faActThOp}</TableHead>
-                  <TableHead>{t.faActThSrc}</TableHead>
-                  <TableHead>{t.faActThTap}</TableHead>
-                  <TableHead>FTW</TableHead>
-                  <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {slots.map((s) => (
-                  <TableRow key={s.unitId}>
-                    <TableCell>
-                      <span className="font-mono font-semibold">
-                        {s.unitCode}
-                      </span>
-                      {s.simperCodeName ? (
-                        <span className="ml-2 text-xs text-(--text-tertiary)">
-                          {s.simperCodeName}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-(--text-secondary)">
+          <b className="font-semibold text-(--text-primary)">{allocated}</b>{" "}
+          {t.faAllocOf}{" "}
+          <b className="font-semibold text-(--text-primary)">{slots.length}</b>{" "}
+          {t.faAllocUnits}
+          {idle ? (
+            <>
+              {" · "}
+              <b className="font-semibold text-(--color-danger-text)">
+                {idle}
+              </b>{" "}
+              {t.faDowntime.toLowerCase()}
+            </>
+          ) : null}
+          {boardQ.data ? (
+            <>
+              {" · "}
+              {t.faGenAt}{" "}
+              <b className="font-mono font-semibold text-(--text-primary)">
+                {boardQ.data.generatedAt.slice(11, 16)}
+              </b>
+            </>
+          ) : null}
+        </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Select
+            aria-label={t.faFleetAll}
+            wrapperClassName="w-auto"
+            className="h-10 w-auto pr-9"
+            value={fleetF}
+            onChange={(e) => {
+              setFleetF(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="all">{t.faFleetAll}</option>
+            {(boardQ.data?.fleets ?? []).map((f) => (
+              <option key={f.id} value={f.id}>
+                Fleet {f.diggerCode}
+              </option>
+            ))}
+            <option value="none">{t.faActNoFleet}</option>
+          </Select>
+          <Segmented role="group" aria-label={t.filter}>
+            {(
+              [
+                ["all", t.segAll],
+                ["unalloc", t.faFUnalloc],
+                ["alloc", t.faFAlloc],
+                ["subbed", t.faFSubbed],
+              ] as ["all" | "unalloc" | "alloc" | "subbed", string][]
+            ).map(([f, label]) => (
+              <SegmentedButton
+                key={f}
+                active={filter === f}
+                onClick={() => {
+                  setFilter(f);
+                  setPage(1);
+                }}
+              >
+                {label}
+              </SegmentedButton>
+            ))}
+          </Segmented>
+          <SearchInput
+            className="w-55"
+            placeholder={t.searchUnit}
+            aria-label={t.searchUnit}
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+      </div>
+
+      {cards.length ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+          {cards.map((s) => {
+            const empty = !s.employeeId;
+            return (
+              <div
+                key={s.unitId}
+                className={cn(
+                  "flex flex-col gap-4 rounded-card p-5 glass-card",
+                  // An idle unit is the fact this board exists to carry, so it
+                  // is the one that reads differently across the room.
+                  empty &&
+                    "border-[rgba(252,60,59,.45)] shadow-[0_0_20px_rgba(252,60,59,.18),0_20px_80px_rgba(0,0,0,.5)]"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <b className="text-base font-bold">{s.unitCode}</b>
+                    <span className="mt-px block truncate text-xs text-(--text-tertiary)">
+                      {s.modelName} · {s.brandName}
+                    </span>
+                  </div>
+                  {empty ? (
+                    <Badge variant="danger" dot>
+                      {t.faDowntime}
+                    </Badge>
+                  ) : (
+                    sourceBadge(s.source)
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {s.departmentName ? (
+                    <Badge variant="accent" title={s.departmentName}>
+                      {deptAbbrev(s.departmentName)}
+                    </Badge>
+                  ) : null}
+                  {s.simperCodeName ? (
+                    <Badge variant="neutral">{s.simperCodeName}</Badge>
+                  ) : null}
+                  {s.requiresFtw ? <Badge variant="warning">FTW</Badge> : null}
+                  {s.fleet ? (
+                    <>
+                      <Badge variant="info">Fleet {s.fleet.diggerCode}</Badge>
+                      {s.fleet.area ? (
+                        <span className="text-xs text-(--text-tertiary)">
+                          {s.fleet.area}
                         </span>
                       ) : null}
-                    </TableCell>
-                    <TableCell>
-                      {s.employeeName ? (
-                        <>
-                          <span className="font-semibold">
-                            {s.employeeName}
-                          </span>
-                          <span className="ml-2 font-mono text-xs text-(--text-tertiary)">
-                            {s.employeeNik}
-                          </span>
-                        </>
-                      ) : (
-                        <Badge variant="danger" dot>
-                          {t.faActEmpty}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{sourceBadge(s.source)}</TableCell>
-                    <TableCell className="font-mono tabular-nums">
-                      {s.tappedAt ?? (
-                        <span className="text-(--text-tertiary)">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {s.requiresFtw ? (
-                        <Badge variant="warning">FTW</Badge>
-                      ) : (
-                        <span className="text-(--text-tertiary)">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {canManage ? (
-                        <div className="flex gap-2">
-                          <IconButton
-                            aria-label={t.faActPick}
-                            onClick={() => setPicking(s)}
-                          >
-                            <UserCog />
-                          </IconButton>
-                        </div>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
+                    </>
+                  ) : null}
+                </div>
+
+                {s.employeeName ? (
+                  <div className="flex items-center gap-3 rounded-icon border border-(--divider) bg-(--fill-subtle) p-3">
+                    <Avatar className="text-xs">
+                      {initialsOf(s.employeeName)}
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <b className="block truncate text-[13px] font-semibold">
+                        {s.employeeName}
+                      </b>
+                      <span className="font-mono text-xs text-(--text-tertiary)">
+                        {s.employeeNik}
+                        {s.tappedAt
+                          ? ` · ${t.faActThTap} ${s.tappedAt.slice(0, 5)}`
+                          : ""}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex min-h-[62px] items-center justify-center rounded-icon border border-dashed border-[rgba(252,60,59,.45)] bg-(--fill-subtle) p-3 text-[13px] text-(--text-tertiary)">
+                    {t.faActEmpty}
+                  </div>
+                )}
+
+                {canManage ? (
+                  <div className="mt-auto flex gap-2">
+                    <Button
+                      variant={empty ? "primary" : "secondary"}
+                      className="h-[34px] flex-1 text-[13px]"
+                      onClick={() => setPicking(s)}
+                    >
+                      {empty ? t.faIntervene : t.faActPick}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <Panel>
           <StateBox
             icon={<Users className="text-(--color-primary-bright)" />}
-            title={t.faActNoBoard}
-            body={t.faActNoBoardB}
+            title={slots.length ? t.noResTitle : t.faActNoBoard}
+            body={slots.length ? t.mdEmptyB : t.faActNoBoardB}
           />
-        )}
+        </Panel>
+      )}
 
-        {slots.length ? (
-          <PanelFoot>
+      {shown.length ? (
+        <Panel className="px-6 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <FootSum>
-              <b>{crewed}</b> / <b>{slots.length}</b> {t.fahThAlloc}
+              {t.attSumA} <b>{range}</b> {t.attSumB} <b>{shown.length}</b>{" "}
+              {t.udbSumB}
             </FootSum>
-          </PanelFoot>
-        ) : null}
-      </Panel>
+            <Pagination
+              page={cur}
+              pageCount={pageCount}
+              onPage={setPage}
+              per={per}
+              perOptions={["6", "12", "24", "48"]}
+              onPer={(v) => {
+                setPer(v);
+                setPage(1);
+              }}
+            />
+          </div>
+        </Panel>
+      ) : null}
 
       {picking ? (
         <CandidatePicker

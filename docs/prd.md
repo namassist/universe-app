@@ -136,10 +136,16 @@ fill the gap from the spare pool.
 ### The allocation engine — shipped
 
 - `spare-validate` is no longer a no-op. It builds and stores one shift's
-  board: every unit holding a PLAN slot (minus `breakdown` and `standby`, which
-  need no operator), its planned operator kept if they pass, and every vacancy
-  offered to the spare pool **first come first served by `first_in_at`**,
-  subject to the same SIMPER and department rules PLAN enforces.
+  board: **every active unit** (minus `breakdown` and `standby`, which need no
+  operator), its planned operator kept if they pass, and every vacancy offered
+  to the spare pool **first come first served by `first_in_at`**, subject to
+  the same SIMPER and department rules PLAN enforces.
+- **The board is driven by `units`, not by `fleet_plan_slots`.** It was the
+  other way round at first, and that hid the units most in need of showing: a
+  unit the plan has no standing pairing for is idle by default, and it never
+  appeared as a vacancy at all. On the site's first real board nine of fifteen
+  units were invisible, and it reported one idle unit while ten had nobody on
+  them. PLAN answers "who usually drives this", never "which units exist".
 - **The eligibility rules stayed one implementation.** `refusePairing` ran a
   SIMPER query per call, which the engine would have asked thousands of times
   in the one code path that runs against a clock. The rule was extracted as a
@@ -182,6 +188,85 @@ fill the gap from the spare pool.
 - The static port's mock (`ACTUAL_INIT`) and its "create then lock" flow are
   gone. There was never a lock — the board is generated twice a day and stays
   editable.
+
+### The fleet wall (Display Fleet) — shipped
+
+- **The wall shows the Actual board of whichever shift is running**, one
+  formation at a time. The static mock it replaced showed nothing real.
+- **Nobody picks the date or the shift.** A TV in the yard has no operator, so
+  the API answers from the clock, and from the master timeline: a shift takes
+  the screen at its **first** stage, `ftw-ingest` (04:45 and 16:45 today) —
+  when its changeover _begins_, not when its board is finished. The people the
+  wall is for are walking to the gate; they need their unit before the line-up
+  is final. Before the morning gate the running shift is the night one that
+  began **yesterday**, because a night board is filed under the date it
+  started.
+- **Between the changeover opening and `spare-validate`, the wall shows the
+  standing PLAN instead of nothing** (owner, 2026-08-29), rendered visibly
+  unfinished — dimmed, desaturated, dashed, with "Line-up sementara" in the
+  header. There is a real ten-minute gap twice a day, and it is the exact
+  window in which arriving operators most want to know their unit; a blank
+  screen there is the least useful thing the wall could do. The provisional
+  state persisting past `spare-validate` is also the standing alarm that
+  nobody generated the board.
+- **The provisional line-up takes its shift from the roster, not the plan.**
+  `fleet_plan_slots` holds no shift: a unit may carry two standing operators,
+  and which is today's is settled by each one's `roster_days` code for the
+  date. A unit whose planned operator is off shows unmanned rather than
+  showing the wrong name.
+- **No deadline, no guess.** A missing gate, or a night gate that does not fall
+  after the day gate, leaves the wall saying the timeline cannot decide —
+  never a plausible default. The same refusal `fingerInDeadline` already makes.
+- **The endpoint never fails on an empty answer.** "No board yet" and "the
+  timeline cannot say" are readings the screen states out loud; an HTTP error
+  would render as a blank TV and send someone looking for broken hardware.
+- **Grouping is the formation**: digger first, then its haulers by code.
+- **Units belonging to no fleet never reach a TV** (owner, 2026-08-29). The
+  wall answers one question — how each formation is crewed — and a unit in no
+  formation has nothing to contribute to it. They stay on the Actual board,
+  which is where a supervisor sees and fills them.
+- **The counts in the header are the formation's own, never the site's**
+  (owner, 2026-08-29). Someone standing in front of the Pit 3 screen acts on
+  Pit 3; a site-wide number there would be read as that fleet's and be wrong.
+  They cover the whole formation even when it spans two pages, so the header
+  does not recount itself every twelve seconds.
+- **Idle units keep a full-size card, in red, in their own formation.** They
+  are never summarised into a count or paged off the end; a unit standing idle
+  is the only thing here that costs money by the hour.
+- Breakdown and standby units do not appear: the board excludes them by
+  design, and the wall shows the board.
+- Readable by a paired `fleet` device or by a signed-in holder of
+  `display-fleet`, the same `allowDevice` shape as the other kiosks. Polled
+  once a minute — the board only moves when someone corrects it.
+
+### Per-screen configuration — shipped
+
+- **Each TV is pointed at its own formations** (`device_fleets`), picked from
+  the real Fleet Settings list. Many TVs, one per pit, each showing the fleet
+  it hangs beside — which is the reason the registry lets you add more than one.
+- **No rows means every fleet**, the same "having rows" bargain
+  `device_run_texts` strikes with the master texts. A screen nobody has scoped
+  is a control-room screen, not a blank one, and that is also why the table
+  carries no `active` flag: deleting the last pick and switching it off would
+  otherwise be two ways to say one thing.
+- **A signed-in person is never scoped.** They are previewing the wall, not
+  standing in the pit it hangs in, so they see every formation.
+- **A pick is refused on any screen that is not a fleet wall**, and on a fleet
+  that no longer exists. Storing either would leave a setting that looks
+  configured and does nothing.
+- `cascade` both ways: a device's picks die with the device, and a fleet
+  disbanded in Fleet Settings leaves the TVs that showed it rather than
+  blocking its own deletion with an error about a television.
+- **Rotation dwell is per screen** (`devices.rotate_seconds`, default 30,
+  bounded 3–600). A TV showing one fleet has nothing to rotate to and a long
+  dwell costs it nothing; a control-room screen carrying every formation needs
+  to move along. `?interval=` still overrides, so a preview can be hurried
+  without touching what the TV in the yard is set to.
+- `GET /v1/fleets` is readable from `display-fleet` as well as `fleet-setting`,
+  because that is where a wall is pointed at its formations. Only the list:
+  creating, editing and disbanding a fleet stay `fleet-setting` alone.
+- `lib/display-data.ts` — the last of the display sample data, four invented
+  fleets whose selection was discarded on submit — is gone.
 
 ### Deferred until the Actual-tab engine exists
 

@@ -13,15 +13,22 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
 import { eq, inArray } from "drizzle-orm";
 
-import { createSession, SESSION_COOKIE } from "../auth/session";
+import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
-import { fleetActualRoutes } from "./fleet-actual";
+import {
+  fleetActualRoutes,
+  groupIntoFleets,
+  planSlots,
+  type WallSlot,
+} from "./fleet-actual";
 
 const app = new Elysia().use(fleetActualRoutes);
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Aktual ${uid()}`;
 const DATE = "1999-06-06";
+/** A separate date, so the roster fixture cannot disturb the board above. */
+const PLAN_DATE = "1999-07-07";
 
 const made = {
   users: [] as string[],
@@ -37,10 +44,13 @@ const made = {
   positions: [] as string[],
   docs: [] as string[],
   rosterDocs: [] as string[],
+  devices: [] as string[],
+  planSlots: [] as string[],
 };
 
 let admin: { cookie: string };
 let viewer: { cookie: string };
+let wall: { cookie: string };
 let unitA: string, unitB: string;
 let opOne: string, opTwo: string;
 
@@ -56,7 +66,10 @@ const send = (method: string, path: string, cookie?: string, body?: unknown) =>
     })
   );
 
-async function makeUser(mode: "view" | "manage") {
+async function makeUser(
+  mode: "view" | "manage",
+  menuSlug: "fleet-allocation" | "display-fleet" = "fleet-allocation"
+) {
   const [role] = await db
     .insert(schema.roles)
     .values({ slug: `zz-aktual-${uid()}`, name: tag, scope: "all" })
@@ -64,7 +77,7 @@ async function makeUser(mode: "view" | "manage") {
   made.roles.push(role!.id);
   await db
     .insert(schema.rolePermissions)
-    .values([{ roleId: role!.id, menuSlug: "fleet-allocation", mode }]);
+    .values([{ roleId: role!.id, menuSlug, mode }]);
   const [user] = await db
     .insert(schema.users)
     .values({
@@ -84,6 +97,7 @@ beforeAll(async () => {
   if (redis.status === "end") await redis.connect();
   admin = await makeUser("manage");
   viewer = await makeUser("view");
+  wall = await makeUser("view", "display-fleet");
 
   const [co] = await db
     .insert(schema.companies)
@@ -195,9 +209,50 @@ beforeAll(async () => {
       tappedAt: null,
     },
   ]);
+
+  /* The standing plan, plus the roster that decides which half of it is
+     "today". unitA carries both operators — one on days, one on nights —
+     which is the case the shift lookup exists to get right. */
+  const slots = await db
+    .insert(schema.fleetPlanSlots)
+    .values([
+      { unitId: unitA, employeeId: opOne },
+      { unitId: unitA, employeeId: opTwo },
+    ])
+    .returning({ id: schema.fleetPlanSlots.id });
+  made.planSlots.push(...slots.map((r) => r.id));
+
+  const [rosterDoc] = await db
+    .insert(schema.rosterDocuments)
+    .values({
+      departmentId: dept!.id,
+      month: `${PLAN_DATE.slice(0, 7)}-01`,
+      fileName: `${tag}.xlsx`,
+      uploadedBy: made.users[0]!,
+    })
+    .returning({ id: schema.rosterDocuments.id });
+  made.rosterDocs.push(rosterDoc!.id);
+  await db.insert(schema.rosterDays).values([
+    {
+      documentId: rosterDoc!.id,
+      employeeId: opOne,
+      date: PLAN_DATE,
+      code: "D",
+    },
+    {
+      documentId: rosterDoc!.id,
+      employeeId: opTwo,
+      date: PLAN_DATE,
+      code: "N",
+    },
+  ]);
 });
 
 afterAll(async () => {
+  if (made.devices.length)
+    await db
+      .delete(schema.devices)
+      .where(inArray(schema.devices.id, made.devices));
   if (made.docs.length)
     await db
       .delete(schema.fleetActualDocuments)
@@ -205,6 +260,14 @@ afterAll(async () => {
   await db
     .delete(schema.fleetActualDocuments)
     .where(eq(schema.fleetActualDocuments.date, DATE));
+  if (made.planSlots.length)
+    await db
+      .delete(schema.fleetPlanSlots)
+      .where(inArray(schema.fleetPlanSlots.id, made.planSlots));
+  if (made.rosterDocs.length)
+    await db
+      .delete(schema.rosterDocuments)
+      .where(inArray(schema.rosterDocuments.id, made.rosterDocs));
   if (made.employees.length)
     await db
       .delete(schema.employees)
@@ -439,5 +502,301 @@ describe("candidates for a unit", () => {
         )
       ).status
     ).toBe(404);
+  });
+});
+
+/* ------------------------------------------------------------ the wall */
+
+const slot = (over: Partial<WallSlot> = {}): WallSlot => ({
+  unitId: crypto.randomUUID(),
+  unitCode: "DT-100",
+  modelName: "M",
+  brandName: "B",
+  fleetId: null,
+  diggerCode: null,
+  area: null,
+  employeeNik: null,
+  employeeName: null,
+  source: null,
+  tappedAt: null,
+  ...over,
+});
+
+describe("arranging the board into formations", () => {
+  const fleetOne = "f1";
+  const fleetTwo = "f2";
+
+  test("puts the digger at the head of its own formation", () => {
+    const groups = groupIntoFleets(
+      [
+        slot({ unitCode: "DT-102", fleetId: fleetOne, diggerCode: "EX-22" }),
+        slot({ unitCode: "EX-22", fleetId: fleetOne, diggerCode: "EX-22" }),
+        slot({ unitCode: "DT-101", fleetId: fleetOne, diggerCode: "EX-22" }),
+      ],
+      new Map()
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.units.map((u) => u.unitCode)).toEqual([
+      "EX-22",
+      "DT-101",
+      "DT-102",
+    ]);
+  });
+
+  test("orders formations by digger code", () => {
+    const groups = groupIntoFleets(
+      [
+        slot({ unitCode: "EX-70", fleetId: fleetTwo, diggerCode: "EX-70" }),
+        slot({ unitCode: "EX-22", fleetId: fleetOne, diggerCode: "EX-22" }),
+      ],
+      new Map()
+    );
+    expect(groups.map((g) => g.diggerCode)).toEqual(["EX-22", "EX-70"]);
+  });
+
+  test("leaves out units that belong to no fleet", () => {
+    const groups = groupIntoFleets(
+      [
+        slot({ unitCode: "WT-01" }),
+        slot({ unitCode: "EX-22", fleetId: fleetOne, diggerCode: "EX-22" }),
+        slot({ unitCode: "WT-02" }),
+      ],
+      new Map()
+    );
+    // The wall answers "how is this formation crewed"; a unit in no formation
+    // has nothing to contribute to it, and stays on the Actual board instead.
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.units.map((u) => u.unitCode)).toEqual(["EX-22"]);
+  });
+
+  test("names each formation's bus", () => {
+    const groups = groupIntoFleets(
+      [slot({ unitCode: "EX-22", fleetId: fleetOne, diggerCode: "EX-22" })],
+      new Map([[fleetOne, "BUS-01"]])
+    );
+    expect(groups[0]!.busCode).toBe("BUS-01");
+  });
+
+  test("counts each formation on its own, never the whole site", () => {
+    const groups = groupIntoFleets(
+      [
+        slot({
+          unitCode: "EX-22",
+          fleetId: fleetOne,
+          diggerCode: "EX-22",
+          employeeName: "Andi",
+          source: "plan",
+        }),
+        slot({
+          unitCode: "DT-101",
+          fleetId: fleetOne,
+          diggerCode: "EX-22",
+          employeeName: "Budi",
+          source: "spare",
+        }),
+        slot({ unitCode: "DT-102", fleetId: fleetOne, diggerCode: "EX-22" }),
+        slot({
+          unitCode: "EX-70",
+          fleetId: fleetTwo,
+          diggerCode: "EX-70",
+          employeeName: "Cakra",
+          source: "manual",
+        }),
+      ],
+      new Map()
+    );
+    expect(groups[0]).toMatchObject({
+      diggerCode: "EX-22",
+      total: 3,
+      crewed: 2,
+      idle: 1,
+      substituted: 1,
+    });
+    // The second formation knows nothing of the first's three units.
+    expect(groups[1]).toMatchObject({
+      diggerCode: "EX-70",
+      total: 1,
+      crewed: 1,
+      idle: 0,
+      substituted: 1,
+    });
+  });
+
+  test("keeps a vacancy in the formation rather than dropping it", () => {
+    const groups = groupIntoFleets(
+      [
+        slot({
+          unitCode: "EX-22",
+          fleetId: fleetOne,
+          diggerCode: "EX-22",
+          employeeName: "Andi",
+          source: "plan",
+        }),
+        slot({ unitCode: "DT-101", fleetId: fleetOne, diggerCode: "EX-22" }),
+      ],
+      new Map()
+    );
+    expect(groups[0]!.units).toHaveLength(2);
+    expect(groups[0]!.units[1]!.employeeName).toBeNull();
+  });
+});
+
+describe("the provisional line-up, before a board exists", () => {
+  const mine = async (shift: "day" | "night") => {
+    const rows = await planSlots(PLAN_DATE, shift);
+    return new Map(rows.map((r) => [r.unitId, r.employeeId]));
+  };
+
+  test("takes the shift from the roster, not from the plan", async () => {
+    // `fleet_plan_slots` holds no shift at all, so this is the only thing
+    // standing between the wall and the night operator's name at breakfast.
+    expect((await mine("day")).get(unitA)).toBe(opOne);
+    expect((await mine("night")).get(unitA)).toBe(opTwo);
+  });
+
+  test("keeps a unit whose plan says nothing, unmanned", async () => {
+    const day = await mine("day");
+    expect(day.has(unitB)).toBe(true);
+    expect(day.get(unitB)).toBeNull();
+  });
+
+  test("leaves a unit unmanned when its operator is not rostered that day", async () => {
+    // A different date: neither operator has a roster row, so the standing
+    // pairing must not be shown as though it were today's line-up.
+    const rows = await planSlots("1999-07-08", "day");
+    const byUnit = new Map(rows.map((r) => [r.unitId, r.employeeId]));
+    expect(byUnit.get(unitA)).toBeNull();
+  });
+
+  test("lists every active unit exactly once", async () => {
+    const rows = await planSlots(PLAN_DATE, "day");
+    expect(new Set(rows.map((r) => r.unitId)).size).toBe(rows.length);
+  });
+});
+
+describe("a screen scoped to its own formations", () => {
+  const rows = () => [
+    slot({ unitCode: "EX-22", fleetId: "f1", diggerCode: "EX-22" }),
+    slot({ unitCode: "EX-70", fleetId: "f2", diggerCode: "EX-70" }),
+  ];
+
+  test("shows only the formations it was given", () => {
+    const groups = groupIntoFleets(rows(), new Map(), new Set(["f2"]));
+    expect(groups.map((g) => g.diggerCode)).toEqual(["EX-70"]);
+  });
+
+  test("shows every formation when it was given none", () => {
+    // Empty is "unscoped", not "nothing": a screen nobody has pointed at a pit
+    // is a control-room screen, and blanking it would be the wrong default.
+    expect(
+      groupIntoFleets(rows(), new Map(), new Set()).map((g) => g.id)
+    ).toEqual(["f1", "f2"]);
+    expect(groupIntoFleets(rows(), new Map(), null)).toHaveLength(2);
+  });
+
+  test("counts only what it shows", () => {
+    const groups = groupIntoFleets(
+      [
+        slot({ unitCode: "EX-22", fleetId: "f1", diggerCode: "EX-22" }),
+        slot({ unitCode: "DT-101", fleetId: "f1", diggerCode: "EX-22" }),
+        slot({ unitCode: "EX-70", fleetId: "f2", diggerCode: "EX-70" }),
+      ],
+      new Map(),
+      new Set(["f2"])
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.total).toBe(1);
+  });
+});
+
+describe("previewing one screen from a browser", () => {
+  const makeScreen = async (rotateSeconds: number) => {
+    const id = `ZZW${uid().toUpperCase()}`;
+    made.devices.push(id);
+    await db
+      .insert(schema.devices)
+      .values({ id, name: tag, kind: "fleet", rotateSeconds });
+    return id;
+  };
+
+  test("answers with the named screen's own dwell", async () => {
+    const id = await makeScreen(9);
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/display?device=${id}`,
+      wall.cookie
+    );
+    expect(res.status).toBe(200);
+    // Without this the preview reports the default however the screen is set,
+    // so every rotation change looks like it did nothing.
+    expect(
+      ((await res.json()) as { rotateSeconds: number }).rotateSeconds
+    ).toBe(9);
+  });
+
+  test("says so when the named screen does not exist", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display?device=ZZ-tidak-ada",
+      wall.cookie
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("a paired TV cannot ask about another screen", async () => {
+    const mine = await makeScreen(11);
+    const other = await makeScreen(47);
+    const session = await createSession("device", mine, "cookie");
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/display?device=${other}`,
+      `${DEVICE_COOKIE}=${session.id}`
+    );
+    // It answers as itself and ignores the parameter — a kiosk must not be
+    // able to read a wall it was not given.
+    expect(res.status).toBe(200);
+    expect(
+      ((await res.json()) as { rotateSeconds: number }).rotateSeconds
+    ).toBe(11);
+  });
+});
+
+describe("the fleet wall endpoint", () => {
+  test("refuses a caller who holds only the allocation menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      viewer.cookie
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("refuses an anonymous caller", async () => {
+    const res = await send("GET", "/fleet-allocation/actual/display");
+    expect(res.status).toBe(401);
+  });
+
+  test("always answers with a whole body, board or no board", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      wall.cookie
+    );
+    // A wall that renders an error renders nothing: "no board yet" and "the
+    // timeline cannot say which shift is on" are readings, not failures.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      servedAt: string;
+      date: string | null;
+      rotateSeconds: number;
+      fleets: { total: number; units: unknown[] }[];
+    };
+    expect(body.servedAt).toBeTruthy();
+    // A person previewing the wall is never scoped and gets the default dwell.
+    expect(body.rotateSeconds).toBe(30);
+    expect(Array.isArray(body.fleets)).toBe(true);
+    // Each formation's count is its own units, not the board's.
+    for (const fleet of body.fleets)
+      expect(fleet.total).toBe(fleet.units.length);
   });
 });

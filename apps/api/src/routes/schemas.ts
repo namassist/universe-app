@@ -838,6 +838,16 @@ export const ActualSlotSchema = t.Object({
   requiresFtw: t.Boolean(),
   simperCodeName: t.Nullable(t.String()),
   departmentName: t.Nullable(t.String()),
+  modelName: t.String(),
+  brandName: t.String(),
+  /** Null for a unit in no formation — support gear, and the spare pool's. */
+  fleet: t.Nullable(
+    t.Object({
+      id: t.String(),
+      diggerCode: t.String(),
+      area: t.Nullable(t.String()),
+    })
+  ),
   employeeId: t.Nullable(t.String()),
   employeeNik: t.Nullable(t.String()),
   employeeName: t.Nullable(t.String()),
@@ -849,6 +859,7 @@ export const ActualBoardSchema = t.Object({
   date: t.String(),
   shift: ShiftKindSchema,
   generatedAt: t.String(),
+  fleets: t.Array(t.Object({ id: t.String(), diggerCode: t.String() })),
   slots: t.Array(ActualSlotSchema),
 });
 
@@ -876,11 +887,80 @@ export const ActualCandidateSchema = t.Object({
   onAnotherUnit: t.Boolean(),
 });
 
+/* ------------------------------------------------- the fleet wall (kiosk) */
+
+/** One unit on the wall, cut down to what is legible from across a yard. */
+export const FleetDisplayUnitSchema = t.Object({
+  unitId: t.String(),
+  unitCode: t.String(),
+  modelName: t.String(),
+  brandName: t.String(),
+  /** Null on an idle unit — the vacancy the wall exists to make obvious. */
+  employeeNik: t.Nullable(t.String()),
+  employeeName: t.Nullable(t.String()),
+  source: t.Nullable(t.UnionEnum(["plan", "spare", "manual"] as const)),
+  tappedAt: t.Nullable(t.String()),
+});
+
+/**
+ * One formation — the unit the wall rotates through, and the unit its counts
+ * are reported in. A screen in one pit is read as being about that pit, so a
+ * site-wide number on it would be read as the fleet's and be wrong.
+ */
+export const FleetDisplayFleetSchema = t.Object({
+  id: t.String(),
+  diggerCode: t.String(),
+  area: t.Nullable(t.String()),
+  busCode: t.Nullable(t.String()),
+  total: t.Integer(),
+  crewed: t.Integer(),
+  idle: t.Integer(),
+  /** Crewed by someone other than the planned holder: spare or manual. */
+  substituted: t.Integer(),
+  units: t.Array(FleetDisplayUnitSchema),
+});
+
+/**
+ * What the fleet TV renders: the Actual board of whichever shift is running,
+ * grouped into formations.
+ *
+ * Three states share this one shape rather than three status codes, because a
+ * wall must render every one of them and an HTTP error renders as nothing:
+ * `date` null means the timeline cannot say which shift is on, `generatedAt`
+ * null means that shift's board has not been built yet, and otherwise it is a
+ * board.
+ */
+export const FleetDisplaySchema = t.Object({
+  servedAt: t.String(),
+  date: t.Nullable(t.String()),
+  shift: t.Nullable(ShiftKindSchema),
+  generatedAt: t.Nullable(t.String()),
+  /**
+   * The line-up is the standing plan, not a generated board: shown while a
+   * shift's changeover has begun but `spare-validate` has not run. A screen
+   * renders it visibly unfinished — nobody has checked FTW or the tap yet.
+   */
+  provisional: t.Boolean(),
+  /** Seconds one formation stays on screen — the screen's own setting. */
+  rotateSeconds: t.Integer(),
+  /**
+   * Formations only. Units belonging to no fleet are deliberately absent: the
+   * wall exists to show how each formation is crewed, and a unit in no
+   * formation has nothing to say about that. They stay on the Actual board,
+   * which is where they are meant to be seen and filled.
+   */
+  fleets: t.Array(FleetDisplayFleetSchema),
+});
+
 export const DeviceSchema = t.Object({
   id: t.String(),
   name: t.String(),
   kind: DeviceKindSchema,
   active: t.Boolean(),
+  /** Seconds one subject stays on screen before the display rotates. */
+  rotateSeconds: t.Integer(),
+  /** Fleet walls: which formations to show. Empty means every fleet. */
+  fleetIds: t.Array(t.String()),
   online: t.Boolean(),
   lastSeenAt: t.Nullable(t.String()),
   /** Human label derived from lastSeenAt — "baru saja", "6m lalu". */

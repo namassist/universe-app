@@ -306,7 +306,7 @@ export function DashboardMenu() {
       label={t.statAllocNow}
       detail={
         <>
-          <b>{SAMPLE.alloc.downtime}</b> downtime
+          <b>{SAMPLE.alloc.downtime}</b> tanpa operator
         </>
       }
     />

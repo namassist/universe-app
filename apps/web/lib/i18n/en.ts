@@ -421,6 +421,9 @@ export const en: Dict = {
   dspPicked: "selected",
   dspSelAll: "Select all",
   dspFleetSearch: "Search fleets…",
+  dspFleetAllNote: "empty = every fleet",
+  dspFleetLoading: "Loading fleets…",
+  dspFleetNoMatch: "No fleet matches.",
   dspClearSel: "Clear",
   dspCycleA: "Full cycle ±",
   dspCycleB: "s for",
@@ -429,7 +432,7 @@ export const en: Dict = {
     "How long each fleet stays on screen — the on-screen progress bar follows this duration.",
   dspErrFleet:
     "At least one fleet is required — create the formation in Fleet Setting first.",
-  dspDlgB: "Changes reach the TV within ±30 seconds via the next heartbeat.",
+  dspDlgB: "Changes reach the TV within ±60 seconds via the next poll.",
   dspSumB: "displays",
   dspDelT: "Delete display",
   dspDelB:
@@ -663,6 +666,10 @@ export const en: Dict = {
   faGenTitle: "Generate the ACTUAL board",
   faGenDlgB:
     "The board is rebuilt from PLAN and that day's readiness data. Any existing board for the same date and shift is replaced.",
+  faFSubbed: "Spare",
+  faActAllFleet: "All fleets",
+  faActNoFleet: "No fleet",
+  faActCrewed: "crewed",
   faActThUnit: "Unit",
   faActThOp: "Operator",
   faActThSrc: "Source",
@@ -680,9 +687,9 @@ export const en: Dict = {
     "This list shows every operator rostered to the shift, including those who did not pass — with the reason. You may still place them.",
   faViaSpare: "Spare",
   faReplaces: "replacing",
-  faDowntime: "Downtime",
+  faDowntime: "No Operator",
   faDowntimeNote:
-    "No valid spare (same roster shift + checked in + fit + matching SIMPER) — unit recorded as downtime.",
+    "No valid spare (same roster shift + checked in + fit + matching SIMPER) — unit recorded as having no operator.",
   faGenAt: "generated at",
   faGugurCuti: "On leave",
   faGugurAbsen: "Not checked in",
@@ -1100,7 +1107,7 @@ export const en: Dict = {
   dspId: "Device ID",
   dspIdHelp: "The tag on the TV itself — used for pairing and revocation.",
   dspContentNote:
-    "Fleet picks are not persisted yet; they land with the next change.",
+    "Fleet picks and rotation are stored per display, and take effect on the next poll.",
   dspRtNote:
     "Leave empty for this display to follow the master running text. Filled in = only these lines show.",
   dspPairT: "Pairing link",

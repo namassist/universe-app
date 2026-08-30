@@ -418,6 +418,9 @@ export const id = {
   dspPicked: "dipilih",
   dspSelAll: "Pilih semua",
   dspFleetSearch: "Cari fleet…",
+  dspFleetAllNote: "kosong = semua fleet",
+  dspFleetLoading: "Memuat fleet…",
+  dspFleetNoMatch: "Tidak ada fleet yang cocok.",
   dspClearSel: "Bersihkan",
   dspCycleA: "Siklus penuh ±",
   dspCycleB: "dtk untuk",
@@ -427,7 +430,7 @@ export const id = {
   dspErrFleet:
     "Minimal satu fleet wajib dipilih — buat formasinya dulu di Setting Fleet.",
   dspDlgB:
-    "Perubahan diterapkan ke TV dalam ±30 detik lewat heartbeat berikutnya.",
+    "Perubahan diterapkan ke TV dalam ±60 detik lewat polling berikutnya.",
   dspSumB: "display",
   dspDelT: "Hapus display",
   dspDelB:
@@ -661,6 +664,10 @@ export const id = {
   faGenTitle: "Generate papan ACTUAL",
   faGenDlgB:
     "Papan dibangun ulang dari PLAN dan data kesiapan hari itu. Papan lama untuk tanggal dan shift yang sama akan digantikan.",
+  faFSubbed: "Spare",
+  faActAllFleet: "Semua fleet",
+  faActNoFleet: "Tanpa fleet",
+  faActCrewed: "berawak",
   faActThUnit: "Unit",
   faActThOp: "Operator",
   faActThSrc: "Sumber",
@@ -678,9 +685,9 @@ export const id = {
     "Daftar ini menampilkan semua operator yang dijadwalkan pada shift tersebut, termasuk yang tidak lolos — beserta alasannya. Anda tetap dapat menempatkan mereka.",
   faViaSpare: "Spare",
   faReplaces: "menggantikan",
-  faDowntime: "Downtime",
+  faDowntime: "Tanpa Operator",
   faDowntimeNote:
-    "Tidak ada spare valid (roster shift sama + lolos absen + FTW + SIMPER cocok) — unit tercatat downtime.",
+    "Tidak ada spare valid (roster shift sama + lolos absen + FTW + SIMPER cocok) — unit tercatat tanpa operator.",
   faGenAt: "digenerate",
   faGugurCuti: "Cuti",
   faGugurAbsen: "Belum absen",
@@ -1097,7 +1104,7 @@ export const id = {
   dspId: "ID Perangkat",
   dspIdHelp: "Kode yang tertempel di TV — dipakai untuk pairing dan revoke.",
   dspContentNote:
-    "Pilihan fleet belum disimpan ke server; menyusul pada perubahan berikutnya.",
+    "Pilihan fleet dan durasi rotasi disimpan per display, dan diterapkan pada polling berikutnya.",
   dspRtNote:
     "Kosongkan agar display ini ikut running text master. Diisi = hanya teks ini yang tampil.",
   dspPairT: "Link pairing",

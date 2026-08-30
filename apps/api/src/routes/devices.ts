@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import {
   DISPLAY_ROUTE_OF_KIND,
@@ -113,7 +113,7 @@ function lastSeenLabel(at: Date | null): string {
  * Online is derived from the heartbeat, never assumed: an anonymous URL cannot
  * produce it, which is the reason a TV has to identify itself at all.
  */
-function toDevice(row: DeviceRow) {
+function toDevice(row: DeviceRow, fleetIds: string[] = []) {
   const online =
     row.active &&
     row.lastSeenAt !== null &&
@@ -123,11 +123,82 @@ function toDevice(row: DeviceRow) {
     name: row.name,
     kind: row.kind,
     active: row.active,
+    rotateSeconds: row.rotateSeconds,
+    /** Empty means every fleet — see `device_fleets`. */
+    fleetIds,
     online,
     lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
     lastSeenLabel: lastSeenLabel(row.lastSeenAt),
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** How long one subject may stay on screen. */
+const MIN_ROTATE_SECONDS = 3;
+const MAX_ROTATE_SECONDS = 600;
+
+/**
+ * The fleet picks of many devices, in one query rather than one per row — a
+ * registry of twenty TVs must not cost twenty round trips to list.
+ */
+async function fleetPicksOf(deviceIds: string[]) {
+  const picks = new Map<string, string[]>();
+  if (!deviceIds.length) return picks;
+  const rows = await db
+    .select({
+      deviceId: schema.deviceFleets.deviceId,
+      fleetId: schema.deviceFleets.fleetId,
+    })
+    .from(schema.deviceFleets)
+    .where(inArray(schema.deviceFleets.deviceId, deviceIds));
+  for (const row of rows) {
+    const list = picks.get(row.deviceId);
+    if (list) list.push(row.fleetId);
+    else picks.set(row.deviceId, [row.fleetId]);
+  }
+  return picks;
+}
+
+/**
+ * Replace a device's fleet picks wholesale, the same contract the run-texts
+ * PUT uses: an empty list is how a screen is handed back to "every fleet",
+ * which a merge could never express.
+ *
+ * Refuses a pick on a screen that is not a fleet wall — storing rows nothing
+ * will ever read is how a setting comes to look configured and do nothing.
+ */
+async function replaceFleetPicks(
+  deviceId: string,
+  kind: DeviceKind,
+  fleetIds: string[]
+): Promise<{ code: string; message: string } | null> {
+  const wanted = [...new Set(fleetIds)];
+  if (wanted.length && kind !== "fleet")
+    return {
+      code: "validation_failed",
+      message: "Hanya display fleet yang bisa dibatasi ke fleet tertentu",
+    };
+
+  if (wanted.length) {
+    const found = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .where(inArray(schema.fleets.id, wanted));
+    if (found.length !== wanted.length)
+      return {
+        code: "fleet_not_found",
+        message: "Sebagian fleet yang dipilih sudah tidak ada",
+      };
+  }
+
+  await db
+    .delete(schema.deviceFleets)
+    .where(eq(schema.deviceFleets.deviceId, deviceId));
+  if (wanted.length)
+    await db
+      .insert(schema.deviceFleets)
+      .values(wanted.map((fleetId) => ({ deviceId, fleetId })));
+  return null;
 }
 
 export const devicesRoutes = new Elysia({
@@ -191,9 +262,9 @@ export const devicesRoutes = new Elysia({
             .where(eq(schema.devices.kind, query.kind))
         : await db.select().from(schema.devices);
       // A caller sees the kinds its own display grants cover, and no others.
-      return rows
-        .filter((r) => mayTouch(permissions, r.kind, "view"))
-        .map(toDevice);
+      const visible = rows.filter((r) => mayTouch(permissions, r.kind, "view"));
+      const picks = await fleetPicksOf(visible.map((r) => r.id));
+      return visible.map((r) => toDevice(r, picks.get(r.id) ?? []));
     },
     {
       auth: { menu: DISPLAY_MENUS, mode: "view" },
@@ -226,9 +297,18 @@ export const devicesRoutes = new Elysia({
             // pair, so it is active and revocable instead — the pairing link is
             // the gate, and deactivation ends the session on the next request.
             active: body.active ?? true,
+            ...(body.rotateSeconds !== undefined
+              ? { rotateSeconds: body.rotateSeconds }
+              : {}),
           })
           .returning();
-        return status(201, toDevice(row!));
+        const refused = await replaceFleetPicks(
+          row!.id,
+          row!.kind,
+          body.fleetIds ?? []
+        );
+        if (refused) return status(422, refused);
+        return status(201, toDevice(row!, body.fleetIds ?? []));
       } catch (error) {
         if (isUniqueViolation(error))
           return status(409, {
@@ -245,12 +325,21 @@ export const devicesRoutes = new Elysia({
         name: t.String({ minLength: 1 }),
         kind: DeviceKindSchema,
         active: t.Optional(t.Boolean()),
+        rotateSeconds: t.Optional(
+          t.Integer({
+            minimum: MIN_ROTATE_SECONDS,
+            maximum: MAX_ROTATE_SECONDS,
+          })
+        ),
+        /** Fleet walls only; empty or absent means every fleet. */
+        fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
       response: {
         201: DeviceSchema,
         401: ErrorSchema,
         403: ErrorSchema,
         409: ErrorSchema,
+        422: ErrorSchema,
       },
       detail: { summary: "Register a display device" },
     }
@@ -261,23 +350,47 @@ export const devicesRoutes = new Elysia({
     async ({ params, body, permissions, status }) => {
       const denied = await refuseUnlessOwned(params.id, permissions);
       if (denied) return status(denied.status, denied.body);
-      const [row] = await db
-        .update(schema.devices)
-        .set({
-          ...(body.name !== undefined ? { name: body.name.trim() } : {}),
-          ...(body.active !== undefined ? { active: body.active } : {}),
-        })
-        .where(eq(schema.devices.id, params.id))
-        .returning();
+      const patch = {
+        ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+        ...(body.active !== undefined ? { active: body.active } : {}),
+        ...(body.rotateSeconds !== undefined
+          ? { rotateSeconds: body.rotateSeconds }
+          : {}),
+      };
+      // A request that changes only the fleet picks touches no device column,
+      // and `set({})` is an error rather than a no-op — so the row is read
+      // instead of written.
+      const [row] = Object.keys(patch).length
+        ? await db
+            .update(schema.devices)
+            .set(patch)
+            .where(eq(schema.devices.id, params.id))
+            .returning()
+        : await db
+            .select()
+            .from(schema.devices)
+            .where(eq(schema.devices.id, params.id))
+            .limit(1);
       if (!row)
         return status(404, {
           code: "device_not_found",
           message: "Perangkat tidak ditemukan",
         });
+      // Absent leaves the picks alone; an empty array is how a screen is
+      // handed back to every fleet. The two are deliberately different.
+      if (body.fleetIds !== undefined) {
+        const refused = await replaceFleetPicks(
+          row.id,
+          row.kind,
+          body.fleetIds
+        );
+        if (refused) return status(422, refused);
+      }
       // Revocation is one toggle: the cached principal drops and the next
       // request from the TV is refused.
       await invalidateDevice(params.id);
-      return toDevice(row);
+      const picks = await fleetPicksOf([row.id]);
+      return toDevice(row, picks.get(row.id) ?? []);
     },
     {
       auth: { menu: DISPLAY_MENUS, mode: "manage" },
@@ -285,14 +398,22 @@ export const devicesRoutes = new Elysia({
       body: t.Object({
         name: t.Optional(t.String({ minLength: 1 })),
         active: t.Optional(t.Boolean()),
+        rotateSeconds: t.Optional(
+          t.Integer({
+            minimum: MIN_ROTATE_SECONDS,
+            maximum: MAX_ROTATE_SECONDS,
+          })
+        ),
+        fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
       response: {
         200: DeviceSchema,
         401: ErrorSchema,
         403: ErrorSchema,
         404: ErrorSchema,
+        422: ErrorSchema,
       },
-      detail: { summary: "Rename or activate/deactivate a device" },
+      detail: { summary: "Edit a device: name, state, rotation, fleets" },
     }
   )
 

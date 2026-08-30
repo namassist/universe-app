@@ -21,10 +21,9 @@
  * `judge` is pure. Only the deadline lookup touches the database.
  */
 
-import { and, eq } from "drizzle-orm";
 import type { ShiftKind } from "@universe/contracts";
 
-import { db, schema } from "./db";
+import { stageTimeOf } from "./stage-time";
 
 /**
  * savera's verdict strings, as they are actually written.
@@ -129,25 +128,13 @@ export function judge(input: JudgeInput): Readiness {
 /**
  * The `finger-in` deadline for a shift, as the operator has it configured.
  *
- * Never a constant in code: the whole reason the schedule is a table is that
- * moving a deadline is an operational decision. `null` means the stage is
- * missing or switched off — a caller must refuse to generate a board rather
- * than invent a time, because either default is wrong in a way nobody sees
- * (an early one fails everyone, a late one passes everyone).
+ * A named wrapper rather than a bare `stageTimeOf` call at each site: this is
+ * *the* gate the pass rule is defined against, and spelling it out here is
+ * what keeps a future caller from reaching for a neighbouring stage that
+ * happens to sit at the same minute.
  */
 export async function fingerInDeadline(
   shift: ShiftKind
 ): Promise<string | null> {
-  const [row] = await db
-    .select({ at: schema.timelineStages.at })
-    .from(schema.timelineStages)
-    .where(
-      and(
-        eq(schema.timelineStages.action, "finger-in"),
-        eq(schema.timelineStages.shift, shift),
-        eq(schema.timelineStages.active, true)
-      )
-    )
-    .limit(1);
-  return row?.at ?? null;
+  return stageTimeOf("finger-in", shift);
 }

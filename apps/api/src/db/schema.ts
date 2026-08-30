@@ -142,11 +142,51 @@ export const devices = pgTable("devices", {
   name: text("name").notNull(),
   kind: deviceKind("kind").notNull(),
   active: boolean("active").notNull().default(true),
+  /**
+   * How long one subject stays on screen before the display rotates, in
+   * seconds. Per device rather than global: a TV showing one fleet has nothing
+   * to rotate to and a long dwell costs it nothing, while a control-room
+   * screen carrying every formation needs to move along.
+   */
+  rotateSeconds: integer("rotate_seconds").notNull().default(30),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Which formations a fleet TV shows.
+ *
+ * **No rows means every fleet**, the same bargain `device_run_texts` strikes
+ * with the master texts: the rule is on *having rows*, so a screen nobody has
+ * scoped is a control-room screen rather than a blank one. That is also why
+ * there is no `active` flag — deleting the last pick and switching it off
+ * would otherwise be two ways to say one thing.
+ *
+ * `cascade` on both sides. A device's picks die with the device, and a fleet
+ * disbanded in Fleet Settings leaves the TVs that showed it rather than
+ * blocking its own deletion with an error about a television.
+ */
+export const deviceFleets = pgTable(
+  "device_fleets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    deviceId: text("device_id")
+      .notNull()
+      .references(() => devices.id, { onDelete: "cascade" }),
+    fleetId: uuid("fleet_id")
+      .notNull()
+      .references(() => fleets.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("device_fleets_device_id_idx").on(table.deviceId),
+    uniqueIndex("device_fleets_device_fleet_idx").on(
+      table.deviceId,
+      table.fleetId
+    ),
+  ]
+);
 
 /**
  * The fingerprint machines on site — the registry the monitoring TV reads.

@@ -24,7 +24,6 @@ import {
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { FLEETS, type FleetPick } from "@/lib/display-data";
 import { useI18n } from "@/lib/i18n";
 import { openDisplay } from "@/lib/open-display";
 import {
@@ -32,6 +31,7 @@ import {
   devicesQueryOptions,
   type DeviceRow,
 } from "@/lib/queries/devices";
+import { fleetsQueryOptions } from "@/lib/queries/fleets";
 import { deviceRunTextsKey } from "@/lib/queries/run-texts";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +73,12 @@ import { useToast } from "@/components/ui/toast";
 /** A device's own ticker line. Same shape the API exchanges. */
 type CustomRunText = { text: string; color: RunTextColor };
 
+/** Matches the column default; a new screen starts where the old ones sit. */
+const DEFAULT_ROTATE = 30;
+/** The API's own bounds — kept here so the field refuses before the request. */
+const MIN_ROTATE = 3;
+const MAX_ROTATE = 600;
+
 /**
  * The display device registry, backed by `/v1/devices`.
  *
@@ -109,6 +115,18 @@ export function DisplayAdminMenu({
   const devicesQ = useQuery(devicesQueryOptions(kind));
   const devices = React.useMemo(() => devicesQ.data ?? [], [devicesQ.data]);
 
+  /* The real formations, from Fleet Settings. Only a fleet wall has anything
+     to point at, so the other three kinds never ask. */
+  const fleetsQ = useQuery({
+    ...fleetsQueryOptions(),
+    enabled: kind === "fleet",
+  });
+  const fleets = React.useMemo(() => fleetsQ.data ?? [], [fleetsQ.data]);
+  const fleetById = React.useMemo(
+    () => new Map(fleets.map((f) => [f.id, f])),
+    [fleets]
+  );
+
   const [q, setQ] = React.useState("");
   const [statusF, setStatusF] = React.useState("");
 
@@ -134,17 +152,24 @@ export function DisplayAdminMenu({
       id: string;
       name: string;
       active: boolean;
+      rotateSeconds: number;
+      fleetIds: string[];
       runTexts: CustomRunText[];
     }) => {
       const result = input.existingId
-        ? await api.v1
-            .devices({ id: input.existingId })
-            .patch({ name: input.name, active: input.active })
+        ? await api.v1.devices({ id: input.existingId }).patch({
+            name: input.name,
+            active: input.active,
+            rotateSeconds: input.rotateSeconds,
+            fleetIds: input.fleetIds,
+          })
         : await api.v1.devices.post({
             id: input.id,
             name: input.name,
             kind,
             active: input.active,
+            rotateSeconds: input.rotateSeconds,
+            fleetIds: input.fleetIds,
           });
       if (result.error) throw result.error;
 
@@ -226,7 +251,32 @@ export function DisplayAdminMenu({
   const [editing, setEditing] = React.useState<DeviceRow | null>(null);
   const [fId, setFId] = React.useState("");
   const [fName, setFName] = React.useState("");
-  const [fSel, setFSel] = React.useState<FleetPick[]>([]);
+  const [fSel, setFSel] = React.useState<string[]>([]);
+  const [fRotate, setFRotate] = React.useState(DEFAULT_ROTATE);
+  const [fleetQ, setFleetQ] = React.useState("");
+
+  const visibleFleets = React.useMemo(() => {
+    const needle = fleetQ.trim().toLowerCase();
+    if (!needle) return fleets;
+    return fleets.filter(
+      (f) =>
+        f.diggerCode.toLowerCase().includes(needle) ||
+        f.workAreaName.toLowerCase().includes(needle)
+    );
+  }, [fleets, fleetQ]);
+
+  /**
+   * How long one turn of the whole rotation takes, spelled out.
+   *
+   * Worth showing because the two numbers multiply: eight formations at 30 s
+   * is four minutes before a screen comes back to the first one, and nobody
+   * works that out from a seconds field alone.
+   */
+  const cycleFleets = kind === "fleet" && fSel.length ? fSel.length : 1;
+  const rotateHelp =
+    kind === "fleet" && cycleFleets > 1
+      ? `${t.dspRotateHelp} ${t.dspCycleA} ${cycleFleets * fRotate} ${t.dspCycleB} ${cycleFleets} fleet.`
+      : t.dspRotateHelp;
   const [fRuntexts, setFRuntexts] = React.useState<CustomRunText[]>([]);
   /* Empty is not "unset": a device with no texts of its own follows the master
      list, which is the behaviour this field is really editing (design D8). */
@@ -257,6 +307,8 @@ export function DisplayAdminMenu({
     setFId(nextId());
     setFName("");
     setFSel([]);
+    setFRotate(DEFAULT_ROTATE);
+    setFleetQ("");
     setFRuntexts([]);
     setFActive(true);
     setNameErr(false);
@@ -266,7 +318,11 @@ export function DisplayAdminMenu({
     setEditing(d);
     setFId(d.id);
     setFName(d.name);
-    setFSel([]);
+    // Loaded from the row rather than reset: a screen's picks are stored now,
+    // so reopening it has to show what it is actually displaying.
+    setFSel(d.fleetIds);
+    setFRotate(d.rotateSeconds);
+    setFleetQ("");
     setFRuntexts([]);
     setFActive(d.active);
     setNameErr(false);
@@ -277,11 +333,11 @@ export function DisplayAdminMenu({
     const { data } = await api.v1.devices({ id: d.id })["run-texts"].get();
     if (data) setFRuntexts(data);
   }
-  function toggleFleet(f: FleetPick) {
+  function toggleFleet(id: string) {
     setFSel((prev) => {
-      const next = prev.some((x) => x.id === f.id)
-        ? prev.filter((x) => x.id !== f.id)
-        : [...prev, f];
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id];
       if (next.length) setNameErr(false);
       return next;
     });
@@ -292,17 +348,22 @@ export function DisplayAdminMenu({
       setNameErr(true);
       return;
     }
+    const first = fSel.length ? fleetById.get(fSel[0]!)?.diggerCode : undefined;
     const name =
-      kind === "fleet" && fSel.length && !fName.trim()
+      kind === "fleet" && first && !fName.trim()
         ? fSel.length === 1
-          ? `Fleet ${fSel[0]!.digger}`
-          : `Fleet ${fSel[0]!.digger} +${fSel.length - 1}`
+          ? `Fleet ${first}`
+          : `Fleet ${first} +${fSel.length - 1}`
         : fName.trim();
     save.mutate({
       existingId: editing?.id ?? null,
       id: fId.trim(),
       name,
       active: fActive,
+      rotateSeconds: fRotate,
+      // Fleet walls only. Sending [] on the other kinds is how a screen stays
+      // unscoped, and the API refuses a non-empty pick on them anyway.
+      fleetIds: kind === "fleet" ? fSel : [],
       runTexts: fRuntexts.filter((r) => r.text.trim().length > 0),
     });
   }
@@ -412,8 +473,11 @@ export function DisplayAdminMenu({
                         aria-label={t.dspPreview}
                         onClick={() =>
                           /* layar kiosk sungguhan (dark-only) — tab baru, fullscreen */
+                          /* The id, not just the name: a preview answers as
+                             that screen — its fleets and its rotation — so
+                             what is seen here is what will hang in the pit. */
                           openDisplay(
-                            `${DISPLAY_ROUTE_OF_KIND[kind]}?name=${encodeURIComponent(d.name)}`
+                            `${DISPLAY_ROUTE_OF_KIND[kind]}?name=${encodeURIComponent(d.name)}&device=${encodeURIComponent(d.id)}`
                           )
                         }
                       >
@@ -507,33 +571,96 @@ export function DisplayAdminMenu({
                     <Badge variant={fSel.length ? "info" : "neutral"}>
                       {fSel.length} {t.dspPicked}
                     </Badge>
+                    {/* Empty is not "nothing": a screen nobody has scoped is
+                        a control-room screen showing every formation, and the
+                        label has to say so or an empty list reads as broken. */}
+                    {fSel.length === 0 ? (
+                      <span className="text-xs font-normal text-(--text-tertiary)">
+                        {t.dspFleetAllNote}
+                      </span>
+                    ) : null}
+                    {fSel.length ? (
+                      <button
+                        type="button"
+                        onClick={() => setFSel([])}
+                        className="ml-auto cursor-pointer text-xs font-normal text-(--text-tertiary) hover:text-(--text-primary)"
+                      >
+                        {t.dspClearSel}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setFSel(fleets.map((f) => f.id))}
+                        className="ml-auto cursor-pointer text-xs font-normal text-(--text-tertiary) hover:text-(--text-primary)"
+                        disabled={!fleets.length}
+                      >
+                        {t.dspSelAll}
+                      </button>
+                    )}
                   </span>
                 }
-                helper={t.dspContentNote}
+                helper={t.dspFleetHelp}
               >
-                <div className="grid max-h-52 grid-cols-2 gap-1 overflow-y-auto rounded-control border border-(--border-input) bg-(--fill-input) p-2">
-                  {FLEETS.map((f) => (
-                    <ToggleRow
-                      key={f.id}
-                      className={cn(
-                        "rounded-md px-1.5 py-1.5",
-                        fSel.some((x) => x.id === f.id) &&
-                          "bg-[rgba(0,212,255,.08)]"
-                      )}
-                    >
-                      <Checkbox
-                        checked={fSel.some((x) => x.id === f.id)}
-                        onChange={() => toggleFleet(f)}
-                      />
-                      <span className="min-w-0 flex-1 truncate">
-                        {`Fleet ${f.digger}`}
-                        <span className="text-(--text-tertiary)">{` — ${f.unitCount} unit`}</span>
-                      </span>
-                    </ToggleRow>
-                  ))}
+                <div className="flex flex-col gap-2">
+                  {fleets.length > 6 ? (
+                    <SearchInput
+                      className="w-full"
+                      value={fleetQ}
+                      onChange={(e) => setFleetQ(e.target.value)}
+                      onClear={() => setFleetQ("")}
+                      placeholder={t.dspFleetSearch}
+                    />
+                  ) : null}
+                  <div className="grid max-h-52 grid-cols-2 gap-1 overflow-y-auto rounded-control border border-(--border-input) bg-(--fill-input) p-2">
+                    {fleetsQ.isPending ? (
+                      <p className="col-span-2 px-1.5 py-2 text-xs text-(--text-tertiary) italic">
+                        {t.dspFleetLoading}
+                      </p>
+                    ) : visibleFleets.length === 0 ? (
+                      /* Two different emptinesses: no fleets exist at all, or
+                         the search matched none. Telling them apart is what
+                         stops someone rebuilding a formation that is there. */
+                      <p className="col-span-2 px-1.5 py-2 text-xs text-(--text-tertiary) italic">
+                        {fleets.length ? t.dspFleetNoMatch : t.dspErrFleet}
+                      </p>
+                    ) : (
+                      visibleFleets.map((f) => (
+                        <ToggleRow
+                          key={f.id}
+                          className={cn(
+                            "rounded-md px-1.5 py-1.5",
+                            fSel.includes(f.id) && "bg-[rgba(0,212,255,.08)]"
+                          )}
+                        >
+                          <Checkbox
+                            checked={fSel.includes(f.id)}
+                            onChange={() => toggleFleet(f.id)}
+                          />
+                          <span className="min-w-0 flex-1 truncate">
+                            {`Fleet ${f.diggerCode}`}
+                            <span className="text-(--text-tertiary)">
+                              {` — ${f.workAreaName} · ${f.units.length + 1} unit`}
+                            </span>
+                          </span>
+                        </ToggleRow>
+                      ))
+                    )}
+                  </div>
                 </div>
               </Field>
             ) : null}
+
+            <Field label={t.dspRotate} htmlFor="dsp-rotate" helper={rotateHelp}>
+              <Input
+                id="dsp-rotate"
+                type="number"
+                min={MIN_ROTATE}
+                max={MAX_ROTATE}
+                className="w-[130px] flex-none"
+                value={String(fRotate)}
+                onChange={(e) => setFRotate(Number(e.target.value))}
+              />
+            </Field>
 
             <Field
               label={t.dspName}

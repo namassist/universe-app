@@ -329,7 +329,14 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
       return rows.map((r) => toFleet(r, members.get(r.id) ?? []));
     },
     {
-      auth: { menu: "fleet-setting", mode: "view" },
+      /**
+       * Readable from the Display menu too, because that is where a fleet wall
+       * is pointed at its formations and the picker has to offer the real
+       * ones. Only this list: creating, editing and disbanding a fleet stay
+       * `fleet-setting` alone. What it discloses — digger codes, work areas,
+       * member units — is what the TV shows in the yard anyway.
+       */
+      auth: { menu: ["fleet-setting", "display-fleet"], mode: "view" },
       response: {
         200: t.Array(FleetSchema),
         401: ErrorSchema,
