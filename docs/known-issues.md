@@ -6,6 +6,29 @@ that now covers each is where a future reader should look, not this file.
 
 ## Open
 
+### Moving a timeline gate rewrites the past, silently
+
+`timeline_stages` holds one time per action per shift with no valid-from date,
+so there is no record of what a gate _was_ on any earlier day. Every "late"
+verdict is recomputed on read against whatever the timeline says now: the Fit
+To Work list and its export re-judge their whole range on every request, and a
+regenerated board re-judges its date. An already-generated board keeps its
+stored result until someone presses Generate.
+
+Deliberate for now (owner, 2026-08-30): the timeline is the rule, and changing
+the rule changes the judgement — one source of truth, with no stored constant
+that can drift out of step with the screen operators actually configure.
+
+**Symptom:** a compliance figure for a past month changes with nobody touching
+that month's data. Move `ftw-deadline` from 05:00 to 05:30 today and an upload
+at 05:02 last week stops being late, everywhere, with no trace that the
+standard moved. Nothing in the product can answer "what was the deadline on
+2026-08-15", so the change is invisible to whoever reads the report next.
+
+Closing it means giving the timeline history — a valid-from column, and every
+reader asking for the gate _as of_ the date being judged — which changes how
+the Timeline menu is edited. Worth doing the day these numbers are audited.
+
 ### Signing a low-privileged account into a paired TV's browser darkens it
 
 `/display/*` now admits a user session as well as the device cookie, and the
