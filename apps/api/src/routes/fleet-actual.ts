@@ -21,7 +21,7 @@ import { buildBoard, storeBoard } from "../allocation";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
-import { fingerInDeadline, judge } from "../readiness";
+import { fingerInDeadline, ftwDeadline, judge } from "../readiness";
 import { stageGates } from "../stage-time";
 import { pairingRefusal } from "./fleet-allocation";
 import { localDate } from "../scheduler";
@@ -646,7 +646,18 @@ export const fleetActualRoutes = new Elysia({
           // way nobody would see on the screen that resulted.
           message: `Tahap "Batas Finger In" untuk shift ${params.shift === "day" ? "siang" : "malam"} tidak aktif — atur dulu di menu Timeline`,
         });
-      const board = await buildBoard(params.date, params.shift, deadline);
+      const uploadClose = await ftwDeadline(params.shift);
+      if (!uploadClose)
+        return status(422, {
+          code: "no_deadline",
+          message: `Tahap "Batas Upload FTW" untuk shift ${params.shift === "day" ? "siang" : "malam"} tidak aktif — atur dulu di menu Timeline`,
+        });
+      const board = await buildBoard(
+        params.date,
+        params.shift,
+        deadline,
+        uploadClose
+      );
       await storeBoard(board);
       return { ok: true, units: board.slots.length };
     },
@@ -696,6 +707,7 @@ export const fleetActualRoutes = new Elysia({
         });
 
       const deadline = await fingerInDeadline(params.shift);
+      const uploadClose = await ftwDeadline(params.shift);
       const people = await db
         .select({
           id: schema.employees.id,
@@ -767,7 +779,11 @@ export const fleetActualRoutes = new Elysia({
           ftw: W.get(nik) ?? null,
           finger: F.get(nik) ?? null,
           requiresFtw: unit.requiresFtw,
+          // Both fall back to midnight rather than to a permissive value: an
+          // unconfigured stage must refuse everyone loudly, not pass everyone
+          // quietly. The screen still lists them, with the reason attached.
           deadline: deadline ?? "00:00:00",
+          ftwDeadline: uploadClose ?? "00:00:00",
         });
         const refusal = pairingRefusal(unit, person, {
           holdsCode: unit.simperCodeId ? holds.has(person.id) : false,
@@ -778,6 +794,8 @@ export const fleetActualRoutes = new Elysia({
           nik: person.nik,
           name: person.name,
           tappedAt: readiness.tappedAt,
+          /** When the FTW was uploaded — what makes "late" actionable. */
+          sentAt: readiness.sentAt,
           ftw: readiness.ftw,
           finger: readiness.finger,
           ready: readiness.passed,

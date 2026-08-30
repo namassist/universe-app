@@ -133,6 +133,33 @@ fill the gap from the spare pool.
   equivalent SQL agree exactly — FTW 3,406 pass / 378 fail of 3,784, and
   fingerprint 5,053 pass / 2,387 late / 1,466 missing of 8,906.
 
+### Late FTW uploads — shipped
+
+- **A reading uploaded at or after its shift's `ftw-deadline` is `late`, and
+  `late` does not pass** (owner, 2026-08-30). Live data: 50 such uploads on
+  2026-08-30, 398 on 2026-08-29 — this is the common case, not an edge one.
+- **Why it is a rule rather than an accident of timing.** The `ftw-ingest`
+  window closes minutes after the gate, but the _night_ pull covers today as
+  well as yesterday, so a 05:19 upload lands in the table by the afternoon
+  anyway. Without this rule the same board regenerated at 17:00 would place
+  people it refused at 05:25 — a board whose answer depends on when the button
+  was pressed. Reading `sent_at` makes the answer a fact about the morning.
+- **`late` is its own verdict, not folded into `fail`.** `fail` is a medical
+  answer (savera judged the person unfit); `late` is an administrative one
+  (nobody judged them in time). Only the second is worth escalating, and a
+  screen that showed both as "gagal" would send a supervisor looking for a sick
+  operator who is standing in front of them, fit, holding a phone.
+- **The escalation is manual and already had its button.** The candidate dialog
+  shows late uploads in amber with the upload time — "FTW telat 05:19" — and a
+  supervisor may place them, exactly as with any other refusal. The Fit To Work
+  sync pulls the reading in on demand; the timeline was not changed.
+- **`ftw-deadline` stops being a no-op marker** and becomes the rule for
+  `late`. Move it and the rule moves. `null` is a refusal to generate, the same
+  as a missing `finger-in`: with no configured deadline there is no such thing
+  as late, and treating every upload as punctual would re-open the hole.
+- A reading with no `sent_at` is judged on its verdict alone — inventing
+  lateness from a null would fail people for a gap in our own record.
+
 ### The allocation engine — shipped
 
 - `spare-validate` is no longer a no-op. It builds and stores one shift's

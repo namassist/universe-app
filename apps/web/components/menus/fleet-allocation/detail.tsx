@@ -393,6 +393,22 @@ export function FleetAllocationDetail() {
 }
 
 /**
+ * Late FTW, and nothing else standing in the way.
+ *
+ * Worth its own case because it is the only refusal a supervisor is meant to
+ * act on: the person is fit by every measure savera took, they simply uploaded
+ * after the gate. Everything else here — unfit, no tap, wrong department, an
+ * expired SIMPER — is a fact to read, not a decision to make.
+ */
+function lateOnly(c: {
+  ftw: string;
+  finger: string;
+  refusal: string | null;
+}): boolean {
+  return c.ftw === "late" && c.finger === "pass" && !c.refusal;
+}
+
+/**
  * Everyone rostered to the shift, with what stands in their way spelled out
  * rather than filtered away — a supervisor overriding the engine is entitled
  * to see what the engine saw, and may place someone it refused.
@@ -464,6 +480,14 @@ function CandidatePicker({
                     ) : c.ready && !c.refusal ? (
                       <Badge variant="success" dot>
                         {t.faActReady}
+                      </Badge>
+                    ) : lateOnly(c) ? (
+                      /* Administrative, not medical — and the one case a
+                         supervisor is expected to decide rather than read
+                         past, so it is not dressed as a refusal. */
+                      <Badge variant="warning" dot>
+                        {t.faActFtwLate}
+                        {c.sentAt ? ` ${c.sentAt.slice(0, 5)}` : ""}
                       </Badge>
                     ) : (
                       <span title={c.refusal ?? undefined}>

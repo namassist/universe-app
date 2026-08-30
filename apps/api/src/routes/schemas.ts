@@ -868,9 +868,13 @@ export const ActualCandidateSchema = t.Object({
   nik: t.String(),
   name: t.String(),
   tappedAt: t.Nullable(t.String()),
+  /** "HH:MM:SS" the FTW was uploaded; null when there is no reading. */
+  sentAt: t.Nullable(t.String()),
   ftw: t.UnionEnum([
     "pass",
     "fail",
+    /** Uploaded after this shift's `ftw-deadline` — refused, but overridable. */
+    "late",
     "missing",
     "unreadable",
     "not-required",
@@ -1207,6 +1211,8 @@ export const RosterConflictSchema = t.Object({
 export const IngestSyncResultSchema = t.Object({
   fetched: t.Integer(),
   upserted: t.Integer(),
+  /** Of those, rows that were not here before — what a person pressed Sync for. */
+  inserted: t.Integer(),
   skipped: t.Integer(),
   syncedAt: t.String(),
 });
@@ -1231,6 +1237,12 @@ export const FtwReadingSchema = t.Object({
   ftwDecision: t.Nullable(t.String()),
   /** "YYYY-MM-DD HH:MM:SS", source-local. */
   sentAt: t.Nullable(t.String()),
+  /**
+   * Uploaded after its shift's `ftw-deadline`, so the board refuses it.
+   * Computed from the timeline on the way out, never stored: moving the stage
+   * moves the flag, and a stored one would be wrong the moment it did.
+   */
+  late: t.Boolean(),
 });
 
 export const FtwListSchema = t.Object({

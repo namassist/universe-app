@@ -68,7 +68,8 @@ type Candidate = {
 async function candidates(
   date: string,
   shift: ShiftKind,
-  deadline: string
+  deadline: string,
+  ftwDeadlineAt: string
 ): Promise<Map<string, Candidate>> {
   const people = await db
     .select({
@@ -141,6 +142,7 @@ async function candidates(
         finger: fingerByNik.get(nik) ?? null,
         requiresFtw: true,
         deadline,
+        ftwDeadline: ftwDeadlineAt,
       }),
     });
   }
@@ -178,7 +180,8 @@ async function skillsByEmployee(
 export async function buildBoard(
   date: string,
   shift: ShiftKind,
-  deadline: string
+  deadline: string,
+  ftwDeadlineAt: string
 ): Promise<Board> {
   /*
    * Driven by `units`, not by `fleet_plan_slots`.
@@ -228,7 +231,7 @@ export async function buildBoard(
     )
     .orderBy(asc(schema.units.code));
 
-  const pool = await candidates(date, shift, deadline);
+  const pool = await candidates(date, shift, deadline, ftwDeadlineAt);
   const skills = await skillsByEmployee([...pool.keys()]);
   const today = localDate(new Date());
 

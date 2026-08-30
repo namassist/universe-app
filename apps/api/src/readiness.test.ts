@@ -18,15 +18,97 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { fingerInDeadline, judge } from "./readiness";
+import { fingerInDeadline, ftwDeadline, judge } from "./readiness";
+
+/** Uploaded before the 04:45 gate, so lateness never confuses another test. */
+const PUNCTUAL = "2026-08-29 04:20:00";
 
 /** A reading that passes, so each test can spoil exactly one thing. */
 const ok = {
-  ftw: { ftwDecision: "FTW aman", sleepCategory: "Dapat Bekerja" },
+  ftw: {
+    ftwDecision: "FTW aman",
+    sleepCategory: "Dapat Bekerja",
+    sentAt: PUNCTUAL,
+  },
   finger: { firstInAt: "2026-08-29 05:01:00" },
   requiresFtw: true,
   deadline: "05:15:00",
+  ftwDeadline: "04:45:00",
 };
+
+describe("a late upload", () => {
+  test("is refused even when savera says the person is fit", () => {
+    // The whole point of the value: `FTW aman` + `Dapat Bekerja` is a pass on
+    // every axis savera measures, and it still must not place anyone, because
+    // nobody judged them before the shift was decided.
+    const v = judge({
+      ...ok,
+      ftw: { ...ok.ftw, sentAt: "2026-08-29 05:19:00" },
+    });
+    expect(v.ftw).toBe("late");
+    expect(v.passed).toBe(false);
+  });
+
+  test("is its own verdict, not folded into fail", () => {
+    // `fail` is a medical answer and `late` an administrative one. A screen
+    // that showed both as "gagal" would send a supervisor looking for a sick
+    // operator who is standing in front of them, fit and holding a phone.
+    const late = judge({
+      ...ok,
+      ftw: { ...ok.ftw, sentAt: "2026-08-29 05:19:00" },
+    });
+    const unfit = judge({
+      ...ok,
+      ftw: { ...ok.ftw, sleepCategory: "Tidak Boleh Bekerja" },
+    });
+    expect(late.ftw).toBe("late");
+    expect(unfit.ftw).toBe("fail");
+  });
+
+  test("is decided by the timeline, not by a fixed hour", () => {
+    const at0500 = { ...ok.ftw, sentAt: "2026-08-29 05:00:00" };
+    expect(judge({ ...ok, ftw: at0500 }).ftw).toBe("late");
+    // Move the gate and the same upload becomes punctual.
+    expect(judge({ ...ok, ftw: at0500, ftwDeadline: "05:15:00" }).ftw).toBe(
+      "pass"
+    );
+  });
+
+  test("closes at the deadline, which is not the last moment through it", () => {
+    expect(
+      judge({ ...ok, ftw: { ...ok.ftw, sentAt: "2026-08-29 04:44:59" } }).ftw
+    ).toBe("pass");
+    expect(
+      judge({ ...ok, ftw: { ...ok.ftw, sentAt: "2026-08-29 04:45:00" } }).ftw
+    ).toBe("late");
+  });
+
+  test("does not apply to a unit that asks for no FTW", () => {
+    const v = judge({
+      ...ok,
+      requiresFtw: false,
+      ftw: { ...ok.ftw, sentAt: "2026-08-29 05:19:00" },
+    });
+    expect(v.ftw).toBe("not-required");
+    expect(v.passed).toBe(true);
+  });
+
+  test("a reading with no upload time is judged on its verdict alone", () => {
+    // savera has always sent one. Inventing lateness from a null would fail
+    // people for a gap in our own record rather than for anything they did.
+    const v = judge({ ...ok, ftw: { ...ok.ftw, sentAt: null } });
+    expect(v.ftw).toBe("pass");
+    expect(v.sentAt).toBeNull();
+  });
+
+  test("reports the upload time, so a screen can say how late", () => {
+    const v = judge({
+      ...ok,
+      ftw: { ...ok.ftw, sentAt: "2026-08-29 05:19:42" },
+    });
+    expect(v.sentAt).toBe("05:19:42");
+  });
+});
 
 describe("fingerprint", () => {
   test("a tap before the deadline passes", () => {
@@ -86,7 +168,11 @@ describe("FTW", () => {
     // 105 rows in seven days. The single most important assertion in the file.
     const v = judge({
       ...ok,
-      ftw: { ftwDecision: "FTW aman", sleepCategory: "Tidak Boleh Bekerja" },
+      ftw: {
+        ftwDecision: "FTW aman",
+        sleepCategory: "Tidak Boleh Bekerja",
+        sentAt: PUNCTUAL,
+      },
     });
     expect(v.ftw).toBe("fail");
     expect(v.passed).toBe(false);
@@ -100,7 +186,11 @@ describe("FTW", () => {
       expect(
         judge({
           ...ok,
-          ftw: { ftwDecision: "FTW aman", sleepCategory: category },
+          ftw: {
+            ftwDecision: "FTW aman",
+            sleepCategory: category,
+            sentAt: PUNCTUAL,
+          },
         }).ftw
       ).toBe("fail");
     }
@@ -113,6 +203,7 @@ describe("FTW", () => {
         ftw: {
           ftwDecision: "Belum mengisi FTW",
           sleepCategory: "Dapat Bekerja",
+          sentAt: PUNCTUAL,
         },
       }).ftw
     ).toBe("fail");
@@ -128,7 +219,11 @@ describe("FTW", () => {
     expect(
       judge({
         ...ok,
-        ftw: { ftwDecision: "  ftw aman ", sleepCategory: "DAPAT BEKERJA" },
+        ftw: {
+          ftwDecision: "  ftw aman ",
+          sleepCategory: "DAPAT BEKERJA",
+          sentAt: PUNCTUAL,
+        },
       }).ftw
     ).toBe("pass");
   });
@@ -138,9 +233,13 @@ describe("FTW", () => {
     // operator-configurable. A reworded verdict must surface as something we
     // cannot read, not as a quiet failure that empties the board with no clue.
     for (const bad of [
-      { ftwDecision: "Aman", sleepCategory: "Dapat Bekerja" },
-      { ftwDecision: "FTW aman", sleepCategory: "Boleh Kerja" },
-      { ftwDecision: null, sleepCategory: "Dapat Bekerja" },
+      { ftwDecision: "Aman", sleepCategory: "Dapat Bekerja", sentAt: PUNCTUAL },
+      {
+        ftwDecision: "FTW aman",
+        sleepCategory: "Boleh Kerja",
+        sentAt: PUNCTUAL,
+      },
+      { ftwDecision: null, sleepCategory: "Dapat Bekerja", sentAt: PUNCTUAL },
     ]) {
       const v = judge({ ...ok, ftw: bad });
       expect(v.ftw).toBe("unreadable");
@@ -168,6 +267,7 @@ describe("a unit that does not require FTW", () => {
       ftw: {
         ftwDecision: "Belum mengisi FTW",
         sleepCategory: "Tidak Boleh Bekerja",
+        sentAt: PUNCTUAL,
       },
       requiresFtw: false,
     });
@@ -212,5 +312,12 @@ describe("the deadline comes from the master timeline", () => {
   test("ignores a deactivated stage", async () => {
     // The inactive 09:09 row above must not win over the real 05:15 one.
     expect(await fingerInDeadline("day")).toBe("05:15:00");
+  });
+
+  test("reads the upload deadline from its own stage", async () => {
+    // `ftw-deadline` was a no-op marker until it became the rule for `late`.
+    // It is a different stage from `finger-in` and must be read as one.
+    expect(await ftwDeadline("day")).toBe("04:45:00");
+    expect(await ftwDeadline("night")).toBe("16:45:00");
   });
 });

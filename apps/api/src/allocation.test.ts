@@ -26,6 +26,7 @@ import { redis } from "./redis";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Alokasi ${uid()}`;
+const FTW_CLOSE = "04:45:00";
 const DEADLINE = "05:15:00";
 
 /**
@@ -308,7 +309,7 @@ afterEach(async () => {
 
 /** Only the units this test built — the dev database holds a real fleet too. */
 const mine = async (date: string, shift: "day" | "night" = "day") => {
-  const board = await buildBoard(date, shift, DEADLINE);
+  const board = await buildBoard(date, shift, DEADLINE, FTW_CLOSE);
   return board.slots.filter((s) => made.units.includes(s.unitId));
 };
 
@@ -578,10 +579,12 @@ describe("the spare pool", () => {
 describe("storing it", () => {
   test("writes the board and replaces it on a regeneration", async () => {
     const date = nextDate();
-    const board = await buildBoard(date, "day", DEADLINE);
+    const board = await buildBoard(date, "day", DEADLINE, FTW_CLOSE);
     const first = await storeBoard(board);
     made.docs.push(first);
-    const second = await storeBoard(await buildBoard(date, "day", DEADLINE));
+    const second = await storeBoard(
+      await buildBoard(date, "day", DEADLINE, FTW_CLOSE)
+    );
     made.docs.push(second);
 
     const docs = await db
@@ -602,8 +605,8 @@ describe("storing it", () => {
 
   test("a regenerated board is identical — placement is deterministic", async () => {
     const date = nextDate();
-    const a = await buildBoard(date, "day", DEADLINE);
-    const b = await buildBoard(date, "day", DEADLINE);
+    const a = await buildBoard(date, "day", DEADLINE, FTW_CLOSE);
+    const b = await buildBoard(date, "day", DEADLINE, FTW_CLOSE);
     expect(b.slots.map((s) => [s.unitId, s.employeeId])).toEqual(
       a.slots.map((s) => [s.unitId, s.employeeId])
     );

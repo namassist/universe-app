@@ -27,7 +27,7 @@ import { db, schema, type TimelineStageRow } from "./db";
 // module init.
 import { buildBoard, storeBoard } from "./allocation";
 import { runIngestWindow, type IngestKind } from "./ingest";
-import { fingerInDeadline } from "./readiness";
+import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { redis } from "./redis";
 
 /** One tick per minute: the schedule is specified to the minute. */
@@ -136,7 +136,18 @@ const allocate: Hook = async (dispatch) => {
       `no active finger-in stage for the ${shift} shift — no deadline, so no pass rule`
     );
 
-  const board = await buildBoard(dispatch.date, shift, deadline);
+  // Refused for the same reason as above, not silently skipped: with no
+  // configured `ftw-deadline` there is no such thing as a late upload, and
+  // treating every one as punctual would put the afternoon's data on the
+  // morning's board.
+  const uploadClose = await ftwDeadline(shift);
+  if (!uploadClose)
+    return record(
+      dispatch,
+      `no active ftw-deadline stage for the ${shift} shift — nothing says when an upload is late`
+    );
+
+  const board = await buildBoard(dispatch.date, shift, deadline, uploadClose);
   await storeBoard(board);
   const filled = board.slots.filter((s) => s.employeeId).length;
   record(

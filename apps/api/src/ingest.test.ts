@@ -53,7 +53,12 @@ describe("syncFtwReadings", () => {
   test("snapshots a source row with the NIK normalized", async () => {
     const result = await syncFtwReadings(TEST_DATES, async () => [ftwRow()]);
 
-    expect(result).toEqual({ fetched: 1, upserted: 1, skipped: 0 });
+    expect(result).toEqual({
+      fetched: 1,
+      upserted: 1,
+      inserted: 1,
+      skipped: 0,
+    });
     const rows = await db
       .select()
       .from(schema.ftwReadings)
@@ -93,7 +98,12 @@ describe("syncFtwReadings", () => {
       ftwRow({ nik: null }),
       ftwRow({ nik: "N/A" }),
     ]);
-    expect(result).toEqual({ fetched: 3, upserted: 1, skipped: 2 });
+    expect(result).toEqual({
+      fetched: 3,
+      upserted: 1,
+      inserted: 1,
+      skipped: 2,
+    });
   });
 
   test("two raw NIKs that normalize to the same key collapse to one row, not an error", async () => {
@@ -104,7 +114,12 @@ describe("syncFtwReadings", () => {
       ftwRow({ nik: "050121018", sleep_category: "Dapat Bekerja" }),
       ftwRow({ nik: "50121018", sleep_category: "Tidak Boleh Bekerja" }),
     ]);
-    expect(result).toEqual({ fetched: 2, upserted: 1, skipped: 1 });
+    expect(result).toEqual({
+      fetched: 2,
+      upserted: 1,
+      inserted: 1,
+      skipped: 1,
+    });
 
     const rows = await db
       .select()
@@ -113,6 +128,25 @@ describe("syncFtwReadings", () => {
     expect(rows).toHaveLength(1);
     // Last one wins — the later row is the later-fetched fact.
     expect(rows[0]!.sleepCategory).toBe("Tidak Boleh Bekerja");
+  });
+
+  test("counts a re-pull as amended, not as new", async () => {
+    // The number a person pressing Sync is reading. Every pass upserts the
+    // whole window, so without this a sync that found thirty late uploads
+    // looks exactly like one that found nothing.
+    const first = await syncFtwReadings(TEST_DATES, async () => [ftwRow()]);
+    expect(first.inserted).toBe(1);
+
+    const again = await syncFtwReadings(TEST_DATES, async () => [ftwRow()]);
+    expect(again.upserted).toBe(1);
+    expect(again.inserted).toBe(0);
+
+    const withNew = await syncFtwReadings(TEST_DATES, async () => [
+      ftwRow(),
+      ftwRow({ nik: "50121099" }),
+    ]);
+    expect(withNew.upserted).toBe(2);
+    expect(withNew.inserted).toBe(1);
   });
 
   test("the same person on two dates is two snapshot rows", async () => {
@@ -133,7 +167,12 @@ describe("syncFingerReadings", () => {
     const result = await syncFingerReadings(TEST_DATES, async () => [
       fingerRow(),
     ]);
-    expect(result).toEqual({ fetched: 1, upserted: 1, skipped: 0 });
+    expect(result).toEqual({
+      fetched: 1,
+      upserted: 1,
+      inserted: 1,
+      skipped: 0,
+    });
 
     const rows = await db
       .select()

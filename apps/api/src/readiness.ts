@@ -57,6 +57,16 @@ const key = (value: string | null | undefined) =>
 export type FtwVerdict =
   | "pass"
   | "fail"
+  /**
+   * Uploaded after this shift's `ftw-deadline`, whatever the verdict says.
+   *
+   * A separate value from `fail` because the two ask different things of a
+   * supervisor: `fail` means savera judged the person unfit, `late` means
+   * nobody judged them in time. The first is a medical answer, the second is
+   * an administrative one — and only the second is worth escalating, which is
+   * why the board refuses it automatically and a person may still override.
+   */
+  | "late"
   /** No reading for this person and date — a failure, not an exemption. */
   | "missing"
   /** A verdict we cannot interpret: savera reworded it, or it is null. */
@@ -78,15 +88,24 @@ export type Readiness = {
   finger: FingerVerdict;
   /** "HH:MM:SS" of the IN tap — what FCFS orders spares by. */
   tappedAt: string | null;
+  /** "HH:MM:SS" the FTW was uploaded, so a screen can show how late. */
+  sentAt: string | null;
 };
 
 export type JudgeInput = {
-  ftw: { ftwDecision: string | null; sleepCategory: string | null } | null;
+  ftw: {
+    ftwDecision: string | null;
+    sleepCategory: string | null;
+    /** When savera received it. Null in rows ingested before this was read. */
+    sentAt: string | null;
+  } | null;
   finger: { firstInAt: string | null } | null;
   /** `units.ftw` — some units need the FTW verdict, others the tap alone. */
   requiresFtw: boolean;
   /** "HH:MM:SS", from `fingerInDeadline` for the shift being generated. */
   deadline: string;
+  /** "HH:MM:SS", the shift's `ftw-deadline` — the moment upload closes. */
+  ftwDeadline: string;
 };
 
 /** "2026-08-29 05:27:58" → "05:27:58". The source stores naive local times. */
@@ -95,6 +114,23 @@ const timeOf = (stamp: string) => stamp.slice(11, 19);
 function judgeFtw(input: JudgeInput): FtwVerdict {
   if (!input.requiresFtw) return "not-required";
   if (!input.ftw) return "missing";
+
+  /*
+   * Lateness is judged before the verdict is even read (owner, 2026-08-30).
+   *
+   * The ingest window closes minutes after `ftw-deadline`, but the *night*
+   * pull covers today as well as yesterday, so a morning upload that missed
+   * its window still lands in the table by the afternoon. Without this, the
+   * same board regenerated at 17:00 would place people it refused at 05:25 —
+   * a board whose answer depends on when the button was pressed. Reading the
+   * upload time makes the answer a fact about the morning instead.
+   *
+   * A row with no `sent_at` is judged on its verdict alone: savera has always
+   * sent one, and inventing lateness from a null would fail people for a gap
+   * in our own record rather than for anything they did.
+   */
+  if (input.ftw.sentAt && timeOf(input.ftw.sentAt) >= input.ftwDeadline)
+    return "late";
 
   const decision = key(input.ftw.ftwDecision);
   const category = key(input.ftw.sleepCategory);
@@ -122,6 +158,7 @@ export function judge(input: JudgeInput): Readiness {
     finger,
     passed: finger === "pass" && (ftw === "pass" || ftw === "not-required"),
     tappedAt: input.finger?.firstInAt ? timeOf(input.finger.firstInAt) : null,
+    sentAt: input.ftw?.sentAt ? timeOf(input.ftw.sentAt) : null,
   };
 }
 
@@ -137,4 +174,17 @@ export async function fingerInDeadline(
   shift: ShiftKind
 ): Promise<string | null> {
   return stageTimeOf("finger-in", shift);
+}
+
+/**
+ * The `ftw-deadline` for a shift — the moment uploading closes.
+ *
+ * Until now this stage was a no-op marker on the timeline; it is what decides
+ * `late`, so moving it moves the rule and nothing here has to be told.
+ * `null` is a refusal for the same reason as above: with no configured
+ * deadline there is no such thing as late, and quietly treating every upload
+ * as punctual would re-open the hole this closes.
+ */
+export async function ftwDeadline(shift: ShiftKind): Promise<string | null> {
+  return stageTimeOf("ftw-deadline", shift);
 }
