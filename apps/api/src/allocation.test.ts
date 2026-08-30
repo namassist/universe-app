@@ -356,6 +356,33 @@ describe("the planned operator", () => {
   });
 });
 
+describe("a unit the plan says nothing about", () => {
+  test("is on the board as a vacancy — PLAN says who usually drives a unit, not which units exist", async () => {
+    const date = nextDate();
+    // No plan slot at all. Building the board from `fleet_plan_slots` hid
+    // exactly these units, and they are the ones most in need of a spare: a
+    // unit with no standing operator is idle by default, not by accident.
+    const unit = await addUnit({ code: `${tag}-U14` });
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot).toBeDefined();
+    expect(slot!.employeeId).toBeNull();
+  });
+
+  test("is crewed from the spare pool like any other vacancy", async () => {
+    const date = nextDate();
+    const unit = await addUnit({ code: `${tag}-U15` });
+    const nik = newNik();
+    const spare = await addEmployee({ nik });
+    await roster(date, spare, "D");
+    await tapAt(date, nik, "04:20:00");
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(spare);
+    expect(slot?.source).toBe("spare");
+  });
+});
+
 describe("units that need no operator", () => {
   test("a unit in breakdown is not on the board at all", async () => {
     const date = nextDate();

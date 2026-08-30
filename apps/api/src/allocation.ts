@@ -180,6 +180,19 @@ export async function buildBoard(
   shift: ShiftKind,
   deadline: string
 ): Promise<Board> {
+  /*
+   * Driven by `units`, not by `fleet_plan_slots`.
+   *
+   * It used to be the other way round, and that hid the units that most needed
+   * showing: a unit the plan has no standing pairing for is idle by default,
+   * and building the board from PLAN meant it never appeared as a vacancy at
+   * all. Nine of fifteen units were invisible on the site's first real board,
+   * which reported one idle unit while ten had nobody on them.
+   *
+   * PLAN answers "who usually drives this", not "which units exist". Only
+   * `units` can answer the second, so the join goes the other way and the
+   * pairing is optional.
+   */
   const planned = await db
     .select({
       unitId: schema.units.id,
@@ -189,10 +202,14 @@ export async function buildBoard(
       simperCodeId: schema.units.simperCodeId,
       simperCodeName: schema.simperCodes.name,
       requiresFtw: schema.units.ftw,
+      /** Null for a unit the plan says nothing about. */
       employeeId: schema.fleetPlanSlots.employeeId,
     })
-    .from(schema.fleetPlanSlots)
-    .innerJoin(schema.units, eq(schema.units.id, schema.fleetPlanSlots.unitId))
+    .from(schema.units)
+    .leftJoin(
+      schema.fleetPlanSlots,
+      eq(schema.fleetPlanSlots.unitId, schema.units.id)
+    )
     .leftJoin(
       schema.departments,
       eq(schema.departments.id, schema.units.departmentId)
@@ -262,7 +279,7 @@ export async function buildBoard(
     // At most one slot holder is rostered to this shift — PLAN refuses two on
     // the same one — so the first match is the only match.
     const holder = rows
-      .map((r) => pool.get(r.employeeId))
+      .map((r) => (r.employeeId ? pool.get(r.employeeId) : undefined))
       .find((c): c is Candidate => c !== undefined);
     const readiness = holder ? readyFor(first.requiresFtw, holder) : null;
 
@@ -290,7 +307,9 @@ export async function buildBoard(
 
   /* --- 2. the spares, first come first served ----------------------------- */
 
-  const slotHolders = new Set(planned.map((r) => r.employeeId));
+  const slotHolders = new Set(
+    planned.map((r) => r.employeeId).filter((id): id is string => id !== null)
+  );
   const spares = [...pool.values()]
     .filter((c) => !slotHolders.has(c.person.id))
     .filter((c) => c.readiness.finger === "pass")
