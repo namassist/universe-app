@@ -267,6 +267,11 @@ export const id = {
   thShift: "Shift",
   allShift: "Semua shift upload",
   ftwShift1: "Shift 1 (00:00–11:59)",
+  attOutOnly: "Pulang shift malam",
+  attMissingIn: "Tap masuk hilang",
+  attCheckoutOf: "pulang shift",
+  attLate: "Tap telat",
+  attOnTime: "Tepat waktu",
   ftwNoShift1T: "Belum ada upload Shift 1 hari ini",
   ftwNoShift2T: "Belum ada upload Shift 2 hari ini",
   ftwNoShiftB:

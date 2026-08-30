@@ -269,6 +269,11 @@ export const en: Dict = {
   thShift: "Shift",
   allShift: "All upload shifts",
   ftwShift1: "Shift 1 (00:00–11:59)",
+  attOutOnly: "Night checkout",
+  attMissingIn: "No check-in",
+  attCheckoutOf: "checkout of",
+  attLate: "Late tap",
+  attOnTime: "On time",
   ftwNoShift1T: "No Shift 1 uploads yet today",
   ftwNoShift2T: "No Shift 2 uploads yet today",
   ftwNoShiftB:

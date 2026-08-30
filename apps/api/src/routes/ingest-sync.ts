@@ -14,14 +14,24 @@
  * Sync requires `manage`; reading only `view`.
  */
 
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  lte,
+  sql,
+} from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
 import { ingestDates, syncFingerReadings, syncFtwReadings } from "../ingest";
-import { ftwDeadline } from "../readiness";
+import { fingerInDeadline, ftwDeadline } from "../readiness";
 import {
   AttendanceListSchema,
   ErrorSchema,
@@ -381,6 +391,7 @@ async function attendanceRows(from: string, to: string) {
       employeeId: schema.employees.id,
       name: schema.employees.name,
       department: schema.departments.name,
+      company: schema.companies.name,
     })
     .from(schema.fingerReadings)
     .leftJoin(
@@ -390,6 +401,10 @@ async function attendanceRows(from: string, to: string) {
     .leftJoin(
       schema.departments,
       eq(schema.departments.id, schema.employees.departmentId)
+    )
+    .leftJoin(
+      schema.companies,
+      eq(schema.companies.id, schema.employees.companyId)
     )
     .where(
       and(
@@ -426,19 +441,172 @@ async function attendanceRows(from: string, to: string) {
       codeByEmployeeDate.set(`${day.employeeId} ${day.date}`, day.code);
   }
 
-  return readings.map((r) => ({
-    nik: r.nik,
-    date: r.date,
-    name: r.name,
-    department: r.department,
-    rosterCode: r.employeeId
+  /*
+   * The gate each person is judged against is their *own* shift's, taken from
+   * the roster code on the row — unlike the FTW screen, which has no roster to
+   * consult and has to infer a half-day from the upload time. Exact here, so
+   * no inference is warranted.
+   *
+   * `null` when the roster says nothing: we genuinely cannot tell whether
+   * 05:20 was late for that person, and answering "not late" would be a claim
+   * rather than an absence of one.
+   */
+  const [dayGate, nightGate] = await Promise.all([
+    fingerInDeadline("day"),
+    fingerInDeadline("night"),
+  ]);
+
+  /*
+   * A row with no IN tap means one of two very different things, and the
+   * previous day settles which.
+   *
+   * A night shift's checkout lands on the *next* date, because a reading is
+   * keyed by (nik, date) — so an operator who started at 17:30 on the 29th
+   * taps out at 06:00 on the 30th and appears here with an OUT and nothing
+   * else. That is not a fault. Someone with no IN today *and* none the day
+   * before has simply not been recorded arriving: a forgotten tap, or a
+   * fingerprint machine that was down (owner, 2026-08-30). That is a fault,
+   * and it used to be buried among the 465 rows the first reading lumped
+   * together.
+   */
+  const dayBefore = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
+  /*
+   * IP → machine name. The whole registry is 58 rows, so it loads once and is
+   * looked up in memory rather than joined per reading twice over.
+   *
+   * An address with no registered machine keeps showing as the address: it is
+   * still where the tap happened, and blanking it would hide a machine someone
+   * forgot to register rather than reporting one.
+   */
+  const machineByIp = new Map(
+    (
+      await db
+        .select({
+          ip: schema.fingerprintMachines.ip,
+          name: schema.fingerprintMachines.name,
+        })
+        .from(schema.fingerprintMachines)
+    ).map((m) => [m.ip, m.name])
+  );
+  const machineAt = (ip: string | null) =>
+    ip ? (machineByIp.get(ip) ?? ip) : null;
+
+  const priorIn = new Set<string>();
+  {
+    const rows = await db
+      .select({
+        nik: schema.fingerReadings.nik,
+        date: schema.fingerReadings.date,
+      })
+      .from(schema.fingerReadings)
+      .where(
+        and(
+          gte(schema.fingerReadings.date, dayBefore(from)),
+          lte(schema.fingerReadings.date, to),
+          isNotNull(schema.fingerReadings.firstInAt)
+        )
+      );
+    for (const r of rows) priorIn.add(`${r.nik} ${r.date}`);
+  }
+  const lateness = (code: string | null, at: string | null): boolean | null => {
+    if (!at || !code) return null;
+    const gate = code === "N" ? nightGate : code === "D" ? dayGate : null;
+    // Strictly at-or-after: the deadline is when the gate closes, not the last
+    // moment through it — the same comparison the pass rule makes.
+    return gate ? at.slice(11, 19) >= gate : null;
+  };
+
+  return readings.map((r) => {
+    const rosterCode = r.employeeId
       ? (codeByEmployeeDate.get(`${r.employeeId} ${r.date}`) ?? null)
-      : null,
-    firstInAt: r.firstInAt,
-    firstInIp: r.firstInIp,
-    firstOutAt: r.firstOutAt,
-    firstOutIp: r.firstOutIp,
+      : null;
+    return {
+      nik: r.nik,
+      date: r.date,
+      name: r.name,
+      department: r.department,
+      company: r.company,
+      rosterCode,
+      firstInAt: r.firstInAt,
+      firstInIp: r.firstInIp,
+      firstInMachine: machineAt(r.firstInIp),
+      firstOutAt: r.firstOutAt,
+      firstOutIp: r.firstOutIp,
+      firstOutMachine: machineAt(r.firstOutIp),
+      /** Tapped in after their own shift's `finger-in`; null when unknowable. */
+      late: lateness(rosterCode, r.firstInAt),
+      /**
+       * For a row with no IN tap: the date they *did* tap in on, which is the
+       * shift this checkout belongs to. Null means no arrival was recorded on
+       * either day — the tap is missing, not merely displaced.
+       */
+      checkoutOf:
+        !r.firstInAt && priorIn.has(`${r.nik} ${dayBefore(r.date)}`)
+          ? dayBefore(r.date)
+          : null,
+    };
+  });
+}
+
+/** The attendance export's columns, in the order a reader scans them. */
+const ATTENDANCE_EXPORT_COLUMNS = [
+  "nik",
+  "nama",
+  "tanggal",
+  "perusahaan",
+  "departemen",
+  "roster",
+  "jam_masuk",
+  "mesin_masuk",
+  "ip_masuk",
+  "jam_keluar",
+  "mesin_keluar",
+  "ip_keluar",
+  "telat",
+  "keterangan",
+] as const;
+
+type AttendanceExportRow = Awaited<ReturnType<typeof attendanceRows>>[number];
+
+async function attendanceWorkbook(
+  rows: AttendanceExportRow[]
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("absensi");
+  ws.columns = ATTENDANCE_EXPORT_COLUMNS.map((key) => ({
+    header: key,
+    key,
+    width: key === "nama" || key === "departemen" ? 30 : 16,
   }));
+  ws.getRow(1).font = { bold: true };
+  for (const r of rows)
+    ws.addRow({
+      nik: r.nik,
+      nama: r.name ?? "",
+      tanggal: r.date,
+      perusahaan: r.company ?? "",
+      departemen: r.department ?? "",
+      roster: r.rosterCode ?? "",
+      jam_masuk: r.firstInAt ? r.firstInAt.slice(11, 19) : "",
+      mesin_masuk: r.firstInMachine ?? "",
+      ip_masuk: r.firstInIp ?? "",
+      jam_keluar: r.firstOutAt ? r.firstOutAt.slice(11, 19) : "",
+      mesin_keluar: r.firstOutMachine ?? "",
+      ip_keluar: r.firstOutIp ?? "",
+      // Blank rather than "TIDAK" when unknowable: an empty cell reads as "no
+      // answer", which is the truth when the roster does not say.
+      telat: r.late === null ? "" : r.late ? "YA" : "TIDAK",
+      keterangan: r.firstInAt
+        ? ""
+        : r.checkoutOf
+          ? `Pulang shift ${r.checkoutOf}`
+          : "Tap masuk hilang",
+    });
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
 export const attendanceSyncRoutes = new Elysia({
@@ -469,6 +637,74 @@ export const attendanceSyncRoutes = new Elysia({
         422: ErrorSchema,
       },
       detail: { summary: "Fingerprint tap snapshots for a date range" },
+    }
+  )
+
+  /** The taps as a spreadsheet — the screen's filters travel with it. */
+  .get(
+    "/export",
+    async ({ query, status }) => {
+      const { from, to } = query;
+      const span = rangeDays(from, to);
+      if (span < 1 || span > MAX_RANGE_DAYS) return status(422, invalidRange);
+
+      const rows = (await attendanceRows(from, to)).filter((r) => {
+        if (query.company && r.company !== query.company) return false;
+        if (query.department && r.department !== query.department) return false;
+        if (query.roster && r.rosterCode !== query.roster) return false;
+        if (query.status === "late" && r.late !== true) return false;
+        if (query.status === "out-only" && !(!r.firstInAt && r.checkoutOf))
+          return false;
+        if (query.status === "missing-in" && !(!r.firstInAt && !r.checkoutOf))
+          return false;
+        if (query.status === "on-time" && r.late !== false) return false;
+        if (query.q) {
+          const needle = query.q.toLowerCase();
+          if (
+            !(r.name ?? "").toLowerCase().includes(needle) &&
+            !r.nik.includes(needle)
+          )
+            return false;
+        }
+        return true;
+      });
+
+      const name = `absensi-${from}${from === to ? "" : `-sd-${to}`}.xlsx`;
+      return new Response(new Uint8Array(await attendanceWorkbook(rows)), {
+        headers: {
+          "content-type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "content-disposition": `attachment; filename="${name}"`,
+        },
+      });
+    },
+    {
+      auth: { menu: "attendance", mode: "view" },
+      query: t.Object({
+        from: t.String(),
+        to: t.String(),
+        company: t.Optional(t.String()),
+        department: t.Optional(t.String()),
+        roster: t.Optional(t.String()),
+        /** "late" | "missing-in" | "out-only" | "on-time" — the screen's. */
+        status: t.Optional(t.String()),
+        q: t.Optional(t.String()),
+      }),
+      detail: {
+        summary: "Export the filtered attendance taps as a spreadsheet",
+        responses: {
+          200: {
+            description: "An .xlsx of exactly the rows the screen is showing",
+            content: {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                { schema: { type: "string", format: "binary" } },
+            },
+          },
+          401: { description: "No session" },
+          403: { description: "No grant on attendance" },
+          422: { description: "Range too wide or inverted" },
+        },
+      },
     }
   )
 

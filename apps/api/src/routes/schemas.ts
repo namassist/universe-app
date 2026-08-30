@@ -1257,12 +1257,28 @@ export const AttendanceReadingSchema = t.Object({
   /** Null when the NIK matches no local employee — shown, not hidden. */
   name: t.Nullable(t.String()),
   department: t.Nullable(t.String()),
+  company: t.Nullable(t.String()),
   /** The roster's word for the day, when this NIK is rostered. */
   rosterCode: t.Nullable(t.String()),
   firstInAt: t.Nullable(t.String()),
   firstInIp: t.Nullable(t.String()),
+  /** The registered machine at that address, falling back to the address. */
+  firstInMachine: t.Nullable(t.String()),
   firstOutAt: t.Nullable(t.String()),
   firstOutIp: t.Nullable(t.String()),
+  firstOutMachine: t.Nullable(t.String()),
+  /**
+   * Tapped in at or after this person's own shift gate. `null` means the
+   * roster does not say which shift they are on, so lateness is unknowable —
+   * a different fact from "on time".
+   */
+  late: t.Nullable(t.Boolean()),
+  /**
+   * On a row with no IN tap: the date whose shift this checkout closes. Null
+   * there means no arrival was recorded on either day — a forgotten tap or a
+   * machine that was down, not a night shift going home.
+   */
+  checkoutOf: t.Nullable(t.String()),
 });
 
 export const AttendanceListSchema = t.Object({
