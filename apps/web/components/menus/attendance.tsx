@@ -50,10 +50,19 @@ import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
 
 /**
- * The tap log as the machines recorded it: first IN and first OUT per person
- * per day, enriched with who the NIK is and what the roster says. What a tap
- * *means* against a shift (late, unfit, absent) needs the allocation engine
- * and arrives with the Actual tab — this screen does not guess.
+ * One row per shift the morning is accountable for: every IN tap, plus every
+ * rostered `D`/`N` that nobody tapped for.
+ *
+ * The second half is the point. Driven by taps alone, a scheduled operator who
+ * never tapped had no row at all — invisible on the one screen whose job is to
+ * notice them. Check-out is not shown: it was only ever here because a reading
+ * is keyed by (nik, date), so a night shift's 06:00 checkout arrived as a row
+ * with no arrival and needed explaining away.
+ *
+ * What a tap *means* against a shift (unfit, spare, replaced) still needs the
+ * allocation engine and arrives with the Actual tab — this screen does not
+ * guess. It reports two contradictions and stops there: scheduled and absent,
+ * or present and not scheduled.
  */
 
 const isoDate = (d: Date) => {
@@ -66,7 +75,7 @@ const MAX_SPAN_DAYS = 62;
 /** "YYYY-MM-DD HH:MM:SS" → "HH:MM", for the in/out cells. */
 const clock = (at: string | null) => (at ? at.slice(11, 16) : undefined);
 
-type SortKey = "date" | "in" | "out";
+type SortKey = "date" | "in";
 type SortDir = "asc" | "desc";
 type Sort = { key: SortKey; dir: SortDir } | null;
 
@@ -82,38 +91,48 @@ const nextSort = (current: Sort, key: SortKey): Sort => {
 type AttRow = {
   firstInAt: string | null;
   late: boolean | null;
-  checkoutOf: string | null;
+  rosterCode: string | null;
 };
 
 /**
- * Reading order: worst first, among arrivals (owner, 2026-08-30).
+ * Tapped in on a day the roster does not schedule — the highlighted anomaly.
  *
- *   tapped late → unknowable → on time → no check-in → night checkout
+ * A null `rosterCode` is deliberately not one: two thirds of the taps come
+ * from NIKs we hold no roster for and never will, and flagging them would
+ * report a gap in our own records as though it were their contradiction.
+ */
+const isMismatch = (r: AttRow): boolean =>
+  !!r.firstInAt &&
+  r.rosterCode !== null &&
+  r.rosterCode !== "D" &&
+  r.rosterCode !== "N";
+
+/**
+ * Reading order: worst first (owner, 2026-08-30).
  *
- * This screen is about who arrived and when, so a row with no IN tap sorts
- * below every row that has one — including the missing-check-in case, which is
- * still a fault but not an arrival to compare against the gate. It keeps its
- * red badge and its own filter, so it is one click away.
+ *   no tap → late → roster mismatch → unknowable → on time
  *
- * Nothing is hidden (owner, 2026-08-30). 410 of today's 1,200 rows are the
- * night shift going home and nobody has to act on them, but ordering is enough
- * to keep them out of the way — a filter that removes rows by default makes a
- * reader wonder what else the screen is not showing them.
+ * A rostered shift with no tap leads, because it is the only row here that can
+ * leave a unit without an operator at 05:30. That reverses the previous
+ * ordering, which sorted every row without an IN tap to the bottom — correct
+ * then, when 410 of them were the night shift going home and no fault of
+ * anyone's. Those rows no longer exist, and what is left in that bucket is
+ * exactly the fault the old one was hiding.
  *
- * "Unknowable" sits between the fault and a clean tap: the NIK matches no
+ * "Unknowable" sits between the anomalies and a clean tap: the NIK matches no
  * employee here, so we cannot fault them — but nor have we cleared them, and
  * ranking it with "on time" would quietly assert we had.
  */
 const severity = (r: AttRow): number =>
   !r.firstInAt
-    ? r.checkoutOf
-      ? 4
-      : 3
+    ? 0
     : r.late === true
-      ? 0
-      : r.late === null
-        ? 1
-        : 2;
+      ? 1
+      : isMismatch(r)
+        ? 2
+        : r.late === null
+          ? 3
+          : 4;
 
 function SortHead({
   label,
@@ -212,10 +231,8 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
       if (dept && r.department !== dept) return false;
       if (company && r.company !== company) return false;
       if (statusF === "late" && r.late !== true) return false;
-      if (statusF === "out-only" && !(!r.firstInAt && r.checkoutOf))
-        return false;
-      if (statusF === "missing-in" && !(!r.firstInAt && !r.checkoutOf))
-        return false;
+      if (statusF === "no-tap" && r.firstInAt) return false;
+      if (statusF === "mismatch" && !isMismatch(r)) return false;
       if (statusF === "on-time" && r.late !== false) return false;
       if (!needle) return true;
       return (
@@ -235,9 +252,8 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
       const dir = sort.dir === "asc" ? 1 : -1;
       if (sort.key === "date")
         return a.date.localeCompare(b.date) * dir || byName;
-      const key = sort.key === "in" ? "firstInAt" : "firstOutAt";
-      const av = a[key];
-      const bv = b[key];
+      const av = a.firstInAt;
+      const bv = b.firstInAt;
       // A row with no tap has nothing to sort by, so it sits at the end
       // whichever way the column points rather than crowding the top.
       if (!av || !bv) return av ? -1 : bv ? 1 : byName;
@@ -384,8 +400,8 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setStatusF(e.target.value)}
             >
               <option value="">{t.allStatus}</option>
-              <option value="missing-in">{t.attMissingIn}</option>
-              <option value="out-only">{t.attOutOnly}</option>
+              <option value="no-tap">{t.attNoTap}</option>
+              <option value="mismatch">{t.attMismatch}</option>
               <option value="late">{t.attLate}</option>
               <option value="on-time">{t.attOnTime}</option>
             </Select>
@@ -444,17 +460,18 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
                   sort={sort}
                   onSort={(k) => setSort((cur) => nextSort(cur, k))}
                 />
-                <SortHead
-                  label={t.thOut}
-                  sortKey="out"
-                  sort={sort}
-                  onSort={(k) => setSort((cur) => nextSort(cur, k))}
-                />
               </tr>
             </TableHeader>
             <TableBody>
               {pg.rows.map((r) => (
-                <TableRow key={`${r.nik}-${r.date}`}>
+                <TableRow
+                  key={`${r.nik}-${r.date}`}
+                  /* The contradiction is between two cells, so the tint sits on
+                     the row that holds both rather than on either one. Faint —
+                     it marks the row for a second look, and the badges say
+                     which way to look. */
+                  className={cn(isMismatch(r) && "bg-[rgba(255,159,10,.07)]")}
+                >
                   <TableCell
                     className={cn(
                       "font-semibold",
@@ -473,7 +490,15 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
                     {r.department ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="info">{r.rosterCode ?? "–"}</Badge>
+                    {/* Amber on a mismatch, and only when we actually hold a
+                        roster for them: a dash means we have nothing to
+                        contradict, which is our gap, not their anomaly. */}
+                    <Badge
+                      variant={isMismatch(r) ? "warning" : "info"}
+                      dot={isMismatch(r)}
+                    >
+                      {r.rosterCode ?? "–"}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     {/* The flag sits on the tap time, where lateness is
@@ -499,23 +524,13 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
                         time={clock(r.firstInAt)}
                         machine={r.firstInMachine ?? undefined}
                       />
-                    ) : r.checkoutOf ? (
-                      /* Not a fault — the night shift going home, whose
-                         checkout lands on the next date. */
-                      <span className="text-xs text-(--text-tertiary)">
-                        {t.attCheckoutOf} {r.checkoutOf}
-                      </span>
                     ) : (
+                      /* Rostered for a shift and never seen. Red, because this
+                         is the row that can leave a unit without an operator. */
                       <Badge variant="danger" dot>
-                        {t.attMissingIn}
+                        {t.attNoTap}
                       </Badge>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <IOCell
-                      time={clock(r.firstOutAt)}
-                      machine={r.firstOutMachine ?? undefined}
-                    />
                   </TableCell>
                 </TableRow>
               ))}

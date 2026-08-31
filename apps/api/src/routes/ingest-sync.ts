@@ -14,17 +14,7 @@
  * Sync requires `manage`; reading only `view`.
  */
 
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  lte,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { Elysia, t } from "elysia";
 
@@ -374,21 +364,76 @@ export const fitToWorkSyncRoutes = new Elysia({
   );
 
 /**
- * The taps enriched from local records: who this NIK is (when we know them)
- * and what the roster says about their day. Left joins on purpose — a tap
- * from a NIK with no employee record is still a fact about the morning, and
- * hiding it would make the screen disagree with the machines.
+ * One row per shift the morning is accountable for — not one row per tap.
+ *
+ * The population is the union of two facts, because either one alone lies
+ * (owner, 2026-08-30):
+ *
+ *   - every IN tap in the range, so the screen never disagrees with the
+ *     machines; and
+ *   - every roster day that says `D` or `N`, so someone who was scheduled and
+ *     *never tapped at all* has a row. Driven by taps alone they had none —
+ *     they were invisible on the one screen whose job is to notice them.
+ *
+ * OUT taps are gone entirely. They were only ever here because a reading is
+ * keyed by (nik, date), so a night shift's 06:00 checkout landed on the next
+ * date as a row with no arrival — 461 of them, needing a `checkoutOf` lookup
+ * to explain that they were not faults. With one row per rostered shift the
+ * question does not arise: the night shift's IN is on its own roster date, and
+ * the checkout is not shown at all.
+ *
+ * Left joins on the employee stay: a tap from a NIK with no employee record is
+ * still a fact about the morning. Those rows carry a null `rosterCode`, which
+ * is *not* the same claim as a roster that disagrees — see `AttendanceReading`.
  */
 async function attendanceRows(from: string, to: string) {
+  /*
+   * Only the active document. The previous reading joined `roster_days`
+   * without it, so a month that had been re-uploaded held two rows per
+   * (employee, date) and the map kept whichever arrived last — the archive
+   * silently overruling the roster in force.
+   */
+  const roster = await db
+    .select({
+      nik: schema.employees.nik,
+      date: schema.rosterDays.date,
+      code: schema.rosterDays.code,
+      name: schema.employees.name,
+      department: schema.departments.name,
+      company: schema.companies.name,
+    })
+    .from(schema.rosterDays)
+    .innerJoin(
+      schema.rosterDocuments,
+      and(
+        eq(schema.rosterDocuments.id, schema.rosterDays.documentId),
+        eq(schema.rosterDocuments.status, "aktif")
+      )
+    )
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.rosterDays.employeeId)
+    )
+    .leftJoin(
+      schema.departments,
+      eq(schema.departments.id, schema.employees.departmentId)
+    )
+    .leftJoin(
+      schema.companies,
+      eq(schema.companies.id, schema.employees.companyId)
+    )
+    .where(
+      and(gte(schema.rosterDays.date, from), lte(schema.rosterDays.date, to))
+    );
+
+  const rosterAt = new Map(roster.map((r) => [`${r.nik} ${r.date}`, r]));
+
   const readings = await db
     .select({
       nik: schema.fingerReadings.nik,
       date: schema.fingerReadings.date,
       firstInAt: schema.fingerReadings.firstInAt,
       firstInIp: schema.fingerReadings.firstInIp,
-      firstOutAt: schema.fingerReadings.firstOutAt,
-      firstOutIp: schema.fingerReadings.firstOutIp,
-      employeeId: schema.employees.id,
       name: schema.employees.name,
       department: schema.departments.name,
       company: schema.companies.name,
@@ -409,37 +454,12 @@ async function attendanceRows(from: string, to: string) {
     .where(
       and(
         gte(schema.fingerReadings.date, from),
-        lte(schema.fingerReadings.date, to)
+        lte(schema.fingerReadings.date, to),
+        /* An OUT with no IN is no longer a row of its own: it is the tail of
+           a shift whose own row lives on the previous date. */
+        isNotNull(schema.fingerReadings.firstInAt)
       )
-    )
-    .orderBy(
-      desc(schema.fingerReadings.date),
-      asc(schema.fingerReadings.firstInAt)
     );
-
-  // One roster query for the whole page of days, matched per (employee, date).
-  const employeeIds = [
-    ...new Set(readings.flatMap((r) => (r.employeeId ? [r.employeeId] : []))),
-  ];
-  const codeByEmployeeDate = new Map<string, string>();
-  if (employeeIds.length) {
-    const days = await db
-      .select({
-        employeeId: schema.rosterDays.employeeId,
-        date: schema.rosterDays.date,
-        code: schema.rosterDays.code,
-      })
-      .from(schema.rosterDays)
-      .where(
-        and(
-          inArray(schema.rosterDays.employeeId, employeeIds),
-          gte(schema.rosterDays.date, from),
-          lte(schema.rosterDays.date, to)
-        )
-      );
-    for (const day of days)
-      codeByEmployeeDate.set(`${day.employeeId} ${day.date}`, day.code);
-  }
 
   /*
    * The gate each person is judged against is their *own* shift's, taken from
@@ -456,24 +476,6 @@ async function attendanceRows(from: string, to: string) {
     fingerInDeadline("night"),
   ]);
 
-  /*
-   * A row with no IN tap means one of two very different things, and the
-   * previous day settles which.
-   *
-   * A night shift's checkout lands on the *next* date, because a reading is
-   * keyed by (nik, date) — so an operator who started at 17:30 on the 29th
-   * taps out at 06:00 on the 30th and appears here with an OUT and nothing
-   * else. That is not a fault. Someone with no IN today *and* none the day
-   * before has simply not been recorded arriving: a forgotten tap, or a
-   * fingerprint machine that was down (owner, 2026-08-30). That is a fault,
-   * and it used to be buried among the 465 rows the first reading lumped
-   * together.
-   */
-  const dayBefore = (iso: string) => {
-    const d = new Date(`${iso}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().slice(0, 10);
-  };
   /*
    * IP → machine name. The whole registry is 58 rows, so it loads once and is
    * looked up in memory rather than joined per reading twice over.
@@ -495,23 +497,6 @@ async function attendanceRows(from: string, to: string) {
   const machineAt = (ip: string | null) =>
     ip ? (machineByIp.get(ip) ?? ip) : null;
 
-  const priorIn = new Set<string>();
-  {
-    const rows = await db
-      .select({
-        nik: schema.fingerReadings.nik,
-        date: schema.fingerReadings.date,
-      })
-      .from(schema.fingerReadings)
-      .where(
-        and(
-          gte(schema.fingerReadings.date, dayBefore(from)),
-          lte(schema.fingerReadings.date, to),
-          isNotNull(schema.fingerReadings.firstInAt)
-        )
-      );
-    for (const r of rows) priorIn.add(`${r.nik} ${r.date}`);
-  }
   const lateness = (code: string | null, at: string | null): boolean | null => {
     if (!at || !code) return null;
     const gate = code === "N" ? nightGate : code === "D" ? dayGate : null;
@@ -520,37 +505,87 @@ async function attendanceRows(from: string, to: string) {
     return gate ? at.slice(11, 19) >= gate : null;
   };
 
-  return readings.map((r) => {
-    const rosterCode = r.employeeId
-      ? (codeByEmployeeDate.get(`${r.employeeId} ${r.date}`) ?? null)
-      : null;
-    return {
+  type Row = {
+    nik: string;
+    date: string;
+    name: string | null;
+    department: string | null;
+    company: string | null;
+    rosterCode: string | null;
+    firstInAt: string | null;
+    firstInIp: string | null;
+    firstInMachine: string | null;
+    late: boolean | null;
+  };
+
+  const rows = new Map<string, Row>();
+
+  /* Every tap first — the machines are the ground truth about arrival. */
+  for (const r of readings) {
+    const key = `${r.nik} ${r.date}`;
+    const rosterCode = rosterAt.get(key)?.code ?? null;
+    rows.set(key, {
+      nik: r.nik,
+      date: r.date,
+      /* Fall back to the roster's copy of the name: the tap's join can miss
+         only when the NIK is unknown here, and then the roster has none
+         either — but keeping the order explicit costs nothing. */
+      name: r.name ?? rosterAt.get(key)?.name ?? null,
+      department: r.department ?? rosterAt.get(key)?.department ?? null,
+      company: r.company ?? rosterAt.get(key)?.company ?? null,
+      rosterCode,
+      firstInAt: r.firstInAt,
+      firstInIp: r.firstInIp,
+      firstInMachine: machineAt(r.firstInIp),
+      late: lateness(rosterCode, r.firstInAt),
+    });
+  }
+
+  /* Then the scheduled shifts nobody tapped for. Only `D` and `N`: a rostered
+     `OFF` with no tap is a person on leave behaving exactly as expected, and
+     990 of those a day would bury the four that matter. */
+  for (const r of roster) {
+    if (r.code !== "D" && r.code !== "N") continue;
+    const key = `${r.nik} ${r.date}`;
+    if (rows.has(key)) continue;
+    rows.set(key, {
       nik: r.nik,
       date: r.date,
       name: r.name,
       department: r.department,
       company: r.company,
-      rosterCode,
-      firstInAt: r.firstInAt,
-      firstInIp: r.firstInIp,
-      firstInMachine: machineAt(r.firstInIp),
-      firstOutAt: r.firstOutAt,
-      firstOutIp: r.firstOutIp,
-      firstOutMachine: machineAt(r.firstOutIp),
-      /** Tapped in after their own shift's `finger-in`; null when unknowable. */
-      late: lateness(rosterCode, r.firstInAt),
-      /**
-       * For a row with no IN tap: the date they *did* tap in on, which is the
-       * shift this checkout belongs to. Null means no arrival was recorded on
-       * either day — the tap is missing, not merely displaced.
-       */
-      checkoutOf:
-        !r.firstInAt && priorIn.has(`${r.nik} ${dayBefore(r.date)}`)
-          ? dayBefore(r.date)
-          : null,
-    };
-  });
+      rosterCode: r.code,
+      firstInAt: null,
+      firstInIp: null,
+      firstInMachine: null,
+      late: null,
+    });
+  }
+
+  return [...rows.values()].sort(
+    (a, b) =>
+      b.date.localeCompare(a.date) ||
+      (a.firstInAt ?? "").localeCompare(b.firstInAt ?? "")
+  );
 }
+
+/**
+ * Tapped in on a day the roster does not schedule — the anomaly the screen
+ * highlights (owner, 2026-08-30).
+ *
+ * A null `rosterCode` is deliberately *not* a mismatch. Two thirds of the taps
+ * come from NIKs with no employee record at all, and never will have a roster;
+ * flagging them would light up most of the screen every morning to report a
+ * gap in our own records rather than anything about the person who tapped.
+ */
+const isMismatch = (r: {
+  firstInAt: string | null;
+  rosterCode: string | null;
+}): boolean =>
+  !!r.firstInAt &&
+  r.rosterCode !== null &&
+  r.rosterCode !== "D" &&
+  r.rosterCode !== "N";
 
 /** The attendance export's columns, in the order a reader scans them. */
 const ATTENDANCE_EXPORT_COLUMNS = [
@@ -563,9 +598,6 @@ const ATTENDANCE_EXPORT_COLUMNS = [
   "jam_masuk",
   "mesin_masuk",
   "ip_masuk",
-  "jam_keluar",
-  "mesin_keluar",
-  "ip_keluar",
   "telat",
   "keterangan",
 ] as const;
@@ -594,17 +626,14 @@ async function attendanceWorkbook(
       jam_masuk: r.firstInAt ? r.firstInAt.slice(11, 19) : "",
       mesin_masuk: r.firstInMachine ?? "",
       ip_masuk: r.firstInIp ?? "",
-      jam_keluar: r.firstOutAt ? r.firstOutAt.slice(11, 19) : "",
-      mesin_keluar: r.firstOutMachine ?? "",
-      ip_keluar: r.firstOutIp ?? "",
       // Blank rather than "TIDAK" when unknowable: an empty cell reads as "no
       // answer", which is the truth when the roster does not say.
       telat: r.late === null ? "" : r.late ? "YA" : "TIDAK",
-      keterangan: r.firstInAt
-        ? ""
-        : r.checkoutOf
-          ? `Pulang shift ${r.checkoutOf}`
-          : "Tap masuk hilang",
+      keterangan: !r.firstInAt
+        ? `Dijadwalkan ${r.rosterCode} tapi tidak tap`
+        : isMismatch(r)
+          ? `Tap masuk tapi roster ${r.rosterCode}`
+          : "",
     });
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -653,10 +682,8 @@ export const attendanceSyncRoutes = new Elysia({
         if (query.department && r.department !== query.department) return false;
         if (query.roster && r.rosterCode !== query.roster) return false;
         if (query.status === "late" && r.late !== true) return false;
-        if (query.status === "out-only" && !(!r.firstInAt && r.checkoutOf))
-          return false;
-        if (query.status === "missing-in" && !(!r.firstInAt && !r.checkoutOf))
-          return false;
+        if (query.status === "no-tap" && r.firstInAt) return false;
+        if (query.status === "mismatch" && !isMismatch(r)) return false;
         if (query.status === "on-time" && r.late !== false) return false;
         if (query.q) {
           const needle = query.q.toLowerCase();
@@ -686,7 +713,7 @@ export const attendanceSyncRoutes = new Elysia({
         company: t.Optional(t.String()),
         department: t.Optional(t.String()),
         roster: t.Optional(t.String()),
-        /** "late" | "missing-in" | "out-only" | "on-time" — the screen's. */
+        /** "late" | "no-tap" | "mismatch" | "on-time" — the screen's. */
         status: t.Optional(t.String()),
         q: t.Optional(t.String()),
       }),

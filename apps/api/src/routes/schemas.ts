@@ -1251,7 +1251,14 @@ export const FtwListSchema = t.Object({
   lastSyncedAt: t.Nullable(t.String()),
 });
 
-/** One person's tap summary for one day, enriched from local records. */
+/**
+ * One shift the morning is accountable for: a tap, a rostered shift, or both.
+ *
+ * A row with `firstInAt` null is someone rostered `D`/`N` who never tapped. A
+ * row whose `rosterCode` is neither `D` nor `N` while `firstInAt` is set is
+ * someone who tapped on a day the roster does not schedule. Both are states the
+ * previous tap-driven list could not express.
+ */
 export const AttendanceReadingSchema = t.Object({
   nik: t.String(),
   date: t.String(),
@@ -1259,27 +1266,23 @@ export const AttendanceReadingSchema = t.Object({
   name: t.Nullable(t.String()),
   department: t.Nullable(t.String()),
   company: t.Nullable(t.String()),
-  /** The roster's word for the day, when this NIK is rostered. */
+  /**
+   * The roster's word for the day. `null` means we hold no roster for this
+   * person at all — a gap in our records, not a contradiction of theirs, and
+   * the screen is careful not to report it as one.
+   */
   rosterCode: t.Nullable(t.String()),
+  /** Null on a rostered shift nobody tapped for — the row exists to say so. */
   firstInAt: t.Nullable(t.String()),
   firstInIp: t.Nullable(t.String()),
   /** The registered machine at that address, falling back to the address. */
   firstInMachine: t.Nullable(t.String()),
-  firstOutAt: t.Nullable(t.String()),
-  firstOutIp: t.Nullable(t.String()),
-  firstOutMachine: t.Nullable(t.String()),
   /**
    * Tapped in at or after this person's own shift gate. `null` means the
    * roster does not say which shift they are on, so lateness is unknowable —
    * a different fact from "on time".
    */
   late: t.Nullable(t.Boolean()),
-  /**
-   * On a row with no IN tap: the date whose shift this checkout closes. Null
-   * there means no arrival was recorded on either day — a forgotten tap or a
-   * machine that was down, not a night shift going home.
-   */
-  checkoutOf: t.Nullable(t.String()),
 });
 
 export const AttendanceListSchema = t.Object({

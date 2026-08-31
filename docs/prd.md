@@ -160,6 +160,35 @@ fill the gap from the spare pool.
 - A reading with no `sent_at` is judged on its verdict alone — inventing
   lateness from a null would fail people for a gap in our own record.
 
+### The Attendance screen is roster-driven — shipped
+
+- **A row is a shift, not a tap** (owner, 2026-08-30). The list is the union of
+  every IN tap in range and every roster day that says `D` or `N`. Driven by
+  taps alone, someone scheduled who **never tapped at all** had no row: the one
+  screen whose job is to notice them could not. Live data for 2026-08-30: 1,833
+  tap rows and **326 scheduled-but-absent rows that did not previously exist**.
+- **Two contradictions are reported, and only two.** Scheduled and absent (red,
+  sorted first — it is the only row here that can leave a unit without an
+  operator at 05:30), and present but not scheduled (amber, row tinted). What a
+  tap _means_ against a shift still belongs to the allocation engine.
+- **A null roster code is not a mismatch.** 2,507 of 3,933 taps come from NIKs
+  with no employee record — non-mining, and they will never have a roster.
+  Flagging `code NOT IN (D, N)` would light up two thirds of the screen every
+  morning to report a gap in our own records as though it were the tapper's
+  anomaly. They stay visible, unflagged, with a dash for a roster.
+- **Check-out is gone.** It existed only because a reading is keyed by
+  (`nik`, `date`), so a night shift's 06:00 checkout landed on the _next_ date
+  as a row with no arrival — 461 of them, needing a `checkoutOf` lookup to
+  explain they were not faults. One row per rostered shift dissolves the
+  question rather than answering it: the night shift's IN is on its own roster
+  date. 124 OUT-only rows on 2026-08-30 stop being rows.
+- **The roster join now requires the active document.** It did not before, so a
+  re-uploaded month held two rows per (employee, date) and the lookup kept
+  whichever arrived last — the archive silently overruling the roster in force.
+- Depends on a real roster. This was not worth building against the dummy
+  all-`D` August: every day read as 990 scheduled and ~660 present, and the
+  mismatch bucket cannot exist when every code is `D`.
+
 ### The allocation engine — shipped
 
 - `spare-validate` is no longer a no-op. It builds and stores one shift's

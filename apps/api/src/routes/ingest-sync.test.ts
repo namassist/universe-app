@@ -168,7 +168,7 @@ describe("the FTW list", () => {
 });
 
 describe("the attendance list", () => {
-  test("enriches a known NIK with name, department, and roster code; leaves an unknown NIK bare", async () => {
+  test("has a row per shift: taps enriched, absentees present, mismatches marked", async () => {
     const viewer = await makeUser("attendance", "view");
 
     // A minimal local chain for the known person.
@@ -184,16 +184,25 @@ describe("the attendance list", () => {
       .insert(schema.positions)
       .values({ name: tag, departmentId: dept!.id })
       .returning({ id: schema.positions.id });
-    const [employee] = await db
-      .insert(schema.employees)
-      .values({
-        nik: "90000011",
-        name: "UJI DIKENAL",
-        companyId: company!.id,
-        departmentId: dept!.id,
-        positionId: position!.id,
-      })
-      .returning({ id: schema.employees.id });
+    const person = async (nik: string, name: string) =>
+      (
+        await db
+          .insert(schema.employees)
+          .values({
+            nik,
+            name,
+            companyId: company!.id,
+            departmentId: dept!.id,
+            positionId: position!.id,
+          })
+          .returning({ id: schema.employees.id })
+      )[0]!;
+    const employee = await person("90000011", "UJI DIKENAL");
+    /* Rostered for a shift and never seen: the row the tap-driven list could
+       not produce at all. */
+    const absentee = await person("90000012", "UJI TIDAK TAP");
+    /* Tapped on a day the roster says OFF — the highlighted contradiction. */
+    const offDuty = await person("90000013", "UJI BEDA ROSTER");
     const [uploader] = await db
       .select({ id: schema.users.id })
       .from(schema.users)
@@ -207,12 +216,11 @@ describe("the attendance list", () => {
         uploadedBy: uploader!.id,
       })
       .returning({ id: schema.rosterDocuments.id });
-    await db.insert(schema.rosterDays).values({
-      documentId: doc!.id,
-      employeeId: employee!.id,
-      date: D1,
-      code: "D",
-    });
+    await db.insert(schema.rosterDays).values([
+      { documentId: doc!.id, employeeId: employee!.id, date: D1, code: "D" },
+      { documentId: doc!.id, employeeId: absentee.id, date: D1, code: "D" },
+      { documentId: doc!.id, employeeId: offDuty.id, date: D1, code: "OFF" },
+    ]);
 
     await db.insert(schema.fingerReadings).values([
       {
@@ -222,7 +230,20 @@ describe("the attendance list", () => {
         firstInIp: "10.0.0.1",
       },
       {
+        nik: "90000013",
+        date: D1,
+        firstInAt: `${D1} 05:20:00`,
+        firstInIp: "10.0.0.3",
+      },
+      {
         nik: "90000099", // no local record on purpose
+        date: D1,
+        firstInAt: `${D1} 05:30:00`,
+        firstInIp: "10.0.0.2",
+      },
+      {
+        // An OUT with no IN: the tail of a shift whose own row is elsewhere.
+        nik: "90000098",
         date: D1,
         firstOutAt: `${D1} 06:26:57`,
         firstOutIp: "10.0.0.2",
@@ -243,32 +264,50 @@ describe("the attendance list", () => {
           department: string | null;
           rosterCode: string | null;
           firstInAt: string | null;
-          firstOutAt: string | null;
         }>;
       };
-      const known = body.rows.find((r) => r.nik === "90000011");
-      expect(known).toMatchObject({
+      const row = (nik: string) => body.rows.find((r) => r.nik === nik);
+
+      expect(row("90000011")).toMatchObject({
         name: "UJI DIKENAL",
         department: tag,
         rosterCode: "D",
         firstInAt: `${D1} 05:15:51`,
       });
 
+      // Scheduled and never seen: a row, with the roster's word and no tap.
+      expect(row("90000012")).toMatchObject({
+        name: "UJI TIDAK TAP",
+        rosterCode: "D",
+        firstInAt: null,
+      });
+
+      // Present but not scheduled — both halves of the contradiction on one row.
+      expect(row("90000013")).toMatchObject({
+        rosterCode: "OFF",
+        firstInAt: `${D1} 05:20:00`,
+      });
+
       // The unknown tap is a fact about the morning, shown bare — not hidden.
-      const unknown = body.rows.find((r) => r.nik === "90000099");
-      expect(unknown).toMatchObject({
+      // A null roster is our gap, and must not read as a contradiction.
+      expect(row("90000099")).toMatchObject({
         name: null,
         department: null,
         rosterCode: null,
-        firstOutAt: `${D1} 06:26:57`,
+        firstInAt: `${D1} 05:30:00`,
       });
+
+      // An OUT with no IN is no longer a row of its own.
+      expect(row("90000098")).toBeUndefined();
     } finally {
       await db
         .delete(schema.rosterDocuments)
         .where(eq(schema.rosterDocuments.id, doc!.id));
       await db
         .delete(schema.employees)
-        .where(eq(schema.employees.id, employee!.id));
+        .where(
+          inArray(schema.employees.id, [employee!.id, absentee.id, offDuty.id])
+        );
       await db
         .delete(schema.positions)
         .where(eq(schema.positions.id, position!.id));
