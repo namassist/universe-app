@@ -160,6 +160,29 @@ fill the gap from the spare pool.
 - A reading with no `sent_at` is judged on its verdict alone — inventing
   lateness from a null would fail people for a gap in our own record.
 
+### The IN tap is split at noon — shipped
+
+- **A day holds two shift-starts, so one "first IN" cannot serve both**
+  (owner, 2026-08-30). `finger_readings` now carries `first_in_at` (the first
+  IN before 12:00) and `first_in_pm_at` (the first at or after it). Resolve
+  with `shiftIn(reading, shift)` — never `firstInAt ?? firstInPmAt`, which is
+  the bug itself written as a fallback.
+- **The bug it closes, from live data.** `distinct on (nik, tanggal) ... asc`
+  took the earliest IN of the calendar day. A night worker finishing the
+  previous shift taps OUT at 06:20 and presses IN as well; that 06:20 then
+  stood as their arrival for the _evening_ shift, comfortably inside a 17:15
+  gate. Six such rows on 2026-08-30 — and re-judged against the correct tap,
+  three change verdict: two to `missing` (they went home and never came back)
+  and one to `late` (real tap 17:16:11, one minute past the gate).
+- **The error direction is what makes it worth fixing.** It passed people who
+  had not arrived. A board that quietly seats an absent operator is worse than
+  one that refuses a present one, because nobody goes looking.
+- **Noon is a fixed hour, not a configured stage** (owner, 2026-08-30). No
+  timeline stage marks where a night begins, and adding one costs more than it
+  returns. The two tap clusters — 04:00–07:00 (1,128 rows) and 15:00–18:00
+  (719) — leave a six-hour gap no plausible gate crosses.
+- Only the IN is split. A shift's OUT is unambiguous and nothing judges it.
+
 ### The Attendance screen is roster-driven — shipped
 
 - **A row is a shift, not a tap** (owner, 2026-08-30). The list is the union of

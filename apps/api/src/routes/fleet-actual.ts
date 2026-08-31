@@ -21,7 +21,7 @@ import { buildBoard, storeBoard } from "../allocation";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
-import { fingerInDeadline, ftwDeadline, judge } from "../readiness";
+import { fingerInDeadline, ftwDeadline, judge, shiftIn } from "../readiness";
 import { stageGates } from "../stage-time";
 import { pairingRefusal } from "./fleet-allocation";
 import { localDate } from "../scheduler";
@@ -777,7 +777,7 @@ export const fleetActualRoutes = new Elysia({
         const nik = normalizeNik(person.nik);
         const readiness = judge({
           ftw: W.get(nik) ?? null,
-          finger: F.get(nik) ?? null,
+          finger: shiftIn(F.get(nik) ?? null, params.shift),
           requiresFtw: unit.requiresFtw,
           // Both fall back to midnight rather than to a permissive value: an
           // unconfigured stage must refuse everyone loudly, not pass everyone

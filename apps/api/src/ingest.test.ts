@@ -44,6 +44,8 @@ const fingerRow = (over: Partial<FingerSourceRow> = {}): FingerSourceRow => ({
   date: D1,
   first_in_at: `${D1} 05:15:51`,
   first_in_ip: "192.168.179.235",
+  first_in_pm_at: null,
+  first_in_pm_ip: null,
   first_out_at: null,
   first_out_ip: null,
   ...over,

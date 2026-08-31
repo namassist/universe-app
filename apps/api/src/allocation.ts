@@ -26,7 +26,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
-import { judge, type Readiness } from "./readiness";
+import { judge, shiftIn, type Readiness } from "./readiness";
 import {
   pairingRefusal,
   type AllocPerson,
@@ -139,7 +139,7 @@ async function candidates(
       // unit and not another, and that is a property of the pairing.
       readiness: judge({
         ftw: ftwByNik.get(nik) ?? null,
-        finger: fingerByNik.get(nik) ?? null,
+        finger: shiftIn(fingerByNik.get(nik) ?? null, shift),
         requiresFtw: true,
         deadline,
         ftwDeadline: ftwDeadlineAt,

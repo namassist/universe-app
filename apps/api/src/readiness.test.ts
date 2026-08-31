@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { fingerInDeadline, ftwDeadline, judge } from "./readiness";
+import { fingerInDeadline, ftwDeadline, judge, shiftIn } from "./readiness";
 
 /** Uploaded before the 04:45 gate, so lateness never confuses another test. */
 const PUNCTUAL = "2026-08-29 04:20:00";
@@ -156,6 +156,66 @@ describe("fingerprint", () => {
     // The same tap against the morning deadline is the bug this prevents:
     // one global deadline would fail every night operator, every day.
     expect(judge({ ...night, deadline: "05:15:00" }).finger).toBe("late");
+  });
+});
+
+describe("which IN tap belongs to the shift", () => {
+  /*
+   * The wrong-button case, from live data (owner, 2026-08-30): a night worker
+   * finishing the previous shift taps OUT at 06:20 and presses IN as well.
+   * Taking the earliest IN of the calendar day made that 06:20 their arrival
+   * for the evening shift — comfortably before the 17:15 gate, so the board
+   * passed six people who had not turned up yet.
+   */
+  const doubleTapped = {
+    firstInAt: "2026-08-30 06:20:29",
+    firstInIp: "10.0.0.1",
+    firstInPmAt: "2026-08-30 17:08:09",
+    firstInPmIp: "10.0.0.2",
+  };
+
+  test("a night shift reads the afternoon tap, not the morning one", () => {
+    expect(shiftIn(doubleTapped, "night")).toEqual({
+      firstInAt: "2026-08-30 17:08:09",
+      firstInIp: "10.0.0.2",
+    });
+  });
+
+  test("a day shift still reads the morning tap", () => {
+    expect(shiftIn(doubleTapped, "day")).toEqual({
+      firstInAt: "2026-08-30 06:20:29",
+      firstInIp: "10.0.0.1",
+    });
+  });
+
+  test("no afternoon tap is missing, never the morning one as a fallback", () => {
+    // Two of the six had no evening tap at all: they went home and did not
+    // come back. "Missing" is the honest answer; falling back to 05:40 would
+    // report them present for a shift nobody saw them at.
+    expect(
+      shiftIn({ firstInAt: "2026-08-30 05:40:36", firstInPmAt: null }, "night")
+    ).toEqual({ firstInAt: null, firstInIp: null });
+  });
+
+  test("the judged verdict follows the tap that was chosen", () => {
+    const night = { ...ok, deadline: "17:15:00" };
+    // 17:16:11 against a 17:15 gate — late, where the morning tap said pass.
+    expect(
+      judge({
+        ...night,
+        finger: shiftIn(
+          {
+            firstInAt: "2026-08-30 06:07:17",
+            firstInPmAt: "2026-08-30 17:16:11",
+          },
+          "night"
+        ),
+      }).finger
+    ).toBe("late");
+  });
+
+  test("no reading at all stays null rather than becoming an empty tap", () => {
+    expect(shiftIn(null, "night")).toBeNull();
   });
 });
 

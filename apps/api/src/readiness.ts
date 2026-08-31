@@ -92,6 +92,37 @@ export type Readiness = {
   sentAt: string | null;
 };
 
+/**
+ * A day's tap record, before anyone has decided which IN is the arrival.
+ *
+ * Both halves are here because both can be non-null on one date, and the
+ * roster is the only thing that says which one the shift meant.
+ */
+export type FingerRecord = {
+  firstInAt: string | null;
+  firstInIp?: string | null;
+  firstInPmAt: string | null;
+  firstInPmIp?: string | null;
+};
+
+/**
+ * The IN tap that belongs to a shift — noon-split, roster-decided.
+ *
+ * Never `firstInAt ?? firstInPmAt`: for a night shift that fallback is exactly
+ * the bug this split exists to close, silently accepting a 06:20 wrong-button
+ * tap as an arrival for a shift that starts at 17:00. A null result is the
+ * honest answer that they were not seen at the start of *this* shift.
+ */
+export function shiftIn(
+  reading: FingerRecord | null,
+  shift: ShiftKind
+): { firstInAt: string | null; firstInIp: string | null } | null {
+  if (!reading) return null;
+  return shift === "night"
+    ? { firstInAt: reading.firstInPmAt, firstInIp: reading.firstInPmIp ?? null }
+    : { firstInAt: reading.firstInAt, firstInIp: reading.firstInIp ?? null };
+}
+
 export type JudgeInput = {
   ftw: {
     ftwDecision: string | null;

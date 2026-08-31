@@ -14,14 +14,14 @@
  * Sync requires `manage`; reading only `view`.
  */
 
-import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, or, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
 import { ingestDates, syncFingerReadings, syncFtwReadings } from "../ingest";
-import { fingerInDeadline, ftwDeadline } from "../readiness";
+import { fingerInDeadline, ftwDeadline, shiftIn } from "../readiness";
 import {
   AttendanceListSchema,
   ErrorSchema,
@@ -434,6 +434,8 @@ async function attendanceRows(from: string, to: string) {
       date: schema.fingerReadings.date,
       firstInAt: schema.fingerReadings.firstInAt,
       firstInIp: schema.fingerReadings.firstInIp,
+      firstInPmAt: schema.fingerReadings.firstInPmAt,
+      firstInPmIp: schema.fingerReadings.firstInPmIp,
       name: schema.employees.name,
       department: schema.departments.name,
       company: schema.companies.name,
@@ -455,9 +457,12 @@ async function attendanceRows(from: string, to: string) {
       and(
         gte(schema.fingerReadings.date, from),
         lte(schema.fingerReadings.date, to),
-        /* An OUT with no IN is no longer a row of its own: it is the tail of
-           a shift whose own row lives on the previous date. */
-        isNotNull(schema.fingerReadings.firstInAt)
+        /* An OUT with no IN of either half is no longer a row of its own: it
+           is the tail of a shift whose own row lives on the previous date. */
+        or(
+          isNotNull(schema.fingerReadings.firstInAt),
+          isNotNull(schema.fingerReadings.firstInPmAt)
+        )
       )
     );
 
@@ -520,10 +525,26 @@ async function attendanceRows(from: string, to: string) {
 
   const rows = new Map<string, Row>();
 
+  /*
+   * Which of the two IN taps is *the* arrival is a question only the roster
+   * answers, so it is answered here and once (`shiftIn`). With no roster we
+   * cannot ask it — those rows fall back to whichever half was tapped, and
+   * their `late` stays null, which is the same "we do not know" the verdict
+   * already carried.
+   */
+  const arrival = (r: (typeof readings)[number], code: string | null) => {
+    if (code === "D" || code === "N")
+      return shiftIn(r, code === "N" ? "night" : "day")!;
+    return r.firstInAt
+      ? { firstInAt: r.firstInAt, firstInIp: r.firstInIp }
+      : { firstInAt: r.firstInPmAt, firstInIp: r.firstInPmIp };
+  };
+
   /* Every tap first — the machines are the ground truth about arrival. */
   for (const r of readings) {
     const key = `${r.nik} ${r.date}`;
     const rosterCode = rosterAt.get(key)?.code ?? null;
+    const { firstInAt, firstInIp } = arrival(r, rosterCode);
     rows.set(key, {
       nik: r.nik,
       date: r.date,
@@ -534,10 +555,10 @@ async function attendanceRows(from: string, to: string) {
       department: r.department ?? rosterAt.get(key)?.department ?? null,
       company: r.company ?? rosterAt.get(key)?.company ?? null,
       rosterCode,
-      firstInAt: r.firstInAt,
-      firstInIp: r.firstInIp,
-      firstInMachine: machineAt(r.firstInIp),
-      late: lateness(rosterCode, r.firstInAt),
+      firstInAt,
+      firstInIp,
+      firstInMachine: machineAt(firstInIp),
+      late: lateness(rosterCode, firstInAt),
     });
   }
 

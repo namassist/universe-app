@@ -203,6 +203,9 @@ describe("the attendance list", () => {
     const absentee = await person("90000012", "UJI TIDAK TAP");
     /* Tapped on a day the roster says OFF — the highlighted contradiction. */
     const offDuty = await person("90000013", "UJI BEDA ROSTER");
+    /* Night shift: the screen must show their evening tap, not the morning
+       wrong-button one that sits on the same row. */
+    const nightCrew = await person("90000014", "UJI SHIFT MALAM");
     const [uploader] = await db
       .select({ id: schema.users.id })
       .from(schema.users)
@@ -220,6 +223,7 @@ describe("the attendance list", () => {
       { documentId: doc!.id, employeeId: employee!.id, date: D1, code: "D" },
       { documentId: doc!.id, employeeId: absentee.id, date: D1, code: "D" },
       { documentId: doc!.id, employeeId: offDuty.id, date: D1, code: "OFF" },
+      { documentId: doc!.id, employeeId: nightCrew.id, date: D1, code: "N" },
     ]);
 
     await db.insert(schema.fingerReadings).values([
@@ -234,6 +238,16 @@ describe("the attendance list", () => {
         date: D1,
         firstInAt: `${D1} 05:20:00`,
         firstInIp: "10.0.0.3",
+      },
+      {
+        // Rostered N, and double-tapped on the way home that morning: the
+        // afternoon tap is the arrival, the 06:20 one is not.
+        nik: "90000014",
+        date: D1,
+        firstInAt: `${D1} 06:20:29`,
+        firstInIp: "10.0.0.4",
+        firstInPmAt: `${D1} 17:08:09`,
+        firstInPmIp: "10.0.0.5",
       },
       {
         nik: "90000099", // no local record on purpose
@@ -297,6 +311,13 @@ describe("the attendance list", () => {
         firstInAt: `${D1} 05:30:00`,
       });
 
+      // The night shift's arrival is the afternoon tap. Showing 06:20 would
+      // repeat the bug the noon split closed, one layer up.
+      expect(row("90000014")).toMatchObject({
+        rosterCode: "N",
+        firstInAt: `${D1} 17:08:09`,
+      });
+
       // An OUT with no IN is no longer a row of its own.
       expect(row("90000098")).toBeUndefined();
     } finally {
@@ -306,7 +327,12 @@ describe("the attendance list", () => {
       await db
         .delete(schema.employees)
         .where(
-          inArray(schema.employees.id, [employee!.id, absentee.id, offDuty.id])
+          inArray(schema.employees.id, [
+            employee!.id,
+            absentee.id,
+            offDuty.id,
+            nightCrew.id,
+          ])
         );
       await db
         .delete(schema.positions)

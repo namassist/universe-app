@@ -1141,9 +1141,25 @@ export const fingerReadings = pgTable(
     /** Normalized (digits only, no leading zeros) — the join key to us. */
     nik: text("nik").notNull(),
     date: date("date").notNull(),
-    /** Source-local tap times, string mode — see `ftwReadings.sentAt`. */
+    /**
+     * Source-local tap times, string mode — see `ftwReadings.sentAt`.
+     *
+     * The IN tap is split at noon and stored as two columns, because one day
+     * holds two shift-starts and a single "first IN" cannot serve both. A
+     * night worker who presses IN as well as OUT on their way home at 06:20
+     * would otherwise have that morning tap stand as their arrival, and the
+     * 17:25 board would pass them for a shift they had not turned up to.
+     *
+     * `firstInAt` is the first IN **before 12:00**, `firstInPmAt` the first
+     * IN **at or after** it. Which one is the arrival is a question only the
+     * roster can answer — resolve it with `shiftIn()`, never by reaching for
+     * whichever is non-null.
+     */
     firstInAt: timestamp("first_in_at", { mode: "string" }),
     firstInIp: text("first_in_ip"),
+    firstInPmAt: timestamp("first_in_pm_at", { mode: "string" }),
+    firstInPmIp: text("first_in_pm_ip"),
+    /** Not split: a shift's OUT is unambiguous, and nothing judges it. */
     firstOutAt: timestamp("first_out_at", { mode: "string" }),
     firstOutIp: text("first_out_ip"),
     syncedAt: timestamp("synced_at", { withTimezone: true })
