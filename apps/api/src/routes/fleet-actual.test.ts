@@ -682,16 +682,17 @@ describe("a screen scoped to its own formations", () => {
   ];
 
   test("shows only the formations it was given", () => {
-    const groups = groupIntoFleets(rows(), new Map(), new Set(["f2"]));
+    const groups = groupIntoFleets(rows(), new Map(), ["f2"]);
     expect(groups.map((g) => g.diggerCode)).toEqual(["EX-70"]);
   });
 
   test("shows every formation when it was given none", () => {
     // Empty is "unscoped", not "nothing": a screen nobody has pointed at a pit
     // is a control-room screen, and blanking it would be the wrong default.
-    expect(
-      groupIntoFleets(rows(), new Map(), new Set()).map((g) => g.id)
-    ).toEqual(["f1", "f2"]);
+    expect(groupIntoFleets(rows(), new Map(), []).map((g) => g.id)).toEqual([
+      "f1",
+      "f2",
+    ]);
     expect(groupIntoFleets(rows(), new Map(), null)).toHaveLength(2);
   });
 
@@ -703,20 +704,35 @@ describe("a screen scoped to its own formations", () => {
         slot({ unitCode: "EX-70", fleetId: "f2", diggerCode: "EX-70" }),
       ],
       new Map(),
-      new Set(["f2"])
+      ["f2"]
     );
     expect(groups).toHaveLength(1);
     expect(groups[0]!.total).toBe(1);
   });
+
+  test("keeps the order it was given, not the alphabet", () => {
+    // A monitor lays its picks out as quadrants, so the pick order is the only
+    // way an admin says which pit belongs top-left. Sorting by digger code
+    // here would silently overrule every one of those choices.
+    const groups = groupIntoFleets(rows(), new Map(), ["f2", "f1"]);
+    expect(groups.map((g) => g.diggerCode)).toEqual(["EX-70", "EX-22"]);
+  });
 });
 
 describe("previewing one screen from a browser", () => {
-  const makeScreen = async (rotateSeconds: number) => {
+  const makeScreen = async (
+    rotateSeconds: number,
+    extra: { name?: string; layout?: "slideshow" | "monitor" } = {}
+  ) => {
     const id = `ZZW${uid().toUpperCase()}`;
     made.devices.push(id);
-    await db
-      .insert(schema.devices)
-      .values({ id, name: tag, kind: "fleet", rotateSeconds });
+    await db.insert(schema.devices).values({
+      id,
+      name: extra.name ?? tag,
+      kind: "fleet",
+      rotateSeconds,
+      ...(extra.layout ? { layout: extra.layout } : {}),
+    });
     return id;
   };
 
@@ -733,6 +749,42 @@ describe("previewing one screen from a browser", () => {
     expect(
       ((await res.json()) as { rotateSeconds: number }).rotateSeconds
     ).toBe(9);
+  });
+
+  test("carries the screen's own name and layout", async () => {
+    // A monitor heads itself with its name, because no one of the four
+    // formations it shows can name it. Without this the wall could only fall
+    // back on the `?name=` a paired TV never sends.
+    const id = await makeScreen(30, {
+      name: "ZZ Ruang Kendali",
+      layout: "monitor",
+    });
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/display?device=${id}`,
+      wall.cookie
+    );
+    const body = (await res.json()) as {
+      deviceName: string | null;
+      layout: string;
+    };
+    expect(body.deviceName).toBe("ZZ Ruang Kendali");
+    expect(body.layout).toBe("monitor");
+  });
+
+  test("names no device when nobody named one", async () => {
+    // A person looking at the site-wide board is not standing at a screen.
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      wall.cookie
+    );
+    const body = (await res.json()) as {
+      deviceName: string | null;
+      layout: string;
+    };
+    expect(body.deviceName).toBeNull();
+    expect(body.layout).toBe("slideshow");
   });
 
   test("says so when the named screen does not exist", async () => {

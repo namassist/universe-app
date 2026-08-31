@@ -182,3 +182,101 @@ describe("which formations a screen shows", () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+describe("how a screen spends itself", () => {
+  test("is a slideshow unless the caller says otherwise", async () => {
+    // Every wall registered before the column existed is one, so the default
+    // has to be the behaviour they already have.
+    const res = await send("POST", "/devices", admin.cookie, {
+      id: newId(),
+      name: tag,
+      kind: "fleet",
+    });
+    expect(((await res.json()) as { layout: string }).layout).toBe("slideshow");
+  });
+
+  test("can be turned into a monitor and back", async () => {
+    const id = newId();
+    await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      layout: "monitor",
+    });
+    const back = await send("PATCH", `/devices/${id}`, admin.cookie, {
+      layout: "slideshow",
+    });
+    expect(((await back.json()) as { layout: string }).layout).toBe(
+      "slideshow"
+    );
+  });
+
+  test("takes more formations than fit one page", async () => {
+    // A monitor is not a smaller slideshow: it shows four at a time and pages
+    // through the rest, so nothing here is capped. The cap that used to live
+    // in this test was a misreading of the requirement.
+    const fleets = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .limit(5);
+    expect(fleets.length).toBe(5);
+    const id = newId();
+    const res = await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      layout: "monitor",
+      fleetIds: fleets.map((f) => f.id),
+    });
+    expect(res.status).toBe(201);
+    expect(
+      ((await res.json()) as { fleetIds: string[] }).fleetIds
+    ).toHaveLength(5);
+  });
+
+  test("switching an existing screen to monitor keeps every pick", async () => {
+    // Layout and picks are independent: changing one must not silently drop
+    // the other, which is what a cap here would have done.
+    const fleets = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .limit(5);
+    const id = newId();
+    await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      fleetIds: fleets.map((f) => f.id),
+    });
+    const res = await send("PATCH", `/devices/${id}`, admin.cookie, {
+      layout: "monitor",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { layout: string; fleetIds: string[] };
+    expect(body.layout).toBe("monitor");
+    expect(body.fleetIds).toHaveLength(5);
+  });
+
+  test("stores the picks in the order they were given", async () => {
+    // Pick order is the quadrant a monitor draws a pit in, and the sequence a
+    // slideshow rotates through. Alphabetical would overrule both.
+    const fleets = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .limit(3);
+    expect(fleets.length).toBe(3);
+    const picked = [fleets[2]!.id, fleets[0]!.id, fleets[1]!.id];
+    const id = newId();
+    const res = await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      layout: "monitor",
+      fleetIds: picked,
+    });
+    expect(res.status).toBe(201);
+    const read = await send("GET", `/devices?kind=fleet`, admin.cookie);
+    const rows = (await read.json()) as { id: string; fleetIds: string[] }[];
+    expect(rows.find((r) => r.id === id)!.fleetIds).toEqual(picked);
+  });
+});

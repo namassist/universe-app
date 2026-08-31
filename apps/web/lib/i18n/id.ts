@@ -432,6 +432,23 @@ export const id = {
   dspFleetHelp:
     "Diambil dari Setting Fleet — pilih ≥1; lebih dari satu = layar TV berotasi antar fleet.",
   dspFleetsCol: "Fleet yang ditayangkan",
+  dspLayout: "Tipe display",
+  dspLayoutSlideshow: "Slideshow — satu fleet bergantian",
+  dspLayoutMonitor: "Monitor — 4 fleet sekaligus",
+  dspLayoutHelpSlide:
+    "Satu formasi memenuhi layar, lalu berganti ke formasi berikutnya.",
+  dspLayoutHelpMon:
+    "4 formasi berdampingan; lebih dari 4 berotasi per halaman. Kartunya lebih kecil, jadi pasang di tempat yang dibaca dari dekat.",
+  dspOrderUp: "Naikkan urutan",
+  dspOrderDown: "Turunkan urutan",
+  dspOrderHelp:
+    "Urutan menentukan halaman dan posisinya: 1–4 halaman pertama, 1 di kiri-atas.",
+  dspMonRotate: "Durasi per halaman (detik)",
+  dspMonRotateHelp: "Lama tiap halaman berisi 4 fleet tampil sebelum berganti.",
+  dspPagesWord: "halaman",
+  dspLayoutCol: "Tipe",
+  dspLayoutSlideShort: "Slideshow",
+  dspLayoutMonShort: "Monitor",
   dspPicked: "dipilih",
   dspSelAll: "Pilih semua",
   dspFleetSearch: "Cari fleet…",

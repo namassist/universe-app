@@ -204,37 +204,43 @@ export function DisplayShell({
 
           {/* stat kiosk */}
           {/* Columns follow the stats passed in: this screen dropped from
-              four to three, and a hardcoded four left a hole on the right. */}
-          <div
-            className="grid flex-none gap-5"
-            style={{
-              gridTemplateColumns: `repeat(${stats.length}, minmax(0,1fr))`,
-            }}
-          >
-            {stats.map((s) => (
-              <div
-                key={s.label}
-                className="flex items-center gap-5 rounded-card px-6 py-4 glass-card"
-              >
+              four to three, and a hardcoded four left a hole on the right.
+              An empty list drops the row entirely — a monitor wall spends its
+              whole height on formations, and four tiles of site-wide numbers
+              above four quadrants would take that height from the cards that
+              are the reason it is on the wall. */}
+          {stats.length ? (
+            <div
+              className="grid flex-none gap-5"
+              style={{
+                gridTemplateColumns: `repeat(${stats.length}, minmax(0,1fr))`,
+              }}
+            >
+              {stats.map((s) => (
                 <div
-                  className={cn(
-                    "grid size-13 flex-none place-items-center rounded-icon border [&_svg]:size-6.5",
-                    s.iconClass
-                  )}
+                  key={s.label}
+                  className="flex items-center gap-5 rounded-card px-6 py-4 glass-card"
                 >
-                  {s.icon}
-                </div>
-                <div>
-                  <div className="text-[52px] leading-none font-bold tabular-nums">
-                    {s.value}
+                  <div
+                    className={cn(
+                      "grid size-13 flex-none place-items-center rounded-icon border [&_svg]:size-6.5",
+                      s.iconClass
+                    )}
+                  >
+                    {s.icon}
                   </div>
-                  <div className="mt-1 text-lg font-semibold text-(--text-secondary)">
-                    {s.label}
+                  <div>
+                    <div className="text-[52px] leading-none font-bold tabular-nums">
+                      {s.value}
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-(--text-secondary)">
+                      {s.label}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : null}
 
           {children}
         </div>

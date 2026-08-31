@@ -18,6 +18,7 @@ import {
   AREA_TYPES,
   BLOOD_TYPES,
   DEVICE_KINDS,
+  DISPLAY_LAYOUTS,
   EMPLOYEE_STATUSES,
   MASTER_KINDS,
   MCU_RESULTS,
@@ -38,6 +39,7 @@ export const AccessModeSchema = t.UnionEnum(ACCESS_MODES);
 export const ScopeSchema = t.UnionEnum(SCOPES);
 export const MenuSlugSchema = t.UnionEnum(MENU_SLUGS);
 export const DeviceKindSchema = t.UnionEnum(DEVICE_KINDS);
+export const DisplayLayoutSchema = t.UnionEnum(DISPLAY_LAYOUTS);
 export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
 export const AreaTypeSchema = t.UnionEnum(AREA_TYPES);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
@@ -971,6 +973,17 @@ export const FleetDisplaySchema = t.Object({
   /** Seconds one formation stays on screen — the screen's own setting. */
   rotateSeconds: t.Integer(),
   /**
+   * Whether the wall shows one formation at a time or four at once. Either
+   * way the fleets below arrive in the order the screen shows them, and
+   * `rotateSeconds` is the dwell it turns pages at.
+   */
+  layout: DisplayLayoutSchema,
+  /**
+   * The registered screen's own name, or null when nobody named a device — a
+   * person previewing the site-wide board. A monitor heads itself with it.
+   */
+  deviceName: t.Nullable(t.String()),
+  /**
    * Formations only. Units belonging to no fleet are deliberately absent: the
    * wall exists to show how each formation is crewed, and a unit in no
    * formation has nothing to say about that. They stay on the Actual board,
@@ -986,7 +999,12 @@ export const DeviceSchema = t.Object({
   active: t.Boolean(),
   /** Seconds one subject stays on screen before the display rotates. */
   rotateSeconds: t.Integer(),
-  /** Fleet walls: which formations to show. Empty means every fleet. */
+  /** How the wall spends itself: one formation at a time, or up to four. */
+  layout: DisplayLayoutSchema,
+  /**
+   * Fleet walls: which formations to show, in the order the screen shows them.
+   * Empty means every fleet.
+   */
   fleetIds: t.Array(t.String()),
   online: t.Boolean(),
   lastSeenAt: t.Nullable(t.String()),

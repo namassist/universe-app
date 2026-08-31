@@ -381,6 +381,78 @@ fill the gap from the spare pool.
 - `lib/display-data.ts` — the last of the display sample data, four invented
   fleets whose selection was discarded on submit — is gone.
 
+### A fleet wall is a slideshow or a monitor — shipped
+
+- **Each fleet TV declares how it spends its screen** (`devices.layout`,
+  default `slideshow`). A `slideshow` is the original wall: one formation fills
+  the glass. A `monitor` puts **four** formations side by side.
+- **Default `slideshow`, because that is what every wall already registered
+  is.** A default that quietly re-laid out the screens hanging in the yard
+  would be a migration nobody asked for.
+- **Four is a page size, not a ceiling** (owner, 2026-08-31). Neither layout
+  caps how many formations a screen may be given; a monitor holding more than
+  four rotates a page of four at a time, exactly as a slideshow rotates one
+  fleet at a time, and at the same `rotateSeconds`. A screen given nine shows
+  three pages of four, four, and one.
+- **Four per page, because the grid it implies is 2×2.** On the 1920×1080
+  canvas the walls run at, that is ~950×480 a quadrant, which still carries a
+  unit code and a full name at a size worth mounting a television for. Six
+  would fit geometrically and be unreadable in the yard.
+- **A monitor's grid does not reshape itself on the last page.** Nine
+  formations end on a page of one, and stretching that one across the wall
+  would resize every card as the page came round — on a wall that turns every
+  thirty seconds, a card that changes size reads as a different card. Only a
+  monitor that never turns fits its grid to what it holds.
+- **A monitor drops the summary tiles** (owner, 2026-08-31). Unit Aktif /
+  Teralokasi / Tanpa Operator / Spare describe _the_ formation on screen, which
+  is a sentence a slideshow can say and a monitor cannot — its screen is about
+  four. Each quadrant carries its own counts in its own header instead, and the
+  height the tiles were taking goes back to the cards.
+- **Pick order is now stored** (`device_fleets.sort_order`) and is the screen's
+  order: the rotation sequence on a slideshow, the page and the quadrant on a
+  monitor. Alphabetical-by-digger was adequate while a wall showed one fleet at
+  a time, but on a monitor it decides which pit lands top-left — and that is a
+  choice the control room makes, not the alphabet.
+- **A quadrant is always two rows of cards; the columns follow the formation.**
+  Card _height_ therefore stays fixed across all four quadrants — a five-unit
+  fleet gets wider cards instead of leaving half its quadrant empty, and a
+  fourteen-unit fleet narrows instead of spilling. Because the grid holds
+  `2 × ceil(n/2) ≥ n`, nothing is ever cut, and the wall keeps its promise that
+  an idle unit is never summarised away.
+- **Each quadrant names its formation the way the yard does**: `Fleet <digger>`
+  with the work area beside it, then the bus and the digger as badges and its
+  own counts (`n unit · n siap · n kosong · n spare`). A quadrant whose
+  formation has an empty seat outlines itself red, so a missing operator is
+  visible before a single card is read.
+- **A monitor turns by flipping its panels, not by sliding them** (owner,
+  2026-08-31). Four panels sliding together reads as the whole screen jumping;
+  four panels flipping in place reads as each quadrant changing its own
+  contents. One turn is a three-phase machine — hold, close, swap, open — with
+  a 70 ms stagger between quadrants, and the animation's durations live in the
+  page rather than only in CSS because the scheduler has to know when a panel
+  has finished closing before it swaps what is inside it. Under
+  `prefers-reduced-motion` the pages still turn; only the flip is dropped.
+- **Blank quadrants on the last page are rendered, not collapsed.** Nine
+  formations end on a page of one, and dropping the three blanks would move
+  every formation between turns — a crew who knows theirs appears bottom-right
+  would have to rescan the wall every time it came round.
+- **Each layout heads itself with what its screen is about** (owner,
+  2026-08-31). A slideshow is about one formation, so it reads
+  `Fleet <digger>` over the work area and the bus. A monitor is about four, so
+  no formation can name it — it takes the screen's own registered name
+  (`devices.name`, now delivered with the board) over
+  `Halaman 1/3 | fleet 1–4 dari 9`. Both keep the shift badge — the wall turns
+  from day to night by itself, so only the header can say which one is up — and
+  the provisional warning, which is an alarm rather than a label. The
+  "digenerate HH:MM" line and the name badge on the right are gone: a monitor
+  already carries its name in the heading, and on a slideshow the badge
+  answered a question the formation title had answered. The other kiosks keep
+  their name badge; they have no name in their heading.
+- **A monitor shows page dots, a slideshow shows the progress bar.** From a
+  distance the dots are what tell a crew their fleet is coming round shortly;
+  without them the wall reads as four formations changing on their own. The
+  segmented story bar stays on the slideshow, where one segment is one subject.
+
 ### Deferred until the Actual-tab engine exists
 
 - **Actual tab:** generated per shift by Manpower — assigned operators who

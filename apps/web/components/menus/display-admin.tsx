@@ -4,6 +4,8 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Eye,
   Link2,
@@ -17,8 +19,10 @@ import {
   COLOR_VAL,
   DEVICE_ID_PREFIX,
   DISPLAY_ROUTE_OF_KIND,
+  MONITOR_FLEETS_PER_PAGE,
   RUNTEXT_COLORS,
   type DeviceKind,
+  type DisplayLayout,
   type RunTextColor,
 } from "@universe/contracts";
 
@@ -153,6 +157,7 @@ export function DisplayAdminMenu({
       name: string;
       active: boolean;
       rotateSeconds: number;
+      layout: DisplayLayout;
       fleetIds: string[];
       runTexts: CustomRunText[];
     }) => {
@@ -161,6 +166,7 @@ export function DisplayAdminMenu({
             name: input.name,
             active: input.active,
             rotateSeconds: input.rotateSeconds,
+            layout: input.layout,
             fleetIds: input.fleetIds,
           })
         : await api.v1.devices.post({
@@ -169,6 +175,7 @@ export function DisplayAdminMenu({
             kind,
             active: input.active,
             rotateSeconds: input.rotateSeconds,
+            layout: input.layout,
             fleetIds: input.fleetIds,
           });
       if (result.error) throw result.error;
@@ -253,7 +260,20 @@ export function DisplayAdminMenu({
   const [fName, setFName] = React.useState("");
   const [fSel, setFSel] = React.useState<string[]>([]);
   const [fRotate, setFRotate] = React.useState(DEFAULT_ROTATE);
+  const [fLayout, setFLayout] = React.useState<DisplayLayout>("slideshow");
   const [fleetQ, setFleetQ] = React.useState("");
+
+  /* A monitor draws four formations at a time and pages through the rest, so
+     it caps nothing — it changes what a pick's *position* means: on a
+     slideshow the order is a queue, on a monitor it is the quadrant and the
+     page the formation lands on. */
+  const monitor = kind === "fleet" && fLayout === "monitor";
+  /* How many turns of the wall the current picks make. On a slideshow that is
+     one per formation; on a monitor, one per four. */
+  const monPages = Math.max(
+    1,
+    Math.ceil(fSel.length / MONITOR_FLEETS_PER_PAGE)
+  );
 
   const visibleFleets = React.useMemo(() => {
     const needle = fleetQ.trim().toLowerCase();
@@ -272,11 +292,20 @@ export function DisplayAdminMenu({
    * is four minutes before a screen comes back to the first one, and nobody
    * works that out from a seconds field alone.
    */
-  const cycleFleets = kind === "fleet" && fSel.length ? fSel.length : 1;
+  /* What one turn of the wall costs. A monitor turns a page of four, so nine
+     formations is three turns rather than nine — and the two numbers multiply,
+     which nobody works out from a seconds field alone. */
+  const cycleTurns = monitor
+    ? monPages
+    : kind === "fleet" && fSel.length
+      ? fSel.length
+      : 1;
   const rotateHelp =
-    kind === "fleet" && cycleFleets > 1
-      ? `${t.dspRotateHelp} ${t.dspCycleA} ${cycleFleets * fRotate} ${t.dspCycleB} ${cycleFleets} fleet.`
-      : t.dspRotateHelp;
+    kind === "fleet" && cycleTurns > 1
+      ? `${monitor ? t.dspMonRotateHelp : t.dspRotateHelp} ${t.dspCycleA} ${cycleTurns * fRotate} ${t.dspCycleB} ${cycleTurns} ${monitor ? t.dspPagesWord : "fleet"}.`
+      : monitor
+        ? t.dspMonRotateHelp
+        : t.dspRotateHelp;
   const [fRuntexts, setFRuntexts] = React.useState<CustomRunText[]>([]);
   /* Empty is not "unset": a device with no texts of its own follows the master
      list, which is the behaviour this field is really editing (design D8). */
@@ -308,6 +337,7 @@ export function DisplayAdminMenu({
     setFName("");
     setFSel([]);
     setFRotate(DEFAULT_ROTATE);
+    setFLayout("slideshow");
     setFleetQ("");
     setFRuntexts([]);
     setFActive(true);
@@ -322,6 +352,7 @@ export function DisplayAdminMenu({
     // so reopening it has to show what it is actually displaying.
     setFSel(d.fleetIds);
     setFRotate(d.rotateSeconds);
+    setFLayout(d.layout);
     setFleetQ("");
     setFRuntexts([]);
     setFActive(d.active);
@@ -333,6 +364,9 @@ export function DisplayAdminMenu({
     const { data } = await api.v1.devices({ id: d.id })["run-texts"].get();
     if (data) setFRuntexts(data);
   }
+  /* Appends rather than inserting in master order: the array *is* the screen's
+     order — the rotation sequence, and the quadrant on a monitor — so ticking
+     the most important formation first puts it first on the glass. */
   function toggleFleet(id: string) {
     setFSel((prev) => {
       const next = prev.includes(id)
@@ -342,6 +376,18 @@ export function DisplayAdminMenu({
       return next;
     });
   }
+
+  function moveFleet(id: string, dir: -1 | 1) {
+    setFSel((prev) => {
+      const i = prev.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j]!, next[i]!];
+      return next;
+    });
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!fName.trim() && !(kind === "fleet" && fSel.length)) {
@@ -361,6 +407,7 @@ export function DisplayAdminMenu({
       name,
       active: fActive,
       rotateSeconds: fRotate,
+      layout: kind === "fleet" ? fLayout : "slideshow",
       // Fleet walls only. Sending [] on the other kinds is how a screen stays
       // unscoped, and the API refuses a non-empty pick on them anyway.
       fleetIds: kind === "fleet" ? fSel : [],
@@ -431,6 +478,9 @@ export function DisplayAdminMenu({
             <TableHeader>
               <tr>
                 <TableHead>{t.dspName}</TableHead>
+                {kind === "fleet" ? (
+                  <TableHead>{t.dspLayoutCol}</TableHead>
+                ) : null}
                 <TableHead>{t.dspConn}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead className="w-44">{t.thAct}</TableHead>
@@ -442,6 +492,29 @@ export function DisplayAdminMenu({
                   <TableCell>
                     <NameCell name={d.name} sub={d.id} />
                   </TableCell>
+                  {/* How many formations, because it is the number that reads
+                      differently per type: four on a monitor is one screenful,
+                      four on a slideshow is two minutes before it comes back
+                      round. Empty means every fleet on both. */}
+                  {kind === "fleet" ? (
+                    <TableCell>
+                      <Badge
+                        variant={d.layout === "monitor" ? "info" : "neutral"}
+                      >
+                        {d.layout === "monitor"
+                          ? t.dspLayoutMonShort
+                          : t.dspLayoutSlideShort}
+                      </Badge>
+                      <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
+                        {d.fleetIds.length
+                          ? d.fleetIds
+                              .map((id) => fleetById.get(id)?.diggerCode)
+                              .filter(Boolean)
+                              .join(" · ")
+                          : t.dspFleetAllNote}
+                      </div>
+                    </TableCell>
+                  ) : null}
                   {/* Derived from last_seen_at, not asserted by the row. */}
                   <TableCell>
                     <Badge variant={d.online ? "success" : "danger"} dot>
@@ -575,6 +648,27 @@ export function DisplayAdminMenu({
               />
             </Field>
 
+            {/* Above the fleet picker because it changes that picker's rules:
+                choosing `monitor` puts a ceiling of four on it and turns the
+                order into a layout. Asked after the picks, it would silently
+                discard some of them. */}
+            {kind === "fleet" ? (
+              <Field
+                label={t.dspLayout}
+                htmlFor="dsp-layout"
+                helper={monitor ? t.dspLayoutHelpMon : t.dspLayoutHelpSlide}
+              >
+                <Select
+                  id="dsp-layout"
+                  value={fLayout}
+                  onChange={(e) => setFLayout(e.target.value as DisplayLayout)}
+                >
+                  <option value="slideshow">{t.dspLayoutSlideshow}</option>
+                  <option value="monitor">{t.dspLayoutMonitor}</option>
+                </Select>
+              </Field>
+            ) : null}
+
             {kind === "fleet" ? (
               <Field
                 label={
@@ -583,6 +677,14 @@ export function DisplayAdminMenu({
                     <Badge variant={fSel.length ? "info" : "neutral"}>
                       {fSel.length} {t.dspPicked}
                     </Badge>
+                    {/* Pages, because on a monitor the count alone no longer
+                        says what the screen does: nine formations is three
+                        turns of the wall, not nine. */}
+                    {monitor && fSel.length > MONITOR_FLEETS_PER_PAGE ? (
+                      <span className="text-xs font-normal text-(--text-tertiary)">
+                        {monPages} {t.dspPagesWord}
+                      </span>
+                    ) : null}
                     {/* Empty is not "nothing": a screen nobody has scoped is
                         a control-room screen showing every formation, and the
                         label has to say so or an empty list reads as broken. */}
@@ -611,7 +713,7 @@ export function DisplayAdminMenu({
                     )}
                   </span>
                 }
-                helper={t.dspFleetHelp}
+                helper={monitor ? t.dspOrderHelp : t.dspFleetHelp}
               >
                 <div className="flex flex-col gap-2">
                   {fleets.length > 6 ? (
@@ -623,46 +725,91 @@ export function DisplayAdminMenu({
                       placeholder={t.dspFleetSearch}
                     />
                   ) : null}
-                  <div className="grid max-h-52 grid-cols-2 gap-1 overflow-y-auto rounded-control border border-(--border-input) bg-(--fill-input) p-2">
+                  {/* One column on a monitor: the order controls need the
+                      width, and four rows never need two columns anyway. */}
+                  <div
+                    className={cn(
+                      "grid max-h-52 gap-1 overflow-y-auto rounded-control border border-(--border-input) bg-(--fill-input) p-2",
+                      monitor ? "grid-cols-1" : "grid-cols-2"
+                    )}
+                  >
                     {fleetsQ.isPending ? (
-                      <p className="col-span-2 px-1.5 py-2 text-xs text-(--text-tertiary) italic">
+                      <p className="col-span-full px-1.5 py-2 text-xs text-(--text-tertiary) italic">
                         {t.dspFleetLoading}
                       </p>
                     ) : visibleFleets.length === 0 ? (
                       /* Two different emptinesses: no fleets exist at all, or
                          the search matched none. Telling them apart is what
                          stops someone rebuilding a formation that is there. */
-                      <p className="col-span-2 px-1.5 py-2 text-xs text-(--text-tertiary) italic">
+                      <p className="col-span-full px-1.5 py-2 text-xs text-(--text-tertiary) italic">
                         {fleets.length ? t.dspFleetNoMatch : t.dspErrFleet}
                       </p>
                     ) : (
-                      visibleFleets.map((f) => (
-                        <ToggleRow
-                          key={f.id}
-                          className={cn(
-                            "rounded-md px-1.5 py-1.5",
-                            fSel.includes(f.id) && "bg-[rgba(0,212,255,.08)]"
-                          )}
-                        >
-                          <Checkbox
-                            checked={fSel.includes(f.id)}
-                            onChange={() => toggleFleet(f.id)}
-                          />
-                          <span className="min-w-0 flex-1 truncate">
-                            {`Fleet ${f.diggerCode}`}
-                            <span className="text-(--text-tertiary)">
-                              {` — ${f.workAreaName} · ${f.units.length + 1} unit`}
-                            </span>
-                          </span>
-                        </ToggleRow>
-                      ))
+                      visibleFleets.map((f) => {
+                        const pos = fSel.indexOf(f.id);
+                        const on = pos >= 0;
+                        return (
+                          <div
+                            key={f.id}
+                            className="flex min-w-0 items-center gap-1"
+                          >
+                            <ToggleRow
+                              className={cn(
+                                "min-w-0 flex-1 rounded-md px-1.5 py-1.5",
+                                on && "bg-[rgba(0,212,255,.08)]"
+                              )}
+                            >
+                              <Checkbox
+                                checked={on}
+                                onChange={() => toggleFleet(f.id)}
+                              />
+                              <span className="min-w-0 flex-1 truncate">
+                                {`Fleet ${f.diggerCode}`}
+                                <span className="text-(--text-tertiary)">
+                                  {` — ${f.workAreaName} · ${f.units.length + 1} unit`}
+                                </span>
+                              </span>
+                            </ToggleRow>
+                            {/* Only on a monitor: a slideshow's order is a
+                                sequence nobody stands in front of long enough
+                                to care about, but a quadrant is a place. */}
+                            {monitor && on ? (
+                              <span className="flex flex-none items-center gap-0.5">
+                                <span className="w-4 text-center font-mono text-xs text-(--text-tertiary) tabular-nums">
+                                  {pos + 1}
+                                </span>
+                                <IconButton
+                                  type="button"
+                                  aria-label={t.dspOrderUp}
+                                  disabled={pos === 0}
+                                  onClick={() => moveFleet(f.id, -1)}
+                                >
+                                  <ChevronUp />
+                                </IconButton>
+                                <IconButton
+                                  type="button"
+                                  aria-label={t.dspOrderDown}
+                                  disabled={pos === fSel.length - 1}
+                                  onClick={() => moveFleet(f.id, 1)}
+                                >
+                                  <ChevronDown />
+                                </IconButton>
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
               </Field>
             ) : null}
 
-            <Field label={t.dspRotate} htmlFor="dsp-rotate" helper={rotateHelp}>
+            <Field
+              label={monitor ? t.dspMonRotate : t.dspRotate}
+              htmlFor="dsp-rotate"
+              helper={rotateHelp}
+            >
               <Input
                 id="dsp-rotate"
                 type="number"

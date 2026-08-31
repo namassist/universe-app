@@ -24,6 +24,7 @@ import {
   DeviceRunTextSchema,
   DeviceSchema,
   DisplayContentSchema,
+  DisplayLayoutSchema,
   ErrorSchema,
   OptionalDeviceKindSchema,
 } from "./schemas";
@@ -124,6 +125,7 @@ function toDevice(row: DeviceRow, fleetIds: string[] = []) {
     kind: row.kind,
     active: row.active,
     rotateSeconds: row.rotateSeconds,
+    layout: row.layout,
     /** Empty means every fleet — see `device_fleets`. */
     fleetIds,
     online,
@@ -150,7 +152,11 @@ async function fleetPicksOf(deviceIds: string[]) {
       fleetId: schema.deviceFleets.fleetId,
     })
     .from(schema.deviceFleets)
-    .where(inArray(schema.deviceFleets.deviceId, deviceIds));
+    .where(inArray(schema.deviceFleets.deviceId, deviceIds))
+    // Pick order is the screen's own order — the sequence a slideshow rotates
+    // through and the quadrant a monitor draws. Returning it unsorted would
+    // reshuffle a wall every time the admin page reloaded.
+    .orderBy(schema.deviceFleets.sortOrder);
   for (const row of rows) {
     const list = picks.get(row.deviceId);
     if (list) list.push(row.fleetId);
@@ -197,7 +203,9 @@ async function replaceFleetPicks(
   if (wanted.length)
     await db
       .insert(schema.deviceFleets)
-      .values(wanted.map((fleetId) => ({ deviceId, fleetId })));
+      .values(
+        wanted.map((fleetId, sortOrder) => ({ deviceId, fleetId, sortOrder }))
+      );
   return null;
 }
 
@@ -300,6 +308,7 @@ export const devicesRoutes = new Elysia({
             ...(body.rotateSeconds !== undefined
               ? { rotateSeconds: body.rotateSeconds }
               : {}),
+            ...(body.layout !== undefined ? { layout: body.layout } : {}),
           })
           .returning();
         const refused = await replaceFleetPicks(
@@ -331,6 +340,7 @@ export const devicesRoutes = new Elysia({
             maximum: MAX_ROTATE_SECONDS,
           })
         ),
+        layout: t.Optional(DisplayLayoutSchema),
         /** Fleet walls only; empty or absent means every fleet. */
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
@@ -356,6 +366,7 @@ export const devicesRoutes = new Elysia({
         ...(body.rotateSeconds !== undefined
           ? { rotateSeconds: body.rotateSeconds }
           : {}),
+        ...(body.layout !== undefined ? { layout: body.layout } : {}),
       };
       // A request that changes only the fleet picks touches no device column,
       // and `set({})` is an error rather than a no-op — so the row is read
@@ -404,6 +415,7 @@ export const devicesRoutes = new Elysia({
             maximum: MAX_ROTATE_SECONDS,
           })
         ),
+        layout: t.Optional(DisplayLayoutSchema),
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
       response: {

@@ -304,13 +304,20 @@ async function onDisplayedBoard(employeeId: string): Promise<boolean> {
  */
 const DEFAULT_ROTATE_SECONDS = 30;
 
-/** The formations one screen was given. Empty set means it was given none. */
-async function deviceFleetScope(deviceId: string): Promise<Set<string>> {
+/**
+ * The formations one screen was given, in the order it was given them. Empty
+ * means it was given none.
+ *
+ * A list rather than a set: pick order is what a monitor lays out its
+ * quadrants by, and what a slideshow rotates through.
+ */
+async function deviceFleetScope(deviceId: string): Promise<string[]> {
   const rows = await db
     .select({ fleetId: schema.deviceFleets.fleetId })
     .from(schema.deviceFleets)
-    .where(eq(schema.deviceFleets.deviceId, deviceId));
-  return new Set(rows.map((r) => r.fleetId));
+    .where(eq(schema.deviceFleets.deviceId, deviceId))
+    .orderBy(schema.deviceFleets.sortOrder);
+  return rows.map((r) => r.fleetId);
 }
 
 /** A registered fleet wall, or nothing. Other kinds never answer here. */
@@ -318,7 +325,9 @@ async function fleetScreen(deviceId: string) {
   const [row] = await db
     .select({
       id: schema.devices.id,
+      name: schema.devices.name,
       rotateSeconds: schema.devices.rotateSeconds,
+      layout: schema.devices.layout,
     })
     .from(schema.devices)
     .where(
@@ -379,10 +388,13 @@ export type WallFleet = {
 export function groupIntoFleets(
   slots: WallSlot[],
   buses: Map<string, string>,
-  /** The screen's own formations; `null` (or empty) means every one of them. */
-  scope: Set<string> | null = null
+  /**
+   * The screen's own formations in pick order; `null` (or empty) means every
+   * one of them.
+   */
+  scope: readonly string[] | null = null
 ): WallFleet[] {
-  const wanted = scope && scope.size ? scope : null;
+  const wanted = scope && scope.length ? new Set(scope) : null;
   const groups = new Map<string, WallFleet>();
   for (const s of slots) {
     if (!s.fleetId || !s.diggerCode) continue;
@@ -428,8 +440,15 @@ export function groupIntoFleets(
       return lead(a) - lead(b) || a.unitCode.localeCompare(b.unitCode);
     });
 
+  /* Scoped screens keep the admin's order — on a monitor it decides which pit
+     lands top-left, and reordering the picks is the only way to move it. An
+     unscoped screen has no order to keep and falls back to the digger's code,
+     which is the vocabulary the yard already sorts by. */
+  const rank = wanted ? new Map(scope!.map((id, i) => [id, i])) : null;
   return [...groups.values()].sort((a, b) =>
-    a.diggerCode.localeCompare(b.diggerCode)
+    rank
+      ? (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity)
+      : a.diggerCode.localeCompare(b.diggerCode)
   );
 }
 
@@ -533,6 +552,13 @@ export const fleetActualRoutes = new Elysia({
 
       const scope = screen ? await deviceFleetScope(screen.id) : null;
       const rotate = screen?.rotateSeconds ?? DEFAULT_ROTATE_SECONDS;
+      /* A wall nobody registered — a person previewing the site-wide board —
+         reads as a slideshow: it has no picks, so it has nothing to lay four
+         of side by side. */
+      const layout = screen?.layout ?? "slideshow";
+      /* The screen's own name, so a monitor can head itself with it. A browser
+         previewing the site-wide board names no device and gets null. */
+      const deviceName = screen?.name ?? null;
 
       const blank = {
         servedAt: new Date().toISOString(),
@@ -541,6 +567,8 @@ export const fleetActualRoutes = new Elysia({
         generatedAt: null as string | null,
         provisional: false,
         rotateSeconds: rotate,
+        layout,
+        deviceName,
         fleets: [],
       };
 
@@ -592,6 +620,8 @@ export const fleetActualRoutes = new Elysia({
         generatedAt: doc?.generatedAt.toISOString() ?? null,
         provisional,
         rotateSeconds: rotate,
+        layout,
+        deviceName,
         fleets: groupIntoFleets(
           slots.map((s) => {
             const person = s.employeeId ? names.get(s.employeeId) : undefined;

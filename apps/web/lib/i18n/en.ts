@@ -435,6 +435,24 @@ export const en: Dict = {
   dspFleetHelp:
     "Taken from Fleet Setting — pick ≥1; more than one makes the TV rotate between fleets.",
   dspFleetsCol: "Fleets on screen",
+  dspLayout: "Display type",
+  dspLayoutSlideshow: "Slideshow — one fleet at a time",
+  dspLayoutMonitor: "Monitor — 4 fleets at once",
+  dspLayoutHelpSlide:
+    "One formation fills the screen and the wall rotates to the next.",
+  dspLayoutHelpMon:
+    "4 formations side by side; more than 4 rotates a page at a time. Cards are smaller, so mount it where it is read close up.",
+  dspOrderUp: "Move earlier",
+  dspOrderDown: "Move later",
+  dspOrderHelp:
+    "Order decides the page and the quadrant: 1–4 is the first screen, 1 top-left.",
+  dspMonRotate: "Seconds per page",
+  dspMonRotateHelp:
+    "How long each page of 4 fleets stays on screen before the next.",
+  dspPagesWord: "pages",
+  dspLayoutCol: "Type",
+  dspLayoutSlideShort: "Slideshow",
+  dspLayoutMonShort: "Monitor",
   dspPicked: "selected",
   dspSelAll: "Select all",
   dspFleetSearch: "Search fleets…",

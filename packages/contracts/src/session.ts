@@ -44,6 +44,37 @@ export const DEVICE_ID_PREFIX: Record<DeviceKind, string> = {
   fingerprint: "DSP-P",
 };
 
+/**
+ * How a fleet wall spends its screen.
+ *
+ * `slideshow` is the original bargain and stays the default: one formation
+ * fills the screen, and the wall turns over to the next every `rotateSeconds`.
+ * A card is as large as the screen allows, which is what makes a name readable
+ * from the far side of a workshop.
+ *
+ * `monitor` trades that size for breadth: `MONITOR_FLEETS_PER_PAGE` formations
+ * stand side by side, so a control room takes in four pits at a glance instead
+ * of waiting out a cycle for the one it cares about. Neither layout caps how
+ * many formations a screen may be given — a monitor holding more than one
+ * page's worth rotates between pages exactly as a slideshow rotates between
+ * fleets, and at the same dwell.
+ */
+export const DISPLAY_LAYOUTS = ["slideshow", "monitor"] as const;
+export type DisplayLayout = (typeof DISPLAY_LAYOUTS)[number];
+
+/**
+ * How many formations a `monitor` screen shows at once.
+ *
+ * Four, because the grid it implies is 2x2: on the 1920x1080 canvas the walls
+ * actually run at, that is ~950x480 a quadrant, which still fits a unit code
+ * and a full name at a size worth mounting a television for. Six would fit
+ * geometrically and be unreadable in the yard.
+ *
+ * A page size, not a ceiling. A screen given nine formations shows three
+ * pages of four, four, and one.
+ */
+export const MONITOR_FLEETS_PER_PAGE = 4;
+
 /** Which transport a login wants its session delivered over. */
 export const SESSION_TRANSPORTS = ["cookie", "bearer"] as const;
 export type SessionTransport = (typeof SESSION_TRANSPORTS)[number];

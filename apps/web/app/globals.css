@@ -390,6 +390,32 @@
 .kswipe-in {
   animation: kswipe 0.5s ease-out;
 }
+/* Pergantian halaman layar monitor: tiap kuadran dibalik keluar lalu masuk,
+   bukan digeser seperti layar fleet tunggal. Sapuan swipe cocok untuk satu
+   subjek yang berganti; empat panel yang menggeser bersamaan terbaca seperti
+   seluruh layar melompat. Membalik panel di tempatnya membuat tiap kuadran
+   jelas mengganti isinya sendiri, dan urutan stagger-nya memberi tahu mata
+   arah pergantiannya. */
+@keyframes kflip-out {
+  from {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: rotateY(-88deg) scale(0.94);
+    opacity: 0;
+  }
+}
+@keyframes kflip-in {
+  from {
+    transform: rotateY(88deg) scale(0.94);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
 /* running text display — teks berjalan dari kanan ke kiri */
 @keyframes kmarquee {
   from {
@@ -411,5 +437,12 @@
   }
   .display-marquee {
     animation-duration: 90s !important;
+  }
+  /* Halaman monitor tetap berganti — yang dimatikan hanya balikannya, jadi
+     isinya langsung berdiri tegak alih-alih tidak pernah muncul. */
+  .display-flip {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

@@ -20,6 +20,7 @@ import {
   AREA_TYPES,
   BLOOD_TYPES,
   DEVICE_KINDS,
+  DISPLAY_LAYOUTS,
   EMPLOYEE_STATUSES,
   MCU_RESULTS,
   ROSTER_CODES,
@@ -35,6 +36,7 @@ import {
 export const scope = pgEnum("scope", SCOPES);
 export const accessMode = pgEnum("access_mode", ACCESS_MODES);
 export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
+export const displayLayout = pgEnum("display_layout", DISPLAY_LAYOUTS);
 export const areaType = pgEnum("area_type", AREA_TYPES);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
@@ -149,6 +151,15 @@ export const devices = pgTable("devices", {
    * screen carrying every formation needs to move along.
    */
   rotateSeconds: integer("rotate_seconds").notNull().default(30),
+  /**
+   * How the screen spends itself: one formation at a time (`slideshow`) or up
+   * to four side by side (`monitor`). Default `slideshow` because that is what
+   * every wall registered before this column did, and a default that quietly
+   * re-laid out the existing yard screens would be a migration nobody asked
+   * for. On a `monitor` nothing rotates, so `rotateSeconds` is inert there —
+   * kept rather than nulled, so switching a screen back restores its dwell.
+   */
+  layout: displayLayout("layout").notNull().default("slideshow"),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -178,6 +189,14 @@ export const deviceFleets = pgTable(
     fleetId: uuid("fleet_id")
       .notNull()
       .references(() => fleets.id, { onDelete: "cascade" }),
+    /**
+     * The order the admin picked them in, which is the order the screen shows
+     * them: the rotation sequence on a slideshow, the quadrant on a monitor.
+     * Alphabetical-by-digger was fine while a wall showed one fleet at a time,
+     * but on a monitor it decides where a pit lands on the glass — and a
+     * control room that reads top-left first wants to say which pit that is.
+     */
+    sortOrder: integer("sort_order").notNull().default(0),
   },
   (table) => [
     index("device_fleets_device_id_idx").on(table.deviceId),
