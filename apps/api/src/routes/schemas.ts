@@ -1265,6 +1265,8 @@ export const AttendanceReadingSchema = t.Object({
   /** Null when the NIK matches no local employee — shown, not hidden. */
   name: t.Nullable(t.String()),
   department: t.Nullable(t.String()),
+  /** The job title, not the shift — what the person is here to do. */
+  position: t.Nullable(t.String()),
   company: t.Nullable(t.String()),
   /**
    * The roster's word for the day. `null` means we hold no roster for this

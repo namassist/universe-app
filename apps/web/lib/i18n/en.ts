@@ -1030,6 +1030,7 @@ export const en: Dict = {
   attSumB: "of",
   attSumLog: "shifts",
   attSumD: "tapped in",
+  allRoster: "All rosters",
   allStatus: "All statuses",
   lblDateTo: "To date",
   toastExportT: "Export started",

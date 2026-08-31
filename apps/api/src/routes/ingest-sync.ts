@@ -400,6 +400,7 @@ async function attendanceRows(from: string, to: string) {
       code: schema.rosterDays.code,
       name: schema.employees.name,
       department: schema.departments.name,
+      position: schema.positions.name,
       company: schema.companies.name,
     })
     .from(schema.rosterDays)
@@ -417,6 +418,10 @@ async function attendanceRows(from: string, to: string) {
     .leftJoin(
       schema.departments,
       eq(schema.departments.id, schema.employees.departmentId)
+    )
+    .leftJoin(
+      schema.positions,
+      eq(schema.positions.id, schema.employees.positionId)
     )
     .leftJoin(
       schema.companies,
@@ -438,6 +443,7 @@ async function attendanceRows(from: string, to: string) {
       firstInPmIp: schema.fingerReadings.firstInPmIp,
       name: schema.employees.name,
       department: schema.departments.name,
+      position: schema.positions.name,
       company: schema.companies.name,
     })
     .from(schema.fingerReadings)
@@ -448,6 +454,10 @@ async function attendanceRows(from: string, to: string) {
     .leftJoin(
       schema.departments,
       eq(schema.departments.id, schema.employees.departmentId)
+    )
+    .leftJoin(
+      schema.positions,
+      eq(schema.positions.id, schema.employees.positionId)
     )
     .leftJoin(
       schema.companies,
@@ -515,6 +525,7 @@ async function attendanceRows(from: string, to: string) {
     date: string;
     name: string | null;
     department: string | null;
+    position: string | null;
     company: string | null;
     rosterCode: string | null;
     firstInAt: string | null;
@@ -553,6 +564,7 @@ async function attendanceRows(from: string, to: string) {
          either — but keeping the order explicit costs nothing. */
       name: r.name ?? rosterAt.get(key)?.name ?? null,
       department: r.department ?? rosterAt.get(key)?.department ?? null,
+      position: r.position ?? rosterAt.get(key)?.position ?? null,
       company: r.company ?? rosterAt.get(key)?.company ?? null,
       rosterCode,
       firstInAt,
@@ -574,6 +586,7 @@ async function attendanceRows(from: string, to: string) {
       date: r.date,
       name: r.name,
       department: r.department,
+      position: r.position,
       company: r.company,
       rosterCode: r.code,
       firstInAt: null,
@@ -615,6 +628,7 @@ const ATTENDANCE_EXPORT_COLUMNS = [
   "tanggal",
   "perusahaan",
   "departemen",
+  "posisi",
   "roster",
   "jam_masuk",
   "mesin_masuk",
@@ -633,7 +647,7 @@ async function attendanceWorkbook(
   ws.columns = ATTENDANCE_EXPORT_COLUMNS.map((key) => ({
     header: key,
     key,
-    width: key === "nama" || key === "departemen" ? 30 : 16,
+    width: key === "nama" || key === "departemen" || key === "posisi" ? 30 : 16,
   }));
   ws.getRow(1).font = { bold: true };
   for (const r of rows)
@@ -643,6 +657,7 @@ async function attendanceWorkbook(
       tanggal: r.date,
       perusahaan: r.company ?? "",
       departemen: r.department ?? "",
+      posisi: r.position ?? "",
       roster: r.rosterCode ?? "",
       jam_masuk: r.firstInAt ? r.firstInAt.slice(11, 19) : "",
       mesin_masuk: r.firstInMachine ?? "",

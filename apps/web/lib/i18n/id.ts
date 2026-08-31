@@ -1028,6 +1028,7 @@ export const id = {
   attSumB: "dari",
   attSumLog: "shift",
   attSumD: "sudah tap masuk",
+  allRoster: "Semua roster",
   allStatus: "Semua status",
   lblDateTo: "Sampai tanggal",
   toastExportT: "Export dimulai",

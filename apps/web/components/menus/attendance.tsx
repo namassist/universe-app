@@ -39,6 +39,7 @@ import { Select } from "@/components/ui/select";
 import { StateBox } from "@/components/ui/state-box";
 import {
   IOCell,
+  NameCell,
   Table,
   TableBody,
   TableCell,
@@ -71,6 +72,17 @@ const isoDate = (d: Date) => {
 };
 
 const MAX_SPAN_DAYS = 62;
+
+/**
+ * The shift the screen opens on, read off the wall clock at noon — the same
+ * boundary the IN tap itself is split at. Open it in the morning and you are
+ * looking at the day shift that has just started; open it in the afternoon and
+ * you are looking at the night shift that is about to.
+ *
+ * Only the *starting* value. Nothing re-runs it, so a board left open across
+ * noon keeps whatever the operator last chose instead of changing under them.
+ */
+const shiftNow = (): "D" | "N" => (new Date().getHours() < 12 ? "D" : "N");
 
 /** "YYYY-MM-DD HH:MM:SS" → "HH:MM", for the in/out cells. */
 const clock = (at: string | null) => (at ? at.slice(11, 16) : undefined);
@@ -186,6 +198,11 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
   const [dept, setDept] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [statusF, setStatusF] = React.useState("");
+  /* Only D and N are offered. The other twenty-seven codes describe why
+     somebody is *not* on shift, and a screen about who turned up this morning
+     has no question they answer. Opens on the shift in progress rather than on
+     everything: both shifts at once is a report, and this is a board. */
+  const [rosterF, setRosterF] = React.useState<string>(shiftNow);
   const [q, setQ] = React.useState("");
   const [sort, setSort] = React.useState<Sort>(null);
   const [exporting, setExporting] = React.useState(false);
@@ -230,6 +247,7 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
     .filter((r) => {
       if (dept && r.department !== dept) return false;
       if (company && r.company !== company) return false;
+      if (rosterF && r.rosterCode !== rosterF) return false;
       if (statusF === "late" && r.late !== true) return false;
       if (statusF === "no-tap" && r.firstInAt) return false;
       if (statusF === "mismatch" && !isMismatch(r)) return false;
@@ -277,6 +295,7 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
       const params = new URLSearchParams({ from, to });
       if (company) params.set("company", company);
       if (dept) params.set("department", dept);
+      if (rosterF) params.set("roster", rosterF);
       if (statusF) params.set("status", statusF);
       if (q.trim()) params.set("q", q.trim());
       const blob = await fetchBlob(`/v1/attendance/export?${params}`);
@@ -357,7 +376,13 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
       </PageTitle>
 
       <Panel>
-        <Toolbar>
+        {/* Two rows, because five filters and a search box no longer fit on
+            one. The search keeps the title's line — it is the one control you
+            reach for without having decided anything yet — and the filters
+            that narrow the set sit together below it, in the order they are
+            usually decided: which morning, whose department, which shift,
+            what went wrong. */}
+        <Toolbar className="mb-3">
           <ToolbarTitle>{t.attLog}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
@@ -367,70 +392,85 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            {/* Only when there is a choice: one company on site is the usual
-                case, and a select with a single option is furniture. */}
-            {companyOptions.length > 1 ? (
-              <Select
-                aria-label={t.allCompanies}
-                wrapperClassName="w-[200px]"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-              >
-                <option value="">{t.allCompanies}</option>
-                {companyOptions.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            ) : null}
-            <Select
-              aria-label={t.allDepts}
-              wrapperClassName="w-[180px]"
-              value={dept}
-              onChange={(e) => setDept(e.target.value)}
-            >
-              <option value="">{t.allDepts}</option>
-              {(deptsQ.data ?? []).map((d) => (
-                <option key={d.id}>{d.name}</option>
-              ))}
-            </Select>
-            <Select
-              aria-label={t.allStatus}
-              wrapperClassName="w-[170px]"
-              value={statusF}
-              onChange={(e) => setStatusF(e.target.value)}
-            >
-              <option value="">{t.allStatus}</option>
-              <option value="no-tap">{t.attNoTap}</option>
-              <option value="mismatch">{t.attMismatch}</option>
-              <option value="late">{t.attLate}</option>
-              <option value="on-time">{t.attOnTime}</option>
-            </Select>
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="att-from"
-                className="text-xs text-(--text-tertiary)"
-              >
-                {t.lblDate}
-              </label>
-              <Input
-                id="att-from"
-                type="date"
-                className="w-[160px] font-mono"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-              <span className="text-(--text-tertiary)">–</span>
-              <Input
-                id="att-to"
-                type="date"
-                className="w-[160px] font-mono"
-                aria-label={t.lblDateTo}
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              />
-            </div>
           </ToolbarGroup>
         </Toolbar>
+
+        <ToolbarGroup className="mb-5 justify-start">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="att-from"
+              className="text-xs text-(--text-tertiary)"
+            >
+              {t.lblDate}
+            </label>
+            <Input
+              id="att-from"
+              type="date"
+              className="w-[160px] font-mono"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+            <span className="text-(--text-tertiary)">–</span>
+            <Input
+              id="att-to"
+              type="date"
+              className="w-[160px] font-mono"
+              aria-label={t.lblDateTo}
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </div>
+          <Select
+            aria-label={t.allDepts}
+            wrapperClassName="w-[180px]"
+            value={dept}
+            onChange={(e) => setDept(e.target.value)}
+          >
+            <option value="">{t.allDepts}</option>
+            {(deptsQ.data ?? []).map((d) => (
+              <option key={d.id}>{d.name}</option>
+            ))}
+          </Select>
+          <Select
+            aria-label={t.allRoster}
+            wrapperClassName="w-[150px]"
+            value={rosterF}
+            onChange={(e) => setRosterF(e.target.value)}
+          >
+            <option value="">{t.allRoster}</option>
+            <option value="D">{`D — ${t.rcD}`}</option>
+            <option value="N">{`N — ${t.rcN}`}</option>
+          </Select>
+          <Select
+            aria-label={t.allStatus}
+            wrapperClassName="w-[170px]"
+            value={statusF}
+            onChange={(e) => setStatusF(e.target.value)}
+          >
+            <option value="">{t.allStatus}</option>
+            <option value="no-tap">{t.attNoTap}</option>
+            <option value="mismatch">{t.attMismatch}</option>
+            <option value="late">{t.attLate}</option>
+            <option value="on-time">{t.attOnTime}</option>
+          </Select>
+          {/* Last, and only when there is a choice: one company on site is the
+              usual case, and a select with a single option is furniture. It
+              sits after the four that are always here so their order stays
+              the same on the sites where it does appear. */}
+          {companyOptions.length > 1 ? (
+            <Select
+              aria-label={t.allCompanies}
+              wrapperClassName="w-[200px]"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+            >
+              <option value="">{t.allCompanies}</option>
+              {companyOptions.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </Select>
+          ) : null}
+        </ToolbarGroup>
 
         {listQ.isPending && spanOk ? (
           <TableSkeleton rows={8} />
@@ -445,7 +485,6 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
             <TableHeader>
               <tr>
                 <TableHead>{t.thEmp}</TableHead>
-                <TableHead>NIK</TableHead>
                 <SortHead
                   label={t.lblDate}
                   sortKey="date"
@@ -453,6 +492,7 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
                   onSort={(k) => setSort((cur) => nextSort(cur, k))}
                 />
                 <TableHead className="max-xl:hidden">{t.thDept}</TableHead>
+                <TableHead className="max-lg:hidden">{t.thPos}</TableHead>
                 <TableHead>{t.thRoster}</TableHead>
                 <SortHead
                   label={t.thIn}
@@ -472,22 +512,24 @@ export function AttendanceMenu({ mode }: { mode: AccessMode }) {
                      which way to look. */
                   className={cn(isMismatch(r) && "bg-[rgba(255,159,10,.07)]")}
                 >
+                  {/* Name over NIK in one cell, as everywhere else a person is
+                      listed: the NIK is how you confirm you have the right
+                      person, not a column anybody scans on its own. It carries
+                      the row when the name does not — an unknown NIK still
+                      identifies the tap. */}
                   <TableCell
-                    className={cn(
-                      "font-semibold",
-                      !r.name && "text-(--text-tertiary)"
-                    )}
+                    className={cn(!r.name && "text-(--text-tertiary)")}
                   >
-                    {r.name ?? "—"}
-                  </TableCell>
-                  <TableCell className="font-mono text-(--text-secondary) tabular-nums">
-                    {r.nik}
+                    <NameCell name={r.name ?? "—"} sub={r.nik} />
                   </TableCell>
                   <TableCell className="font-mono whitespace-nowrap">
                     {dLabel(r.date)}
                   </TableCell>
                   <TableCell className="max-xl:hidden">
                     {r.department ?? "—"}
+                  </TableCell>
+                  <TableCell className="max-lg:hidden">
+                    {r.position ?? "—"}
                   </TableCell>
                   <TableCell>
                     {/* Amber on a mismatch, and only when we actually hold a
