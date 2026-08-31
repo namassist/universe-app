@@ -544,8 +544,20 @@ export function DisplayAdminMenu({
           {editing ? `${t.dspEditT} — ${editing.name}` : t.dspAdd}
         </DialogTitle>
         <DialogBody>{t.dspDlgB}</DialogBody>
-        <form onSubmit={submit} noValidate>
-          <div className="mt-4 flex flex-col gap-5">
+        {/* The card caps itself at the viewport and lays its children out in a
+            column, but a flex item does not shrink below its content unless it
+            is told to — so the form has to carry `min-h-0` and own the scroll
+            area itself, or a tall device (many formations, a long fleet list)
+            simply runs off the bottom of the screen with no way to reach the
+            buttons. The actions stay outside that area: they are what the
+            operator is scrolling towards. */}
+        <form
+          onSubmit={submit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {/* `pr-1` keeps the scrollbar off the inputs' focus rings. */}
+          <div className="mt-4 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1">
             {/* The id is the tag physically written on the TV, so it is typed
                 rather than generated behind the operator's back. */}
             <Field

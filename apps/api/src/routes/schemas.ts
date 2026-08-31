@@ -903,6 +903,16 @@ export const FleetDisplayUnitSchema = t.Object({
   /** Null on an idle unit — the vacancy the wall exists to make obvious. */
   employeeNik: t.Nullable(t.String()),
   employeeName: t.Nullable(t.String()),
+  /**
+   * The stored file name of that person's photograph, or null when they have
+   * none — the wall falls back to their initials.
+   *
+   * The name rather than a ready URL: the screen builds the URL itself, and
+   * the name is what makes that URL change when a photo is replaced, so a wall
+   * that has been running for a month does not keep showing a face out of
+   * cache. The same bargain `photoUrl()` strikes on the employees screen.
+   */
+  employeePhotoFile: t.Nullable(t.String()),
   source: t.Nullable(t.UnionEnum(["plan", "spare", "manual"] as const)),
   tappedAt: t.Nullable(t.String()),
 });

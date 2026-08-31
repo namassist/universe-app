@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { api, unwrap } from "@/lib/api";
+import { api, API_URL, unwrap } from "@/lib/api";
 
 /**
  * The fleet TV's own feed: the Actual board of whichever shift is running.
@@ -50,3 +50,23 @@ export type FleetDisplay = Awaited<
 
 export type FleetDisplayFleet = FleetDisplay["fleets"][number];
 export type FleetDisplayUnit = FleetDisplayFleet["units"][number];
+
+/**
+ * Where the wall fetches one operator's photograph, or null when they have no
+ * photo on file and the card falls back to their initials.
+ *
+ * Its own endpoint rather than `/employees/:nik/photo`: a paired TV holds no
+ * grant on the employee register, and this one serves only the faces that are
+ * on the board it is showing. A plain URL for an `<img>` so the browser caches
+ * and streams it, with the stored file name as the cache-buster — a wall that
+ * has been running for a month must pick up a replaced photo without being
+ * restarted.
+ */
+export function fleetPhotoUrl(unit: {
+  employeeNik: string | null;
+  employeePhotoFile: string | null;
+}): string | null {
+  if (!unit.employeeNik || !unit.employeePhotoFile) return null;
+  const nik = encodeURIComponent(unit.employeeNik);
+  return `${API_URL}/v1/fleet-allocation/actual/display/photo/${nik}?v=${unit.employeePhotoFile}`;
+}

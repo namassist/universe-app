@@ -517,6 +517,7 @@ const slot = (over: Partial<WallSlot> = {}): WallSlot => ({
   area: null,
   employeeNik: null,
   employeeName: null,
+  employeePhotoFile: null,
   source: null,
   tappedAt: null,
   ...over,
@@ -798,5 +799,71 @@ describe("the fleet wall endpoint", () => {
     // Each formation's count is its own units, not the board's.
     for (const fleet of body.fleets)
       expect(fleet.total).toBe(fleet.units.length);
+  });
+});
+
+/**
+ * The wall's own photo route.
+ *
+ * Only the refusals are pinned. Serving a face needs the *current* shift to
+ * hold the person, and which shift is current is the wall clock's answer — the
+ * same reason the display endpoint itself is only tested for the shape it
+ * always returns. What is worth nailing down is the direction the gate fails
+ * in: everything that is not demonstrably on the board now is a 404.
+ */
+describe("an operator's photo on the wall", () => {
+  test("refuses an anonymous caller", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display/photo/99120000"
+    );
+    expect(res.status).toBe(401);
+  });
+
+  test("refuses a caller who holds only the allocation menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display/photo/99120000",
+      viewer.cookie
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("refuses a kiosk paired as some other kind of screen", async () => {
+    const id = `ZZA${uid().toUpperCase()}`;
+    made.devices.push(id);
+    await db.insert(schema.devices).values({ id, name: tag, kind: "att" });
+    const session = await createSession("device", id, "cookie");
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display/photo/99120000",
+      `${DEVICE_COOKIE}=${session.id}`
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("404s for a NIK nobody here holds", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display/photo/tidak-ada-nik",
+      wall.cookie
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("404s for someone on no board the wall is showing", async () => {
+    const [row] = await db
+      .select({ nik: schema.employees.nik })
+      .from(schema.employees)
+      .where(eq(schema.employees.id, opOne))
+      .limit(1);
+    // Photo or not, this fixture's board is dated 1999 and no wall is showing
+    // it. A screen must not be able to walk the register one NIK at a time.
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/display/photo/${row!.nik}`,
+      wall.cookie
+    );
+    expect(res.status).toBe(404);
   });
 });

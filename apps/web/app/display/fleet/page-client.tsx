@@ -17,6 +17,7 @@ import { SHIFT_KIND_LABELS } from "@universe/contracts";
 import { isStatus } from "@/lib/api";
 import {
   fleetDisplayQueryOptions,
+  fleetPhotoUrl,
   type FleetDisplayFleet,
   type FleetDisplayUnit,
 } from "@/lib/queries/fleet-display";
@@ -40,13 +41,23 @@ import { DisplayBadge, type DisplayTone } from "../_components/display-table";
  * the one thing here that costs money by the hour.
  */
 
-/** How a slot reads at six metres: filled by plan, filled by someone else, empty. */
+/**
+ * How a slot reads at six metres: filled by plan, filled by someone else, empty.
+ *
+ * Spare and manual share amber because the header counts them as one number,
+ * under one amber card, labelled Spare — a badge in a different colour from
+ * the tile that counts it reads as a different thing, and someone standing in
+ * front of the wall counting cyan cards against an amber four would be right
+ * to think one of them was wrong. The word still separates them: both are a
+ * seat filled by someone other than its planned holder, and which of the two
+ * says only how that came about.
+ */
 function toneOf(unit: FleetDisplayUnit): {
   tone: DisplayTone;
   label: string;
 } {
   if (!unit.employeeName) return { tone: "danger", label: "Kosong" };
-  if (unit.source === "spare") return { tone: "info", label: "Spare" };
+  if (unit.source === "spare") return { tone: "warning", label: "Spare" };
   if (unit.source === "manual") return { tone: "warning", label: "Manual" };
   return { tone: "success", label: "Plan" };
 }
@@ -107,6 +118,43 @@ const clock = (iso: string | null) =>
       })
     : "—";
 
+/**
+ * The operator's photograph filling the card, with their initials underneath.
+ *
+ * Underneath rather than instead: a wall runs unattended for weeks, and every
+ * way a photo can fail to arrive — no file on the volume, the API unreachable
+ * between polls, a face added to the register after this card was drawn — must
+ * land on the initials rather than on a broken-image glyph six metres up. The
+ * failure is remembered by URL, as `<Avatar>` does it, so a replaced photo is
+ * tried again instead of being suppressed by the previous one's failure.
+ */
+function OperatorFace({ name, src }: { name: string; src: string | null }) {
+  const [failedSrc, setFailedSrc] = React.useState<string | null>(null);
+  const showPhoto = !!src && failedSrc !== src;
+
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-(image:--gradient-cta)">
+      {showPhoto ? (
+        /* Served by the API behind a session cookie, which the Next image
+           optimizer cannot forward — no loader would make <Image> work here. */
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={name}
+          onError={() => setFailedSrc(src)}
+          /* Top-weighted, because a mugshot is framed on the face and the
+             bottom of the card is under the scrim that carries the name. */
+          className="absolute inset-0 size-full object-cover object-top"
+        />
+      ) : (
+        <span className="text-[88px] font-bold text-(--color-on-cta) opacity-80">
+          {initialsOf(name)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function UnitCard({
   unit,
   provisional,
@@ -130,13 +178,10 @@ function UnitCard({
           "border-dashed border-(--border-input) opacity-55 saturate-50"
       )}
     >
-      {/* The operator fills the card — initials until there are photographs. */}
+      {/* The operator fills the card: their photograph, their initials, or the
+          empty-seat mark. */}
       {unit.employeeName ? (
-        <div className="absolute inset-0 grid place-items-center bg-(image:--gradient-cta)">
-          <span className="text-[88px] font-bold text-(--color-on-cta) opacity-80">
-            {initialsOf(unit.employeeName)}
-          </span>
-        </div>
+        <OperatorFace name={unit.employeeName} src={fleetPhotoUrl(unit)} />
       ) : (
         <div className="absolute inset-0 grid place-items-center bg-(--fill-input)">
           <UserX className="size-20 text-(--text-disabled)" />

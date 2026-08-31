@@ -23,6 +23,7 @@ import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
 import { fingerInDeadline, ftwDeadline, judge, shiftIn } from "../readiness";
 import { stageGates } from "../stage-time";
+import { photoMimeType, photoPath } from "../storage";
 import { pairingRefusal } from "./fleet-allocation";
 import { localDate } from "../scheduler";
 import { normalizeNik } from "../sources/nik";
@@ -231,18 +232,69 @@ async function documentOf(date: string, shift: ShiftKind) {
   return doc;
 }
 
-/** Names for the ids a board carries, in one query rather than per row. */
+/**
+ * Names for the ids a board carries, in one query rather than per row — and
+ * the photo file name with them, because the wall shows the face and asking
+ * for it separately would be a second round trip per operator.
+ */
 async function peopleNames(ids: string[]) {
-  if (!ids.length) return new Map<string, { nik: string; name: string }>();
+  if (!ids.length)
+    return new Map<
+      string,
+      { nik: string; name: string; photoFile: string | null }
+    >();
   const rows = await db
     .select({
       id: schema.employees.id,
       nik: schema.employees.nik,
       name: schema.employees.name,
+      photoFile: schema.employees.photoFileName,
     })
     .from(schema.employees)
     .where(inArray(schema.employees.id, ids));
-  return new Map(rows.map((r) => [r.id, { nik: r.nik, name: r.name }]));
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      { nik: r.nik, name: r.name, photoFile: r.photoFile },
+    ])
+  );
+}
+
+const photoNotFound = {
+  code: "photo_not_found",
+  message: "Foto tidak ditemukan",
+};
+
+/**
+ * Whether this person holds a slot on the line-up the wall is showing now.
+ *
+ * Mirrors what `/display` answers with, and deliberately by the same rule: the
+ * generated board when there is one, the standing plan while there is not. Any
+ * looser rule (an employee that exists, an employee on some board) would let a
+ * kiosk walk the register one NIK at a time.
+ */
+async function onDisplayedBoard(employeeId: string): Promise<boolean> {
+  const now = currentShift(new Date(), await stageGates("ftw-ingest"));
+  if (!now) return false;
+
+  const doc = await documentOf(now.date, now.shift);
+  const [hit] = doc
+    ? await db
+        .select({ id: schema.fleetActualSlots.id })
+        .from(schema.fleetActualSlots)
+        .where(
+          and(
+            eq(schema.fleetActualSlots.documentId, doc.id),
+            eq(schema.fleetActualSlots.employeeId, employeeId)
+          )
+        )
+        .limit(1)
+    : await db
+        .select({ id: schema.fleetPlanSlots.id })
+        .from(schema.fleetPlanSlots)
+        .where(eq(schema.fleetPlanSlots.employeeId, employeeId))
+        .limit(1);
+  return !!hit;
 }
 
 /**
@@ -287,6 +339,8 @@ export type WallSlot = {
   area: string | null;
   employeeNik: string | null;
   employeeName: string | null;
+  /** Stored file name of their photo, or null — the wall falls back to initials. */
+  employeePhotoFile: string | null;
   source: "plan" | "spare" | "manual" | null;
   tappedAt: string | null;
 };
@@ -359,6 +413,7 @@ export function groupIntoFleets(
       brandName: s.brandName,
       employeeNik: s.employeeNik,
       employeeName: s.employeeName,
+      employeePhotoFile: s.employeePhotoFile,
       source: s.source,
       tappedAt: s.tappedAt,
     });
@@ -550,6 +605,7 @@ export const fleetActualRoutes = new Elysia({
               area: s.area,
               employeeNik: person?.nik ?? null,
               employeeName: person?.name ?? null,
+              employeePhotoFile: person?.photoFile ?? null,
               source: s.source,
               tappedAt: s.tappedAt,
             };
@@ -570,6 +626,62 @@ export const fleetActualRoutes = new Elysia({
         404: ErrorSchema,
       },
       detail: { summary: "The running shift's board, for the fleet TV" },
+    }
+  )
+
+  /**
+   * One operator's photograph, for the wall that is showing them.
+   *
+   * Separate from `/employees/:nik/photo` because a paired TV is not a person:
+   * it holds no grant on the employee register and no department scope, so it
+   * could never call that route — and widening that route to admit devices
+   * would hand every kiosk the whole register.
+   *
+   * So the gate here is the board itself. A screen may fetch exactly the faces
+   * it has just been told to display, recomputed rather than taken on trust,
+   * and the answer is 404 for anybody else — the same 404 as a person with no
+   * photo, because which is which is not a kiosk's business either.
+   *
+   * Streamed like the employees route, and for the same reason (design D8).
+   */
+  .get(
+    "/display/photo/:nik",
+    async ({ params, principal, status }) => {
+      if (principal.kind === "device" && principal.deviceKind !== "fleet")
+        return status(403, {
+          code: "forbidden",
+          message: "Perangkat ini bukan untuk layar tersebut",
+        });
+
+      const [person] = await db
+        .select({
+          id: schema.employees.id,
+          photoFileName: schema.employees.photoFileName,
+        })
+        .from(schema.employees)
+        .where(eq(schema.employees.nik, normalizeNik(params.nik)))
+        .limit(1);
+      if (!person?.photoFileName) return status(404, photoNotFound);
+
+      if (!(await onDisplayedBoard(person.id)))
+        return status(404, photoNotFound);
+
+      const file = Bun.file(photoPath(person.photoFileName));
+      // The row can outlive the file — an unmounted volume is exactly this
+      // case (design D8), and a wall must get a 404 it can fall back from
+      // rather than a 500 it cannot.
+      if (!(await file.exists())) return status(404, photoNotFound);
+      return new Response(file, {
+        headers: { "content-type": photoMimeType(person.photoFileName) },
+      });
+    },
+    {
+      auth: { menu: "display-fleet", mode: "view", allowDevice: true },
+      params: t.Object({ nik: t.String({ minLength: 1 }) }),
+      // No 200 schema: the body is an image, and a declared JSON shape would
+      // have Elysia try to validate bytes as an object.
+      response: { 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema },
+      detail: { summary: "An operator's photo, for the fleet TV" },
     }
   )
 
