@@ -113,6 +113,14 @@
       "when": 1788010026658,
       "tag": "0015_light_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788091206082,
+      "tag": "0016_moaning_screwball",
+      "breakpoints": true
+
     }
   ]
 }

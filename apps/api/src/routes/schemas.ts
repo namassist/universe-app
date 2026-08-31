@@ -130,7 +130,7 @@ const RosterRevisionStatusUnion = t.Union([
 ]);
 
 /**
- * Twenty-eight literals rather than `t.UnionEnum(ROSTER_CODES)`, for the reason
+ * Twenty-nine literals rather than `t.UnionEnum(ROSTER_CODES)`, for the reason
  * at the top of this block: as an *optional* query filter, `UnionEnum` would
  * inject `"D"` when the caller sent no code at all — silently turning "every
  * code" into "day shift only", which is a filtered answer that looks like a
@@ -149,6 +149,7 @@ const RosterCodeUnion = t.Union([
   t.Literal("PH"),
   t.Literal("PHD"),
   t.Literal("S"),
+  t.Literal("SICK"),
   t.Literal("A"),
   t.Literal("MCU"),
   t.Literal("MCR"),

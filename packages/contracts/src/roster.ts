@@ -14,10 +14,16 @@
  */
 
 /**
- * The twenty-eight codes of the roster legend, in legend order.
+ * The twenty-nine codes of the roster legend, in legend order.
  *
  * `R` and `STB` are here because they can appear in a real file and a parser
  * must not refuse a legitimate row (D3) — not because allocation reads them.
+ *
+ * `SICK` sits beside `S` rather than replacing it: both mean illness, and both
+ * are `absent`, but `S` is the day someone calls in and `SICK` is the long
+ * absence that is already known about. Allocation cannot tell them apart — to
+ * it they are equally unavailable — while Attendance can, which is the whole
+ * reason the two are separate cells in a roster file.
  */
 export const ROSTER_CODES = [
   "D",
@@ -32,6 +38,7 @@ export const ROSTER_CODES = [
   "PH",
   "PHD",
   "S",
+  "SICK",
   "A",
   "MCU",
   "MCR",
@@ -111,6 +118,7 @@ export const ROSTER_CODE_KIND: Record<RosterCode, RosterCodeKind> = {
   PH: "off",
   PHD: "off",
   S: "absent",
+  SICK: "absent",
   A: "absent",
   MCU: "medical",
   MCR: "medical",
@@ -195,7 +203,7 @@ export const ENDED_CODES = ROSTER_CODES.filter(
 export const ROSTER_LEGEND_GROUPS = [
   { id: "shift", codes: ["D", "N", "R", "STB", "OFF"] },
   { id: "leave", codes: ["CR", "AL", "LWP", "LWOP", "PH", "PHD"] },
-  { id: "absence", codes: ["S", "A"] },
+  { id: "absence", codes: ["S", "SICK", "A"] },
   { id: "medical", codes: ["MCU", "MCR", "MCUF", "ISM", "OBC", "KRT"] },
   { id: "assignment", codes: ["TGS", "DNS", "TRV", "TR", "TRS", "IN"] },
   { id: "employment", codes: ["TERM", "EOC", "RSG"] },

@@ -834,7 +834,7 @@ export const en: Dict = {
   thNama: "Name",
   upPrevA: "Previewing",
   upPrevB: "employees — all rows are checked during validation.",
-  legendTitle: "Roster code legend — 28 codes",
+  legendTitle: "Roster code legend — 29 codes",
   legendNote:
     "The same codes are used in the Excel file, revisions, and the attendance view",
   revSub: "Submit attendance corrections — every entry needs tiered approval.",
@@ -960,6 +960,7 @@ export const en: Dict = {
   rcPH: "Public holiday",
   rcPHD: "Public holiday (day)",
   rcS: "Sick",
+  rcSICK: "Long-term sick",
   rcA: "Alpha / no notice",
   rcMCU: "Medical check up",
   rcMCR: "Regular MCU",

@@ -833,7 +833,7 @@ export const id = {
   thNama: "Nama",
   upPrevA: "Preview",
   upPrevB: "karyawan — seluruh baris diperiksa saat validasi.",
-  legendTitle: "Legend kode roster — 28 kode",
+  legendTitle: "Legend kode roster — 29 kode",
   legendNote:
     "Kode yang sama dipakai di file Excel, revisi, dan tampilan attendance",
   revSub: "Ajukan koreksi absensi — setiap entri butuh approval berjenjang.",
@@ -959,6 +959,7 @@ export const id = {
   rcPH: "Public holiday",
   rcPHD: "Public holiday siang",
   rcS: "Sakit",
+  rcSICK: "Sakit panjang",
   rcA: "Alpha",
   rcMCU: "Medical check up",
   rcMCR: "Reguler MCU",

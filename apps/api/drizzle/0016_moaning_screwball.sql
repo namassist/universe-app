@@ -1,0 +1,1 @@
+ALTER TYPE "public"."roster_code" ADD VALUE 'SICK' BEFORE 'A';

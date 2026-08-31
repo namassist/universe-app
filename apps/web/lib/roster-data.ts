@@ -20,7 +20,7 @@ import type { Dict } from "@/lib/i18n";
 export function rosterCodeColor(c: string): string {
   if (["OFF", "CR", "AL", "LWP", "LWOP", "PH", "PHD"].includes(c))
     return "var(--text-tertiary)";
-  if (["S", "A", "ISM", "OBC", "KRT", "TERM", "RSG", "EOC"].includes(c))
+  if (["S", "SICK", "A", "ISM", "OBC", "KRT", "TERM", "RSG", "EOC"].includes(c))
     return "var(--color-danger-text)";
   if (c === "N") return "var(--color-primary-bright)";
   return "var(--text-secondary)";
@@ -59,6 +59,7 @@ const CODE_LABEL: Record<RosterCode, keyof Dict> = {
   PH: "rcPH",
   PHD: "rcPHD",
   S: "rcS",
+  SICK: "rcSICK",
   A: "rcA",
   MCU: "rcMCU",
   MCR: "rcMCR",
