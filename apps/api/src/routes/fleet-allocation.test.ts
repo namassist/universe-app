@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
@@ -282,6 +282,10 @@ beforeAll(async () => {
       })
       .returning({ id: schema.units.id, code: schema.units.code });
     made.units.push(row!.id);
+    /* The board only carries what Fleet Setting configured, so a fixture unit
+       joins the no-fleet entry. What scoping leaves *out* is pinned on its
+       own below. */
+    await db.insert(schema.noFleetUnits).values({ unitId: row!.id });
     return { id: row!.id, code: row!.code };
   };
   unitReq = await unit({ simperCodeId: skillCode.id });
@@ -326,8 +330,12 @@ afterAll(async () => {
     await db
       .delete(schema.employees)
       .where(inArray(schema.employees.id, made.employees));
-  if (made.units.length)
+  if (made.units.length) {
+    await db
+      .delete(schema.noFleetUnits)
+      .where(inArray(schema.noFleetUnits.unitId, made.units));
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
+  }
   if (made.positions.length)
     await db
       .delete(schema.positions)
@@ -523,5 +531,39 @@ describe("the board composes what the screen renders", () => {
     const free = board.units.find((u) => u.code === unitFree.code);
     expect(free?.slots.map((s) => s.nik)).toEqual([opNight.nik]);
     expect(board.spares.map((s) => s.nik)).toContain(opDay.nik);
+  });
+});
+
+/**
+ * What the board leaves out.
+ *
+ * The sharp edge of scoping, pinned on its own: a unit nobody configured does
+ * not appear as a vacancy, so it goes quiet rather than loudly empty. That was
+ * accepted deliberately (owner, 2026-08-31) — unscoped, the board covered the
+ * whole register and every forklift and ambulance stood as an idle card nobody
+ * would ever fill — but it has to stay a fact the suite states out loud rather
+ * than one a future reader discovers.
+ */
+describe("the board is scoped to what Fleet Setting configured", () => {
+  test("a unit configured nowhere drops off, and comes back with one row", async () => {
+    const codesNow = async () =>
+      (
+        (await (
+          await send("GET", "/fleet-allocation/plan", admin.cookie)
+        ).json()) as { units: { code: string }[] }
+      ).units.map((u) => u.code);
+
+    expect(await codesNow()).toContain(unitFree.code);
+
+    // Un-configure it: nothing else about the unit changes — it is still
+    // active, still not broken down, still has its standing pairing.
+    await db
+      .delete(schema.noFleetUnits)
+      .where(eq(schema.noFleetUnits.unitId, unitFree.id));
+    expect(await codesNow()).not.toContain(unitFree.code);
+
+    // And the way back in is one row, not a schema change.
+    await db.insert(schema.noFleetUnits).values({ unitId: unitFree.id });
+    expect(await codesNow()).toContain(unitFree.code);
   });
 });

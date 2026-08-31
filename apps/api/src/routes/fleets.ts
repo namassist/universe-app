@@ -40,6 +40,7 @@ import {
   FleetImportPreviewSchema,
   FleetSchema,
   ImportResultSchema,
+  NoFleetSchema,
 } from "./schemas";
 
 const digger = alias(schema.units, "digger_unit");
@@ -208,6 +209,57 @@ export async function refuseComposition(input: {
 /** Distinct ids in submitted order — a doubled selection is not two haulers. */
 const distinct = (ids: string[]) => [...new Set(ids)];
 
+/* ------------------------------------------------------------- no-fleet */
+
+/**
+ * Why a no-fleet list cannot be saved as submitted, or null when it can.
+ *
+ * The same shape of refusal the fleet dialog gets, and for the same reason: a
+ * unit is configured in exactly one place, so one already leading or hauling
+ * for a formation is refused here by name rather than by a constraint the
+ * operator has to decode.
+ */
+async function refuseNoFleetUnits(unitIds: string[]): Promise<string | null> {
+  if (!unitIds.length) return null;
+
+  const found = await db
+    .select({ id: schema.units.id, code: schema.units.code })
+    .from(schema.units)
+    .where(inArray(schema.units.id, unitIds));
+  if (found.length !== unitIds.length)
+    return `${unitIds.length - found.length} unit tidak ada di master`;
+  const codeOf = new Map(found.map((u) => [u.id, u.code]));
+
+  const leading = await db
+    .select({ id: schema.fleets.diggerUnitId })
+    .from(schema.fleets)
+    .where(inArray(schema.fleets.diggerUnitId, unitIds));
+  if (leading.length)
+    return `Unit ${leading
+      .map((l) => codeOf.get(l.id) ?? "?")
+      .join(", ")} memimpin fleet dan sudah masuk alokasi lewat fleet-nya`;
+
+  const hauling = await db
+    .select({ id: schema.fleetUnits.unitId })
+    .from(schema.fleetUnits)
+    .where(inArray(schema.fleetUnits.unitId, unitIds));
+  if (hauling.length)
+    return `Unit ${hauling
+      .map((h) => codeOf.get(h.id) ?? "?")
+      .join(", ")} sudah menjadi anggota fleet`;
+
+  return null;
+}
+
+/** The no-fleet entry's units, by code — the order the dialog lists them. */
+async function noFleetUnits(): Promise<{ id: string; code: string }[]> {
+  return db
+    .select({ id: schema.units.id, code: schema.units.code })
+    .from(schema.noFleetUnits)
+    .innerJoin(schema.units, eq(schema.units.id, schema.noFleetUnits.unitId))
+    .orderBy(asc(schema.units.code));
+}
+
 /* --------------------------------------------------------------- import */
 
 /** Everything the parser needs to resolve codes and diff against. */
@@ -343,6 +395,56 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         403: ErrorSchema,
       },
       detail: { summary: "List fleets with their member units" },
+    }
+  )
+
+  /* -------------------------------------------------------------- no-fleet
+     Declared before /:id so "no-fleet" is never parsed as a fleet id.
+
+     There is no row behind this entry and so no way to delete it: it is a
+     fixed part of Fleet Setting, and "cannot be deleted" is a property of
+     having nothing to delete rather than a rule someone enforces. */
+
+  .get("/no-fleet", async () => ({ units: await noFleetUnits() }), {
+    auth: { menu: ["fleet-setting", "display-fleet"], mode: "view" },
+    response: {
+      200: NoFleetSchema,
+      401: ErrorSchema,
+      403: ErrorSchema,
+    },
+    detail: {
+      summary: "Units allocated without belonging to a formation",
+    },
+  })
+
+  .put(
+    "/no-fleet/units",
+    async ({ body, status }) => {
+      const unitIds = distinct(body.unitIds);
+      const refusal = await refuseNoFleetUnits(unitIds);
+      if (refusal) return status(422, invalid(refusal));
+
+      /* Replaced, not patched — the dialog submits the list it means, exactly
+         as the fleet dialog's member list does. */
+      await db.transaction(async (tx) => {
+        await tx.delete(schema.noFleetUnits);
+        if (unitIds.length)
+          await tx
+            .insert(schema.noFleetUnits)
+            .values(unitIds.map((unitId) => ({ unitId })));
+      });
+      return { units: await noFleetUnits() };
+    },
+    {
+      auth: { menu: "fleet-setting", mode: "manage" },
+      body: t.Object({ unitIds: t.Array(t.String({ format: "uuid" })) }),
+      response: {
+        200: NoFleetSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Replace the no-fleet entry's units" },
     }
   )
 

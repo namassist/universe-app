@@ -653,6 +653,12 @@ export const en: Dict = {
   flErrMin: "Minimum 8 OHT units in one fleet (9 incl. digger).",
   flDlgB:
     "Formations are relatively fixed — daily operator allocation happens in Fleet Allocation.",
+  flNoFleet: "No-fleet",
+  flNoFleetSub: "No formation",
+  flNoFleetFixed: "Fixed",
+  flNoFleetEmpty: "No units yet",
+  flNoFleetDlgB:
+    "Units that take part in automatic allocation without belonging to any formation \u2014 graders, water trucks, and the like. A unit that already leads or hauls for a fleet is not offered here.",
   flSumB: "fleet formations",
   flDelT: "Delete",
   flDelB:
@@ -734,7 +740,7 @@ export const en: Dict = {
     "Competent operators without a unit this shift — replaces the SPARE rows of the old setting file.",
   faSpareEmpty: "All competent operators are allocated.",
   faFleetAll: "All fleets",
-  faSupportGrp: "Support units",
+  faNoFleet: "No-fleet",
   udbSerial: "Serial no.",
   udbErrCode: "Code is required and must be unique.",
   udbGlobal: "Company-wide asset",

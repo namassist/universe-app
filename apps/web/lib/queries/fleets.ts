@@ -18,3 +18,23 @@ export const fleetsQueryOptions = () =>
 export type FleetRow = Awaited<
   ReturnType<NonNullable<ReturnType<typeof fleetsQueryOptions>["queryFn"]>>
 >[number];
+
+export const noFleetKey = ["fleets", "no-fleet"] as const;
+
+/**
+ * The no-fleet entry — the units that take part in allocation without
+ * belonging to a formation.
+ *
+ * Its own query rather than a row in the list above, because it is not a
+ * fleet: no digger, no area, no bus, and nothing to disband. Fleet Setting
+ * pins it above the formations and the allocation board offers it as the last
+ * option in the formation filter.
+ */
+export const noFleetQueryOptions = () =>
+  queryOptions({
+    queryKey: noFleetKey,
+    queryFn: () => unwrap(api.v1.fleets["no-fleet"].get()),
+  });
+
+export const saveNoFleetUnits = (unitIds: string[]) =>
+  unwrap(api.v1.fleets["no-fleet"].units.put({ unitIds }));

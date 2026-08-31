@@ -573,6 +573,35 @@ export const fleetUnits = pgTable(
 );
 
 /**
+ * Units that take part in allocation without belonging to a formation — the
+ * "no-fleet" entry in Fleet Setting (owner, 2026-08-31).
+ *
+ * Allocation is scoped to units somebody has configured: a fleet's digger, its
+ * haulers, its bus, or a row here. A grader or a fuel truck belongs to no
+ * formation and still needs an operator every shift, and before this the only
+ * way to include it was to include *everything* — which is what the engine did,
+ * building 447-slot boards over a register where 75 units were configured.
+ *
+ * `unit_id` is the primary key, so a unit appears at most once, and the route
+ * refuses one that already leads, hauls for, or buses a fleet: a unit is
+ * configured in exactly one place. `restrict` on the unit for the same reason
+ * `fleet_units` uses it — a unit that is still allocated somewhere must not be
+ * deleted out from under the board.
+ *
+ * There is no row for the entry itself. It is a fixed part of Fleet Setting,
+ * not a record, which is what makes "cannot be deleted" a property of the
+ * design rather than a rule someone has to remember to enforce.
+ */
+export const noFleetUnits = pgTable("no_fleet_units", {
+  unitId: uuid("unit_id")
+    .primaryKey()
+    .references(() => units.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * The standing PLAN pairings — which operators hold which unit, across
  * shifts.
  *

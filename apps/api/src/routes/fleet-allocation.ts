@@ -33,6 +33,7 @@ import {
 
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
+import { isFleetConfigured } from "../fleet-scope";
 import { localDate } from "../scheduler";
 import {
   buildPlanTemplate,
@@ -67,24 +68,40 @@ const SlotSchema = t.Object({
   rosterShift: ShiftKindSchema,
 });
 
+/**
+ * One unit as the PLAN board reads it.
+ *
+ * Deliberately not the whole unit record: what a card carries is what someone
+ * pairing an operator to a machine has to check — which machine, what permit it
+ * takes, whose department owns it, which formation it runs in, and whether it
+ * needs a Fit To Work.
+ *
+ * The work area is **not** here. It is a property of the fleet, identical for
+ * every unit in one, and it used to be sent twice per unit (as `location` and
+ * again inside `fleet`) so the card printed it twice. It now travels once, on
+ * the `fleets` list below, where a screen states it for the whole formation.
+ */
 const BoardUnitSchema = t.Object({
   id: t.String(),
   code: t.String(),
-  modelName: t.String(),
   brandName: t.String(),
   status: UnitStatusSchema,
-  location: t.Nullable(t.String()),
+  /** Which permit this machine takes — the pairing's hard constraint. */
+  simperCodeName: t.Nullable(t.String()),
+  /** Whether its operator must clear Fit To Work before the shift. */
+  requiresFtw: t.Boolean(),
   /** The owning department's name — null for a global unit. */
   departmentName: t.Nullable(t.String()),
-  fleet: t.Nullable(
-    t.Object({ id: t.String(), diggerCode: t.String(), area: t.String() })
-  ),
+  fleet: t.Nullable(t.Object({ id: t.String(), diggerCode: t.String() })),
   slots: t.Array(SlotSchema),
 });
 
 const PlanBoardSchema = t.Object({
   units: t.Array(BoardUnitSchema),
-  fleets: t.Array(t.Object({ id: t.String(), diggerCode: t.String() })),
+  /** Each formation and the area it works — the one place the area is stated. */
+  fleets: t.Array(
+    t.Object({ id: t.String(), diggerCode: t.String(), area: t.String() })
+  ),
   spares: t.Array(
     t.Object({
       nik: t.String(),
@@ -487,23 +504,23 @@ export const fleetAllocationRoutes = new Elysia({
         .select({
           id: schema.units.id,
           code: schema.units.code,
-          modelName: schema.unitModels.name,
           brandName: schema.unitBrands.name,
+          simperCodeName: schema.simperCodes.name,
+          requiresFtw: schema.units.ftw,
           standby: schema.units.standby,
           breakdown: schema.units.breakdown,
           fleetId: schema.fleets.id,
           diggerCode: digger.code,
-          area: schema.workAreas.name,
           departmentName: schema.departments.name,
         })
         .from(schema.units)
         .innerJoin(
-          schema.unitModels,
-          eq(schema.unitModels.id, schema.units.modelId)
-        )
-        .innerJoin(
           schema.unitBrands,
           eq(schema.unitBrands.id, schema.units.brandId)
+        )
+        .leftJoin(
+          schema.simperCodes,
+          eq(schema.simperCodes.id, schema.units.simperCodeId)
         )
         .leftJoin(
           schema.departments,
@@ -521,11 +538,19 @@ export const fleetAllocationRoutes = new Elysia({
           )
         )
         .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-        .leftJoin(
-          schema.workAreas,
-          eq(schema.workAreas.id, schema.fleets.workAreaId)
+        /*
+         * Only what Fleet Setting configured (owner, 2026-08-31). The board
+         * used to list the whole active register — 447 units against 75 in a
+         * formation — so 83% of it was machines nobody had decided took part.
+         *
+         * With the register out of the way, a unit here with no `fleet` is no
+         * longer "we do not know": it is the no-fleet entry, by definition,
+         * which is what lets the filter offer that entry as itself instead of
+         * as a residual bucket called "support".
+         */
+        .where(
+          and(eq(schema.units.active, true), isFleetConfigured(schema.units.id))
         )
-        .where(eq(schema.units.active, true))
         .orderBy(asc(schema.units.code));
 
       const slots = await slotsByUnit();
@@ -541,24 +566,35 @@ export const fleetAllocationRoutes = new Elysia({
         today
       );
 
+      /* The area rides with the formation, not with each of its units: it is
+         one value for the whole fleet, and sending it per unit is what had the
+         card printing it twice. */
       const fleetRows = await db
-        .select({ id: schema.fleets.id, diggerCode: digger.code })
+        .select({
+          id: schema.fleets.id,
+          diggerCode: digger.code,
+          area: schema.workAreas.name,
+        })
         .from(schema.fleets)
         .innerJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
+        .innerJoin(
+          schema.workAreas,
+          eq(schema.workAreas.id, schema.fleets.workAreaId)
+        )
         .orderBy(asc(digger.code));
 
       return {
         units: unitRows.map((u) => ({
           id: u.id,
           code: u.code,
-          modelName: u.modelName,
           brandName: u.brandName,
           status: statusOf(u) as UnitStatus,
-          location: u.area,
+          simperCodeName: u.simperCodeName,
+          requiresFtw: u.requiresFtw,
           departmentName: u.departmentName,
           fleet:
-            u.fleetId && u.diggerCode && u.area
-              ? { id: u.fleetId, diggerCode: u.diggerCode, area: u.area }
+            u.fleetId && u.diggerCode
+              ? { id: u.fleetId, diggerCode: u.diggerCode }
               : null,
           slots: (slots.get(u.id) ?? []).map((s) => ({
             nik: s.nik,

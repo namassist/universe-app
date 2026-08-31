@@ -21,22 +21,32 @@ export type Slot = {
   at?: string; // HH:mm
 };
 
+/**
+ * One unit as a board card reads it.
+ *
+ * The work area is deliberately absent. It belongs to the fleet, not the
+ * machine — identical for every unit in a formation — so a card that printed
+ * it repeated the same words down the whole grid. It lives on `FLEET_OPTIONS`
+ * now, where the board states it once for whichever formation is on screen.
+ */
 export type BoardUnit = {
   code: string;
-  model: string;
   brand: string;
-  loc: string;
   status: UnitStatus;
+  /** Which permit the machine takes; null when none is recorded. */
+  simperCode?: string | null;
+  /** Whether its operator has to clear Fit To Work first. */
+  requiresFtw?: boolean;
   /** Owning department's name; null/absent means a global unit. */
   departmentName?: string | null;
-  fleet: { id: string; digger: string; area: string } | null;
+  fleet: { id: string; digger: string } | null;
   downtime?: boolean;
   slots: Slot[];
 };
 
 export const FLEET_OPTIONS = [
-  { id: "fl1", digger: "EX8001" },
-  { id: "fl2", digger: "EX7001" },
+  { id: "fl1", digger: "EX8001", area: "Panel East Puncak Utara" },
+  { id: "fl2", digger: "EX7001", area: "Disposal T4" },
 ];
 
 const op = (nik: string, name: string, simperJenis = "BII"): Slot => ({
@@ -45,173 +55,28 @@ const op = (nik: string, name: string, simperJenis = "BII"): Slot => ({
   simperJenis,
 });
 
-const FL1 = { id: "fl1", digger: "EX8001", area: "Panel East Puncak Utara" };
-const FL2 = { id: "fl2", digger: "EX7001", area: "Disposal T4" };
-
-/** Papan PLAN — pasangan tetap unit ↔ maks. 2 operator. */
-export const PLAN_UNITS: BoardUnit[] = [
-  {
-    code: "EX8001",
-    model: "EX2600-7BH",
-    brand: "HITACHI",
-    loc: "Panel East Puncak Utara",
-    status: "ready",
-    fleet: FL1,
-    slots: [op("508210388", "Andi Wijaya")],
-  },
-  {
-    code: "RD5001",
-    model: "777E",
-    brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
-    status: "ready",
-    fleet: FL1,
-    slots: [op("503220421", "Budi Santoso"), op("501230510", "Rudi Hartono")],
-  },
-  {
-    code: "RD5002",
-    model: "777E",
-    brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
-    status: "ready",
-    fleet: FL1,
-    slots: [op("511190111", "Joko Prasetyo")],
-  },
-  {
-    code: "RD4001",
-    model: "773E",
-    brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
-    status: "breakdown",
-    fleet: FL1,
-    slots: [],
-  },
-  {
-    code: "RD4002",
-    model: "773E",
-    brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
-    status: "ready",
-    fleet: FL1,
-    slots: [],
-  },
-  {
-    code: "EX7001",
-    model: "EX2000-7BH",
-    brand: "HITACHI",
-    loc: "Disposal T4",
-    status: "ready",
-    fleet: FL2,
-    slots: [op("502210367", "Hendra Gunawan")],
-  },
-  {
-    code: "DT4017",
-    model: "SYZ440C",
-    brand: "SANY",
-    loc: "Disposal T4",
-    status: "ready",
-    fleet: FL2,
-    slots: [op("506230455", "Fitri Handayani")],
-  },
-  {
-    code: "DT4018",
-    model: "SYZ440C",
-    brand: "SANY",
-    loc: "Disposal T4",
-    status: "ready",
-    fleet: FL2,
-    slots: [op("509220290", "Dewi Anggraini")],
-  },
-  {
-    code: "DT3013",
-    model: "SYZ320C-8W(R)",
-    brand: "SANY",
-    loc: "Disposal T4",
-    status: "standby",
-    fleet: FL2,
-    slots: [],
-  },
-  {
-    code: "WE2004",
-    model: "SY215W",
-    brand: "SANY",
-    loc: "Workshop",
-    status: "ready",
-    fleet: null,
-    slots: [op("504180129", "Agus Salim", "KIMPER")],
-  },
-  {
-    code: "DT3014",
-    model: "SYZ320C-8W(R)",
-    brand: "SANY",
-    loc: "Workshop",
-    status: "standby",
-    fleet: null,
-    slots: [],
-  },
-  {
-    code: "EX5001",
-    model: "ZX870LCH-5G",
-    brand: "HITACHI",
-    loc: "Panel East Puncak Utara",
-    status: "ready",
-    fleet: null,
-    slots: [],
-  },
-  {
-    code: "EX5002",
-    model: "ZX870LCH-5G",
-    brand: "HITACHI",
-    loc: "Readyline",
-    status: "standby",
-    fleet: null,
-    slots: [],
-  },
-  {
-    code: "EX4001",
-    model: "ZX470LC-5G",
-    brand: "HITACHI",
-    loc: "Readyline",
-    status: "standby",
-    fleet: null,
-    slots: [],
-  },
-  {
-    code: "EX4002",
-    model: "ZX470LC-5G",
-    brand: "HITACHI",
-    loc: "Readyline",
-    status: "standby",
-    fleet: null,
-    slots: [],
-  },
-];
+const FL1 = { id: "fl1", digger: "EX8001" };
+const FL2 = { id: "fl2", digger: "EX7001" };
 
 /** Papan ACTUAL hasil generate — 1 slot final per unit + kasus khusus. */
 export const ACTUAL_UNITS: BoardUnit[] = [
   {
     code: "EX8001",
-    model: "EX2600-7BH",
     brand: "HITACHI",
-    loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
     slots: [{ ...op("508210388", "Andi Wijaya"), via: "plan", ftw: "fit" }],
   },
   {
     code: "RD5001",
-    model: "777E",
     brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
     slots: [{ ...op("503220421", "Budi Santoso"), via: "plan", ftw: "fit" }],
   },
   {
     code: "RD5002",
-    model: "777E",
     brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
     slots: [
@@ -225,18 +90,14 @@ export const ACTUAL_UNITS: BoardUnit[] = [
   },
   {
     code: "RD4001",
-    model: "773E",
     brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
     status: "breakdown",
     fleet: FL1,
     slots: [],
   },
   {
     code: "RD4002",
-    model: "773E",
     brand: "CATERPILLAR",
-    loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: FL1,
     downtime: true,
@@ -244,9 +105,7 @@ export const ACTUAL_UNITS: BoardUnit[] = [
   },
   {
     code: "EX7001",
-    model: "EX2000-7BH",
     brand: "HITACHI",
-    loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
     slots: [
@@ -255,18 +114,14 @@ export const ACTUAL_UNITS: BoardUnit[] = [
   },
   {
     code: "DT4017",
-    model: "SYZ440C",
     brand: "SANY",
-    loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
     slots: [{ ...op("506230455", "Fitri Handayani"), via: "plan", ftw: "fit" }],
   },
   {
     code: "DT4018",
-    model: "SYZ440C",
     brand: "SANY",
-    loc: "Disposal T4",
     status: "ready",
     fleet: FL2,
     slots: [
@@ -280,18 +135,14 @@ export const ACTUAL_UNITS: BoardUnit[] = [
   },
   {
     code: "DT3013",
-    model: "SYZ320C-8W(R)",
     brand: "SANY",
-    loc: "Disposal T4",
     status: "standby",
     fleet: FL2,
     slots: [],
   },
   {
     code: "WE2004",
-    model: "SY215W",
     brand: "SANY",
-    loc: "Workshop",
     status: "ready",
     fleet: null,
     slots: [
@@ -300,45 +151,35 @@ export const ACTUAL_UNITS: BoardUnit[] = [
   },
   {
     code: "DT3014",
-    model: "SYZ320C-8W(R)",
     brand: "SANY",
-    loc: "Workshop",
     status: "standby",
     fleet: null,
     slots: [],
   },
   {
     code: "EX5001",
-    model: "ZX870LCH-5G",
     brand: "HITACHI",
-    loc: "Panel East Puncak Utara",
     status: "ready",
     fleet: null,
     slots: [],
   },
   {
     code: "EX5002",
-    model: "ZX870LCH-5G",
     brand: "HITACHI",
-    loc: "Readyline",
     status: "standby",
     fleet: null,
     slots: [],
   },
   {
     code: "EX4001",
-    model: "ZX470LC-5G",
     brand: "HITACHI",
-    loc: "Readyline",
     status: "standby",
     fleet: null,
     slots: [],
   },
   {
     code: "EX4002",
-    model: "ZX470LC-5G",
     brand: "HITACHI",
-    loc: "Readyline",
     status: "standby",
     fleet: null,
     slots: [],

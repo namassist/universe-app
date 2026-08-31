@@ -212,6 +212,40 @@ fill the gap from the spare pool.
   all-`D` August: every day read as 990 scheduled and ~660 present, and the
   mismatch bucket cannot exist when every code is `D`.
 
+### Allocation is scoped to what Fleet Setting configured — shipped
+
+- **A unit takes part when somebody put it there** (owner, 2026-08-31). The
+  PLAN board and the engine now cover a formation's digger, its haulers, and
+  the units in Fleet Setting's **no-fleet** entry. Nothing else. Before this the
+  engine was driven by `units` alone: on 2026-08-31 it built a **447-slot board
+  against 75 configured units**, and 251 of those slots were empty.
+- **The old "Unit support" filter was a residual, and its name lied.** It meant
+  "in no fleet", and it held 372 of 447 active units — 135 dump trucks, 52
+  excavators, 30 dozers. Those are production units nobody had paired to a
+  formation yet, not support machines. It is gone, and so is "Semua fleet": the
+  formation filter is now purely what Fleet Setting holds, so every option names
+  a decision somebody made.
+- **No-fleet is an entry, not a fleet.** A fleet is identified by its digger
+  (`digger_unit_id`, not null and unique) and works a Mining area — a row with
+  neither cannot be one. So `no_fleet_units` is its own table with `unit_id` as
+  the primary key, and there is no record behind the entry at all, which is what
+  makes "cannot be deleted" structural rather than a rule to remember.
+- **A unit is configured in exactly one place.** The three sources cannot
+  overlap (`fleets.digger_unit_id` unique, `fleet_units.unit_id` unique,
+  `no_fleet_units.unit_id` primary key), and the route refuses a unit that
+  already leads or hauls, by name.
+- **A fleet's bus is deliberately not configured by being a bus.** It is crew
+  transport rather than a machine the pool crews — all 26 bus slots on the last
+  board were empty — and two buses serve more than one formation, so a bus has
+  no single fleet to be filed under. A bus that really needs a driver goes in
+  the no-fleet entry by someone's decision.
+- **The cost, accepted knowingly.** An active unit configured nowhere is not
+  allocated and is not reported idle either — it goes quiet instead of loudly
+  empty. This is the failure `allocation.ts` was rewritten to escape once
+  before, when a PLAN-driven board hid nine of fifteen units. It is pinned by a
+  test that states it out loud, and the way back in is one row in the no-fleet
+  entry.
+
 ### The allocation engine — shipped
 
 - `spare-validate` is no longer a no-op. It builds and stores one shift's

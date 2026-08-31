@@ -113,6 +113,10 @@ async function addUnit(input: {
     })
     .returning({ id: schema.units.id });
   made.units.push(row!.id);
+  /* Allocation is scoped to units Fleet Setting configured, so a fixture unit
+     joins the no-fleet entry — the same way a real grader with no formation
+     gets on the board. Scoping itself is pinned separately. */
+  await db.insert(schema.noFleetUnits).values({ unitId: row!.id });
   return row!.id;
 }
 
@@ -303,6 +307,9 @@ afterEach(async () => {
   await db
     .delete(schema.fleetPlanSlots)
     .where(inArray(schema.fleetPlanSlots.unitId, made.units));
+  await db
+    .delete(schema.noFleetUnits)
+    .where(inArray(schema.noFleetUnits.unitId, made.units));
   await db.delete(schema.units).where(inArray(schema.units.id, made.units));
   made.units.length = 0;
 });

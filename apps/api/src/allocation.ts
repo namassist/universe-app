@@ -26,6 +26,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
+import { isFleetConfigured } from "./fleet-scope";
 import { judge, shiftIn, type Readiness } from "./readiness";
 import {
   pairingRefusal,
@@ -226,7 +227,25 @@ export async function buildBoard(
         eq(schema.units.active, true),
         // Neither needs an operator, so neither is a vacancy (owner).
         eq(schema.units.breakdown, false),
-        eq(schema.units.standby, false)
+        eq(schema.units.standby, false),
+        /*
+         * And somebody configured it in Fleet Setting (owner, 2026-08-31).
+         *
+         * "Driven by units" above still holds — the board is built from the
+         * machines, not from PLAN, so a configured unit with no standing
+         * pairing is still a vacancy. What narrowed is *which* machines the
+         * board is about. Unscoped it covered the whole register: 447 slots
+         * against 75 configured units, where every forklift, lowboy and
+         * ambulance stood as a permanently idle red card nobody would fill —
+         * 251 empty slots on the last board, and an idle card that is always
+         * there is one nobody reads.
+         *
+         * The cost is real and was accepted deliberately: a unit configured
+         * nowhere is not allocated and not reported as idle either. Fleet
+         * Setting's no-fleet entry is where a machine with no formation is
+         * put back in.
+         */
+        isFleetConfigured(schema.units.id)
       )
     )
     .orderBy(asc(schema.units.code));

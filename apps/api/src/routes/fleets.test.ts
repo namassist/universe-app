@@ -195,8 +195,12 @@ afterAll(async () => {
     await db
       .delete(schema.fleets)
       .where(inArray(schema.fleets.id, made.fleets));
-  if (made.units.length)
+  if (made.units.length) {
+    await db
+      .delete(schema.noFleetUnits)
+      .where(inArray(schema.noFleetUnits.unitId, made.units));
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
+  }
   for (const { table, id } of made.catalogues) {
     const target = {
       classes: schema.unitClasses,
@@ -378,5 +382,124 @@ describe("editing replaces the member list; deleting releases it", () => {
 
     const again = await send("DELETE", `/fleets/${second}`, admin.cookie);
     expect(again.status).toBe(404);
+  });
+});
+
+/* --------------------------------------------------------------- no-fleet */
+
+/**
+ * The fixed entry for machines in no formation.
+ *
+ * What is worth pinning is the exclusivity — a unit is configured in exactly
+ * one place — and that the list is *replaced*, because the dialog submits what
+ * it means rather than a diff. Which fixture happens to be free by the time
+ * these run depends on the suites above, so the units under test are read from
+ * the database rather than assumed.
+ */
+describe("the no-fleet entry", () => {
+  /** A unit currently leading a fleet, and one currently hauling for one. */
+  async function claimed() {
+    const [leader] = await db
+      .select({ id: schema.fleets.diggerUnitId, code: schema.units.code })
+      .from(schema.fleets)
+      .innerJoin(schema.units, eq(schema.units.id, schema.fleets.diggerUnitId))
+      .where(inArray(schema.fleets.id, made.fleets))
+      .limit(1);
+    const [hauler] = await db
+      .select({ id: schema.fleetUnits.unitId, code: schema.units.code })
+      .from(schema.fleetUnits)
+      .innerJoin(schema.units, eq(schema.units.id, schema.fleetUnits.unitId))
+      .where(inArray(schema.fleetUnits.fleetId, made.fleets))
+      .limit(1);
+    return { leader, hauler };
+  }
+
+  /** A unit this suite made that no formation has claimed. */
+  async function free() {
+    const rows = await db
+      .select({ id: schema.units.id, code: schema.units.code })
+      .from(schema.units)
+      .where(inArray(schema.units.id, made.units));
+    const { leader, hauler } = await claimed();
+    const takenIds = await db
+      .select({ id: schema.fleetUnits.unitId })
+      .from(schema.fleetUnits);
+    const leaders = await db
+      .select({ id: schema.fleets.diggerUnitId })
+      .from(schema.fleets);
+    const taken = new Set([
+      ...takenIds.map((r) => r.id),
+      ...leaders.map((r) => r.id),
+      leader?.id,
+      hauler?.id,
+    ]);
+    return rows.find((u) => !taken.has(u.id))!;
+  }
+
+  test("answers with a list and needs no creating", async () => {
+    const response = await send("GET", "/fleets/no-fleet", viewer.cookie);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { units: { code: string }[] };
+    expect(Array.isArray(body.units)).toBe(true);
+  });
+
+  test("replaces its unit list rather than adding to it", async () => {
+    const unit = await free();
+    const first = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
+      unitIds: [unit.id],
+    });
+    expect(first.status).toBe(200);
+    expect(
+      ((await first.json()) as { units: { code: string }[] }).units.map(
+        (u) => u.code
+      )
+    ).toEqual([unit.code]);
+
+    // Emptied, not merged: a replaced list is the whole list.
+    const second = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
+      unitIds: [],
+    });
+    expect(second.status).toBe(200);
+    expect(((await second.json()) as { units: unknown[] }).units).toEqual([]);
+  });
+
+  test("refuses a unit that already leads a fleet, by name", async () => {
+    const { leader } = await claimed();
+    const response = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
+      unitIds: [leader!.id],
+    });
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { message: string }).message).toContain(
+      leader!.code
+    );
+  });
+
+  test("refuses a unit that already hauls for a fleet, by name", async () => {
+    const { hauler } = await claimed();
+    const response = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
+      unitIds: [hauler!.id],
+    });
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { message: string }).message).toContain(
+      hauler!.code
+    );
+  });
+
+  test("is read-only for a viewer", async () => {
+    const response = await send(
+      "PUT",
+      "/fleets/no-fleet/units",
+      viewer.cookie,
+      { unitIds: [] }
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("cannot be deleted — there is no route that would", async () => {
+    // "no-fleet" is not a fleet id, so the disband route refuses it outright.
+    // The entry is part of the screen rather than a record, which is what
+    // makes undeletable structural instead of a rule to remember.
+    const response = await send("DELETE", "/fleets/no-fleet", admin.cookie);
+    expect(response.status).not.toBe(200);
   });
 });

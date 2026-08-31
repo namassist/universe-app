@@ -651,6 +651,12 @@ export const id = {
   flErrMin: "Minimal 8 unit OHT dalam satu fleet (9 termasuk digger).",
   flDlgB:
     "Formasi relatif tetap — alokasi operator harian dilakukan di Fleet Allocation.",
+  flNoFleet: "No-fleet",
+  flNoFleetSub: "Tanpa formasi",
+  flNoFleetFixed: "Tetap",
+  flNoFleetEmpty: "Belum ada unit",
+  flNoFleetDlgB:
+    "Unit yang ikut alokasi otomatis tetapi tidak masuk formasi mana pun — grader, water truck, dan sejenisnya. Unit yang sudah memimpin atau menjadi anggota fleet tidak muncul di sini.",
   flSumB: "formasi fleet",
   flDelT: "Hapus",
   flDelB:
@@ -732,7 +738,7 @@ export const id = {
     "Operator berkompetensi yang belum mendapat unit di shift ini — pengganti baris SPARE di file setting lama.",
   faSpareEmpty: "Semua operator berkompetensi sudah teralokasi.",
   faFleetAll: "Semua fleet",
-  faSupportGrp: "Unit support",
+  faNoFleet: "No-fleet",
   udbSerial: "No. seri",
   udbErrCode: "Kode wajib diisi dan belum terpakai.",
   udbGlobal: "Aset global perusahaan",

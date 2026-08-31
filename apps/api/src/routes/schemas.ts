@@ -697,6 +697,18 @@ export const FleetSchema = t.Object({
   createdAt: t.String(),
 });
 
+/**
+ * The no-fleet entry: units that take part in allocation without belonging to
+ * a formation.
+ *
+ * Just a list, with no id and no record of its own — it is a fixed part of
+ * Fleet Setting rather than a fleet, which is exactly what makes it something
+ * nobody can delete.
+ */
+export const NoFleetSchema = t.Object({
+  units: t.Array(t.Object({ id: t.String(), code: t.String() })),
+});
+
 /* ------------------------------------------------------------------ employees */
 
 /** A qualification code an employee holds — key and name, like every reference. */

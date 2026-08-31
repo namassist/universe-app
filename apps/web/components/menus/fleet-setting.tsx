@@ -13,6 +13,9 @@ import { useI18n } from "@/lib/i18n";
 import {
   fleetsKey,
   fleetsQueryOptions,
+  noFleetKey,
+  noFleetQueryOptions,
+  saveNoFleetUnits,
   type FleetRow,
 } from "@/lib/queries/fleets";
 import { masterQueryOptions, recordType } from "@/lib/queries/master";
@@ -81,6 +84,15 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const fleetsQ = useQuery(fleetsQueryOptions());
   const fleets = React.useMemo(() => fleetsQ.data ?? [], [fleetsQ.data]);
 
+  /* The no-fleet entry — machines in no formation that still get an operator.
+     Fetched separately because it is not a fleet: no digger, no area, no bus,
+     and nothing to disband. */
+  const noFleetQ = useQuery(noFleetQueryOptions());
+  const noFleet = React.useMemo(
+    () => noFleetQ.data?.units ?? [],
+    [noFleetQ.data]
+  );
+
   // Active units and active Mining work areas — the values this screen offers.
   const unitsQ = useQuery(unitsQueryOptions({ active: true }));
   const areasQ = useQuery(masterQueryOptions("area-kerja", true));
@@ -135,6 +147,11 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [errDigger, setErrDigger] = React.useState(false);
   const [errUnits, setErrUnits] = React.useState("");
   const [delTarget, setDelTarget] = React.useState<FleetRow | null>(null);
+
+  // no-fleet dialog — a unit list and nothing else to decide
+  const [nfOpen, setNfOpen] = React.useState(false);
+  const [nfUnits, setNfUnits] = React.useState<string[]>([]);
+  const [nfQ, setNfQ] = React.useState("");
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: fleetsKey });
@@ -212,6 +229,63 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const unitOptsFiltered = unitOpts.filter((c) =>
     c.toUpperCase().includes(unitQ.trim().toUpperCase())
   );
+
+  /* Anything no formation has already claimed. A unit is configured in exactly
+     one place, so a digger or a hauler is not offered here — the API refuses it
+     by name anyway, and offering it would be a trap. */
+  const inAFleet = React.useMemo(
+    () =>
+      new Set([
+        ...fleets.map((f) => f.diggerCode),
+        ...fleets.flatMap((f) => f.units.map((u) => u.code)),
+      ]),
+    [fleets]
+  );
+  const nfOpts = React.useMemo(
+    () =>
+      units
+        .map((u) => u.code)
+        .filter((c) => !inAFleet.has(c))
+        .sort(),
+    [units, inAFleet]
+  );
+  const nfOptsFiltered = nfOpts.filter((c) =>
+    c.toUpperCase().includes(nfQ.trim().toUpperCase())
+  );
+  const unitTypeOf = React.useMemo(
+    () => new Map(units.map((u) => [u.code, unitTypeLabel(u)])),
+    [units]
+  );
+
+  const saveNoFleet = useMutation({
+    mutationFn: (codes: string[]) =>
+      saveNoFleetUnits(
+        codes.map((c) => unitIdByCode.get(c)).filter((id): id is string => !!id)
+      ),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: noFleetKey });
+      pushToast(
+        "success",
+        t.flNoFleet,
+        `${result.units.length} ${t.flSumB.toLowerCase()}`
+      );
+      setNfOpen(false);
+    },
+    onError: (error) =>
+      pushToast("error", t.flNoFleet, errorMessage(error, t.loginErr)),
+  });
+
+  function openNoFleet() {
+    setNfUnits(noFleet.map((u) => u.code));
+    setNfQ("");
+    setNfOpen(true);
+  }
+
+  function toggleNfUnit(code: string) {
+    setNfUnits((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  }
 
   function toggleUnit(code: string) {
     if (fUnits.includes(code)) {
@@ -335,6 +409,50 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             </tr>
           </TableHeader>
           <TableBody>
+            {/* Pinned above the formations, and there is no delete on it: it
+                has no record to delete. A site always has machines that belong
+                to no formation and still have to be crewed, so the entry is
+                part of the screen rather than something to create.
+
+                Hidden while the list is being searched — the search is for a
+                formation, and a fixed row that ignored it would read as a
+                result that does not match. */}
+            {!listNeedle ? (
+              <TableRow>
+                <TableCell>
+                  <NameCell name={t.flNoFleet} sub={t.flNoFleetSub} />
+                </TableCell>
+                <TableCell className="text-(--text-tertiary)">—</TableCell>
+                <TableCell className="text-(--text-tertiary) max-xl:hidden">
+                  —
+                </TableCell>
+                <TableCell>
+                  <div className="flex max-w-[320px] flex-wrap gap-1">
+                    {noFleet.length ? (
+                      noFleet.map((u) => (
+                        <Badge key={u.id} variant="info">
+                          {u.code}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs text-(--text-tertiary) italic">
+                        {t.flNoFleetEmpty}
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="neutral">{t.flNoFleetFixed}</Badge>
+                </TableCell>
+                <TableCell>
+                  {canW ? (
+                    <IconButton aria-label={t.udbEditT} onClick={openNoFleet}>
+                      <Pencil />
+                    </IconButton>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            ) : null}
             {pg.rows.map((f) => (
               <TableRow key={f.id}>
                 <TableCell>
@@ -552,6 +670,80 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* Dialog no-fleet — hanya daftar unit, tidak ada yang lain diputuskan */}
+      <Dialog
+        open={nfOpen}
+        onClose={() => setNfOpen(false)}
+        className="w-[min(560px,100%)]"
+        labelledBy="nf-t"
+      >
+        <DialogIcon variant="info">
+          <Truck />
+        </DialogIcon>
+        <DialogTitle id="nf-t">{t.flNoFleet}</DialogTitle>
+        <DialogBody>{t.flNoFleetDlgB}</DialogBody>
+        <div className="mt-4 flex min-h-0 flex-1 flex-col gap-2">
+          {nfUnits.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {nfUnits.map((c) => (
+                <button
+                  type="button"
+                  key={c}
+                  onClick={() => toggleNfUnit(c)}
+                  aria-label={`${t.empDel} ${c}`}
+                  className="flex cursor-pointer items-center gap-1 rounded-chip border border-(--badge-info-border) bg-(--badge-info-fill) px-2 py-1 font-mono text-xs font-semibold text-primary-bright hover:border-(--badge-danger-border) hover:text-danger-text"
+                >
+                  {c}
+                  <X className="size-3" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <SearchInput
+            placeholder={t.flUnitSearchPh}
+            aria-label={t.flUnitSearchPh}
+            value={nfQ}
+            onChange={(e) => setNfQ(e.target.value)}
+          />
+          <div className="max-h-64 min-h-0 flex-1 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
+            {nfOptsFiltered.length ? (
+              nfOptsFiltered.map((code) => (
+                <label
+                  key={code}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-(--fill-hover)"
+                >
+                  <Checkbox
+                    checked={nfUnits.includes(code)}
+                    onChange={() => toggleNfUnit(code)}
+                  />
+                  <span className="font-mono text-sm font-semibold">
+                    {code}
+                  </span>
+                  <span className="text-xs text-(--text-tertiary)">
+                    {unitTypeOf.get(code) ?? "—"}
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="px-2 py-1.5 text-xs text-(--text-tertiary)">
+                {t.noResTitle}
+              </p>
+            )}
+          </div>
+        </div>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setNfOpen(false)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            disabled={saveNoFleet.isPending}
+            onClick={() => saveNoFleet.mutate(nfUnits)}
+          >
+            {t.udbSaveEdit}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Dialog hapus fleet */}

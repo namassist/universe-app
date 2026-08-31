@@ -52,6 +52,15 @@ import {
 
 const FA_PLAN_MAX_OPS = 2;
 
+/**
+ * The no-fleet entry's value in the formation filter.
+ *
+ * Not a fleet id, because it is not a fleet — it is Fleet Setting's fixed list
+ * for machines that belong to no formation and still need an operator. A unit
+ * id could never collide with it, and it reads as itself in the markup.
+ */
+const NO_FLEET = "no-fleet";
+
 type Filter = "all" | "unalloc" | "alloc" | "issue";
 type Kind = "bd" | "none" | "warn" | "dt" | "ok";
 
@@ -246,14 +255,12 @@ function AllocDialog({
 function toBoardUnits(board: PlanBoard | undefined): BoardUnit[] {
   return (board?.units ?? []).map((u) => ({
     code: u.code,
-    model: u.modelName,
     brand: u.brandName,
-    loc: u.location ?? "—",
     status: u.status,
+    simperCode: u.simperCodeName,
+    requiresFtw: u.requiresFtw,
     departmentName: u.departmentName,
-    fleet: u.fleet
-      ? { id: u.fleet.id, digger: u.fleet.diggerCode, area: u.fleet.area }
-      : null,
+    fleet: u.fleet ? { id: u.fleet.id, digger: u.fleet.diggerCode } : null,
     slots: u.slots.map((s) => ({
       nik: s.nik,
       name: s.name,
@@ -307,12 +314,16 @@ export function AllocBoard({
         : SPARE_INIT,
     [mode, planQ.data]
   );
+  /* Each formation carries its work area. The cards no longer do: an area is
+     one fact about a fleet, and repeating it on all sixty of its units said it
+     sixty times without saying anything the sixty-first did not. */
   const fleetOptions = React.useMemo(
     () =>
       mode === "plan"
         ? (planQ.data?.fleets ?? []).map((f) => ({
             id: f.id,
             digger: f.diggerCode,
+            area: f.area,
           }))
         : FLEET_OPTIONS,
     [mode, planQ.data]
@@ -321,11 +332,29 @@ export function AllocBoard({
   const [spareQ, setSpareQ] = React.useState("");
   const [spareDeptF, setSpareDeptF] = React.useState("all");
   const [filter, setFilter] = React.useState<Filter>("all");
-  const [fleetF, setFleetF] = React.useState("all");
+  /* Empty until someone chooses, rather than a fleet id nobody picked. The
+     board always shows exactly one formation now — there is no "all" to fall
+     back to — so the choice is *derived* below instead of guessed at here,
+     which also survives the formation list arriving after the first render. */
+  const [fleetF, setFleetF] = React.useState("");
   const [q, setQ] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [per, setPer] = React.useState("6");
   const [allocFor, setAllocFor] = React.useState<BoardUnit | null>(null);
+
+  /**
+   * The formation actually on screen.
+   *
+   * Derived rather than stored, so nothing has to run after the fleet list
+   * arrives: until the operator picks something — and if their pick stops
+   * existing, as it does when a fleet is disbanded — the board falls back to
+   * the first formation Fleet Setting offers, and to the no-fleet entry when
+   * there are no formations at all.
+   */
+  const activeFleet =
+    fleetF === NO_FLEET || fleetOptions.some((f) => f.id === fleetF)
+      ? fleetF
+      : (fleetOptions[0]?.id ?? NO_FLEET);
 
   const canEdit = mode === "plan" && canManage;
   /* intervensi manual terbatas: pasca-generate, slot kosong saja */
@@ -423,9 +452,13 @@ export function AllocBoard({
 
   const needle = q.trim().toLowerCase();
   const allFiltered = units.filter((u) => {
-    if (fleetF === "support" && u.fleet) return false;
-    if (fleetF !== "all" && fleetF !== "support" && u.fleet?.id !== fleetF)
-      return false;
+    /* A unit on this board with no formation *is* the no-fleet entry: the
+       board only carries what Fleet Setting configured, so "no fleet" no
+       longer overlaps with "not configured", the way the old support bucket
+       did. */
+    const inFleet =
+      activeFleet === NO_FLEET ? !u.fleet : u.fleet?.id === activeFleet;
+    if (!inFleet) return false;
     const kind = kindOf(u);
     if (filter === "unalloc" && u.slots.length) return false;
     if (filter === "alloc" && !u.slots.length) return false;
@@ -451,6 +484,11 @@ export function AllocBoard({
     total: units.length,
     downtime: units.filter((u) => u.downtime).length,
   };
+
+  /** Null while every fleet is on screen — there is no single area to name. */
+  /** Null on the no-fleet entry: it belongs to no formation and so to no area. */
+  const selectedArea =
+    fleetOptions.find((f) => f.id === activeFleet)?.area ?? null;
 
   function assign(unit: BoardUnit, nik: string, name: string) {
     if (mode === "plan") {
@@ -510,7 +548,11 @@ export function AllocBoard({
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* The board's own reading, on its own line. It is a caption for what
+          follows rather than one more control, and putting it back in the
+          control row is what forced the controls into a single right-aligned
+          huddle in the first place. */}
+      <div>
         <span className="text-sm text-(--text-secondary)">
           <b className="font-semibold text-(--text-primary)">
             {summary.allocated}
@@ -518,6 +560,16 @@ export function AllocBoard({
           {t.faAllocOf}{" "}
           <b className="font-semibold text-(--text-primary)">{summary.total}</b>{" "}
           {t.faAllocUnits}
+          {/* Once a formation is chosen every card on screen shares its area,
+              so it is stated once, here, instead of on each of them. */}
+          {selectedArea ? (
+            <>
+              {" · "}
+              <b className="font-semibold text-(--text-primary)">
+                {selectedArea}
+              </b>
+            </>
+          ) : null}
           {mode === "plan" ? (
             <> · {t.faPlanHint}</>
           ) : (
@@ -544,35 +596,16 @@ export function AllocBoard({
             </>
           )}
         </span>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {canEdit ? (
-            <Button
-              variant="secondary"
-              className="h-10"
-              onClick={() => router.push("/fleet-allocation/import")}
-            >
-              <Upload />
-              {t.upImport}
-            </Button>
-          ) : null}
-          <Select
-            aria-label="Filter fleet"
-            wrapperClassName="w-auto"
-            className="h-10 w-auto pr-9"
-            value={fleetF}
-            onChange={(e) => {
-              setFleetF(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="all">{t.faFleetAll}</option>
-            {fleetOptions.map((f) => (
-              <option key={f.id} value={f.id}>
-                Fleet {f.digger}
-              </option>
-            ))}
-            <option value="support">{t.faSupportGrp}</option>
-          </Select>
+      </div>
+
+      {/* Two groups, pushed apart. On the left the controls that decide *which*
+          units the board is about — the allocation tabs, the formation, and the
+          import that changes the set itself. On the right the search, which
+          narrows whatever those three settled on. Grouping them by what they do
+          is what makes the split readable; a single right-aligned row of four
+          unrelated controls was not. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Segmented role="group" aria-label="Filter alokasi">
             {(
               [
@@ -594,17 +627,51 @@ export function AllocBoard({
               </SegmentedButton>
             ))}
           </Segmented>
-          <SearchInput
-            className="w-55"
-            placeholder={t.searchUnit}
-            aria-label={t.searchUnit}
-            value={q}
+          {/* Purely what Fleet Setting holds: its formations, and its no-fleet
+              entry. There is no "all" and no residual bucket — every option
+              here is something someone configured, so choosing one names a
+              decision rather than a leftover. */}
+          <Select
+            aria-label="Filter fleet"
+            wrapperClassName="w-auto"
+            className="h-10 w-auto pr-9"
+            value={activeFleet}
             onChange={(e) => {
-              setQ(e.target.value);
+              setFleetF(e.target.value);
               setPage(1);
             }}
-          />
+          >
+            {/* The area rides on the option, so it is in front of you at the
+                moment you choose a formation — and the closed select goes on
+                stating it for the one you picked. */}
+            {fleetOptions.map((f) => (
+              <option key={f.id} value={f.id}>
+                Fleet {f.digger} — {f.area}
+              </option>
+            ))}
+            <option value={NO_FLEET}>{t.faNoFleet}</option>
+          </Select>
+          {canEdit ? (
+            <Button
+              variant="secondary"
+              className="h-10"
+              onClick={() => router.push("/fleet-allocation/import")}
+            >
+              <Upload />
+              {t.upImport}
+            </Button>
+          ) : null}
         </div>
+        <SearchInput
+          className="w-55"
+          placeholder={t.searchUnit}
+          aria-label={t.searchUnit}
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+        />
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
@@ -621,11 +688,11 @@ export function AllocBoard({
                   "border-[rgba(252,60,59,.45)] shadow-[0_0_20px_rgba(252,60,59,.18),0_20px_80px_rgba(0,0,0,.5)]"
               )}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
                   <b className="text-base font-bold">{u.code}</b>
-                  <span className="mt-px block text-xs text-(--text-tertiary)">
-                    {u.model} · {u.brand} · {u.loc}
+                  <span className="mt-px block truncate text-xs text-(--text-tertiary)">
+                    {u.brand}
                   </span>
                 </div>
                 <Badge variant={st.variant} dot>
@@ -633,6 +700,15 @@ export function AllocBoard({
                 </Badge>
               </div>
 
+              {/* What the machine demands of whoever is paired to it, in the
+                  order it is checked: whose department owns it, what permit it
+                  takes, and whether it needs a Fit To Work.
+
+                  The formation is not among them (owner, 2026-08-31). It is how
+                  the board is *narrowed*, not something read off one card — the
+                  dropdown above already says which fleet is on screen, and
+                  repeating it on every card in that fleet only crowded out the
+                  three facts that differ between them. */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* Which department may operate it — GLOBAL means anyone. */}
                 {u.departmentName ? (
@@ -642,14 +718,10 @@ export function AllocBoard({
                 ) : mode === "plan" ? (
                   <Badge variant="neutral">{t.faGlobalUnit}</Badge>
                 ) : null}
-                {u.fleet ? (
-                  <>
-                    <Badge variant="info">Fleet {u.fleet.digger}</Badge>
-                    <span className="text-xs text-(--text-tertiary)">
-                      {u.fleet.area}
-                    </span>
-                  </>
+                {u.simperCode ? (
+                  <Badge variant="neutral">{u.simperCode}</Badge>
                 ) : null}
+                {u.requiresFtw ? <Badge variant="warning">FTW</Badge> : null}
               </div>
 
               {mode === "plan" ? (

@@ -127,6 +127,13 @@
       "when": 1788094081554,
       "tag": "0017_stiff_malcolm_colcord",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788143602802,
+      "tag": "0018_woozy_the_hunter",
+      "breakpoints": true
     }
   ]
 }
