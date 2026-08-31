@@ -1,0 +1,38 @@
+# One origin for the whole application.
+#
+# The browser talks to a single host and port; Caddy decides what is behind
+# each path. That is not only tidier than exposing 3000 and 3001 separately —
+# it removes two whole classes of problem:
+#
+#   * No CORS. The web app and the API are same-origin, so there is no
+#     preflight to configure and no allowlist to keep in step with the server's
+#     address.
+#   * Session cookies just work. `SameSite=Lax` over a single origin needs no
+#     exception, and one port is one firewall rule.
+#
+# The API owns three paths at the root — everything under /v1, plus /health and
+# /openapi. Everything else is the web app.
+:80 {
+	encode zstd gzip
+
+	# Uploaded photos and sounds stream through here; the default 100s write
+	# timeout is generous for a LAN but an import of several thousand rows can
+	# outrun it.
+	handle /v1/* {
+		reverse_proxy api:3001
+	}
+	handle /health {
+		reverse_proxy api:3001
+	}
+	handle /openapi* {
+		reverse_proxy api:3001
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

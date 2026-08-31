@@ -519,7 +519,22 @@ async function wipeWorkforce(): Promise<void> {
   console.log("  workforce, catalogues, sample fleet, and roster cleared");
 }
 
-export async function seed(): Promise<void> {
+/**
+ * Everything a *real* installation needs and nothing it does not: the six
+ * roles, their grants, the superadmin who can log in and create everyone else,
+ * and the two kiosks that have no admin UI.
+ *
+ * Split out from `seed()` because the rest of that function is sample data.
+ * On a fresh production database an operator has to be able to log in, and
+ * the only way to do that was to run a seed that also inserts an invented
+ * workforce — real names would then sit beside fictional ones in the same
+ * employee register, which is the kind of mess that is discovered late and
+ * cleaned up by hand.
+ *
+ * Idempotent, like `seed()`: re-running reconciles the locked superadmin role
+ * and leaves the five editable ones alone.
+ */
+export async function bootstrap(): Promise<Map<string, string>> {
   // Held to the same policy it enforces on everyone else — the most privileged
   // account must not be the weakest.
   if (env.SUPERADMIN_PASSWORD.length < env.PASSWORD_MIN_LENGTH) {
@@ -529,8 +544,6 @@ export async function seed(): Promise<void> {
         `a superadmin weaker than the policy it enforces.`
     );
   }
-
-  if (process.env.SEED_FRESH === "1") await wipeWorkforce();
 
   console.log("[seed] roles");
   const roleIds = new Map<string, string>();
@@ -546,6 +559,25 @@ export async function seed(): Promise<void> {
 
   console.log("[seed] devices");
   await seedDevices();
+
+  return roleIds;
+}
+
+export async function seed(): Promise<void> {
+  if (process.env.SEED_FRESH === "1") {
+    // Checked before the wipe rather than inside bootstrap(): refusing to
+    // create a weak superadmin *after* emptying the workforce would leave the
+    // database worse than it was found.
+    if (env.SUPERADMIN_PASSWORD.length < env.PASSWORD_MIN_LENGTH)
+      throw new Error(
+        `SUPERADMIN_PASSWORD is ${env.SUPERADMIN_PASSWORD.length} characters; ` +
+          `PASSWORD_MIN_LENGTH is ${env.PASSWORD_MIN_LENGTH}. Refusing to create ` +
+          `a superadmin weaker than the policy it enforces.`
+      );
+    await wipeWorkforce();
+  }
+
+  const roleIds = await bootstrap();
 
   await seedMasterData();
 

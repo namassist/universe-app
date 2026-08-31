@@ -1,0 +1,24 @@
+# Build context hygiene. Everything here either bloats the image, leaks
+# secrets, or would be rebuilt anyway — and `.next` in particular must never
+# reach a build, because a host dev server's output would overwrite the one
+# built inside the image.
+node_modules
+**/node_modules
+.next
+**/.next
+.turbo
+**/.turbo
+dist
+**/dist
+.git
+.github
+.husky
+.vscode
+.claude
+.agents
+openspec
+**/.env
+**/.env.*
+!**/.env.example
+**/storage
+*.log
