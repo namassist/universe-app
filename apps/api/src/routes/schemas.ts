@@ -1391,3 +1391,83 @@ export const AttendanceListSchema = t.Object({
   rows: t.Array(AttendanceReadingSchema),
   lastSyncedAt: t.Nullable(t.String()),
 });
+
+/* ----------------------------------------------------------- the dashboard */
+
+/**
+ * The dashboard's payload. Every section is nullable, and null means the
+ * caller holds no grant for it — not that the number is zero.
+ */
+export const DashboardSchema = t.Object({
+  /** Site-local today, so the screen never re-derives it from a UTC instant. */
+  date: t.String(),
+  attendance: t.Nullable(
+    t.Object({ scheduled: t.Integer(), tapped: t.Integer() })
+  ),
+  ftw: t.Nullable(
+    t.Object({
+      scheduled: t.Integer(),
+      fit: t.Integer(),
+      followUp: t.Integer(),
+      missing: t.Integer(),
+    })
+  ),
+  units: t.Nullable(
+    t.Object({
+      active: t.Integer(),
+      breakdown: t.Integer(),
+      standby: t.Integer(),
+    })
+  ),
+  revisions: t.Nullable(
+    t.Object({ pendingItems: t.Integer(), pendingDocs: t.Integer() })
+  ),
+  devices: t.Nullable(t.Object({ total: t.Integer(), offline: t.Integer() })),
+  /** When the two external sources last answered; null when never. */
+  ingest: t.Nullable(
+    t.Object({
+      ftwSyncedAt: t.Nullable(t.String()),
+      fingerSyncedAt: t.Nullable(t.String()),
+    })
+  ),
+  fleetConfig: t.Nullable(t.Object({ unitsWithOperatorNoFleet: t.Integer() })),
+  /** One line per shift that has a board today; absent means not generated. */
+  allocation: t.Nullable(
+    t.Array(
+      t.Object({
+        shift: ShiftKindSchema,
+        generatedAt: t.String(),
+        slots: t.Integer(),
+        filled: t.Integer(),
+      })
+    )
+  ),
+  /** Null until the employee register carries SIMPER expiry dates at all. */
+  simper: t.Nullable(t.Object({ expired: t.Integer(), soon: t.Integer() })),
+  /** The signed-in person's own day; null when the account has no NIK. */
+  me: t.Nullable(
+    t.Object({
+      name: t.String(),
+      nik: t.String(),
+      rosterCode: t.Nullable(RosterCodeSchema),
+      ftwDecision: t.Nullable(t.String()),
+      tappedAt: t.Nullable(t.String()),
+      unitCode: t.Nullable(t.String()),
+      unitSource: t.Nullable(t.UnionEnum(["plan", "spare", "manual"] as const)),
+      pendingRevisions: t.Integer(),
+    })
+  ),
+  /**
+   * The rows worth acting on, capped per kind. Facts only — the screen writes
+   * the sentence and picks the badge, in the reader's language.
+   */
+  attention: t.Array(
+    t.Object({
+      kind: t.UnionEnum(["breakdown", "unfit", "absent", "display"] as const),
+      name: t.String(),
+      sub: t.String(),
+      dept: t.String(),
+      detail: t.Nullable(t.String()),
+    })
+  ),
+});

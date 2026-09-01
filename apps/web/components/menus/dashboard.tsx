@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   Clock,
@@ -17,6 +18,10 @@ import {
 
 import type { MenuSlug } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
+import {
+  dashboardQueryOptions,
+  type AttentionFact,
+} from "@/lib/queries/dashboard";
 import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Pagination, usePagination } from "@/components/ui/pagination";
@@ -76,53 +81,87 @@ const CARD_SUCCESS = {
   color: "var(--badge-success-text)",
 };
 
-/* ---- static sample content (no data layer) ---- */
-const SAMPLE = {
-  att: { total: 128, present: 116, belum: 12 },
-  ftw: { total: 128, fit: 121, kurang: 3, belum: 4 },
-  units: { breakdown: 4 },
-  rev: { pending: 6, pendingSids: 3 },
-  simper: { expired: 2, soon: 5 },
-  alloc: { filled: 42, downtime: 3, made: 1, generated: 1 },
-  disp: { total: 8, offline: 1 },
-  breakdownUnits: [
-    { code: "DT-104", model: "HD785-7", loc: "Pit 3", at: "08:12" },
-    { code: "EX-22", model: "PC2000-8", loc: "Disposal", at: "07:40" },
-  ],
-  unfit: [
-    {
-      name: "Budi Santoso",
-      nik: "503220421",
-      dept: "Hauling",
-      sleep: "4j 10m",
-    },
-    { name: "Andi Wijaya", nik: "508210388", dept: "Loading", sleep: "3j 55m" },
-  ],
-  absent: [
-    { name: "Rudi Hartono", nik: "501230510", dept: "Hauling", code: "P-2" },
-    { name: "Sari Lestari", nik: "505200233", dept: "Support", code: "M-1" },
-  ],
-  pendingRev: [
-    { sid: "REV-2481", entries: 3 },
-    { sid: "REV-2479", entries: 2 },
-  ],
-  expiredSimper: [
-    {
-      name: "Joko Prasetyo",
-      nik: "511190111",
-      dept: "Hauling",
-      jenis: "BII",
-      exp: "18 Jul 2026",
-    },
-  ],
-  offlineDisplays: [
-    { name: "Display Gate B", id: "DSP-03", kind: "att" as const },
-  ],
-};
+/** One labelled fact on the personal strip. */
+function MeFact({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: BadgeVariant;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-xs text-(--text-tertiary)">{label}</div>
+      <Badge variant={tone} className="mt-1">
+        {value}
+      </Badge>
+    </div>
+  );
+}
 
 export function DashboardMenu() {
   const { t, lang } = useI18n();
   const { roleLabel, access } = useRole();
+  const dashQ = useQuery(dashboardQueryOptions());
+  const data = dashQ.data;
+
+  /**
+   * The payload, in the shape the cards below already read.
+   *
+   * A projection rather than a rewrite of every card: what changed is where
+   * the numbers come from, not what they mean. `null` on a section means the
+   * API withheld it for want of a grant — which is why the composition below
+   * now tests the section rather than re-deriving the permission.
+   */
+  const facts = React.useMemo(() => {
+    const rows = (kind: AttentionFact["kind"]) =>
+      (data?.attention ?? []).filter((r) => r.kind === kind);
+    return {
+      att: {
+        total: data?.attendance?.scheduled ?? 0,
+        present: data?.attendance?.tapped ?? 0,
+        belum: Math.max(
+          0,
+          (data?.attendance?.scheduled ?? 0) - (data?.attendance?.tapped ?? 0)
+        ),
+      },
+      ftw: {
+        total: data?.ftw?.scheduled ?? 0,
+        fit: data?.ftw?.fit ?? 0,
+        kurang: data?.ftw?.followUp ?? 0,
+        belum: data?.ftw?.missing ?? 0,
+      },
+      units: { breakdown: data?.units?.breakdown ?? 0 },
+      rev: {
+        pending: data?.revisions?.pendingItems ?? 0,
+        pendingSids: data?.revisions?.pendingDocs ?? 0,
+      },
+      simper: {
+        expired: data?.simper?.expired ?? 0,
+        soon: data?.simper?.soon ?? 0,
+      },
+      disp: {
+        total: data?.devices?.total ?? 0,
+        offline: data?.devices?.offline ?? 0,
+      },
+      alloc: {
+        /* Both of today's shifts, summed: the card is "how much of today is
+           crewed", not "how much of one shift is". */
+        filled: (data?.allocation ?? []).reduce((n, b) => n + b.filled, 0),
+        slots: (data?.allocation ?? []).reduce((n, b) => n + b.slots, 0),
+        boards: (data?.allocation ?? []).length,
+      },
+      fleetGap: data?.fleetConfig?.unitsWithOperatorNoFleet ?? 0,
+      ingest: data?.ingest ?? null,
+      me: data?.me ?? null,
+      breakdownUnits: rows("breakdown"),
+      unfit: rows("unfit"),
+      absent: rows("absent"),
+      offlineDisplays: rows("display"),
+    };
+  }, [data]);
   const en = lang === "en";
   const link = (slug: MenuSlug) => `/${slug}`;
   const has = (slug: MenuSlug) => Boolean(access(slug));
@@ -163,7 +202,7 @@ export function DashboardMenu() {
       href={link("fit-to-work")}
       icon={<XCircle />}
       iconStyle={CARD_DANGER}
-      value={String(SAMPLE.ftw.kurang)}
+      value={String(facts.ftw.kurang)}
       label={t.statUnfit}
       detail={
         <>
@@ -178,11 +217,11 @@ export function DashboardMenu() {
       href={link("attendance")}
       icon={<Clock />}
       iconStyle={CARD_WARNING}
-      value={String(SAMPLE.att.belum)}
+      value={String(facts.att.belum)}
       label={t.statAbsent}
       detail={
         <>
-          {t.dAbsent1} <b>{SAMPLE.att.total}</b> {t.dAbsent2}
+          {t.dAbsent1} <b>{facts.att.total}</b> {t.dAbsent2}
         </>
       }
     />
@@ -193,11 +232,11 @@ export function DashboardMenu() {
       href={link("attendance")}
       icon={<UserCheck />}
       iconStyle={CARD_SUCCESS}
-      value={String(SAMPLE.att.present)}
+      value={String(facts.att.present)}
       label={t.statPresent}
       detail={
         <>
-          {t.dAbsent1} <b>{SAMPLE.att.total}</b> {t.dAbsent2}
+          {t.dAbsent1} <b>{facts.att.total}</b> {t.dAbsent2}
         </>
       }
     />
@@ -208,14 +247,14 @@ export function DashboardMenu() {
       href={link("unit-status")}
       icon={<Truck />}
       iconStyle={CARD_DANGER}
-      value={String(SAMPLE.units.breakdown)}
+      value={String(facts.units.breakdown)}
       label={t.statBreakdown}
       detail={
         <>
-          <b>{SAMPLE.breakdownUnits[0]?.code}</b>
-          {SAMPLE.breakdownUnits
+          <b>{facts.breakdownUnits[0]?.name ?? "—"}</b>
+          {facts.breakdownUnits
             .slice(1, 3)
-            .map((u) => ` · ${u.code}`)
+            .map((u) => ` · ${u.name}`)
             .join("")}
         </>
       }
@@ -227,11 +266,11 @@ export function DashboardMenu() {
       href={link("roster-approval")}
       icon={<MessageSquareMore />}
       iconStyle={CARD_INFO}
-      value={String(SAMPLE.rev.pending)}
+      value={String(facts.rev.pending)}
       label={t.statApproval}
       detail={
         <>
-          <b>{SAMPLE.rev.pendingSids}</b> {t.dRevGroups}
+          <b>{facts.rev.pendingSids}</b> {t.dRevGroups}
         </>
       }
     />
@@ -242,11 +281,11 @@ export function DashboardMenu() {
       href={link("roster-revision")}
       icon={<MessageSquareMore />}
       iconStyle={CARD_INFO}
-      value={String(SAMPLE.rev.pending)}
+      value={String(facts.rev.pending)}
       label={t.statRevPending}
       detail={
         <>
-          <b>{SAMPLE.rev.pendingSids}</b> {t.dRevGroups}
+          <b>{facts.rev.pendingSids}</b> {t.dRevGroups}
         </>
       }
     />
@@ -256,12 +295,12 @@ export function DashboardMenu() {
       key="simper"
       href={link("employees")}
       icon={<IdCard />}
-      iconStyle={SAMPLE.simper.expired ? CARD_DANGER : CARD_SUCCESS}
-      value={String(SAMPLE.simper.expired)}
+      iconStyle={facts.simper.expired ? CARD_DANGER : CARD_SUCCESS}
+      value={String(facts.simper.expired)}
       label={t.statSimperExp}
       detail={
         <>
-          <b>{SAMPLE.simper.soon}</b> {t.dSimperSoon}
+          <b>{facts.simper.soon}</b> {t.dSimperSoon}
         </>
       }
     />
@@ -272,11 +311,11 @@ export function DashboardMenu() {
       href={link("fit-to-work")}
       icon={<Clock />}
       iconStyle={CARD_WARNING}
-      value={String(SAMPLE.ftw.belum)}
+      value={String(facts.ftw.belum)}
       label={t.statFtwBelum}
       detail={
         <>
-          {t.dAbsent1} <b>{SAMPLE.ftw.total}</b> {t.dOps}
+          {t.dAbsent1} <b>{facts.ftw.total}</b> {t.dOps}
         </>
       }
     />
@@ -287,11 +326,11 @@ export function DashboardMenu() {
       href={link("fit-to-work")}
       icon={<Heart />}
       iconStyle={CARD_SUCCESS}
-      value={String(SAMPLE.ftw.fit)}
+      value={String(facts.ftw.fit)}
       label={t.statFtwFit}
       detail={
         <>
-          {t.dAbsent1} <b>{SAMPLE.ftw.total}</b> {t.dOps}
+          {t.dAbsent1} <b>{facts.ftw.total}</b> {t.dOps}
         </>
       }
     />
@@ -302,11 +341,12 @@ export function DashboardMenu() {
       href={link("fleet-allocation")}
       icon={<CalendarDays />}
       iconStyle={CARD_INFO}
-      value={String(SAMPLE.alloc.filled)}
+      value={String(facts.alloc.filled)}
       label={t.statAllocNow}
       detail={
         <>
-          <b>{SAMPLE.alloc.downtime}</b> tanpa operator
+          <b>{Math.max(0, facts.alloc.slots - facts.alloc.filled)}</b>{" "}
+          {t.dNoOperator}
         </>
       }
     />
@@ -316,12 +356,12 @@ export function DashboardMenu() {
       key="actual-today"
       href={link("fleet-allocation")}
       icon={<CalendarDays />}
-      iconStyle={SAMPLE.alloc.generated < 2 ? CARD_WARNING : CARD_SUCCESS}
-      value={`${SAMPLE.alloc.made}/2`}
+      iconStyle={facts.alloc.boards < 2 ? CARD_WARNING : CARD_SUCCESS}
+      value={`${facts.alloc.boards}/2`}
       label={t.statActualToday}
       detail={
         <>
-          <b>{SAMPLE.alloc.generated}</b> {t.dGenerated}
+          <b>{facts.alloc.slots}</b> {t.dGenerated}
         </>
       }
     />
@@ -335,96 +375,114 @@ export function DashboardMenu() {
           : link("display-fleet")
       }
       icon={<Monitor />}
-      iconStyle={SAMPLE.disp.offline ? CARD_WARNING : CARD_SUCCESS}
-      value={`${SAMPLE.disp.total - SAMPLE.disp.offline}/${SAMPLE.disp.total}`}
+      iconStyle={facts.disp.offline ? CARD_WARNING : CARD_SUCCESS}
+      value={`${facts.disp.total - facts.disp.offline}/${facts.disp.total}`}
       label={t.statDisplays}
       detail={
         <>
-          <b>{SAMPLE.disp.offline}</b> offline
+          <b>{facts.disp.offline}</b> offline
         </>
       }
     />
   );
 
-  /* ---- attention-row library ---- */
-  const bdRows = (): AttentionRow[] =>
-    SAMPLE.breakdownUnits.map((u) => ({
-      name: u.code,
-      sub: u.model,
-      dept: "—",
-      issue: en
-        ? `Reported down at ${u.at} — awaiting repair (${u.loc})`
-        : `Dilaporkan rusak ${u.at} — menunggu perbaikan (${u.loc})`,
-      badge: "Breakdown",
-      badgeVariant: "danger",
-      target: "unit-status",
-      action: en ? "Open Unit Status" : "Buka Status Unit",
-    }));
-  const unfitRows = (): AttentionRow[] =>
-    SAMPLE.unfit.map((r) => ({
-      name: r.name,
-      sub: r.nik,
-      dept: r.dept,
-      issue: en
-        ? `Slept ${r.sleep} — below the safe threshold`
-        : `Tidur ${r.sleep} — di bawah ambang aman`,
-      badge: "Unfit",
-      badgeVariant: "danger",
-      target: "fit-to-work",
-      action: en ? "Open Fit To Work" : "Buka Fit To Work",
-    }));
-  const absenRows = (): AttentionRow[] =>
-    SAMPLE.absent.map((r) => ({
-      name: r.name,
-      sub: r.nik,
-      dept: r.dept,
-      issue: en
-        ? `Roster ${r.code} — no check-in yet`
-        : `Roster ${r.code} — belum check-in`,
-      badge: en ? "Not clocked in" : "Belum absen",
-      badgeVariant: "warning",
-      target: "attendance",
-      action: en ? "View attendance" : "Lihat attendance",
-    }));
-  const revRows = (target: MenuSlug): AttentionRow[] =>
-    SAMPLE.pendingRev.map((g) => ({
-      name: g.sid,
-      sub: `${g.entries} entri`,
-      dept: "—",
-      issue: en
-        ? `${g.entries} revision entries awaiting decision`
-        : `${g.entries} entri revisi menunggu keputusan`,
-      badge: "Pending",
-      badgeVariant: "info",
+  /**
+   * Units a standing operator holds that no formation claims.
+   *
+   * Shown only when there are any: during normal operation this is zero and a
+   * permanent card reading 0 is one nobody looks at. While the formations are
+   * still being set up it is in the hundreds, and it is the single number that
+   * says how much of the yard the engine cannot see.
+   */
+  const cardFleetGap = () => (
+    <StatCard
+      key="fleet-gap"
+      href={link("fleet-setting")}
+      icon={<Truck />}
+      iconStyle={CARD_WARNING}
+      value={String(facts.fleetGap)}
+      label={t.statFleetGap}
+      detail={<>{t.dFleetGap}</>}
+    />
+  );
+
+  /* ---- attention rows ----
+     The API sends facts; the sentence and the badge are written here, in the
+     reader's language. Kept as one mapper rather than six near-identical
+     ones — the shape is the same and only the wording differs. */
+  const rowsOf = (
+    kind: AttentionFact["kind"],
+    badge: string,
+    badgeVariant: BadgeVariant,
+    target: MenuSlug,
+    action: string,
+    issue: (fact: AttentionFact) => string
+  ): AttentionRow[] =>
+    facts[
+      (
+        {
+          breakdown: "breakdownUnits",
+          unfit: "unfit",
+          absent: "absent",
+          display: "offlineDisplays",
+        } as const
+      )[kind]
+    ].map((fact) => ({
+      name: fact.name,
+      sub: fact.sub,
+      dept: fact.dept,
+      issue: issue(fact),
+      badge,
+      badgeVariant,
       target,
-      action: en ? "Open Revisions" : "Buka Revisi",
+      action,
     }));
-  const simperRows = (): AttentionRow[] =>
-    SAMPLE.expiredSimper.map((e) => ({
-      name: e.name,
-      sub: e.nik,
-      dept: e.dept,
-      issue: en
-        ? `SIMPER ${e.jenis} expired on ${e.exp}`
-        : `SIMPER ${e.jenis} kedaluwarsa ${e.exp}`,
-      badge: en ? "Expired" : "Kedaluwarsa",
-      badgeVariant: "danger",
-      target: "employees",
-      action: en ? "Open employee" : "Buka Karyawan",
-    }));
-  const dispRows = (): AttentionRow[] =>
-    SAMPLE.offlineDisplays.map((d) => ({
-      name: d.name,
-      sub: d.id,
-      dept: "—",
-      issue: en
-        ? "Display offline — last heartbeat 6m ago"
-        : "Display offline — heartbeat terakhir 6m lalu",
-      badge: "Offline",
-      badgeVariant: "danger",
-      target: d.kind === "att" ? "display-attendance" : "display-fleet",
-      action: en ? "Open displays" : "Buka display",
-    }));
+
+  const bdRows = () =>
+    rowsOf(
+      "breakdown",
+      "Breakdown",
+      "danger",
+      "unit-status",
+      en ? "Open Unit Status" : "Buka Status Unit",
+      (f) => (en ? `Down — ${f.sub}` : `Rusak — ${f.sub}`)
+    );
+  const unfitRows = () =>
+    rowsOf(
+      "unfit",
+      "Unfit",
+      "danger",
+      "fit-to-work",
+      en ? "Open Fit To Work" : "Buka Fit To Work",
+      /* The source's own words, not a paraphrase: a supervisor comparing this
+         against the Fit To Work menu must not find two wordings for one
+         reading. */
+      (f) => f.detail ?? (en ? "Needs follow-up" : "Perlu tindak lanjut")
+    );
+  const absenRows = () =>
+    rowsOf(
+      "absent",
+      en ? "No tap" : "Belum tap",
+      "warning",
+      "attendance",
+      en ? "Open Attendance" : "Buka Attendance",
+      (f) =>
+        en
+          ? `Rostered ${f.detail} — no fingerprint yet`
+          : `Roster ${f.detail} — belum ada fingerprint`
+    );
+  const dispRows = () =>
+    rowsOf(
+      "display",
+      "Offline",
+      "danger",
+      "display-attendance",
+      en ? "Open Displays" : "Buka Display",
+      () =>
+        en
+          ? "No heartbeat in the last minutes"
+          : "Tidak ada heartbeat beberapa menit terakhir"
+    );
 
   /* ---- composition ---- */
   /* Driven by the caller's grants rather than by a role name. Roles are
@@ -434,31 +492,31 @@ export function DashboardMenu() {
   const cards: React.ReactNode[] = [];
   const allRows: AttentionRow[] = [];
 
-  if (has("fit-to-work")) {
+  /* Gated on the section, not on the grant. The API already applied the
+     permission — a null section is its answer, and re-deriving it here would
+     be a second rule to keep in step with the first. */
+  if (data?.ftw) {
     cards.push(cardUnfit(), cardBelumFtw(), cardFit());
     allRows.push(...unfitRows());
   }
-  if (has("attendance")) {
+  if (data?.attendance) {
     cards.push(cardAbsen(), cardPresent());
     allRows.push(...absenRows());
   }
-  if (has("unit-status")) {
+  if (data?.units) {
     cards.push(cardBreakdown());
     allRows.push(...bdRows());
   }
-  if (has("roster-approval")) {
-    cards.push(cardApproval());
-    allRows.push(...revRows("roster-approval"));
-  } else if (has("roster-revision")) {
-    cards.push(cardRevPending());
-    allRows.push(...revRows("roster-revision"));
+  if (data?.revisions) {
+    /* One queue, two readings of it: whoever decides sees "waiting on you",
+       whoever submits sees "waiting on someone else". */
+    cards.push(has("roster-approval") ? cardApproval() : cardRevPending());
   }
-  if (has("fleet-allocation")) cards.push(cardAlloc(), cardActualToday());
-  if (has("employees")) {
-    cards.push(cardSimper());
-    allRows.push(...simperRows());
-  }
-  if (has("display-attendance") || has("display-fleet")) {
+  if (data?.allocation) cards.push(cardAlloc(), cardActualToday());
+  if (data?.fleetConfig && data.fleetConfig.unitsWithOperatorNoFleet > 0)
+    cards.push(cardFleetGap());
+  if (data?.simper) cards.push(cardSimper());
+  if (data?.devices) {
     cards.push(cardDisplays());
     allRows.push(...dispRows());
   }
@@ -484,7 +542,60 @@ export function DashboardMenu() {
         </Fresh>
       </PageTitle>
 
-      <div className="grid grid-cols-4 gap-4 max-xl:grid-cols-2">{cards}</div>
+      {/* The signed-in person's own day, above the aggregates.
+          For a `self` account it is the entire dashboard — a department total
+          means nothing to an operator, and "you are on D, you tapped at 04:45,
+          you are on DT4023" is the only line here they can act on. Everyone
+          else gets it too, because everyone has a shift. */}
+      {facts.me ? (
+        <Panel className="px-6 py-5">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+            <div className="min-w-0">
+              <div className="text-lg font-semibold">{facts.me.name}</div>
+              <div className="font-mono text-xs text-(--text-tertiary)">
+                {facts.me.nik}
+              </div>
+            </div>
+            <MeFact
+              label={t.meRoster}
+              value={facts.me.rosterCode ?? "—"}
+              tone={facts.me.rosterCode ? "info" : "neutral"}
+            />
+            <MeFact
+              label={t.meFtw}
+              value={facts.me.ftwDecision ?? t.meNoReading}
+              tone={
+                !facts.me.ftwDecision
+                  ? "danger"
+                  : /aman/i.test(facts.me.ftwDecision)
+                    ? "success"
+                    : "warning"
+              }
+            />
+            <MeFact
+              label={t.meTap}
+              value={facts.me.tappedAt?.slice(11, 16) ?? t.meNoTap}
+              tone={facts.me.tappedAt ? "success" : "danger"}
+            />
+            <MeFact
+              label={t.meUnit}
+              value={facts.me.unitCode ?? t.meNoUnit}
+              tone={facts.me.unitCode ? "success" : "neutral"}
+            />
+            {facts.me.pendingRevisions > 0 ? (
+              <MeFact
+                label={t.meRevision}
+                value={String(facts.me.pendingRevisions)}
+                tone="warning"
+              />
+            ) : null}
+          </div>
+        </Panel>
+      ) : null}
+
+      {cards.length ? (
+        <div className="grid grid-cols-4 gap-4 max-xl:grid-cols-2">{cards}</div>
+      ) : null}
 
       <Panel>
         <Toolbar>

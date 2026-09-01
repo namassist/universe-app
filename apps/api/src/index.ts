@@ -14,6 +14,7 @@ import {
   pingSoundStorage,
 } from "./storage";
 import { authRoutes } from "./routes/auth";
+import { dashboardRoutes } from "./routes/dashboard";
 import { devicesRoutes, displayRoutes } from "./routes/devices";
 import { runTextsRoutes, soundsRoutes } from "./routes/display-content";
 import { employeesRoutes } from "./routes/employees";
@@ -44,6 +45,7 @@ import { usersRoutes } from "./routes/users";
  */
 const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(authRoutes)
+  .use(dashboardRoutes)
   .use(rolesRoutes)
   .use(usersRoutes)
   .use(devicesRoutes)

@@ -212,6 +212,50 @@ fill the gap from the spare pool.
   all-`D` August: every day read as 990 scheduled and ~660 present, and the
   mismatch bucket cannot exist when every code is `D`.
 
+### The dashboard — shipped
+
+- **Composed server-side, in one request** (owner, 2026-09-01). Every card is a
+  count, and a screen that opened with a dozen round trips would spend longer
+  assembling itself than reading anything. The whole payload takes ~80 ms.
+- **Two gates, and they are not the same gate.** A _grant_ decides whether a
+  section is sent at all; _scope_ decides how much of it. Both live in the API,
+  because a card the web merely declines to render has still arrived over the
+  wire. A withheld section is `null`, never zero — zero and "not yours to see"
+  must not look alike.
+- **People-shaped sections are scoped, machine-shaped ones are not.**
+  Attendance, FTW, SIMPER and the personal strip go through `scopeWhere`, which
+  fails closed: a `self` account with no NIK reports on nobody rather than on
+  everybody. The unit register, the board, the kiosks and the ingest clock
+  describe the site rather than a department — and the fleet board spans
+  departments by design (the `manpower` scope correction, D8) — so their gate
+  is the grant alone.
+- **The denominator is the shift, not the roster.** 990 people carry a roster
+  row for a given day; 322 of them are off, on leave, travelling or sick. Only
+  `D` and `N` schedule a shift, so presence is read against 668. Counting
+  against 990 would make an ordinary day look like a crisis, every day.
+- **A `self` account gets its own day, not a smaller version of the site's.**
+  Roster code, FTW verdict, tap time, the unit today's board seated them on,
+  and anything they are waiting on. An aggregate over a department means
+  nothing to an operator; "you are on D, you tapped at 04:45, you are on
+  DT4023" is the only line on the page they can act on. Everyone else gets the
+  strip too, because everyone has a shift.
+- **One card exists because nothing else would ever show its number:** _Units
+  outside every fleet_ — held by a standing operator, claimed by no formation.
+  The signature of a configuration gap rather than a deliberate omission, since
+  a grader kept out of the fleets carries no standing pairing either. Shown
+  only when non-zero; during setup it was 289.
+- **Unmatched source readings were a second such card, and were taken out**
+  (owner, 2026-09-01). A reading whose NIK matches nobody is not an error
+  anywhere — it is simply skipped, by these counts, by the attendance table,
+  and by the allocation engine's candidate pool. On 2026-09-01 that was 101 of
+  344 FTW rows and 531 of 1155 taps, so every other figure on the page is
+  quietly computed over the remainder. The finding stands and is worth chasing;
+  the dashboard is simply not where it is reported.
+- **The SIMPER card is withheld until the dates exist.** Every active employee
+  carries a SIMPER _type_ and exactly one carries an expiry date, so a card
+  counting zero out of nothing would read as "all clear" — the opposite of the
+  truth. The section appears on its own the day the dates are imported.
+
 ### Allocation is scoped to formations — shipped
 
 - **A unit takes part when it belongs to a formation** (owner, 2026-08-31): it
