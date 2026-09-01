@@ -43,6 +43,7 @@ import {
   CANDIDATES,
   FLEET_OPTIONS,
   ftwBadge,
+  siteClock,
   SPARE_INIT,
   type BoardUnit,
   type Candidate,
@@ -813,7 +814,7 @@ export function AllocBoard({
                     ) : slot.via === "manual" ? (
                       <Badge variant="warning" dot>
                         {t.faIntervene}
-                        {slot.at ? ` · ${slot.at.slice(11, 16)}` : ""}
+                        {slot.at ? ` · ${siteClock(slot.at)}` : ""}
                       </Badge>
                     ) : slot.via === "spare" ? (
                       <Badge variant="warning" dot>

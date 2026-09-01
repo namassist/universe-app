@@ -44,6 +44,8 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
+import { siteClock } from "./data";
+
 /** "PIT SERVICE AND DEVELOPMENT" → "PSD", so a badge stays a badge. */
 function deptAbbrev(name: string): string {
   const words = name.split(/\s+/).filter((w) => w.length > 2);
@@ -195,7 +197,7 @@ export function FleetAllocationDetail() {
               {" · "}
               {t.faGenAt}{" "}
               <b className="font-mono font-semibold text-(--text-primary)">
-                {boardQ.data.generatedAt.slice(11, 16)}
+                {siteClock(boardQ.data.generatedAt)}
               </b>
             </>
           ) : null}

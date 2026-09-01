@@ -44,6 +44,8 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
+import { siteClock } from "./data";
+
 /** Today, site-local, for the generate dialog's default. */
 function todayISO() {
   const d = new Date();
@@ -179,7 +181,7 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
                     </TableCell>
                     <TableCell>{shiftLabel(r.shift)}</TableCell>
                     <TableCell className="font-mono whitespace-nowrap">
-                      {r.generatedAt.slice(11, 16)}
+                      {siteClock(r.generatedAt)}
                     </TableCell>
                     <TableCell className="font-mono">{r.total}</TableCell>
                     <TableCell className="font-mono">{r.viaPlan}</TableCell>
