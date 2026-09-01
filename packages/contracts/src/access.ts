@@ -58,7 +58,11 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   attendance: "Attendance",
   "fit-to-work": "Fit To Work",
   "unit-status": "Status Unit",
-  "fleet-allocation": "Fleet Allocation",
+  // The slug stays `fleet-allocation` for the same reason `jabatan` does: it
+  // names a route, a permission row on every role, and the `auth` macro's
+  // guard in a dozen handlers. The label is what people read, and they read
+  // "Unit No-Operator".
+  "fleet-allocation": "Unit No-Operator",
   "fleet-setting": "Setting Fleet",
   "database-unit": "Database Unit",
   "jenis-unit": "Jenis Unit",

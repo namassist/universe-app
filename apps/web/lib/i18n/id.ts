@@ -14,7 +14,7 @@ export const id = {
   navAsset: "Asset & Fleet",
   navUnitDb: "Database Unit",
   navUnitStatus: "Status Unit",
-  navFleetAlloc: "Fleet Allocation",
+  navFleetAlloc: "Unit No-Operator",
   navFleetSetting: "Setting Fleet",
   navUsers: "User Management",
   navSettings: "Settings",
@@ -297,7 +297,7 @@ export const id = {
   udbSumB: "unit",
   udbAdd: "Tambah Unit",
   udbAddB:
-    "Unit baru masuk master data dan bisa dipakai di Status Unit & Fleet Allocation.",
+    "Unit baru masuk master data dan bisa dipakai di Status Unit & Unit No-Operator.",
   udbEditT: "Edit Unit",
   udbEditB: "Perubahan tercatat dengan nama Anda dan tanggal.",
   udbSaveEdit: "Simpan perubahan",
@@ -642,7 +642,7 @@ export const id = {
   faImpFrom: "Pindah dari",
   faImpRows: "pasangan",
   flSub:
-    "Formasi fleet — 1 digger (leader) + unit OHT + lokasi kerja + bus default. Dipakai papan Fleet Allocation harian.",
+    "Formasi fleet — 1 digger (leader) + unit OHT + lokasi kerja + bus default. Dipakai papan Unit No-Operator harian.",
   flImpTitle: "Import fleet dari spreadsheet",
   flImpSub: "Buat dan perbarui formasi fleet secara massal dari file .xlsx.",
   flImpBack: "Kembali ke pengaturan fleet",
@@ -667,7 +667,7 @@ export const id = {
   flErrMax: "Maksimal 12 unit OHT dalam satu fleet (13 termasuk digger).",
   flErrMin: "Minimal 8 unit OHT dalam satu fleet (9 termasuk digger).",
   flDlgB:
-    "Formasi relatif tetap — alokasi operator harian dilakukan di Fleet Allocation.",
+    "Formasi relatif tetap — alokasi operator harian dilakukan di Unit No-Operator.",
   flNoFleet: "No-fleet",
   flNoFleetSub: "Tanpa formasi",
   flNoFleetFixed: "Tetap",

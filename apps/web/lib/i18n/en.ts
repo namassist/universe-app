@@ -16,7 +16,7 @@ export const en: Dict = {
   navAsset: "Asset & Fleet",
   navUnitDb: "Unit Database",
   navUnitStatus: "Unit Status",
-  navFleetAlloc: "Fleet Allocation",
+  navFleetAlloc: "Unit No-Operator",
   navFleetSetting: "Fleet Setting",
   navUsers: "User Management",
   navSettings: "Settings",
@@ -299,7 +299,7 @@ export const en: Dict = {
   udbSumB: "units",
   udbAdd: "Add Unit",
   udbAddB:
-    "The new unit joins the master data and can be used in Unit Status & Fleet Allocation.",
+    "The new unit joins the master data and can be used in Unit Status & Unit No-Operator.",
   udbEditT: "Edit Unit",
   udbEditB: "The change is recorded with your name and the date.",
   udbSaveEdit: "Save changes",
@@ -645,7 +645,7 @@ export const en: Dict = {
   faImpFrom: "Moved from",
   faImpRows: "pairings",
   flSub:
-    "Fleet formations — 1 digger (leader) + OHT units + work location + default bus. Used by the daily Fleet Allocation board.",
+    "Fleet formations — 1 digger (leader) + OHT units + work location + default bus. Used by the daily Unit No-Operator board.",
   flImpTitle: "Import fleets from a spreadsheet",
   flImpSub: "Create and update fleet formations in bulk from an .xlsx file.",
   flImpBack: "Back to fleet settings",
@@ -670,7 +670,7 @@ export const en: Dict = {
   flErrMax: "Maximum 12 OHT units in one fleet (13 incl. digger).",
   flErrMin: "Minimum 8 OHT units in one fleet (9 incl. digger).",
   flDlgB:
-    "Formations are relatively fixed — daily operator allocation happens in Fleet Allocation.",
+    "Formations are relatively fixed — daily operator allocation happens in Unit No-Operator.",
   flNoFleet: "No-fleet",
   flNoFleetSub: "No formation",
   flNoFleetFixed: "Fixed",
