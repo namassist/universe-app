@@ -248,6 +248,22 @@ fill the gap from the spare pool.
 - **The board's summary counts the selected formation, not the register.** With
   the whole register on PLAN, a total of 447 beside a screen showing one
   eight-unit fleet describes nothing anybody is looking at.
+- **A spare card carries the SIMPER codes its operator holds** (owner,
+  2026-08-31), delivered with the board rather than fetched per operator — the
+  pool is several hundred people. The badges are deliberately _smaller_ than
+  the department badge: the department says who an operator belongs to, the
+  codes say what they may drive, and several of the second only fit beside one
+  of the first if each is slighter.
+- **Six badges, then a count.** The register runs from one code to
+  twenty-three; most operators hold two or six. A card rendering twenty-three
+  would stand several times the height of the ones beside it and break the
+  grid, so the rest becomes `+N` with the full list on the card's tooltip.
+- **The pool is filtered by code and paged.** The code filter is a set of
+  checkboxes, not a single choice — an operator holds several, and the question
+  behind it ("who can drive this") is answered by _any_ of the ticked codes
+  rather than all of them. Paging exists because the pool is the whole
+  allocatable workforce minus whoever is paired, on a screen whose subject is
+  the units above it.
 - **Its membership is derived, never stored.** Formations are reshuffled often,
   and a stored list of "everything else" goes stale the moment one is edited —
   silently, because nothing about a stale row looks wrong. Deriving it makes
@@ -271,22 +287,29 @@ fill the gap from the spare pool.
   before, when a PLAN-driven board hid nine of fifteen units. What answers it
   now is the no-fleet entry itself: the units are listed, in Fleet Setting,
   where someone deciding formations is already looking.
-- **A spare card carries the SIMPER codes its operator holds** (owner,
-  2026-08-31), delivered with the board rather than fetched per operator — the
-  pool is several hundred people. The badges are deliberately _smaller_ than
-  the department badge: the department says who an operator belongs to, the
-  codes say what they may drive, and several of the second only fit beside one
-  of the first if each is slighter.
-- **Six badges, then a count.** The register runs from one code to
-  twenty-three; most operators hold two or six. A card rendering twenty-three
-  would stand several times the height of the ones beside it and break the
-  grid, so the rest becomes `+N` with the full list on the card's tooltip.
-- **The pool is filtered by code and paged.** The code filter is a set of
-  checkboxes, not a single choice — an operator holds several, and the question
-  behind it ("who can drive this") is answered by _any_ of the ticked codes
-  rather than all of them. Paging exists because the pool is the whole
-  allocatable workforce minus whoever is paired, on a screen whose subject is
-  the units above it.
+
+### Spares are offered in two tiers — shipped
+
+- **An operator who holds no unit anywhere is offered a vacancy before one who
+  does** (owner, 2026-09-01). Everyone in the spare pool is unattached _today_,
+  but not for the same reason: some hold nothing at all, others hold a machine
+  that is broken down, on standby, or in no formation. Seating the second group
+  on somebody else's unit is the expensive placement — when their own machine
+  comes back, taking it means pulling them off a seat and opening a fresh
+  vacancy mid-shift, which the application does not handle and a supervisor
+  sorts out by hand.
+- **Ordering, never filtering.** If no unattached spare can take a unit — wrong
+  SIMPER, wrong department, none left — a standing holder still gets it. A seat
+  left empty beside somebody able to fill it would cost far more than the
+  reshuffle this avoids. A test pins exactly that case.
+- **The price: first-come-first-served no longer holds across the whole pool.**
+  An unattached spare who tapped at 05:10 now outranks a standing holder who
+  tapped at 04:48. Accepted knowingly; the tap still orders each tier
+  internally, so "arrive early" keeps its meaning within a tier.
+- **Measured on the 2026-09-01 day board**: all 14 spare placements moved to
+  operators holding no standing unit (four had previously gone to standing
+  holders), and the number of filled seats did not change — 16 either way. The
+  reordering cost no coverage.
 
 ### The board's audit table — shipped
 

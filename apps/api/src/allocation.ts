@@ -333,18 +333,60 @@ export async function buildBoard(
     planned.map((r) => r.employeeId).filter((id): id is string => id !== null)
   );
 
+  /**
+   * Everyone in the pool who holds a standing unit *somewhere*.
+   *
+   * Not the same as `slotHolders`, which is about this board: an operator
+   * whose unit is broken down, on standby, or in no formation holds a unit in
+   * PLAN and no seat here, so they arrive in the spare pool alongside people
+   * who hold nothing at all. This set is what tells the two apart.
+   */
+  const standing = new Set<string>();
+  if (pool.size) {
+    const rows = await db
+      .select({ employeeId: schema.fleetPlanSlots.employeeId })
+      .from(schema.fleetPlanSlots)
+      .where(inArray(schema.fleetPlanSlots.employeeId, [...pool.keys()]));
+    for (const row of rows) standing.add(row.employeeId);
+  }
+
   const spares = [...pool.values()]
     .filter((c) => !slotHolders.has(c.person.id))
     .filter((c) => c.readiness.finger === "pass")
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      /*
+       * A spare who holds no unit anywhere goes first (owner, 2026-09-01).
+       *
+       * Everyone here is unattached *today*, but not for the same reason: some
+       * hold nothing at all, others hold a machine that is broken down, on
+       * standby, or in no formation. Seating the second group on somebody
+       * else's unit is the expensive placement — when their own machine comes
+       * back, taking it means pulling them off a seat and opening a fresh
+       * vacancy mid-shift, which the application does not handle and a
+       * supervisor has to sort out by hand.
+       *
+       * Ordering, never filtering: if no unattached spare can take a unit —
+       * wrong SIMPER, wrong department, none left — a standing holder still
+       * gets it. A seat left empty beside somebody able to fill it would cost
+       * far more than the reshuffle this avoids.
+       *
+       * The price is that first-come-first-served no longer holds across the
+       * whole pool: an unattached spare who tapped at 05:10 now outranks a
+       * standing holder who tapped at 04:48. Accepted knowingly — the tap
+       * still orders each group internally.
+       */
+      const rank =
+        Number(standing.has(a.person.id)) - Number(standing.has(b.person.id));
+      if (rank !== 0) return rank;
+      return (
         (a.readiness.tappedAt ?? "").localeCompare(
           b.readiness.tappedAt ?? ""
         ) ||
         // Two taps in the same second must not place arbitrarily, or a board
         // regenerated differs from the one people already read.
         a.person.nik.localeCompare(b.person.nik)
-    );
+      );
+    });
 
   for (const slot of slots) {
     if (slot.employeeId) continue;

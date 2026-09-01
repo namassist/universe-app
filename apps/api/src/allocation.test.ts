@@ -654,6 +654,82 @@ describe("the spare pool", () => {
   });
 });
 
+describe("an unattached spare outranks a standing operator", () => {
+  test("even when the standing operator tapped first", async () => {
+    /* Owner, 2026-09-01. Both are unattached today, but not for the same
+       reason: A holds 4090 (broken down), B holds nothing anywhere. Seating A
+       on someone else's unit is the expensive placement — when 4090 comes
+       back, taking it means pulling A off a seat and opening a fresh vacancy
+       mid-shift, which nothing here handles. So B goes first, despite tapping
+       22 minutes later. */
+    const date = nextDate();
+
+    const nikA = newNik();
+    const opA = await addEmployee({ nik: nikA });
+    const broken = await addUnit({ code: `${tag}-B90`, breakdown: true });
+    await plan(broken, opA);
+    await roster(date, opA, "D");
+    await tapAt(date, nikA, "04:48:00");
+
+    const nikB = newNik();
+    const opB = await addEmployee({ nik: nikB });
+    await roster(date, opB, "D");
+    await tapAt(date, nikB, "05:10:00");
+
+    const onLeave = await addEmployee({ nik: newNik() });
+    const vacant = await addUnit({ code: `${tag}-B28` });
+    await plan(vacant, onLeave);
+
+    const slots = await mine(date);
+    // The broken unit is not a slot at all: it needs no operator, so it is not
+    // a vacancy either — which is exactly why its holder is loose.
+    expect(slots.find((s) => s.unitId === broken)).toBeUndefined();
+
+    const seat = slots.find((s) => s.unitId === vacant);
+    expect(seat?.employeeId).toBe(opB);
+    expect(seat?.source).toBe("spare");
+  });
+
+  test("but a standing operator still takes a seat nobody else can", async () => {
+    /* Ordering, never filtering. The unattached spare here lacks the SIMPER
+       the unit demands, so the seat falls to the standing operator rather than
+       standing empty — which would cost far more than the reshuffle the rule
+       is avoiding. */
+    const date = nextDate();
+    const [code] = await db
+      .insert(schema.simperCodes)
+      .values({ name: `${tag} SKILL` })
+      .returning({ id: schema.simperCodes.id });
+    made.simperCodes.push(code!.id);
+
+    const nikA = newNik();
+    const opA = await addEmployee({ nik: nikA });
+    await db
+      .insert(schema.employeeSkills)
+      .values({ employeeId: opA, simperCodeId: code!.id });
+    const broken = await addUnit({ code: `${tag}-B91`, breakdown: true });
+    await plan(broken, opA);
+    await roster(date, opA, "D");
+    await tapAt(date, nikA, "04:48:00");
+
+    // Unattached, earlier tap, and still not a candidate: no such skill.
+    const nikB = newNik();
+    const opB = await addEmployee({ nik: nikB });
+    await roster(date, opB, "D");
+    await tapAt(date, nikB, "04:10:00");
+
+    const onLeave = await addEmployee({ nik: newNik() });
+    const vacant = await addUnit({
+      code: `${tag}-B29`,
+      simperCodeId: code!.id,
+    });
+    await plan(vacant, onLeave);
+
+    const seat = (await mine(date)).find((s) => s.unitId === vacant);
+    expect(seat?.employeeId).toBe(opA);
+  });
+});
+
 describe("a unit outside every formation", () => {
   test("gets no slot of its own", async () => {
     const date = nextDate();
