@@ -669,11 +669,11 @@ export const id = {
   flDlgB:
     "Formasi relatif tetap — alokasi operator harian dilakukan di Unit No-Operator.",
   flNoFleet: "No-fleet",
-  flNoFleetSub: "Tanpa formasi",
-  flNoFleetFixed: "Tetap",
-  flNoFleetEmpty: "Belum ada unit",
+  flNoFleetSub: "Tanpa formasi — di luar alokasi",
+  flNoFleetFixed: "Otomatis",
+  flNoFleetEmpty: "Semua unit aktif sudah masuk formasi",
   flNoFleetDlgB:
-    "Unit yang ikut alokasi otomatis tetapi tidak masuk formasi mana pun — grader, water truck, dan sejenisnya. Unit yang sudah memimpin atau menjadi anggota fleet tidak muncul di sini.",
+    "Semua unit aktif yang tidak masuk formasi mana pun. Daftar ini terisi sendiri: unit yang dikeluarkan dari sebuah fleet langsung muncul di sini, dan yang dimasukkan ke fleet langsung hilang. Unit di sini TIDAK ikut perhitungan alokasi.",
   flSumB: "formasi fleet",
   flDelT: "Hapus",
   flDelB:
@@ -755,7 +755,7 @@ export const id = {
     "Operator berkompetensi yang belum mendapat unit di shift ini — pengganti baris SPARE di file setting lama.",
   faSpareEmpty: "Semua operator berkompetensi sudah teralokasi.",
   faFleetAll: "Semua fleet",
-  faNoFleet: "No-fleet",
+  faNoFleet: "No-fleet — tanpa formasi",
   udbSerial: "No. seri",
   udbErrCode: "Kode wajib diisi dan belum terpakai.",
   udbGlobal: "Aset global perusahaan",

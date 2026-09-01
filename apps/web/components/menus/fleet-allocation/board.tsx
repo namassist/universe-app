@@ -56,9 +56,11 @@ const FA_PLAN_MAX_OPS = 2;
 /**
  * The no-fleet entry's value in the formation filter.
  *
- * Not a fleet id, because it is not a fleet — it is Fleet Setting's fixed list
- * for machines that belong to no formation and still need an operator. A unit
- * id could never collide with it, and it reads as itself in the markup.
+ * Not a fleet id, because it is not a fleet — it is every active unit that
+ * belongs to no formation. On PLAN it is a real destination: a standing
+ * pairing is a fact about a person and a machine whether or not that machine
+ * is in a formation today. On ACTUAL there is nothing behind it, because the
+ * engine allocates formations only, so the option is not offered there.
  */
 const NO_FLEET = "no-fleet";
 
@@ -352,10 +354,12 @@ export function AllocBoard({
    * the first formation Fleet Setting offers, and to the no-fleet entry when
    * there are no formations at all.
    */
+  const noFleetOffered = mode === "plan";
   const activeFleet =
-    fleetF === NO_FLEET || fleetOptions.some((f) => f.id === fleetF)
+    (noFleetOffered && fleetF === NO_FLEET) ||
+    fleetOptions.some((f) => f.id === fleetF)
       ? fleetF
-      : (fleetOptions[0]?.id ?? NO_FLEET);
+      : (fleetOptions[0]?.id ?? (noFleetOffered ? NO_FLEET : ""));
 
   const canEdit = mode === "plan" && canManage;
   /* intervensi manual terbatas: pasca-generate, slot kosong saja */
@@ -453,10 +457,9 @@ export function AllocBoard({
 
   const needle = q.trim().toLowerCase();
   const allFiltered = units.filter((u) => {
-    /* A unit on this board with no formation *is* the no-fleet entry: the
-       board only carries what Fleet Setting configured, so "no fleet" no
-       longer overlaps with "not configured", the way the old support bucket
-       did. */
+    /* A unit on this board with no formation *is* the no-fleet entry — the
+       whole active register is here on PLAN, and "no fleet" is a place rather
+       than a residual, because Fleet Setting decides it. */
     const inFleet =
       activeFleet === NO_FLEET ? !u.fleet : u.fleet?.id === activeFleet;
     if (!inFleet) return false;
@@ -480,10 +483,18 @@ export function AllocBoard({
     ? `${(cur - 1) * perN + 1}–${(cur - 1) * perN + cards.length}`
     : "0";
 
+  /* Counted over the selected formation, not over `units`: PLAN now carries
+     the whole active register, and a total of 447 beside a screen showing one
+     eight-unit fleet describes nothing anybody is looking at. `q` and the
+     status filter are deliberately not applied — the summary is about the
+     formation, not about the search. */
+  const inSelection = units.filter((u) =>
+    activeFleet === NO_FLEET ? !u.fleet : u.fleet?.id === activeFleet
+  );
   const summary = {
-    allocated: units.filter((u) => u.slots.length).length,
-    total: units.length,
-    downtime: units.filter((u) => u.downtime).length,
+    allocated: inSelection.filter((u) => u.slots.length).length,
+    total: inSelection.length,
+    downtime: inSelection.filter((u) => u.downtime).length,
   };
 
   /** Null while every fleet is on screen — there is no single area to name. */
@@ -650,7 +661,11 @@ export function AllocBoard({
                 Fleet {f.digger} — {f.area}
               </option>
             ))}
-            <option value={NO_FLEET}>{t.faNoFleet}</option>
+            {/* PLAN only: the engine allocates formations, so on ACTUAL there
+                would be nothing behind this option. */}
+            {noFleetOffered ? (
+              <option value={NO_FLEET}>{t.faNoFleet}</option>
+            ) : null}
           </Select>
           {canEdit ? (
             <Button

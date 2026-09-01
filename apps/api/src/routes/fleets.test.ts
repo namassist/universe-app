@@ -195,12 +195,8 @@ afterAll(async () => {
     await db
       .delete(schema.fleets)
       .where(inArray(schema.fleets.id, made.fleets));
-  if (made.units.length) {
-    await db
-      .delete(schema.noFleetUnits)
-      .where(inArray(schema.noFleetUnits.unitId, made.units));
+  if (made.units.length)
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
-  }
   for (const { table, id } of made.catalogues) {
     const target = {
       classes: schema.unitClasses,
@@ -390,11 +386,14 @@ describe("editing replaces the member list; deleting releases it", () => {
 /**
  * The fixed entry for machines in no formation.
  *
- * What is worth pinning is the exclusivity — a unit is configured in exactly
- * one place — and that the list is *replaced*, because the dialog submits what
- * it means rather than a diff. Which fixture happens to be free by the time
- * these run depends on the suites above, so the units under test are read from
- * the database rather than assumed.
+ * Its membership is derived, not stored (owner, 2026-08-31): every active unit
+ * that leads no fleet and hauls for none is in it, and there is nothing to
+ * edit. What is worth pinning is exactly that — the entry follows the
+ * formations by itself, and a reshuffle can never leave it stale.
+ *
+ * Which fixture happens to be free by the time these run depends on the suites
+ * above, so the units under test are read from the database rather than
+ * assumed.
  */
 describe("the no-fleet entry", () => {
   /** A unit currently leading a fleet, and one currently hauling for one. */
@@ -414,85 +413,59 @@ describe("the no-fleet entry", () => {
     return { leader, hauler };
   }
 
-  /** A unit this suite made that no formation has claimed. */
-  async function free() {
-    const rows = await db
-      .select({ id: schema.units.id, code: schema.units.code })
-      .from(schema.units)
-      .where(inArray(schema.units.id, made.units));
-    const { leader, hauler } = await claimed();
-    const takenIds = await db
-      .select({ id: schema.fleetUnits.unitId })
-      .from(schema.fleetUnits);
-    const leaders = await db
-      .select({ id: schema.fleets.diggerUnitId })
-      .from(schema.fleets);
-    const taken = new Set([
-      ...takenIds.map((r) => r.id),
-      ...leaders.map((r) => r.id),
-      leader?.id,
-      hauler?.id,
-    ]);
-    return rows.find((u) => !taken.has(u.id))!;
-  }
-
-  test("answers with a list and needs no creating", async () => {
+  const codes = async () => {
     const response = await send("GET", "/fleets/no-fleet", viewer.cookie);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { units: { code: string }[] };
-    expect(Array.isArray(body.units)).toBe(true);
+    return ((await response.json()) as { units: { code: string }[] }).units.map(
+      (u) => u.code
+    );
+  };
+
+  test("answers with a list and needs no creating", async () => {
+    expect(Array.isArray(await codes())).toBe(true);
   });
 
-  test("replaces its unit list rather than adding to it", async () => {
-    const unit = await free();
-    const first = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
-      unitIds: [unit.id],
-    });
-    expect(first.status).toBe(200);
-    expect(
-      ((await first.json()) as { units: { code: string }[] }).units.map(
-        (u) => u.code
-      )
-    ).toEqual([unit.code]);
+  test("excludes a unit that leads a fleet, and one that hauls for one", async () => {
+    // The two ways a unit is *in* allocation are the two ways it is out of
+    // this list. Storing membership made that an invariant somebody had to
+    // maintain; deriving it makes it arithmetic.
+    const { leader, hauler } = await claimed();
+    const listed = await codes();
+    expect(listed).not.toContain(leader!.code);
+    expect(listed).not.toContain(hauler!.code);
+  });
 
-    // Emptied, not merged: a replaced list is the whole list.
-    const second = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
+  test("takes a unit back the moment it leaves its formation", async () => {
+    // The reason this entry is derived at all: formations are reshuffled
+    // often, and a stored list of "everything else" would go stale silently.
+    const { hauler } = await claimed();
+    expect(await codes()).not.toContain(hauler!.code);
+
+    const [row] = await db
+      .select({ fleetId: schema.fleetUnits.fleetId })
+      .from(schema.fleetUnits)
+      .where(eq(schema.fleetUnits.unitId, hauler!.id))
+      .limit(1);
+    await db
+      .delete(schema.fleetUnits)
+      .where(eq(schema.fleetUnits.unitId, hauler!.id));
+    expect(await codes()).toContain(hauler!.code);
+
+    // Put it back, so the suites after this one see what they expect.
+    await db
+      .insert(schema.fleetUnits)
+      .values({ fleetId: row!.fleetId, unitId: hauler!.id });
+    expect(await codes()).not.toContain(hauler!.code);
+  });
+
+  test("has no write route at all", async () => {
+    // Not "forbidden for a viewer" — there is nothing to write. Membership is
+    // a consequence of the formations, so an editing endpoint could only ever
+    // disagree with them.
+    const response = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
       unitIds: [],
     });
-    expect(second.status).toBe(200);
-    expect(((await second.json()) as { units: unknown[] }).units).toEqual([]);
-  });
-
-  test("refuses a unit that already leads a fleet, by name", async () => {
-    const { leader } = await claimed();
-    const response = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
-      unitIds: [leader!.id],
-    });
-    expect(response.status).toBe(422);
-    expect(((await response.json()) as { message: string }).message).toContain(
-      leader!.code
-    );
-  });
-
-  test("refuses a unit that already hauls for a fleet, by name", async () => {
-    const { hauler } = await claimed();
-    const response = await send("PUT", "/fleets/no-fleet/units", admin.cookie, {
-      unitIds: [hauler!.id],
-    });
-    expect(response.status).toBe(422);
-    expect(((await response.json()) as { message: string }).message).toContain(
-      hauler!.code
-    );
-  });
-
-  test("is read-only for a viewer", async () => {
-    const response = await send(
-      "PUT",
-      "/fleets/no-fleet/units",
-      viewer.cookie,
-      { unitIds: [] }
-    );
-    expect(response.status).toBe(403);
+    expect(response.status).not.toBe(200);
   });
 
   test("cannot be deleted — there is no route that would", async () => {

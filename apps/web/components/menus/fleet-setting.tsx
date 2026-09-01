@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
 
 import { FLEET_MAX_UNITS, FLEET_MIN_UNITS } from "@universe/contracts";
 
@@ -15,7 +15,6 @@ import {
   fleetsQueryOptions,
   noFleetKey,
   noFleetQueryOptions,
-  saveNoFleetUnits,
   type FleetRow,
 } from "@/lib/queries/fleets";
 import { masterQueryOptions, recordType } from "@/lib/queries/master";
@@ -148,13 +147,18 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [errUnits, setErrUnits] = React.useState("");
   const [delTarget, setDelTarget] = React.useState<FleetRow | null>(null);
 
-  // no-fleet dialog — a unit list and nothing else to decide
+  // no-fleet dialog — a read-only list; membership is derived, not chosen
   const [nfOpen, setNfOpen] = React.useState(false);
-  const [nfUnits, setNfUnits] = React.useState<string[]>([]);
   const [nfQ, setNfQ] = React.useState("");
 
+  /* The no-fleet entry follows the formations, so every write that changes a
+     formation changes it too. Invalidating both together is what keeps the
+     pinned row honest after a fleet is created, edited or disbanded. */
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: fleetsKey });
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: fleetsKey }),
+      queryClient.invalidateQueries({ queryKey: noFleetKey }),
+    ]);
 
   const save = useMutation({
     mutationFn: async (input: {
@@ -241,50 +245,20 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       ]),
     [fleets]
   );
-  const nfOpts = React.useMemo(
-    () =>
-      units
-        .map((u) => u.code)
-        .filter((c) => !inAFleet.has(c))
-        .sort(),
-    [units, inAFleet]
-  );
-  const nfOptsFiltered = nfOpts.filter((c) =>
-    c.toUpperCase().includes(nfQ.trim().toUpperCase())
-  );
+  const nfFiltered = React.useMemo(() => {
+    const needle = nfQ.trim().toUpperCase();
+    return needle
+      ? noFleet.filter((u) => u.code.toUpperCase().includes(needle))
+      : noFleet;
+  }, [noFleet, nfQ]);
   const unitTypeOf = React.useMemo(
     () => new Map(units.map((u) => [u.code, unitTypeLabel(u)])),
     [units]
   );
 
-  const saveNoFleet = useMutation({
-    mutationFn: (codes: string[]) =>
-      saveNoFleetUnits(
-        codes.map((c) => unitIdByCode.get(c)).filter((id): id is string => !!id)
-      ),
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: noFleetKey });
-      pushToast(
-        "success",
-        t.flNoFleet,
-        `${result.units.length} ${t.flSumB.toLowerCase()}`
-      );
-      setNfOpen(false);
-    },
-    onError: (error) =>
-      pushToast("error", t.flNoFleet, errorMessage(error, t.loginErr)),
-  });
-
   function openNoFleet() {
-    setNfUnits(noFleet.map((u) => u.code));
     setNfQ("");
     setNfOpen(true);
-  }
-
-  function toggleNfUnit(code: string) {
-    setNfUnits((prev) =>
-      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
-    );
   }
 
   function toggleUnit(code: string) {
@@ -427,29 +401,36 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                   —
                 </TableCell>
                 <TableCell>
-                  <div className="flex max-w-[320px] flex-wrap gap-1">
-                    {noFleet.length ? (
-                      noFleet.map((u) => (
+                  {/* A count and a sample, not the whole list: this is most of
+                      the register, and several hundred badges would bury the
+                      formations underneath it. The dialog has the full list. */}
+                  {noFleet.length ? (
+                    <div className="flex max-w-[320px] flex-wrap items-center gap-1">
+                      {noFleet.slice(0, 3).map((u) => (
                         <Badge key={u.id} variant="info">
                           {u.code}
                         </Badge>
-                      ))
-                    ) : (
-                      <span className="text-xs text-(--text-tertiary) italic">
-                        {t.flNoFleetEmpty}
-                      </span>
-                    )}
-                  </div>
+                      ))}
+                      {noFleet.length > 3 ? (
+                        <span className="text-xs text-(--text-tertiary)">
+                          +{noFleet.length - 3} {t.flSumB.toLowerCase()}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-(--text-tertiary) italic">
+                      {t.flNoFleetEmpty}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant="neutral">{t.flNoFleetFixed}</Badge>
                 </TableCell>
                 <TableCell>
-                  {canW ? (
-                    <IconButton aria-label={t.udbEditT} onClick={openNoFleet}>
-                      <Pencil />
-                    </IconButton>
-                  ) : null}
+                  {/* Not gated on write access: there is nothing to write. */}
+                  <IconButton aria-label={t.flNoFleet} onClick={openNoFleet}>
+                    <Eye />
+                  </IconButton>
                 </TableCell>
               </TableRow>
             ) : null}
@@ -684,64 +665,41 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
         </DialogIcon>
         <DialogTitle id="nf-t">{t.flNoFleet}</DialogTitle>
         <DialogBody>{t.flNoFleetDlgB}</DialogBody>
+        {/* Read-only: membership is a consequence of the formations, so there
+            is nothing here to submit. The search is worth keeping — the list
+            is the size of the yard minus its fleets. */}
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-2">
-          {nfUnits.length ? (
-            <div className="flex flex-wrap gap-1.5">
-              {nfUnits.map((c) => (
-                <button
-                  type="button"
-                  key={c}
-                  onClick={() => toggleNfUnit(c)}
-                  aria-label={`${t.empDel} ${c}`}
-                  className="flex cursor-pointer items-center gap-1 rounded-chip border border-(--badge-info-border) bg-(--badge-info-fill) px-2 py-1 font-mono text-xs font-semibold text-primary-bright hover:border-(--badge-danger-border) hover:text-danger-text"
-                >
-                  {c}
-                  <X className="size-3" />
-                </button>
-              ))}
-            </div>
-          ) : null}
           <SearchInput
             placeholder={t.flUnitSearchPh}
             aria-label={t.flUnitSearchPh}
             value={nfQ}
             onChange={(e) => setNfQ(e.target.value)}
           />
-          <div className="max-h-64 min-h-0 flex-1 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
-            {nfOptsFiltered.length ? (
-              nfOptsFiltered.map((code) => (
-                <label
-                  key={code}
-                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-(--fill-hover)"
+          <div className="max-h-72 min-h-0 flex-1 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
+            {nfFiltered.length ? (
+              nfFiltered.map((u) => (
+                <div
+                  key={u.id}
+                  className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
                 >
-                  <Checkbox
-                    checked={nfUnits.includes(code)}
-                    onChange={() => toggleNfUnit(code)}
-                  />
                   <span className="font-mono text-sm font-semibold">
-                    {code}
+                    {u.code}
                   </span>
                   <span className="text-xs text-(--text-tertiary)">
-                    {unitTypeOf.get(code) ?? "—"}
+                    {unitTypeOf.get(u.code) ?? "—"}
                   </span>
-                </label>
+                </div>
               ))
             ) : (
               <p className="px-2 py-1.5 text-xs text-(--text-tertiary)">
-                {t.noResTitle}
+                {noFleet.length ? t.noResTitle : t.flNoFleetEmpty}
               </p>
             )}
           </div>
         </div>
         <DialogActions>
           <Button variant="ghost" onClick={() => setNfOpen(false)}>
-            {t.btnCancel}
-          </Button>
-          <Button
-            disabled={saveNoFleet.isPending}
-            onClick={() => saveNoFleet.mutate(nfUnits)}
-          >
-            {t.udbSaveEdit}
+            {t.btnClose}
           </Button>
         </DialogActions>
       </Dialog>

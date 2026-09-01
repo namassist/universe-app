@@ -27,7 +27,77 @@ const made = {
   users: [] as string[],
   roles: [] as string[],
   devices: [] as string[],
+  fleets: [] as string[],
+  units: [] as string[],
+  areas: [] as string[],
+  catalogues: [] as {
+    table: "unitClasses" | "unitTypes" | "unitModels" | "unitBrands";
+    id: string;
+  }[],
 };
+
+/**
+ * Five formations of this suite's own.
+ *
+ * Borrowing whatever the dev database happened to hold was a mistake: these
+ * tests are about how many formations a screen may carry, and the answer
+ * changed the day somebody disbanded a fleet — a failure that says nothing
+ * about the code under test.
+ */
+async function makeFleets(count: number): Promise<string[]> {
+  const [cls] = await db
+    .insert(schema.unitClasses)
+    .values({ name: `${tag} CLASS` })
+    .returning({ id: schema.unitClasses.id });
+  const [typ] = await db
+    .insert(schema.unitTypes)
+    .values({ name: `${tag} TYPE` })
+    .returning({ id: schema.unitTypes.id });
+  const [mdl] = await db
+    .insert(schema.unitModels)
+    .values({ name: `${tag} MODEL` })
+    .returning({ id: schema.unitModels.id });
+  const [brd] = await db
+    .insert(schema.unitBrands)
+    .values({ name: `${tag} BRAND` })
+    .returning({ id: schema.unitBrands.id });
+  made.catalogues.push(
+    { table: "unitClasses", id: cls!.id },
+    { table: "unitTypes", id: typ!.id },
+    { table: "unitModels", id: mdl!.id },
+    { table: "unitBrands", id: brd!.id }
+  );
+  const [area] = await db
+    .insert(schema.workAreas)
+    .values({ name: `${tag} Pit`, type: "Mining" })
+    .returning({ id: schema.workAreas.id });
+  made.areas.push(area!.id);
+
+  const ids: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const [unit] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZF${uid().toUpperCase()}`,
+        classId: cls!.id,
+        typeId: typ!.id,
+        modelId: mdl!.id,
+        brandId: brd!.id,
+      })
+      .returning({ id: schema.units.id });
+    made.units.push(unit!.id);
+    const [fleet] = await db
+      .insert(schema.fleets)
+      .values({ diggerUnitId: unit!.id, workAreaId: area!.id })
+      .returning({ id: schema.fleets.id });
+    made.fleets.push(fleet!.id);
+    ids.push(fleet!.id);
+  }
+  return ids;
+}
+
+/** The ids the layout tests pick from — created once, in beforeAll. */
+let fixtureFleets: string[] = [];
 let admin: { cookie: string };
 
 const send = (method: string, path: string, cookie?: string, body?: unknown) =>
@@ -73,9 +143,13 @@ beforeAll(async () => {
   made.users.push(user!.id);
   const session = await createSession("user", user!.id, "cookie");
   admin = { cookie: `${SESSION_COOKIE}=${session.id}` };
+
+  fixtureFleets = await makeFleets(5);
 });
 
 afterAll(async () => {
+  // Devices first: `device_fleets` cascades from both sides, so the picks go
+  // with whichever end is deleted, but the fleets must outlive nothing.
   if (made.devices.length)
     await db
       .delete(schema.devices)
@@ -84,6 +158,18 @@ afterAll(async () => {
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
     await db.delete(schema.roles).where(inArray(schema.roles.id, made.roles));
+  if (made.fleets.length)
+    await db
+      .delete(schema.fleets)
+      .where(inArray(schema.fleets.id, made.fleets));
+  if (made.units.length)
+    await db.delete(schema.units).where(inArray(schema.units.id, made.units));
+  if (made.areas.length)
+    await db
+      .delete(schema.workAreas)
+      .where(inArray(schema.workAreas.id, made.areas));
+  for (const { table, id } of made.catalogues)
+    await db.delete(schema[table]).where(eq(schema[table].id, id));
 });
 
 describe("how long a screen dwells", () => {
@@ -215,18 +301,13 @@ describe("how a screen spends itself", () => {
     // A monitor is not a smaller slideshow: it shows four at a time and pages
     // through the rest, so nothing here is capped. The cap that used to live
     // in this test was a misreading of the requirement.
-    const fleets = await db
-      .select({ id: schema.fleets.id })
-      .from(schema.fleets)
-      .limit(5);
-    expect(fleets.length).toBe(5);
     const id = newId();
     const res = await send("POST", "/devices", admin.cookie, {
       id,
       name: tag,
       kind: "fleet",
       layout: "monitor",
-      fleetIds: fleets.map((f) => f.id),
+      fleetIds: fixtureFleets,
     });
     expect(res.status).toBe(201);
     expect(
@@ -237,16 +318,12 @@ describe("how a screen spends itself", () => {
   test("switching an existing screen to monitor keeps every pick", async () => {
     // Layout and picks are independent: changing one must not silently drop
     // the other, which is what a cap here would have done.
-    const fleets = await db
-      .select({ id: schema.fleets.id })
-      .from(schema.fleets)
-      .limit(5);
     const id = newId();
     await send("POST", "/devices", admin.cookie, {
       id,
       name: tag,
       kind: "fleet",
-      fleetIds: fleets.map((f) => f.id),
+      fleetIds: fixtureFleets,
     });
     const res = await send("PATCH", `/devices/${id}`, admin.cookie, {
       layout: "monitor",
@@ -260,12 +337,7 @@ describe("how a screen spends itself", () => {
   test("stores the picks in the order they were given", async () => {
     // Pick order is the quadrant a monitor draws a pit in, and the sequence a
     // slideshow rotates through. Alphabetical would overrule both.
-    const fleets = await db
-      .select({ id: schema.fleets.id })
-      .from(schema.fleets)
-      .limit(3);
-    expect(fleets.length).toBe(3);
-    const picked = [fleets[2]!.id, fleets[0]!.id, fleets[1]!.id];
+    const picked = [fixtureFleets[2]!, fixtureFleets[0]!, fixtureFleets[1]!];
     const id = newId();
     const res = await send("POST", "/devices", admin.cookie, {
       id,

@@ -58,6 +58,9 @@ let unitReq: Unit; //  global, requires the skill code
 let unitDept: Unit; // owned by dept A, no requirement
 let unitFree: Unit; // global, no requirement
 
+/** The formation every fixture unit hauls for — scaffolding, not subject. */
+let fleetId: string, fleetArea: string, fleetDigger: string;
+
 /* ------------------------------------------------------------- fixtures */
 
 async function makeUser(mode: "view" | "manage") {
@@ -267,8 +270,13 @@ beforeAll(async () => {
     .returning({ id: schema.unitBrands.id });
   made.catalogues.push(cls!.id, typ!.id, mdl!.id, brd!.id);
 
-  const unit = async (
-    extra: Partial<{ simperCodeId: string; departmentId: string }>
+  /** A bare unit row. The digger needs one without a membership. */
+  const unitRow = async (
+    extra: Partial<{
+      simperCodeId: string;
+      departmentId: string;
+      standby: boolean;
+    }>
   ) => {
     const [row] = await db
       .insert(schema.units)
@@ -282,12 +290,34 @@ beforeAll(async () => {
       })
       .returning({ id: schema.units.id, code: schema.units.code });
     made.units.push(row!.id);
-    /* The board only carries what Fleet Setting configured, so a fixture unit
-       joins the no-fleet entry. What scoping leaves *out* is pinned on its
-       own below. */
-    await db.insert(schema.noFleetUnits).values({ unitId: row!.id });
     return { id: row!.id, code: row!.code };
   };
+
+  /* The suite's formation. Its digger is standby so it never occupies a slot
+     of its own; it exists only to give `fleet_units` something to point at. */
+  const [area] = await db
+    .insert(schema.workAreas)
+    .values({ name: `ZZ Pit ${uid()}`, type: "Mining" })
+    .returning({ id: schema.workAreas.id });
+  fleetArea = area!.id;
+  fleetDigger = (await unitRow({ standby: true })).id;
+  const [fleet] = await db
+    .insert(schema.fleets)
+    .values({ diggerUnitId: fleetDigger, workAreaId: fleetArea })
+    .returning({ id: schema.fleets.id });
+  fleetId = fleet!.id;
+
+  /* The board only carries units that belong to a formation, so a fixture unit
+     hauls for that fleet. What scoping leaves *out* is pinned on its own
+     below. */
+  const unit = async (
+    extra: Partial<{ simperCodeId: string; departmentId: string }>
+  ) => {
+    const row = await unitRow(extra);
+    await db.insert(schema.fleetUnits).values({ fleetId, unitId: row.id });
+    return row;
+  };
+
   unitReq = await unit({ simperCodeId: skillCode.id });
   unitDept = await unit({ departmentId: deptA });
   unitFree = await unit({});
@@ -330,12 +360,17 @@ afterAll(async () => {
     await db
       .delete(schema.employees)
       .where(inArray(schema.employees.id, made.employees));
+  if (fleetId)
+    await db.delete(schema.fleets).where(eq(schema.fleets.id, fleetId));
   if (made.units.length) {
+    // Before the units: `fleet_units.unit_id` is `restrict`.
     await db
-      .delete(schema.noFleetUnits)
-      .where(inArray(schema.noFleetUnits.unitId, made.units));
+      .delete(schema.fleetUnits)
+      .where(inArray(schema.fleetUnits.unitId, made.units));
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
   }
+  if (fleetArea)
+    await db.delete(schema.workAreas).where(eq(schema.workAreas.id, fleetArea));
   if (made.positions.length)
     await db
       .delete(schema.positions)
@@ -544,26 +579,34 @@ describe("the board composes what the screen renders", () => {
  * would ever fill — but it has to stay a fact the suite states out loud rather
  * than one a future reader discovers.
  */
-describe("the board is scoped to what Fleet Setting configured", () => {
-  test("a unit configured nowhere drops off, and comes back with one row", async () => {
-    const codesNow = async () =>
-      (
-        (await (
-          await send("GET", "/fleet-allocation/plan", admin.cookie)
-        ).json()) as { units: { code: string }[] }
-      ).units.map((u) => u.code);
+describe("PLAN carries the whole register, the engine does not", () => {
+  test("a unit in no formation is on the PLAN board, with no fleet", async () => {
+    /* The two scopes differ on purpose. A standing pairing is a fact about a
+       person and a machine — true whether or not the machine is in a formation
+       today — so PLAN has to be able to show it. Automatic allocation is a
+       different question, and `allocation.test.ts` pins that it answers only
+       about formations. */
+    const board = (await (
+      await send("GET", "/fleet-allocation/plan", admin.cookie)
+    ).json()) as { units: { code: string; fleet: unknown }[] };
 
-    expect(await codesNow()).toContain(unitFree.code);
+    const listed = board.units.find((u) => u.code === unitFree.code);
+    expect(listed).toBeDefined();
+    expect(listed!.fleet).not.toBeNull();
 
-    // Un-configure it: nothing else about the unit changes — it is still
-    // active, still not broken down, still has its standing pairing.
+    // Take it out of its formation: it stays on the board and loses its fleet,
+    // which is what puts it under the filter's no-fleet entry.
     await db
-      .delete(schema.noFleetUnits)
-      .where(eq(schema.noFleetUnits.unitId, unitFree.id));
-    expect(await codesNow()).not.toContain(unitFree.code);
+      .delete(schema.fleetUnits)
+      .where(eq(schema.fleetUnits.unitId, unitFree.id));
+    const after = (await (
+      await send("GET", "/fleet-allocation/plan", admin.cookie)
+    ).json()) as { units: { code: string; fleet: unknown }[] };
+    const loose = after.units.find((u) => u.code === unitFree.code);
+    expect(loose).toBeDefined();
+    expect(loose!.fleet).toBeNull();
 
-    // And the way back in is one row, not a schema change.
-    await db.insert(schema.noFleetUnits).values({ unitId: unitFree.id });
-    expect(await codesNow()).toContain(unitFree.code);
+    // Put it back for the suites that follow.
+    await db.insert(schema.fleetUnits).values({ fleetId, unitId: unitFree.id });
   });
 });

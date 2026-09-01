@@ -672,11 +672,11 @@ export const en: Dict = {
   flDlgB:
     "Formations are relatively fixed — daily operator allocation happens in Unit No-Operator.",
   flNoFleet: "No-fleet",
-  flNoFleetSub: "No formation",
-  flNoFleetFixed: "Fixed",
-  flNoFleetEmpty: "No units yet",
+  flNoFleetSub: "No formation — outside allocation",
+  flNoFleetFixed: "Automatic",
+  flNoFleetEmpty: "Every active unit belongs to a formation",
   flNoFleetDlgB:
-    "Units that take part in automatic allocation without belonging to any formation \u2014 graders, water trucks, and the like. A unit that already leads or hauls for a fleet is not offered here.",
+    "Every active unit that belongs to no formation. The list keeps itself: a unit taken out of a fleet appears here at once, and one put into a fleet leaves. Units here do NOT take part in allocation.",
   flSumB: "fleet formations",
   flDelT: "Delete",
   flDelB:
@@ -758,7 +758,7 @@ export const en: Dict = {
     "Competent operators without a unit this shift — replaces the SPARE rows of the old setting file.",
   faSpareEmpty: "All competent operators are allocated.",
   faFleetAll: "All fleets",
-  faNoFleet: "No-fleet",
+  faNoFleet: "No-fleet — no formation",
   udbSerial: "Serial no.",
   udbErrCode: "Code is required and must be unique.",
   udbGlobal: "Company-wide asset",

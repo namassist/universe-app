@@ -59,6 +59,17 @@ const made = {
 /** unit_class / type / model / brand — required, and uninteresting here. */
 let cls: string, typ: string, mdl: string, brd: string;
 
+/**
+ * One formation every fixture unit hauls for.
+ *
+ * Allocation is scoped to units that belong to a formation, so a unit created
+ * outside one is invisible to the engine — correctly, and unhelpfully for a
+ * test about the engine. The digger and the area live for the whole suite
+ * because they are scaffolding rather than subject matter; the haulers come
+ * and go with each test.
+ */
+let fleetId: string, fleetArea: string, fleetDigger: string;
+
 let deptA: string, deptB: string, posAlloc: string, posOther: string;
 let codeA: string;
 
@@ -113,10 +124,26 @@ async function addUnit(input: {
     })
     .returning({ id: schema.units.id });
   made.units.push(row!.id);
-  /* Allocation is scoped to units Fleet Setting configured, so a fixture unit
-     joins the no-fleet entry — the same way a real grader with no formation
-     gets on the board. Scoping itself is pinned separately. */
-  await db.insert(schema.noFleetUnits).values({ unitId: row!.id });
+  /* Allocation is scoped to formations, so a fixture unit hauls for the
+     suite's fleet. Without this it is simply not on any board and every
+     assertion below would be about an empty list. Scoping itself is pinned
+     separately. */
+  await db.insert(schema.fleetUnits).values({ fleetId, unitId: row!.id });
+  return row!.id;
+}
+
+/**
+ * A unit that belongs to no formation — Fleet Setting's no-fleet entry.
+ *
+ * Deliberately not a hauler: what these tests pin is that such a unit gets no
+ * slot of its own, while the operator who holds it standing is still useful.
+ */
+async function addLooseUnit(code: string) {
+  const [row] = await db
+    .insert(schema.units)
+    .values({ code, classId: cls, typeId: typ, modelId: mdl, brandId: brd })
+    .returning({ id: schema.units.id });
+  made.units.push(row!.id);
   return row!.id;
 }
 
@@ -227,9 +254,52 @@ beforeAll(async () => {
     })
     .returning({ id: schema.rosterDocuments.id });
   rosterDoc = doc!.id;
+
+  /* The suite's formation. Its digger is a unit like any other, but it is not
+     in `made.units` — that list is emptied after every test, and the fleet
+     that references the digger would block its deletion. */
+  const [area] = await db
+    .insert(schema.workAreas)
+    .values({ name: `${tag} Pit`, type: "Mining" })
+    .returning({ id: schema.workAreas.id });
+  fleetArea = area!.id;
+  const [digger] = await db
+    .insert(schema.units)
+    .values({
+      code: `${tag}-EX`,
+      classId: cls,
+      typeId: typ,
+      modelId: mdl,
+      brandId: brd,
+      /* Standby, so the scaffolding never becomes a competitor: the engine
+         skips standby units, and without this the digger is an unplanned
+         vacancy that sorts ahead of `-U1` by code and takes the spare the test
+         is actually about. */
+      standby: true,
+    })
+    .returning({ id: schema.units.id });
+  fleetDigger = digger!.id;
+  const [fleet] = await db
+    .insert(schema.fleets)
+    .values({ diggerUnitId: fleetDigger, workAreaId: fleetArea })
+    .returning({ id: schema.fleets.id });
+  fleetId = fleet!.id;
 });
 
 afterAll(async () => {
+  /* The formation first: the fleet references the digger with `restrict`, and
+     the digger references the catalogues this block goes on to delete. */
+  if (fleetId)
+    await db.delete(schema.fleets).where(eq(schema.fleets.id, fleetId));
+  if (fleetDigger) {
+    await db
+      .delete(schema.fleetActualSlots)
+      .where(eq(schema.fleetActualSlots.unitId, fleetDigger));
+    await db.delete(schema.units).where(eq(schema.units.id, fleetDigger));
+  }
+  if (fleetArea)
+    await db.delete(schema.workAreas).where(eq(schema.workAreas.id, fleetArea));
+
   for (const id of made.docs)
     await db
       .delete(schema.fleetActualDocuments)
@@ -307,9 +377,10 @@ afterEach(async () => {
   await db
     .delete(schema.fleetPlanSlots)
     .where(inArray(schema.fleetPlanSlots.unitId, made.units));
+  // Before the units: `fleet_units.unit_id` is `restrict`.
   await db
-    .delete(schema.noFleetUnits)
-    .where(inArray(schema.noFleetUnits.unitId, made.units));
+    .delete(schema.fleetUnits)
+    .where(inArray(schema.fleetUnits.unitId, made.units));
   await db.delete(schema.units).where(inArray(schema.units.id, made.units));
   made.units.length = 0;
 });
@@ -580,6 +651,93 @@ describe("the spare pool", () => {
     );
     expect(slots.filter((s) => s.employeeId === spare)).toHaveLength(1);
     expect(slots.filter((s) => s.employeeId === null)).toHaveLength(1);
+  });
+});
+
+describe("a unit outside every formation", () => {
+  test("gets no slot of its own", async () => {
+    const date = nextDate();
+    const nik = newNik();
+    const person = await addEmployee({ nik });
+    const loose = await addLooseUnit(`${tag}-NF1`);
+    await roster(date, person, "D");
+    await plan(loose, person);
+    await tapAt(date, nik, "04:05:00");
+
+    // The engine allocates formations. A machine in none of them is not on
+    // the board at all — not as a filled slot, and not as an idle one.
+    expect((await mine(date)).find((s) => s.unitId === loose)).toBeUndefined();
+  });
+
+  test("leaves its standing operator free to fill a formation's vacancy", async () => {
+    /* The reason the two scopes differ. A standing pairing on a unit with no
+       formation is still a real fact, but it holds nobody back: the operator
+       is a spare, and a spare is exactly what an empty seat in a fleet
+       needs. */
+    const date = nextDate();
+    const looseNik = newNik();
+    const looseOp = await addEmployee({ nik: looseNik });
+    const loose = await addLooseUnit(`${tag}-NF2`);
+    await roster(date, looseOp, "D");
+    await plan(loose, looseOp);
+    await tapAt(date, looseNik, "04:02:00");
+
+    // A fleet unit whose own planned operator never turned up.
+    const absentNik = newNik();
+    const absent = await addEmployee({ nik: absentNik });
+    const inFleet = await addUnit({ code: `${tag}-NF3` });
+    await roster(date, absent, "D");
+    await plan(inFleet, absent);
+    await tapAt(date, absentNik, null);
+
+    const slot = (await mine(date)).find((s) => s.unitId === inFleet);
+    expect(slot?.employeeId).toBe(looseOp);
+    expect(slot?.source).toBe("spare");
+  });
+
+  test("its operator still has to be on the roster", async () => {
+    // Being a spare is not a way around the roster: someone not rostered to
+    // this shift is not a candidate at all, however free their unit leaves
+    // them.
+    const date = nextDate();
+    const offNik = newNik();
+    const offToday = await addEmployee({ nik: offNik });
+    const loose = await addLooseUnit(`${tag}-NF4`);
+    await plan(loose, offToday);
+    await tapAt(date, offNik, "04:01:00");
+
+    const absentNik = newNik();
+    const absent = await addEmployee({ nik: absentNik });
+    const inFleet = await addUnit({ code: `${tag}-NF5` });
+    await roster(date, absent, "D");
+    await plan(inFleet, absent);
+    await tapAt(date, absentNik, null);
+
+    const slot = (await mine(date)).find((s) => s.unitId === inFleet);
+    expect(slot?.employeeId).toBeNull();
+  });
+
+  test("a formation's own operator is served before any spare", async () => {
+    const date = nextDate();
+    const looseNik = newNik();
+    const looseOp = await addEmployee({ nik: looseNik });
+    const loose = await addLooseUnit(`${tag}-NF6`);
+    await roster(date, looseOp, "D");
+    await plan(loose, looseOp);
+    // Tapped first, so first-come-first-served would hand them the unit if
+    // the planned holder were not privileged over spares.
+    await tapAt(date, looseNik, "04:00:00");
+
+    const heldNik = newNik();
+    const holder = await addEmployee({ nik: heldNik });
+    const inFleet = await addUnit({ code: `${tag}-NF7` });
+    await roster(date, holder, "D");
+    await plan(inFleet, holder);
+    await tapAt(date, heldNik, "04:30:00");
+
+    const slot = (await mine(date)).find((s) => s.unitId === inFleet);
+    expect(slot?.employeeId).toBe(holder);
+    expect(slot?.source).toBe("plan");
   });
 });
 

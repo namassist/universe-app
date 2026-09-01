@@ -33,7 +33,6 @@ import {
 
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
-import { isFleetConfigured } from "../fleet-scope";
 import { localDate } from "../scheduler";
 import {
   buildPlanTemplate,
@@ -539,18 +538,28 @@ export const fleetAllocationRoutes = new Elysia({
         )
         .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
         /*
-         * Only what Fleet Setting configured (owner, 2026-08-31). The board
-         * used to list the whole active register — 447 units against 75 in a
-         * formation — so 83% of it was machines nobody had decided took part.
+         * The PLAN board carries the whole active register, formation or not
+         * (owner, 2026-08-31).
          *
-         * With the register out of the way, a unit here with no `fleet` is no
-         * longer "we do not know": it is the no-fleet entry, by definition,
-         * which is what lets the filter offer that entry as itself instead of
-         * as a residual bucket called "support".
+         * PLAN and the engine deliberately have *different* scopes, and the
+         * difference is the point. A standing pairing is a fact about a person
+         * and a machine — "operator A holds 4019" — and it is true whether or
+         * not 4019 is in a formation today. Automatic allocation is a
+         * different question, and it answers only about formations.
+         *
+         * So an operator whose standing unit has no formation is not left out:
+         * their pairing is recorded here, and on the board they fall into the
+         * **spare pool**, because `buildBoard` scopes `planned` to formations
+         * and so never counts them as holding a slot. An operator whose unit
+         * *is* in a formation keeps it first, before any spare is offered
+         * anything. Both still follow the roster, which is what decides who is
+         * a candidate at all.
+         *
+         * The filter is what keeps this readable: it shows one formation at a
+         * time, with the no-fleet entry as its own option, so the register
+         * being large costs nothing until somebody asks for it.
          */
-        .where(
-          and(eq(schema.units.active, true), isFleetConfigured(schema.units.id))
-        )
+        .where(eq(schema.units.active, true))
         .orderBy(asc(schema.units.code));
 
       const slots = await slotsByUnit();

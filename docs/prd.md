@@ -212,39 +212,65 @@ fill the gap from the spare pool.
   all-`D` August: every day read as 990 scheduled and ~660 present, and the
   mismatch bucket cannot exist when every code is `D`.
 
-### Allocation is scoped to what Fleet Setting configured — shipped
+### Allocation is scoped to formations — shipped
 
-- **A unit takes part when somebody put it there** (owner, 2026-08-31). The
-  PLAN board and the engine now cover a formation's digger, its haulers, and
-  the units in Fleet Setting's **no-fleet** entry. Nothing else. Before this the
-  engine was driven by `units` alone: on 2026-08-31 it built a **447-slot board
-  against 75 configured units**, and 251 of those slots were empty.
+- **A unit takes part when it belongs to a formation** (owner, 2026-08-31): it
+  leads one (`fleets.digger_unit_id`) or it hauls for one (`fleet_units`).
+  That is the whole rule. Before this the engine was driven by `units` alone
+  and built a **447-slot board against 15 units in a formation**, where every
+  bus, forklift, lowboy and ambulance was a permanently idle vacancy nobody
+  would ever fill.
 - **The old "Unit support" filter was a residual, and its name lied.** It meant
-  "in no fleet", and it held 372 of 447 active units — 135 dump trucks, 52
-  excavators, 30 dozers. Those are production units nobody had paired to a
-  formation yet, not support machines. It is gone, and so is "Semua fleet": the
-  formation filter is now purely what Fleet Setting holds, so every option names
-  a decision somebody made.
-- **No-fleet is an entry, not a fleet.** A fleet is identified by its digger
-  (`digger_unit_id`, not null and unique) and works a Mining area — a row with
-  neither cannot be one. So `no_fleet_units` is its own table with `unit_id` as
-  the primary key, and there is no record behind the entry at all, which is what
-  makes "cannot be deleted" structural rather than a rule to remember.
-- **A unit is configured in exactly one place.** The three sources cannot
-  overlap (`fleets.digger_unit_id` unique, `fleet_units.unit_id` unique,
-  `no_fleet_units.unit_id` primary key), and the route refuses a unit that
-  already leads or hauls, by name.
-- **A fleet's bus is deliberately not configured by being a bus.** It is crew
-  transport rather than a machine the pool crews — all 26 bus slots on the last
-  board were empty — and two buses serve more than one formation, so a bus has
-  no single fleet to be filed under. A bus that really needs a driver goes in
-  the no-fleet entry by someone's decision.
-- **The cost, accepted knowingly.** An active unit configured nowhere is not
-  allocated and is not reported idle either — it goes quiet instead of loudly
+  "in no fleet" and held most of the register — dump trucks, excavators,
+  dozers. Those are production units nobody had paired to a formation yet, not
+  support machines. It is gone, and so is "Semua fleet": the formation filter
+  is now purely what Fleet Setting holds, so every option names a decision
+  somebody made.
+- **No-fleet is a visibility bucket, not a second scope** (owner, 2026-08-31).
+  It holds every active unit that belongs to no formation, and the engine
+  ignores it entirely — the focus is the units that are in a fleet. It exists
+  so a machine cannot fall out of allocation unnoticed, which is a question
+  about what an operator can see rather than about what the engine computes.
+- **PLAN and the engine have different scopes, and the difference is the
+  point** (owner, 2026-08-31). The PLAN board carries the whole active
+  register, with the no-fleet entry as an option in its formation filter, so a
+  standing pairing can be set on any machine: "operator A holds 4019" is a fact
+  about a person and a machine, true whether or not 4019 is in a formation
+  today. The engine reads only formations.
+- **So an operator whose standing unit has no formation becomes a spare.**
+  `buildBoard` scopes `planned` to formations, so their pairing never counts as
+  holding a slot, and they fall into the spare pool — which is exactly what an
+  empty seat in a fleet needs. An operator whose unit _is_ in a formation keeps
+  it first, before any spare is offered anything. Both still follow the roster:
+  it decides who is a candidate at all, and being a spare is not a way around
+  it. Four tests pin this, including the one that would catch a spare
+  outranking a formation's own holder.
+- **The board's summary counts the selected formation, not the register.** With
+  the whole register on PLAN, a total of 447 beside a screen showing one
+  eight-unit fleet describes nothing anybody is looking at.
+- **Its membership is derived, never stored.** Formations are reshuffled often,
+  and a stored list of "everything else" goes stale the moment one is edited —
+  silently, because nothing about a stale row looks wrong. Deriving it makes
+  the entry correct by construction: a unit pulled out of a fleet is in it on
+  the next read, and one added to a fleet leaves without anyone remembering.
+  `no_fleet_units` was dropped in `0020` (verified empty first).
+- **So there is nothing to edit, and nothing to delete.** The entry is
+  read-only: an editing endpoint could only ever disagree with the formations
+  it is computed from. It stays pinned above the formations in Fleet Setting,
+  and "cannot be deleted" remains a property of having no record behind it.
+- **A unit is configured in exactly one place.** `fleets.digger_unit_id` is
+  unique and `fleet_units.unit_id` is unique across the table, so joining on
+  either can never double a card.
+- **A fleet's bus is deliberately not in scope by being a bus.** It is crew
+  transport rather than a machine the pool crews — across every board generated
+  so far, all 52 bus slots were empty — and two buses serve more than one
+  formation, so a bus has no single fleet to be filed under.
+- **The cost, accepted knowingly.** An active unit in no formation is not
+  allocated and is not reported idle either — it goes quiet rather than loudly
   empty. This is the failure `allocation.ts` was rewritten to escape once
-  before, when a PLAN-driven board hid nine of fifteen units. It is pinned by a
-  test that states it out loud, and the way back in is one row in the no-fleet
-  entry.
+  before, when a PLAN-driven board hid nine of fifteen units. What answers it
+  now is the no-fleet entry itself: the units are listed, in Fleet Setting,
+  where someone deciding formations is already looking.
 
 ### The allocation engine — shipped
 

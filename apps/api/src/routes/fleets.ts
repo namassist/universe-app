@@ -17,7 +17,7 @@
  * and class as a heuristic, and a heuristic is not a thing to refuse on.
  */
 
-import { asc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
@@ -28,6 +28,7 @@ import {
 
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
+import { isNotFleetConfigured } from "../fleet-scope";
 import {
   buildTemplate,
   validateFleetWorkbook,
@@ -212,51 +213,26 @@ const distinct = (ids: string[]) => [...new Set(ids)];
 /* ------------------------------------------------------------- no-fleet */
 
 /**
- * Why a no-fleet list cannot be saved as submitted, or null when it can.
+ * The no-fleet entry's units: every active unit that belongs to no formation.
  *
- * The same shape of refusal the fleet dialog gets, and for the same reason: a
- * unit is configured in exactly one place, so one already leading or hauling
- * for a formation is refused here by name rather than by a constraint the
- * operator has to decode.
+ * Derived, never stored (owner, 2026-08-31). Formations are reshuffled often,
+ * and a stored list of "everything else" goes stale the moment one is edited —
+ * silently, because nothing about a stale row looks wrong. Deriving it means
+ * the entry is correct by construction: a unit pulled out of a fleet is in
+ * here on the next read, and one added to a fleet leaves without anyone
+ * remembering to remove it.
+ *
+ * This entry is **not allocated.** It exists so a machine cannot drop out of
+ * allocation unnoticed, which is a question about visibility rather than a
+ * second scope for the engine — see `fleet-scope.ts`.
  */
-async function refuseNoFleetUnits(unitIds: string[]): Promise<string | null> {
-  if (!unitIds.length) return null;
-
-  const found = await db
-    .select({ id: schema.units.id, code: schema.units.code })
-    .from(schema.units)
-    .where(inArray(schema.units.id, unitIds));
-  if (found.length !== unitIds.length)
-    return `${unitIds.length - found.length} unit tidak ada di master`;
-  const codeOf = new Map(found.map((u) => [u.id, u.code]));
-
-  const leading = await db
-    .select({ id: schema.fleets.diggerUnitId })
-    .from(schema.fleets)
-    .where(inArray(schema.fleets.diggerUnitId, unitIds));
-  if (leading.length)
-    return `Unit ${leading
-      .map((l) => codeOf.get(l.id) ?? "?")
-      .join(", ")} memimpin fleet dan sudah masuk alokasi lewat fleet-nya`;
-
-  const hauling = await db
-    .select({ id: schema.fleetUnits.unitId })
-    .from(schema.fleetUnits)
-    .where(inArray(schema.fleetUnits.unitId, unitIds));
-  if (hauling.length)
-    return `Unit ${hauling
-      .map((h) => codeOf.get(h.id) ?? "?")
-      .join(", ")} sudah menjadi anggota fleet`;
-
-  return null;
-}
-
-/** The no-fleet entry's units, by code — the order the dialog lists them. */
 async function noFleetUnits(): Promise<{ id: string; code: string }[]> {
   return db
     .select({ id: schema.units.id, code: schema.units.code })
-    .from(schema.noFleetUnits)
-    .innerJoin(schema.units, eq(schema.units.id, schema.noFleetUnits.unitId))
+    .from(schema.units)
+    .where(
+      and(eq(schema.units.active, true), isNotFleetConfigured(schema.units.id))
+    )
     .orderBy(asc(schema.units.code));
 }
 
@@ -403,7 +379,9 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
 
      There is no row behind this entry and so no way to delete it: it is a
      fixed part of Fleet Setting, and "cannot be deleted" is a property of
-     having nothing to delete rather than a rule someone enforces. */
+     having nothing to delete rather than a rule someone enforces. It is
+     read-only for the same reason — its membership is derived from the
+     formations, so there is nothing here to edit. */
 
   .get("/no-fleet", async () => ({ units: await noFleetUnits() }), {
     auth: { menu: ["fleet-setting", "display-fleet"], mode: "view" },
@@ -413,40 +391,9 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
       403: ErrorSchema,
     },
     detail: {
-      summary: "Units allocated without belonging to a formation",
+      summary: "Active units belonging to no formation — outside allocation",
     },
   })
-
-  .put(
-    "/no-fleet/units",
-    async ({ body, status }) => {
-      const unitIds = distinct(body.unitIds);
-      const refusal = await refuseNoFleetUnits(unitIds);
-      if (refusal) return status(422, invalid(refusal));
-
-      /* Replaced, not patched — the dialog submits the list it means, exactly
-         as the fleet dialog's member list does. */
-      await db.transaction(async (tx) => {
-        await tx.delete(schema.noFleetUnits);
-        if (unitIds.length)
-          await tx
-            .insert(schema.noFleetUnits)
-            .values(unitIds.map((unitId) => ({ unitId })));
-      });
-      return { units: await noFleetUnits() };
-    },
-    {
-      auth: { menu: "fleet-setting", mode: "manage" },
-      body: t.Object({ unitIds: t.Array(t.String({ format: "uuid" })) }),
-      response: {
-        200: NoFleetSchema,
-        401: ErrorSchema,
-        403: ErrorSchema,
-        422: ErrorSchema,
-      },
-      detail: { summary: "Replace the no-fleet entry's units" },
-    }
-  )
 
   /* ---------------------------------------------------------------- import
      Declared before /:id so "import" is never parsed as a fleet id. */
