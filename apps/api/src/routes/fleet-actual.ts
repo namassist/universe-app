@@ -17,25 +17,43 @@ import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import { SHIFT_KINDS, type ShiftKind } from "@universe/contracts";
 
-import { buildBoard, storeBoard } from "../allocation";
+import { buildBoard, candidates, storeBoard } from "../allocation";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
 import { fingerInDeadline, ftwDeadline, judge, shiftIn } from "../readiness";
 import { stageGates } from "../stage-time";
 import { photoMimeType, photoPath } from "../storage";
-import { pairingRefusal } from "./fleet-allocation";
+import { pairingRefusal, skillNamesByEmployee } from "./fleet-allocation";
 import { localDate } from "../scheduler";
 import { normalizeNik } from "../sources/nik";
 import {
+  ActualAuditSchema,
   ActualBoardSchema,
   ActualCandidateSchema,
   ActualDocumentSchema,
   ErrorSchema,
   FleetDisplaySchema,
+  ShiftKindSchema,
 } from "./schemas";
 
 const DATE_PATTERN = "^\\d{4}-\\d{2}-\\d{2}$";
+
+/**
+ * The order the audit table reads its decisions in: the seats that were
+ * filled, then the people who were not seated.
+ *
+ * `manual` sits with the other two placements rather than apart, because from
+ * the board's point of view it is one — a seat that ended up filled. What
+ * separates it is who decided, and the badge says that.
+ */
+const DECISION_ORDER = {
+  kept: 0,
+  substitute: 1,
+  manual: 2,
+  "not-ready": 3,
+  "no-seat": 4,
+} as const;
 
 const noBoard = {
   code: "board_not_found",
@@ -773,6 +791,227 @@ export const fleetActualRoutes = new Elysia({
         404: ErrorSchema,
       },
       detail: { summary: "One board, unit by unit" },
+    }
+  )
+
+  /**
+   * The board's audit table: one line per operator the roster put on this
+   * shift, and what became of them.
+   *
+   * Why it exists: the board says *what* was decided; this says *why it could
+   * be*. Without it the two questions behind every disputed slot — did they
+   * pass FTW, did they tap — are answered by opening two other menus and
+   * matching NIKs by eye.
+   *
+   * **The readiness columns are read as they stand now, not as the engine saw
+   * them.** `fleet_actual_slots` records the outcome, not the verdicts behind
+   * it, and readings keep arriving after a board is generated — on
+   * 2026-08-30 the day board was built at 05:20 and 711 of that date's FTW
+   * rows were synced afterwards. So this table agrees with the FTW and
+   * Attendance menus, which is what it is here to replace, and can disagree
+   * with a board generated before a late upload. The screen says so.
+   */
+  .get(
+    "/:date/:shift/audit",
+    async ({ params, status }) => {
+      const deadline = await fingerInDeadline(params.shift);
+      const uploadClose = await ftwDeadline(params.shift);
+      if (!deadline || !uploadClose)
+        return status(422, {
+          code: "no_deadline",
+          message: `Tahap batas untuk shift ${params.shift === "day" ? "siang" : "malam"} tidak aktif — atur dulu di menu Timeline`,
+        });
+
+      // The roster is the gate, and it is the same call the engine makes — so
+      // the table cannot list somebody the engine never considered.
+      const pool = await candidates(
+        params.date,
+        params.shift,
+        deadline,
+        uploadClose
+      );
+      const ids = [...pool.keys()];
+      if (!ids.length)
+        return { date: params.date, shift: params.shift, rows: [] };
+
+      const planUnit = alias(schema.units, "plan_unit");
+      const planDigger = alias(schema.units, "plan_digger");
+      const planRows = await db
+        .select({
+          employeeId: schema.fleetPlanSlots.employeeId,
+          unitCode: planUnit.code,
+          diggerCode: planDigger.code,
+          requiresFtw: planUnit.ftw,
+        })
+        .from(schema.fleetPlanSlots)
+        .innerJoin(planUnit, eq(planUnit.id, schema.fleetPlanSlots.unitId))
+        /* Their formation is their standing unit's, by either route into one:
+           leading it, or hauling for it. */
+        .leftJoin(schema.fleetUnits, eq(schema.fleetUnits.unitId, planUnit.id))
+        .leftJoin(
+          schema.fleets,
+          or(
+            eq(schema.fleets.id, schema.fleetUnits.fleetId),
+            eq(schema.fleets.diggerUnitId, planUnit.id)
+          )
+        )
+        .leftJoin(planDigger, eq(planDigger.id, schema.fleets.diggerUnitId))
+        .where(inArray(schema.fleetPlanSlots.employeeId, ids));
+      const plan = new Map(planRows.map((r) => [r.employeeId!, r]));
+
+      const [doc] = await db
+        .select({ id: schema.fleetActualDocuments.id })
+        .from(schema.fleetActualDocuments)
+        .where(
+          and(
+            eq(schema.fleetActualDocuments.date, params.date),
+            eq(schema.fleetActualDocuments.shift, params.shift)
+          )
+        )
+        .limit(1);
+      /* The unit the board put them on, and *its* formation — not their
+         standing unit's. A spare who filled a seat in EX4001 worked EX4001
+         today, and someone asking about that formation wants them. */
+      const actualDigger = alias(schema.units, "actual_digger");
+      const actual = new Map<
+        string,
+        {
+          unitCode: string;
+          diggerCode: string | null;
+          requiresFtw: boolean;
+          source: "plan" | "spare" | "manual" | null;
+        }
+      >();
+      if (doc) {
+        const rows = await db
+          .select({
+            employeeId: schema.fleetActualSlots.employeeId,
+            unitCode: schema.units.code,
+            diggerCode: actualDigger.code,
+            requiresFtw: schema.units.ftw,
+            source: schema.fleetActualSlots.source,
+          })
+          .from(schema.fleetActualSlots)
+          .innerJoin(
+            schema.units,
+            eq(schema.units.id, schema.fleetActualSlots.unitId)
+          )
+          .leftJoin(
+            schema.fleetUnits,
+            eq(schema.fleetUnits.unitId, schema.fleetActualSlots.unitId)
+          )
+          .leftJoin(
+            schema.fleets,
+            or(
+              eq(schema.fleets.id, schema.fleetUnits.fleetId),
+              eq(schema.fleets.diggerUnitId, schema.fleetActualSlots.unitId)
+            )
+          )
+          .leftJoin(
+            actualDigger,
+            eq(actualDigger.id, schema.fleets.diggerUnitId)
+          )
+          .where(eq(schema.fleetActualSlots.documentId, doc.id));
+        for (const row of rows)
+          if (row.employeeId)
+            actual.set(row.employeeId, {
+              unitCode: row.unitCode,
+              diggerCode: row.diggerCode,
+              requiresFtw: row.requiresFtw,
+              source: row.source,
+            });
+      }
+
+      const skills = await skillNamesByEmployee(ids);
+
+      /* Which unit's rule applies to this person: the one they were placed on,
+         or failing that their standing unit. With neither, the pool's default
+         (required) stands. */
+      const requiresFtwFor = (id: string): boolean =>
+        actual.get(id)?.requiresFtw ?? plan.get(id)?.requiresFtw ?? true;
+
+      const rows = ids.map((id) => {
+        const entry = pool.get(id)!;
+        const standing = plan.get(id);
+        const placed = actual.get(id);
+        const ftw = requiresFtwFor(id)
+          ? entry.readiness.ftw
+          : ("not-required" as const);
+        /* Ready for the unit that applied to them — the same two-part rule the
+           engine uses, with FTW dropped where the unit does not ask for it. */
+        const ready =
+          entry.readiness.finger === "pass" &&
+          (ftw === "pass" || ftw === "not-required");
+        return {
+          /* Where they worked, or — when the board placed them nowhere —
+             where they belong. Filtering a formation therefore answers "who
+             was this formation's business today": its standing operators,
+             including the ones it lost, and whoever actually drove its units
+             in their place. */
+          fleetDiggerCode: placed?.diggerCode ?? standing?.diggerCode ?? null,
+          planUnitCode: standing?.unitCode ?? null,
+          nik: entry.person.nik,
+          name: entry.person.name,
+          skills: skills.get(id) ?? [],
+          /* The verdict the engine actually used for *this* person, not the
+             pool's default. `candidates()` judges everyone as though FTW were
+             required; a unit that does not require it has the engine ask
+             again. Reporting the default made the table contradict the board —
+             a digger with `ftw = false` showed "no reading" beside an operator
+             it had happily seated. */
+          ftw,
+          sentAt: entry.readiness.sentAt,
+          finger: entry.readiness.finger,
+          tappedAt: entry.readiness.tappedAt,
+          actualUnitCode: placed?.unitCode ?? null,
+          decision: placed
+            ? placed.source === "plan"
+              ? ("kept" as const)
+              : placed.source === "manual"
+                ? ("manual" as const)
+                : ("substitute" as const)
+            : ready
+              ? ("no-seat" as const)
+              : ("not-ready" as const),
+        };
+      });
+
+      /* Formation first, spares last — the order someone reads the yard in.
+         A spare here is anyone with no formation: no standing unit at all, or
+         a standing unit that belongs to none. */
+      rows.sort((a, b) => {
+        const fa = a.fleetDiggerCode;
+        const fb = b.fleetDiggerCode;
+        if (fa && fb && fa !== fb) return fa.localeCompare(fb);
+        if (fa && !fb) return -1;
+        if (!fa && fb) return 1;
+        /* Inside a formation, by what the board decided: the seats it filled
+           first, then the people it turned away. Reading a fleet is asking
+           "who is on it, and who should have been" in that order — sorting by
+           unit code interleaved the two and made the second question something
+           you had to hunt for. Unit code is the tiebreaker, so each block
+           still reads unit by unit. */
+        const rank = DECISION_ORDER[a.decision] - DECISION_ORDER[b.decision];
+        if (rank !== 0) return rank;
+        return (
+          (a.actualUnitCode ?? "").localeCompare(b.actualUnitCode ?? "") ||
+          (a.planUnitCode ?? "").localeCompare(b.planUnitCode ?? "") ||
+          a.name.localeCompare(b.name)
+        );
+      });
+
+      return { date: params.date, shift: params.shift, rows };
+    },
+    {
+      auth: { menu: "fleet-allocation", mode: "view" },
+      params: t.Object({ date: t.String(), shift: ShiftKindSchema }),
+      response: {
+        200: ActualAuditSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "The board's audit table, one line per operator" },
     }
   )
 

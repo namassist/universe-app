@@ -878,6 +878,66 @@ export const ActualBoardSchema = t.Object({
   slots: t.Array(ActualSlotSchema),
 });
 
+/**
+ * One line of the board's audit table: an operator the roster put on this
+ * shift, and what became of them.
+ *
+ * The row is the *person*, not the slot — "unit plan → unit actual" is a
+ * movement, and a movement needs someone to move. Units nobody filled are
+ * already visible on the board above.
+ */
+export const ActualAuditRowSchema = t.Object({
+  /** The formation their standing unit belongs to; null makes them a spare. */
+  fleetDiggerCode: t.Nullable(t.String()),
+  /** Their standing unit, or null — which the screen shows as SPARE. */
+  planUnitCode: t.Nullable(t.String()),
+  nik: t.String(),
+  name: t.String(),
+  /** The SIMPER codes they hold, by name. */
+  skills: t.Array(t.String()),
+  ftw: t.UnionEnum([
+    "pass",
+    "fail",
+    "late",
+    "missing",
+    "unreadable",
+    "not-required",
+  ] as const),
+  /** "HH:MM:SS" the FTW was uploaded; null when there is no reading. */
+  sentAt: t.Nullable(t.String()),
+  finger: t.UnionEnum(["pass", "late", "missing"] as const),
+  /** "HH:MM:SS" of the IN tap the roster says belongs to this shift. */
+  tappedAt: t.Nullable(t.String()),
+  /** The unit this board actually put them on, or null. */
+  actualUnitCode: t.Nullable(t.String()),
+  /**
+   * What the board did about this person, in one word.
+   *
+   * An *outcome*, not a reason — the columns beside it carry the evidence.
+   * `kept` and `substitute` come from the engine's own stored `source` rather
+   * than from comparing unit codes, because only the source can tell a spare
+   * who happened to land on their own unit from a holder the plan kept.
+   */
+  decision: t.UnionEnum([
+    /** Placed by the plan, on the unit they hold. */
+    "kept",
+    /** Placed from the spare pool, filling a seat. */
+    "substitute",
+    /** Placed by a supervisor after the board was generated. */
+    "manual",
+    /** Not placed, and not ready — FTW or the tap stood in the way. */
+    "not-ready",
+    /** Ready, and still placed nowhere: no seat they could take. */
+    "no-seat",
+  ] as const),
+});
+
+export const ActualAuditSchema = t.Object({
+  date: t.String(),
+  shift: ShiftKindSchema,
+  rows: t.Array(ActualAuditRowSchema),
+});
+
 export const ActualCandidateSchema = t.Object({
   employeeId: t.String(),
   nik: t.String(),

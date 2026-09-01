@@ -54,7 +54,7 @@ export type Board = {
 
 /* ------------------------------------------------------------- the inputs */
 
-type Candidate = {
+export type Candidate = {
   person: AllocPerson;
   readiness: Readiness;
 };
@@ -66,7 +66,7 @@ type Candidate = {
  * normalized NIK because that is the only key the sources share with us, and
  * the snapshot tables deliberately carry no foreign key to `employees`.
  */
-async function candidates(
+export async function candidates(
   date: string,
   shift: ShiftKind,
   deadline: string,
@@ -332,6 +332,7 @@ export async function buildBoard(
   const slotHolders = new Set(
     planned.map((r) => r.employeeId).filter((id): id is string => id !== null)
   );
+
   const spares = [...pool.values()]
     .filter((c) => !slotHolders.has(c.person.id))
     .filter((c) => c.readiness.finger === "pass")

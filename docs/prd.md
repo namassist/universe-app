@@ -288,6 +288,85 @@ fill the gap from the spare pool.
   allocatable workforce minus whoever is paired, on a screen whose subject is
   the units above it.
 
+### The board's audit table — shipped
+
+- **One line per operator the roster put on this shift, and what became of
+  them** (owner, 2026-08-31), under the Actual detail's history. Columns:
+  fleet, plan unit, operator, SIMPER codes, FTW verdict, finger check-in,
+  actual unit. It exists so the two questions behind every disputed slot — did
+  they pass FTW, did they tap — stop being answered by opening two other menus
+  and matching NIKs by eye.
+- **The row is the person, not the slot.** "Plan unit → actual unit" is a
+  movement, and a movement needs someone to move. Units nobody filled are
+  already on the board above, so the table does not repeat them.
+- **The fleet column is where they _worked_, falling back to where they
+  belong** (owner, 2026-09-01). A spare who filled a seat in EX4001 worked
+  EX4001 that shift, so filtering a formation answers "who was this
+  formation's business today": its standing operators, including the ones it
+  lost, and whoever drove its units in their place. Inside a formation the rows
+  read unit by unit, with the operators the board placed nowhere following.
+- **The actual unit closes the row, and carries the decision in its colour**
+  (owner, 2026-09-01). Green kept the unit they stand on, amber came in to fill
+  one, red left the shift without a machine and reads `NO UNIT` — a badge
+  rather than a dash, because "nobody gave this person a unit" is a finding,
+  not a blank. It is the only coloured cell in the row and the answer the whole
+  line was building towards, so a separate decision column was dropped as a
+  second way of saying the same thing. The word stays on the tooltip, which is
+  what keeps a spare and a supervisor's placement — both amber, as on the fleet
+  wall — distinguishable to anyone who asks.
+- **The check-in column sorts** (owner, 2026-09-01): click for earliest first,
+  again for latest, again to return to the formation order. Earliest-first is
+  the direction the engine itself works in — it offers vacancies to spares
+  first come first served by the tap — so the sorted table replays the order
+  the decisions were made in. Operators with no tap sit at the end whichever
+  way the column points: a missing tap is neither early nor late, and putting
+  it first on the reverse would parade the people who never arrived above
+  everyone who did.
+- **Rows within a formation read by decision, not by unit code**: the seats it
+  filled, then the people it turned away. Reading a fleet is asking "who is on
+  it, and who should have been" in that order; sorting by unit interleaved the
+  two and made the second question something to hunt for. Unit code is the
+  tiebreaker, so each block still runs unit by unit.
+- **The five decisions come from the engine's stored `source`**, never from
+  comparing unit codes — only the source can tell a spare who landed on their
+  own unit from a holder the plan kept. `not-ready` and `no-seat` stay apart in
+  the data even though both render red: when a formation runs short, somebody
+  turned away by FTW is a different problem from somebody ready with nowhere to
+  sit.
+- **The FTW column reports the verdict the engine used for that person, not
+  the pool's default.** `candidates()` judges everyone as though FTW were
+  required, and a unit that does not require it has the engine ask again — so
+  the table applies the rule of the unit they were placed on, or failing that
+  their standing unit. Without this a digger with `ftw = false` showed "no
+  reading" beside an operator the board had happily seated, and the table
+  contradicted the thing it exists to explain.
+- **The roster is the gate, and it is the engine's own call** (`candidates()`),
+  so the table can neither explain a decision about somebody the engine never
+  considered nor omit somebody it did.
+- **No standing unit reads SPARE, not a dash.** It is not missing data — it is
+  what a spare _is_.
+- **Formations first, spares last.** A spare here is anyone with no formation:
+  no standing unit at all, or a standing unit that belongs to none.
+- **Filtered by formation, FTW verdict, finger verdict, and SIMPER code**
+  (owner, 2026-09-01). The formation filter carries one entry beyond the
+  formations themselves — the rows in none of them, where every spare and every
+  no-fleet unit's holder sits, which is the bucket somebody scanning for "who
+  was left over" actually wants. The first three are single choices, because a row has exactly one
+  verdict and "pass or fail" asks for everything; only SIMPER is a set of
+  checkboxes, because an operator holds several codes at once. Each filter
+  offers only what the board actually contains — a verdict nobody on this shift
+  has is a choice that can only empty the table. The code filter is ANY, not
+  ALL: a unit asks for one code, so holding any of the ticked ones is what
+  makes an operator relevant. That checkbox control now also serves the spare
+  pool on the PLAN board, extracted rather than written twice.
+- **The readiness columns are read as they stand now, not as the engine saw
+  them.** `fleet_actual_slots` records outcomes, not the verdicts behind them,
+  and readings keep arriving after generation — the 2026-08-30 day board was
+  built at 05:20 and 711 of that date's FTW rows synced afterwards. So these
+  columns agree with the Fit To Work and Attendance menus, which is what they
+  are here to replace, and can differ from what the engine saw. The panel says
+  so above the table rather than leaving it to be discovered.
+
 ### The allocation engine — shipped
 
 - `spare-validate` is no longer a no-op. It builds and stores one shift's

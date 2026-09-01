@@ -53,6 +53,7 @@ let viewer: { cookie: string };
 let wall: { cookie: string };
 let unitA: string, unitB: string;
 let opOne: string, opTwo: string;
+let nikOne: string, nikTwo: string;
 
 const send = (method: string, path: string, cookie?: string, body?: unknown) =>
   app.handle(
@@ -164,18 +165,20 @@ beforeAll(async () => {
   [unitA, unitB] = units.map((u) => u.id) as [string, string];
   made.units.push(unitA, unitB);
 
+  nikOne = `9911${uid().slice(0, 4)}`;
+  nikTwo = `9912${uid().slice(0, 4)}`;
   const ops = await db
     .insert(schema.employees)
     .values([
       {
-        nik: `9911${uid().slice(0, 4)}`,
+        nik: nikOne,
         name: `${tag} Satu`,
         companyId: co!.id,
         departmentId: dept!.id,
         positionId: pos!.id,
       },
       {
-        nik: `9912${uid().slice(0, 4)}`,
+        nik: nikTwo,
         name: `${tag} Dua`,
         companyId: co!.id,
         departmentId: dept!.id,
@@ -716,6 +719,55 @@ describe("a screen scoped to its own formations", () => {
     // here would silently overrule every one of those choices.
     const groups = groupIntoFleets(rows(), new Map(), ["f2", "f1"]);
     expect(groups.map((g) => g.diggerCode)).toEqual(["EX-70", "EX-22"]);
+  });
+});
+
+describe("the board's audit table", () => {
+  const audit = (shift: "day" | "night") =>
+    send(
+      "GET",
+      `/fleet-allocation/actual/${PLAN_DATE}/${shift}/audit`,
+      viewer.cookie
+    );
+
+  test("lists the operators this shift's roster put on, and no others", async () => {
+    /* The roster is the gate, and it is the engine's own call — so the table
+       can neither explain a decision about somebody the engine never
+       considered, nor leave out somebody it did. `opTwo` is rostered N on this
+       date, so the day table must not name them. */
+    const res = await audit("day");
+    if (res.status === 422) return; // no deadline configured for this shift
+    expect(res.status).toBe(200);
+    const niks = ((await res.json()) as { rows: { nik: string }[] }).rows.map(
+      (r) => r.nik
+    );
+    expect(niks).toContain(nikOne);
+    expect(niks).not.toContain(nikTwo);
+  });
+
+  test("puts formations first and spares last", async () => {
+    const res = await audit("day");
+    if (res.status === 422) return;
+    const rows = (
+      (await res.json()) as {
+        rows: { fleetDiggerCode: string | null }[];
+      }
+    ).rows;
+    // Everything with a formation comes before everything without one.
+    const firstSpare = rows.findIndex((r) => !r.fleetDiggerCode);
+    const withFleet = rows.filter((r) => r.fleetDiggerCode).length;
+    if (firstSpare !== -1) expect(firstSpare).toBe(withFleet);
+  });
+
+  test("a caller with only the fleet wall cannot read it", async () => {
+    // It carries names, NIKs, and readiness verdicts for the whole shift —
+    // more than a kiosk grant has any business seeing.
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/${PLAN_DATE}/day/audit`,
+      wall.cookie
+    );
+    expect(res.status).toBe(403);
   });
 });
 
