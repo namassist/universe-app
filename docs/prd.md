@@ -271,6 +271,22 @@ fill the gap from the spare pool.
   before, when a PLAN-driven board hid nine of fifteen units. What answers it
   now is the no-fleet entry itself: the units are listed, in Fleet Setting,
   where someone deciding formations is already looking.
+- **A spare card carries the SIMPER codes its operator holds** (owner,
+  2026-08-31), delivered with the board rather than fetched per operator — the
+  pool is several hundred people. The badges are deliberately _smaller_ than
+  the department badge: the department says who an operator belongs to, the
+  codes say what they may drive, and several of the second only fit beside one
+  of the first if each is slighter.
+- **Six badges, then a count.** The register runs from one code to
+  twenty-three; most operators hold two or six. A card rendering twenty-three
+  would stand several times the height of the ones beside it and break the
+  grid, so the rest becomes `+N` with the full list on the card's tooltip.
+- **The pool is filtered by code and paged.** The code filter is a set of
+  checkboxes, not a single choice — an operator holds several, and the question
+  behind it ("who can drive this") is answered by _any_ of the ticked codes
+  rather than all of them. Paging exists because the pool is the whole
+  allocatable workforce minus whoever is paired, on a screen whose subject is
+  the units above it.
 
 ### The allocation engine — shipped
 

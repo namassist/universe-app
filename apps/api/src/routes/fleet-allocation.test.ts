@@ -249,6 +249,8 @@ beforeAll(async () => {
     label: "Free",
     departmentId: deptA,
     positionId: operatorA,
+    // Skilled, so the spare pool has someone whose codes the board must carry.
+    skilled: true,
   });
 
   // Catalogue scaffolding for units.
@@ -540,6 +542,25 @@ describe("the board composes what the screen renders", () => {
     expect(spares).not.toContain(opFit.nik);
     expect(spares).toContain(opFree.nik);
     expect(spares).not.toContain(clerk.nik);
+  });
+
+  test("a spare carries the SIMPER codes they hold", async () => {
+    /* The pool is browsed by someone deciding who can drive a given unit, and
+       that is exactly what a code answers. Sending it with the board rather
+       than making the screen ask per operator is what keeps a pool of several
+       hundred to one request. */
+    const board = (await (
+      await send("GET", "/fleet-allocation/plan", viewer.cookie)
+    ).json()) as { spares: { nik: string; skills: string[] }[] };
+
+    const free = board.spares.find((s) => s.nik === opFree.nik);
+    expect(free?.skills).toEqual([skillCode.name]);
+
+    // And an operator with none of them says so with an empty list, not by
+    // omitting the field — the screen renders no badges either way, but only
+    // one of those shapes survives a client that reads `.length`.
+    const bare = board.spares.find((s) => s.nik === opNoSkill.nik);
+    expect(bare?.skills).toEqual([]);
   });
 
   test("releasing frees the slot and the spare returns", async () => {

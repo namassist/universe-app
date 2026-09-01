@@ -29,6 +29,7 @@ import { Pagination } from "@/components/ui/pagination";
 import {
   FootSum,
   Panel,
+  PanelFoot,
   Toolbar,
   ToolbarGroup,
   ToolbarTitle,
@@ -38,6 +39,7 @@ import { Segmented, SegmentedButton } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 
+import { CheckFilter } from "./check-filter";
 import {
   ACTUAL_UNITS,
   CANDIDATES,
@@ -63,6 +65,17 @@ const FA_PLAN_MAX_OPS = 2;
  * engine allocates formations only, so the option is not offered there.
  */
 const NO_FLEET = "no-fleet";
+
+/**
+ * How many SIMPER codes a spare card shows before it gives up and counts.
+ *
+ * Six, because most of the register sits at or below it — the two big clusters
+ * are two codes and six — while the tail runs to twenty-three, and one card
+ * carrying twenty-three badges is several times the height of the cards beside
+ * it. The full list is on the card's tooltip, and the filter above is the way
+ * to ask about a code that is not shown.
+ */
+const SPARE_SKILL_BADGES = 6;
 
 type Filter = "all" | "unalloc" | "alloc" | "issue";
 type Kind = "bd" | "none" | "warn" | "dt" | "ok";
@@ -313,6 +326,7 @@ export function AllocBoard({
             nik: s.nik,
             name: s.name,
             departmentName: s.departmentName,
+            skills: s.skills,
           }))
         : SPARE_INIT,
     [mode, planQ.data]
@@ -334,6 +348,12 @@ export function AllocBoard({
 
   const [spareQ, setSpareQ] = React.useState("");
   const [spareDeptF, setSpareDeptF] = React.useState("all");
+  /* SIMPER codes are a *set*, not a single choice: an operator holds several,
+     and someone browsing the pool is asking "who can drive this", which more
+     than one code can answer. Empty means no restriction. */
+  const [spareSkillF, setSpareSkillF] = React.useState<string[]>([]);
+  const [sparePage, setSparePage] = React.useState(1);
+  const [sparePer, setSparePer] = React.useState("12");
   const [filter, setFilter] = React.useState<Filter>("all");
   /* Empty until someone chooses, rather than a fleet id nobody picked. The
      board always shows exactly one formation now — there is no "all" to fall
@@ -548,15 +568,44 @@ export function AllocBoard({
     [spare]
   );
 
+  /** The SIMPER codes the pool actually holds — offering more would be lying. */
+  const spareSkills = React.useMemo(
+    () => [...new Set(spare.flatMap((s) => s.skills ?? []))].sort(),
+    [spare]
+  );
+
   const spareNeedle = spareQ.trim().toLowerCase();
   const spareShown = spare.filter((s) => {
     if (spareDeptF !== "all" && s.departmentName !== spareDeptF) return false;
+    /* Any, not all: a unit asks for one code, so an operator holding any of
+       the ticked ones is a candidate. Requiring all of them would answer a
+       question nobody is asking. */
+    if (
+      spareSkillF.length &&
+      !spareSkillF.some((code) => s.skills?.includes(code))
+    )
+      return false;
     if (!spareNeedle) return true;
     return (
       s.name.toLowerCase().includes(spareNeedle) ||
       s.nik.toLowerCase().includes(spareNeedle)
     );
   });
+
+  /* Paged, because the pool is the whole allocatable workforce minus whoever
+     is paired — hundreds of cards on a screen whose subject is the units
+     above it. Clamped during render so a filter that shortens the list cannot
+     leave the view on a page that no longer exists. */
+  const sparePerN = Number(sparePer);
+  const sparePageCount = Math.max(1, Math.ceil(spareShown.length / sparePerN));
+  const spareCur = Math.min(sparePage, sparePageCount);
+  const sparePageRows = spareShown.slice(
+    (spareCur - 1) * sparePerN,
+    spareCur * sparePerN
+  );
+  const spareRange = spareShown.length
+    ? `${(spareCur - 1) * sparePerN + 1}–${(spareCur - 1) * sparePerN + sparePageRows.length}`
+    : "0";
 
   return (
     <>
@@ -942,7 +991,10 @@ export function AllocBoard({
                 wrapperClassName="w-auto"
                 className="h-10 w-auto pr-9"
                 value={spareDeptF}
-                onChange={(e) => setSpareDeptF(e.target.value)}
+                onChange={(e) => {
+                  setSpareDeptF(e.target.value);
+                  setSparePage(1);
+                }}
               >
                 <option value="all">{t.faDeptAll}</option>
                 {spareDepts.map((d) => (
@@ -952,12 +1004,27 @@ export function AllocBoard({
                 ))}
               </Select>
             ) : null}
+            <CheckFilter
+              label={t.faSkillFilter}
+              options={spareSkills.map((code) => ({
+                value: code,
+                label: code,
+              }))}
+              value={spareSkillF}
+              onChange={(next) => {
+                setSpareSkillF(next);
+                setSparePage(1);
+              }}
+            />
             <SearchInput
               className="w-[240px]"
               placeholder={t.searchOp}
               aria-label={t.searchOp}
               value={spareQ}
-              onChange={(e) => setSpareQ(e.target.value)}
+              onChange={(e) => {
+                setSpareQ(e.target.value);
+                setSparePage(1);
+              }}
             />
           </ToolbarGroup>
         </Toolbar>
@@ -969,34 +1036,87 @@ export function AllocBoard({
             {spareQ.trim() ? t.faNoMatch : t.faSpareEmpty}
           </p>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-            {spareShown.map((r) => (
-              <div
-                key={r.nik}
-                className="flex items-center gap-3 rounded-icon border border-(--divider) bg-(--fill-subtle) p-3"
-              >
-                <Avatar className="flex-none text-xs">
-                  {initialsOf(r.name)}
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <b
-                    className="block truncate text-[13px] font-semibold"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </b>
-                  <span className="block truncate font-mono text-xs text-(--text-tertiary)">
-                    {r.nik}
-                  </span>
+          <>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+              {sparePageRows.map((r) => (
+                <div
+                  key={r.nik}
+                  className="flex items-center gap-3 rounded-icon border border-(--divider) bg-(--fill-subtle) p-3"
+                >
+                  <Avatar className="flex-none text-xs">
+                    {initialsOf(r.name)}
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <b
+                      className="block truncate text-[13px] font-semibold"
+                      title={r.name}
+                    >
+                      {r.name}
+                    </b>
+                    <span className="block truncate font-mono text-xs text-(--text-tertiary)">
+                      {r.nik}
+                    </span>
+                    {/* Smaller than the department badge on purpose: the
+                        department says who this operator belongs to, the codes
+                        say what they may drive. Several of the second fit on a
+                        card only if each is slighter than the one of the
+                        first, and the codes are read as a set rather than
+                        one at a time. */}
+                    {r.skills?.length ? (
+                      <span
+                        className="mt-1 flex flex-wrap gap-1"
+                        title={r.skills.join(" · ")}
+                      >
+                        {r.skills.slice(0, SPARE_SKILL_BADGES).map((code) => (
+                          <span
+                            key={code}
+                            className="rounded-chip border border-(--badge-info-border) bg-(--badge-info-fill) px-1.5 py-px font-mono text-[10px] leading-4 font-semibold text-(--color-primary-bright)"
+                          >
+                            {code}
+                          </span>
+                        ))}
+                        {r.skills.length > SPARE_SKILL_BADGES ? (
+                          <span className="px-0.5 font-mono text-[10px] leading-4 text-(--text-tertiary)">
+                            +{r.skills.length - SPARE_SKILL_BADGES}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </div>
+                  {r.departmentName ? (
+                    <Badge
+                      variant="accent"
+                      title={r.departmentName}
+                      className="flex-none self-start"
+                    >
+                      {deptAbbrev(r.departmentName)}
+                    </Badge>
+                  ) : null}
                 </div>
-                {r.departmentName ? (
-                  <Badge variant="accent" title={r.departmentName}>
-                    {deptAbbrev(r.departmentName)}
-                  </Badge>
-                ) : null}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            {/* Only once there is more than a page of them: a pager under six
+                cards is a control that does nothing. */}
+            {spareShown.length > sparePerN || sparePageCount > 1 ? (
+              <PanelFoot>
+                <FootSum>
+                  {t.attSumA} <b>{spareRange}</b> {t.attSumB}{" "}
+                  <b>{spareShown.length}</b> {t.faSpareSumB}
+                </FootSum>
+                <Pagination
+                  page={spareCur}
+                  pageCount={sparePageCount}
+                  onPage={setSparePage}
+                  per={sparePer}
+                  perOptions={["12", "24", "48"]}
+                  onPer={(value) => {
+                    setSparePer(value);
+                    setSparePage(1);
+                  }}
+                />
+              </PanelFoot>
+            ) : null}
+          </>
         )}
       </Panel>
 

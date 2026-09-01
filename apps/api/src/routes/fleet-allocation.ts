@@ -107,6 +107,14 @@ const PlanBoardSchema = t.Object({
       name: t.String(),
       departmentName: t.String(),
       rosterShift: ShiftKindSchema,
+      /**
+       * The SIMPER codes this operator holds, by name.
+       *
+       * The same fact the engine matches on, shown rather than left implicit:
+       * a spare is only useful for a unit whose code they carry, and the pool
+       * is browsed by someone deciding exactly that.
+       */
+      skills: t.Array(t.String()),
     })
   ),
 });
@@ -193,6 +201,37 @@ function allocatablePeople() {
       )
     )
     .orderBy(asc(schema.employees.name));
+}
+
+/**
+ * employeeId → the SIMPER code *names* they hold, sorted.
+ *
+ * Names rather than ids because this leaves for a screen, and one query rather
+ * than one per operator: the spare pool is the whole allocatable workforce.
+ */
+export async function skillNamesByEmployee(
+  employeeIds: string[]
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (!employeeIds.length) return map;
+  const rows = await db
+    .select({
+      employeeId: schema.employeeSkills.employeeId,
+      name: schema.simperCodes.name,
+    })
+    .from(schema.employeeSkills)
+    .innerJoin(
+      schema.simperCodes,
+      eq(schema.simperCodes.id, schema.employeeSkills.simperCodeId)
+    )
+    .where(inArray(schema.employeeSkills.employeeId, employeeIds))
+    .orderBy(asc(schema.simperCodes.name));
+  for (const row of rows) {
+    const list = map.get(row.employeeId) ?? [];
+    list.push(row.name);
+    map.set(row.employeeId, list);
+  }
+  return map;
 }
 
 type SlotHolder = {
@@ -574,6 +613,7 @@ export const fleetAllocationRoutes = new Elysia({
         [...paired, ...spares.map((s) => s.id)],
         today
       );
+      const skills = await skillNamesByEmployee(spares.map((s) => s.id));
 
       /* The area rides with the formation, not with each of its units: it is
          one value for the whole fleet, and sending it per unit is what had the
@@ -618,6 +658,7 @@ export const fleetAllocationRoutes = new Elysia({
           name: s.name,
           departmentName: s.departmentName,
           rosterShift: kinds.get(s.id) ?? null,
+          skills: skills.get(s.id) ?? [],
         })),
       };
     },

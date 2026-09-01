@@ -1,7 +1,7 @@
 import type { BadgeVariant } from "@/components/ui/badge";
 
 /**
- * Static data model for the Fleet Allocation board — a server-composed board
+ * Static data model for the Unit No-Operator board — a server-composed board
  * document (units + resolved slots + fleet embed), scaled down to sample size.
  * No state here; the board keeps local state.
  */
@@ -187,7 +187,13 @@ export const ACTUAL_UNITS: BoardUnit[] = [
 ];
 
 /** Pool spare — tanpa urutan prioritas (bukan senioritas). */
-export type SpareRow = { nik: string; name: string; departmentName?: string };
+export type SpareRow = {
+  nik: string;
+  name: string;
+  departmentName?: string;
+  /** The SIMPER codes this operator holds, by name — what a unit matches on. */
+  skills?: string[];
+};
 export const SPARE_INIT: SpareRow[] = [
   { nik: "507230715", name: "Bagus Priyambodo" },
   { nik: "507230733", name: "Lina Kusuma" },
