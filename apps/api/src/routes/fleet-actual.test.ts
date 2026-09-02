@@ -523,6 +523,7 @@ const slot = (over: Partial<WallSlot> = {}): WallSlot => ({
   employeePhotoFile: null,
   source: null,
   tappedAt: null,
+  ftw: null,
   ...over,
 });
 

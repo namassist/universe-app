@@ -21,7 +21,13 @@ import { buildBoard, candidates, storeBoard } from "../allocation";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
-import { fingerInDeadline, ftwDeadline, judge, shiftIn } from "../readiness";
+import {
+  fingerInDeadline,
+  ftwDeadline,
+  judge,
+  shiftIn,
+  type FtwVerdict,
+} from "../readiness";
 import { stageGates } from "../stage-time";
 import { photoMimeType, photoPath } from "../storage";
 import { pairingRefusal, skillNamesByEmployee } from "./fleet-allocation";
@@ -278,6 +284,67 @@ async function peopleNames(ids: string[]) {
   );
 }
 
+/**
+ * FTW and the tap, for the faces the wall is about to show.
+ *
+ * A judge bound to one date's readings rather than a finished map, because the
+ * verdict is a property of the *pairing*: `units.ftw` decides whether FTW is
+ * asked for at all, so one operator reads "Lolos FTW" on a unit that requires
+ * it and carries no FTW badge on a unit that does not. Judging per person and
+ * reusing the answer across units is exactly the mistake the audit table made
+ * before it was fixed.
+ *
+ * The two reads mirror `candidates()` deliberately — same tables, same date,
+ * same `shiftIn` split — so the wall cannot disagree with the board it is
+ * showing.
+ *
+ * `null` when the timeline cannot say where the deadlines are. A wall then
+ * shows no readiness badges at all rather than inventing verdicts from a
+ * half-configured timeline: the same refusal `currentShift` makes, for the same
+ * reason — a plausible wrong badge on a screen people read at a glance is worse
+ * than no badge.
+ */
+async function wallReadings(date: string, shift: ShiftKind, niks: string[]) {
+  if (!niks.length) return null;
+  const [deadline, ftwDeadlineAt] = await Promise.all([
+    fingerInDeadline(shift),
+    ftwDeadline(shift),
+  ]);
+  if (!deadline || !ftwDeadlineAt) return null;
+
+  const [ftwRows, fingerRows] = await Promise.all([
+    db
+      .select()
+      .from(schema.ftwReadings)
+      .where(
+        and(
+          eq(schema.ftwReadings.date, date),
+          inArray(schema.ftwReadings.nik, niks)
+        )
+      ),
+    db
+      .select()
+      .from(schema.fingerReadings)
+      .where(
+        and(
+          eq(schema.fingerReadings.date, date),
+          inArray(schema.fingerReadings.nik, niks)
+        )
+      ),
+  ]);
+  const ftwByNik = new Map(ftwRows.map((r) => [r.nik, r]));
+  const fingerByNik = new Map(fingerRows.map((r) => [r.nik, r]));
+
+  return (nik: string, requiresFtw: boolean) =>
+    judge({
+      ftw: ftwByNik.get(nik) ?? null,
+      finger: shiftIn(fingerByNik.get(nik) ?? null, shift),
+      requiresFtw,
+      deadline,
+      ftwDeadline: ftwDeadlineAt,
+    });
+}
+
 const photoNotFound = {
   code: "photo_not_found",
   message: "Foto tidak ditemukan",
@@ -370,6 +437,13 @@ export type WallSlot = {
   employeePhotoFile: string | null;
   source: "plan" | "spare" | "manual" | null;
   tappedAt: string | null;
+  /**
+   * The FTW verdict for *this* pairing — `not-required` where the unit does
+   * not ask, null where the timeline could not be read. Six values rather than
+   * a boolean because "has not filled it in" and "filled it in and was refused"
+   * ask opposite things of the person standing in front of the screen.
+   */
+  ftw: FtwVerdict | null;
 };
 
 export type WallFleet = {
@@ -446,6 +520,7 @@ export function groupIntoFleets(
       employeePhotoFile: s.employeePhotoFile,
       source: s.source,
       tappedAt: s.tappedAt,
+      ftw: s.ftw,
     });
   }
 
@@ -625,6 +700,18 @@ export const fleetActualRoutes = new Elysia({
       const names = await peopleNames(
         slots.map((s) => s.employeeId).filter((id): id is string => !!id)
       );
+      /* Readiness for exactly the people on screen — not the whole roster.
+         The wall is the one reader that shows a line-up *before* the board
+         exists, and in that window these two badges are the only thing telling
+         an arriving operator what they still owe. */
+      const readingFor = await wallReadings(now.date, now.shift, [
+        ...new Set(
+          slots
+            .map((s) => (s.employeeId ? names.get(s.employeeId)?.nik : null))
+            .filter((nik): nik is string => !!nik)
+            .map(normalizeNik)
+        ),
+      ]);
       const buses = await fleetBuses([
         ...new Set(
           slots.map((s) => s.fleetId).filter((id): id is string => !!id)
@@ -643,6 +730,10 @@ export const fleetActualRoutes = new Elysia({
         fleets: groupIntoFleets(
           slots.map((s) => {
             const person = s.employeeId ? names.get(s.employeeId) : undefined;
+            const readiness =
+              person && readingFor
+                ? readingFor(normalizeNik(person.nik), s.requiresFtw)
+                : null;
             return {
               unitId: s.unitId,
               unitCode: s.unitCode,
@@ -655,7 +746,11 @@ export const fleetActualRoutes = new Elysia({
               employeeName: person?.name ?? null,
               employeePhotoFile: person?.photoFile ?? null,
               source: s.source,
-              tappedAt: s.tappedAt,
+              /* The board's own record first: it is what the engine placed
+                 them by. The live reading fills the provisional window, where
+                 there is no board to have recorded anything. */
+              tappedAt: s.tappedAt ?? readiness?.tappedAt ?? null,
+              ftw: readiness?.ftw ?? null,
             };
           }),
           buses,

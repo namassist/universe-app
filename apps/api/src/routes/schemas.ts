@@ -989,6 +989,26 @@ export const FleetDisplayUnitSchema = t.Object({
   employeePhotoFile: t.Nullable(t.String()),
   source: t.Nullable(t.UnionEnum(["plan", "spare", "manual"] as const)),
   tappedAt: t.Nullable(t.String()),
+  /**
+   * The FTW verdict for this pairing, or null when the timeline could not say
+   * where the deadlines are and the wall declines to guess.
+   *
+   * Six values rather than pass/not-pass, because this screen is read by the
+   * person it is about: "belum" sends them to fill the form in, "tidak lolos"
+   * must not. `not-required` is its own value so a unit whose `ftw` flag is off
+   * carries no FTW badge at all, rather than a reassuring green one that stands
+   * for a check nobody made.
+   */
+  ftw: t.Nullable(
+    t.UnionEnum([
+      "pass",
+      "fail",
+      "late",
+      "missing",
+      "unreadable",
+      "not-required",
+    ] as const)
+  ),
 });
 
 /**

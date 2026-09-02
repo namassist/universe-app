@@ -67,6 +67,50 @@ function toneOf(unit: FleetDisplayUnit): {
 }
 
 /**
+ * The FTW verdict, as a badge the person it is about can act on.
+ *
+ * Not collapsed to pass/not-pass, and the reason is the provisional window:
+ * before the board is generated the wall shows the standing plan, so the
+ * operator reading it may well be one savera has already refused. "Belum FTW"
+ * would send them to fill in a form they already filled in, and up onto a unit
+ * they must not take — the exact opposite of what the screen is for.
+ *
+ * `not-required` renders nothing at all rather than a green badge: the unit
+ * never asked for FTW, and a reassuring mark standing for a check nobody made
+ * is worse than silence.
+ */
+const FTW_BADGE: Record<
+  NonNullable<FleetDisplayUnit["ftw"]>,
+  { tone: DisplayTone; label: string } | null
+> = {
+  pass: { tone: "success", label: "Lolos FTW" },
+  missing: { tone: "neutral", label: "Belum FTW" },
+  fail: { tone: "danger", label: "Tidak lolos FTW" },
+  late: { tone: "warning", label: "FTW terlambat" },
+  unreadable: { tone: "warning", label: "FTW tak terbaca" },
+  "not-required": null,
+};
+
+/**
+ * The tap, as a time or its absence — green once it exists, neutral until then
+ * (owner, 2026-09-02).
+ *
+ * The pair reads as one sentence with the FTW badge beside it: neutral is what
+ * is still owed, green is what is done. Green here means "tapped", not "tapped
+ * in time" — the wall holds the moment, not the verdict — and the deliberate
+ * consequence is that a late arrival shows a green time. That is the operator's
+ * own clock to read; the board is where lateness is actually decided.
+ */
+function fingerBadge(unit: FleetDisplayUnit): {
+  tone: DisplayTone;
+  label: string;
+} {
+  return unit.tappedAt
+    ? { tone: "success", label: unit.tappedAt.slice(0, 5) }
+    : { tone: "neutral", label: "Belum finger" };
+}
+
+/**
  * Cards per page, and the shape of the grid holding them.
  *
  * Columns come from the count rather than a breakpoint, so a formation of five
@@ -250,21 +294,45 @@ function UnitCard({
           >
             {unit.employeeName ?? "Belum ada operator"}
           </div>
+          {/* NIK and readiness on one line: the identity and what it still
+              owes are read together, and stacking them cost a row of height
+              that a quadrant on a monitor wall does not have to spare.
+
+              `items-center`, not `items-baseline` — a pill has no baseline to
+              share with the digits beside it, and aligning to one sits it low.
+
+              The badges matter most before the board exists. Between a shift's
+              changeover and `spare-validate` the wall shows the standing plan,
+              and for the operator walking to the gate "Belum FTW" and "Belum
+              finger" are the whole of what they still owe. */}
           <div
             className={cn(
-              "mt-0.5 flex items-baseline gap-2.5 font-mono text-(--text-secondary) tabular-nums",
-              compact ? "text-[11px]" : "text-base"
+              "mt-0.5 flex min-w-0 flex-wrap items-center font-mono text-(--text-secondary) tabular-nums",
+              compact ? "gap-1.5 text-[11px]" : "gap-2 text-base"
             )}
           >
             {unit.employeeNik ? <span>{unit.employeeNik}</span> : null}
-            {/* The tap time, because it is the half of the pass rule a
-                supervisor can act on — a name with no time is someone the
-                board placed off the plan, not someone who arrived. */}
-            {unit.tappedAt ? (
-              <span className="text-(--text-tertiary)">
-                {unit.tappedAt.slice(0, 5)}
-              </span>
-            ) : null}
+            {/* Only where there is somebody they are about: an idle unit is
+                already saying the one thing it has to say. */}
+            {unit.employeeName
+              ? [unit.ftw ? FTW_BADGE[unit.ftw] : null, fingerBadge(unit)]
+                  .filter(
+                    (badge): badge is { tone: DisplayTone; label: string } =>
+                      !!badge
+                  )
+                  .map((badge) => (
+                    <DisplayBadge
+                      key={badge.label}
+                      tone={badge.tone}
+                      className={cn(
+                        "flex-none gap-1 py-0.5 font-mono [&>span]:size-1.5",
+                        compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
+                      )}
+                    >
+                      {badge.label}
+                    </DisplayBadge>
+                  ))
+              : null}
           </div>
         </div>
       </div>
