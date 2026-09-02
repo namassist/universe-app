@@ -172,6 +172,22 @@ A container started with the right value but built with the wrong one boots
 perfectly and fails every request. If the app loads but nothing works, this is
 the first thing to check.
 
+### The other API address
+
+`NEXT_PUBLIC_API_URL` is the address a **browser** uses. Server Components
+render inside the `web` container, and from there that address means leaving for
+the host's published port and coming back in through the proxy — a route the
+compose network need not have. Server-side renders therefore use
+`INTERNAL_API_URL` (`http://api:3001`), set on the `web` service. It is read at
+runtime, so redirecting server-to-server traffic never requires rebuilding the
+browser bundle.
+
+The symptom when this is missing is specific and misleading: login succeeds —
+the POST returns 200 and sets the cookie — and then the button sits on
+"Checking..." forever, because the navigation to `/dashboard` issues an RSC
+request whose server-side session read never completes. Nothing in the API log
+looks wrong, because the API was never reached.
+
 ## Backups
 
 The database and the uploaded files are separate, and a backup of one without

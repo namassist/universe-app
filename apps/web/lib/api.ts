@@ -70,7 +70,13 @@ export async function serverApi() {
     .getAll()
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
-  return treaty<App>(API_URL, {
+  // `API_URL` is the address a *browser* uses, and on a containerised
+  // deployment the server cannot reach itself at it — that address resolves to
+  // the host's published port, back through the reverse proxy, over a route the
+  // app's own network need not have. Read at runtime, so redirecting
+  // server-to-server traffic never requires rebuilding the browser bundle.
+  const base = process.env.INTERNAL_API_URL || API_URL;
+  return treaty<App>(base, {
     ...PARSE_DATE,
     headers: header ? { cookie: header } : undefined,
   });

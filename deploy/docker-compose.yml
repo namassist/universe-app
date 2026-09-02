@@ -124,6 +124,12 @@ services:
         NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN}
     image: universe-web:latest
     restart: unless-stopped
+    environment:
+      # Server Components render inside this container, where PUBLIC_ORIGIN —
+      # the host's published port, reached back through the proxy — need not be
+      # routable. The browser bundle is unaffected: it keeps the build-time
+      # NEXT_PUBLIC_API_URL above.
+      INTERNAL_API_URL: http://api:3001
     depends_on:
       - api
 
