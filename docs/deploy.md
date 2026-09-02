@@ -254,6 +254,13 @@ returns A records), not in this repository.
 
 ## Known sharp edges
 
+- **`TZ` is not optional.** Shift boundaries, roster dates and every scheduler
+  stage are compared against the container's local clock, which defaults to UTC.
+  Leave it unset on a WITA site and the wall shows the wrong shift for eight
+  hours of every day, and the stages that generate boards fire at the wrong
+  hour — neither of which reports an error, because nothing is malformed. It is
+  set on `api` and `web` from `TZ` in `.env`.
+
 - **Redis holds the sessions.** It has a password here, but it is still a
   single point of failure: flush it and everyone is logged out. That is
   recoverable — people log in again — but do not point another project at the
