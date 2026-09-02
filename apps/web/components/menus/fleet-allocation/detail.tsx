@@ -653,10 +653,13 @@ function CandidatePicker({
                         {c.sentAt ? ` ${c.sentAt.slice(0, 5)}` : ""}
                       </Badge>
                     ) : (
+                      /* The bare verdict when nothing else stands in the way:
+                         FTW has its own column now and the tap has another, so
+                         spelling either out again here said the same thing a
+                         third time — in raw enum words nobody translated. */
                       <span title={c.refusal ?? undefined}>
                         <Badge variant="danger" dot>
-                          {c.refusal ??
-                            `${t.faActNotReady} · ${c.finger}/${c.ftw}`}
+                          {c.refusal ?? t.faActNotReady}
                         </Badge>
                       </span>
                     )}

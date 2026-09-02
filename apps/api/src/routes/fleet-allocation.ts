@@ -350,6 +350,18 @@ export type AllocPerson = NonNullable<Awaited<ReturnType<typeof personByNik>>>;
  * neither place.
  *
  * Returns the refusal message, or null when the pairing is sound.
+ *
+ * The message names the *unit's* requirement and nothing about the person
+ * (owner, 2026-09-02). Every caller already has them: the picker dialog puts
+ * the name in the first column of the same row, the import report carries `nik`
+ * and `emp` as their own fields beside the issue, and the single-slot route
+ * answers a supervisor who chose that operator a second earlier. Repeating it
+ * inside the sentence only widened a badge that has to sit in a table cell.
+ *
+ * Short for the same reason. The advice these used to end with — "tandai
+ * posisinya di master Posisi", "perpanjang dulu" — is a thing to do about the
+ * refusal rather than the refusal itself, and it was being read in a place with
+ * no room for it.
  */
 export function pairingRefusal(
   unit: AllocUnit,
@@ -361,17 +373,15 @@ export function pairingRefusal(
     today: string;
   }
 ): string | null {
-  if (person.statusValue !== "aktif")
-    return `Karyawan ${person.nik} sudah tidak aktif`;
+  if (person.statusValue !== "aktif") return "Karyawan sudah tidak aktif";
   if (!person.fleetAllocation)
-    return `Posisi "${person.positionName}" tidak masuk alokasi fleet — tandai posisinya di master Posisi bila memang seharusnya`;
+    return `Posisi "${person.positionName}" tidak masuk alokasi fleet`;
   if (unit.departmentId && person.departmentId !== unit.departmentId)
-    return `Unit ${unit.code} milik departemen "${unit.departmentName}" — operatornya harus dari departemen itu`;
+    return `Beda departemen — unit ini milik "${unit.departmentName}"`;
   if (unit.simperCodeId) {
-    if (!facts.holdsCode)
-      return `${person.name} tidak memegang kode SIMPER "${unit.simperCodeName}" yang unit ini butuhkan`;
+    if (!facts.holdsCode) return `Tidak punya SIMPER "${unit.simperCodeName}"`;
     if (person.simperExp !== null && person.simperExp < facts.today)
-      return `SIMPER ${person.name} kedaluwarsa ${person.simperExp} — perpanjang dulu sebelum dipasangkan`;
+      return `SIMPER kedaluwarsa ${person.simperExp}`;
   }
   return null;
 }
