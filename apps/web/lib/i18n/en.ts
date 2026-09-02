@@ -771,6 +771,12 @@ export const en: Dict = {
   faActFtwLate: "FTW late",
   faActNotReady: "Not ready",
   faActOnOther: "Already on another unit",
+  faActStatusAll: "All statuses",
+  faActSort: "Order",
+  faActSortTap: "Earliest tap",
+  faActSortTapLate: "Latest tap",
+  faActSortName: "Name A–Z",
+  faActSearch: "Search name or NIK…",
   faActPickB:
     "This list shows every operator rostered to the shift, including those who did not pass — with the reason. You may still place them.",
   faViaSpare: "Spare",

@@ -432,6 +432,32 @@ function lateOnly(c: {
 }
 
 /**
+ * Which of the three groups a candidate belongs to, and therefore where in the
+ * list they sit (owner, 2026-09-02).
+ *
+ * Ready first, already-placed second, refused last. The order is the order a
+ * supervisor decides in: the people who can take the unit right now, then the
+ * ones who could if you moved them off something else, then the ones you are
+ * only reading to understand why the seat is empty.
+ *
+ * The group always outranks the chosen sort. Sorting reorders *within* a
+ * group, because a name-ordered list that mixes a refused operator between two
+ * ready ones costs the reader the one distinction the dialog exists to make.
+ */
+const CANDIDATE_GROUPS = ["ready", "other", "blocked"] as const;
+type CandidateGroup = (typeof CANDIDATE_GROUPS)[number];
+
+function groupOf(c: {
+  ready: boolean;
+  refusal: string | null;
+  onAnotherUnit: boolean;
+}): CandidateGroup {
+  if (c.ready && !c.refusal && !c.onAnotherUnit) return "ready";
+  if (c.onAnotherUnit) return "other";
+  return "blocked";
+}
+
+/**
  * Everyone rostered to the shift, with what stands in their way spelled out
  * rather than filtered away — a supervisor overriding the engine is entitled
  * to see what the engine saw, and may place someone it refused.
@@ -455,13 +481,59 @@ function CandidatePicker({
   const candidatesQ = useQuery(
     actualCandidatesQueryOptions(date, shift, slot.unitId)
   );
-  const rows = candidatesQ.data ?? [];
+  const all = React.useMemo(() => candidatesQ.data ?? [], [candidatesQ.data]);
+
+  const [q, setQ] = React.useState("");
+  const [groupF, setGroupF] = React.useState<"" | CandidateGroup>("");
+  const [ftwF, setFtwF] = React.useState("");
+  const [sort, setSort] = React.useState<"tap" | "tapLate" | "name">("tap");
+
+  /* Offered only where they can discriminate: a filter whose every row shares
+     one value is a control that cannot change the answer, and on a dialog this
+     dense it costs more attention than it returns. */
+  const ftwOptions = React.useMemo(() => {
+    const seen = new Set(all.map((c) => c.ftw));
+    return (Object.keys(AUDIT_FTW) as (keyof typeof AUDIT_FTW)[])
+      .filter((v) => seen.has(v))
+      .map((v) => ({ value: v, label: t[AUDIT_FTW[v].key] }));
+  }, [all, t]);
+
+  const rows = React.useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const kept = all.filter((c) => {
+      if (groupF && groupOf(c) !== groupF) return false;
+      if (ftwF && c.ftw !== ftwF) return false;
+      if (!needle) return true;
+      return (
+        c.name.toLowerCase().includes(needle) ||
+        c.nik.toLowerCase().includes(needle)
+      );
+    });
+    /* A copy: `all` is react-query's cached array, and sorting in place would
+       mutate what every other reader of this query sees. */
+    return [...kept].sort((a, b) => {
+      const byGroup =
+        CANDIDATE_GROUPS.indexOf(groupOf(a)) -
+        CANDIDATE_GROUPS.indexOf(groupOf(b));
+      if (byGroup !== 0) return byGroup;
+      if (sort === "name") return a.name.localeCompare(b.name);
+      /* Never tapped sorts last under both tap orders, not first under one of
+         them: the absence of a tap is not an early tap, and a reversed sort
+         that floats it to the top reads as "arrived first". */
+      const at = a.tappedAt ?? "";
+      const bt = b.tappedAt ?? "";
+      if (!at !== !bt) return at ? -1 : 1;
+      const byTap =
+        sort === "tapLate" ? bt.localeCompare(at) : at.localeCompare(bt);
+      return byTap !== 0 ? byTap : a.name.localeCompare(b.name);
+    });
+  }, [all, q, groupF, ftwF, sort]);
 
   return (
     <Dialog
       open
       onClose={onClose}
-      className="w-[min(720px,100%)]"
+      className="w-[min(1060px,100%)]"
       labelledBy="fapick-t"
     >
       <DialogIcon variant="info">
@@ -472,12 +544,67 @@ function CandidatePicker({
       </DialogTitle>
       <DialogBody>{t.faActPickB}</DialogBody>
 
-      <div className="mt-4 max-h-[46vh] overflow-y-auto">
+      {/* One full-width row, search widest: on a shift of several hundred
+          rostered operators the supervisor usually arrives knowing who they
+          want, and the selects are for the times they do not. */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Select
+          aria-label={t.thStatus}
+          wrapperClassName="min-w-[150px] flex-1"
+          className="h-10 w-full"
+          value={groupF}
+          onChange={(e) => setGroupF(e.target.value as "" | CandidateGroup)}
+        >
+          <option value="">{t.faActStatusAll}</option>
+          <option value="ready">{t.faActReady}</option>
+          <option value="other">{t.faActOnOther}</option>
+          <option value="blocked">{t.faActNotReady}</option>
+        </Select>
+        {ftwOptions.length > 1 ? (
+          <Select
+            aria-label={t.faAuditFtw}
+            wrapperClassName="min-w-[150px] flex-1"
+            className="h-10 w-full"
+            value={ftwF}
+            onChange={(e) => setFtwF(e.target.value)}
+          >
+            <option value="">{t.faAuditFtwAll}</option>
+            {ftwOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        <Select
+          aria-label={t.faActSort}
+          wrapperClassName="min-w-[150px] flex-1"
+          className="h-10 w-full"
+          value={sort}
+          onChange={(e) =>
+            setSort(e.target.value as "tap" | "tapLate" | "name")
+          }
+        >
+          <option value="tap">{t.faActSortTap}</option>
+          <option value="tapLate">{t.faActSortTapLate}</option>
+          <option value="name">{t.faActSortName}</option>
+        </Select>
+        <SearchInput
+          className="w-auto min-w-[220px] flex-[2]"
+          placeholder={t.faActSearch}
+          aria-label={t.faActSearch}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </div>
+
+      <div className="mt-3 max-h-[46vh] overflow-y-auto">
         {rows.length ? (
           <Table>
             <TableHeader>
               <tr>
                 <TableHead>{t.faActThOp}</TableHead>
+                <TableHead>{t.faAuditFtw}</TableHead>
                 <TableHead>{t.faActThTap}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead />
@@ -491,6 +618,19 @@ function CandidatePicker({
                     <span className="ml-2 font-mono text-xs text-(--text-tertiary)">
                       {c.nik}
                     </span>
+                  </TableCell>
+                  {/* Its own column, not folded into the status badge: FTW is
+                      the half of the pass rule a supervisor can do something
+                      about, and reading it required opening another menu. */}
+                  <TableCell>
+                    <Badge variant={AUDIT_FTW[c.ftw].variant} dot>
+                      {t[AUDIT_FTW[c.ftw].key]}
+                    </Badge>
+                    {c.ftw === "late" && c.sentAt ? (
+                      <span className="ml-2 font-mono text-xs text-(--text-tertiary) tabular-nums">
+                        {c.sentAt.slice(0, 5)}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">
                     {c.tappedAt ?? "—"}
@@ -536,13 +676,23 @@ function CandidatePicker({
             </TableBody>
           </Table>
         ) : (
+          /* Two different emptinesses, said differently: nobody is rostered to
+             this shift at all, or the filters hid everyone. Reporting the
+             second as the first sends a supervisor looking at the roster for a
+             problem they created two seconds ago in this dialog. */
           <StateBox
             icon={<Users className="text-(--color-primary-bright)" />}
             title={t.noResTitle}
-            body={t.faActPickB}
+            body={all.length ? t.noResBody : t.faActPickB}
           />
         )}
       </div>
+
+      {all.length ? (
+        <div className="mt-2 text-right text-xs text-(--text-tertiary) tabular-nums">
+          {rows.length} / {all.length}
+        </div>
+      ) : null}
 
       <DialogActions>
         <Button variant="ghost" onClick={onClose}>

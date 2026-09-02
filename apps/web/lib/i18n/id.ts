@@ -768,6 +768,12 @@ export const id = {
   faActFtwLate: "FTW telat",
   faActNotReady: "Tidak lolos",
   faActOnOther: "Sudah di unit lain",
+  faActStatusAll: "Semua status",
+  faActSort: "Urutan",
+  faActSortTap: "Tap paling awal",
+  faActSortTapLate: "Tap paling akhir",
+  faActSortName: "Nama A–Z",
+  faActSearch: "Cari nama atau NIK…",
   faActPickB:
     "Daftar ini menampilkan semua operator yang dijadwalkan pada shift tersebut, termasuk yang tidak lolos — beserta alasannya. Anda tetap dapat menempatkan mereka.",
   faViaSpare: "Spare",
