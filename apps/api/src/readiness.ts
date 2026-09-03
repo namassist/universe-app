@@ -142,7 +142,18 @@ export type JudgeInput = {
 /** "2026-08-29 05:27:58" → "05:27:58". The source stores naive local times. */
 const timeOf = (stamp: string) => stamp.slice(11, 19);
 
-function judgeFtw(input: JudgeInput): FtwVerdict {
+/**
+ * The FTW half of the rule, on its own.
+ *
+ * Exported because the fit-to-work wall asks only this question — it has no
+ * unit and no tap to weigh — and a wall that re-implemented "what counts as
+ * late" would be a second definition of a rule that exists to have one.
+ */
+export function judgeFtw(input: {
+  ftw: JudgeInput["ftw"];
+  requiresFtw: boolean;
+  ftwDeadline: string;
+}): FtwVerdict {
   if (!input.requiresFtw) return "not-required";
   if (!input.ftw) return "missing";
 
@@ -173,7 +184,11 @@ function judgeFtw(input: JudgeInput): FtwVerdict {
     : "fail";
 }
 
-function judgeFinger(input: JudgeInput): FingerVerdict {
+/** The tap half, on its own — what the attendance wall asks. See `judgeFtw`. */
+export function judgeFinger(input: {
+  finger: JudgeInput["finger"];
+  deadline: string;
+}): FingerVerdict {
   const at = input.finger?.firstInAt;
   if (!at) return "missing";
   // Strictly before: the deadline is the moment the gate closes, not the last

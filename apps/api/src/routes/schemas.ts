@@ -1412,6 +1412,81 @@ export const AttendanceListSchema = t.Object({
   lastSyncedAt: t.Nullable(t.String()),
 });
 
+/* ------------------------------------------------- the readiness walls */
+
+/**
+ * What the attendance and fit-to-work TVs render.
+ *
+ * Two states share one shape, as on the fleet wall and for the same reason: a
+ * screen must render every answer, and an HTTP error renders as nothing. A
+ * null `date` means the timeline cannot say which shift is on; otherwise it is
+ * a shift, and an empty `rows` with a zero `total` means nobody is rostered
+ * onto it.
+ *
+ * `rows` is the exception list and is capped; the counts beside it are over
+ * the whole roster. They are meant to disagree — that is what tells a reader
+ * the screen is showing the worst of a larger number, not all of it.
+ */
+const WallEnvelope = {
+  servedAt: t.String(),
+  date: t.Nullable(t.String()),
+  shift: t.Nullable(ShiftKindSchema),
+  /** Everyone the active roster puts on this shift. */
+  total: t.Integer(),
+};
+
+export const AttendanceDisplaySchema = t.Object({
+  ...WallEnvelope,
+  /** Tapped in before this shift's `finger-in` gate. */
+  present: t.Integer(),
+  /** Tapped in, but at or after it. */
+  late: t.Integer(),
+  /** Rostered with no IN tap for this shift's half of the day. */
+  absent: t.Integer(),
+  rows: t.Array(
+    t.Object({
+      nik: t.String(),
+      name: t.String(),
+      position: t.Nullable(t.String()),
+      department: t.Nullable(t.String()),
+      verdict: t.UnionEnum(["pass", "late", "missing"] as const),
+      /** "HH:MM:SS" of the IN tap that counted, or null. */
+      tappedAt: t.Nullable(t.String()),
+    })
+  ),
+});
+
+export const FitWorkDisplaySchema = t.Object({
+  ...WallEnvelope,
+  /** Uploaded something, whatever it said. */
+  filed: t.Integer(),
+  passed: t.Integer(),
+  /** Filed but not accepted: refused, late, or a verdict we cannot read. */
+  refused: t.Integer(),
+  missing: t.Integer(),
+  rows: t.Array(
+    t.Object({
+      nik: t.String(),
+      name: t.String(),
+      position: t.Nullable(t.String()),
+      department: t.Nullable(t.String()),
+      verdict: t.UnionEnum([
+        "pass",
+        "fail",
+        "late",
+        "missing",
+        "unreadable",
+        "not-required",
+      ] as const),
+      /** savera's sleep minutes, null when nothing was filed. */
+      sleepMinutes: t.Nullable(t.Integer()),
+      sleepCategory: t.Nullable(t.String()),
+      /** "HH:MM:SS" the upload landed. */
+      sentAt: t.Nullable(t.String()),
+    })
+  ),
+});
+
 /* ----------------------------------------------------------- the dashboard */
 
 /**
