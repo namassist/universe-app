@@ -40,6 +40,7 @@ import {
 import { MAX_IMPORT_BYTES } from "./import-columns";
 import {
   ErrorSchema,
+  FleetBulkDeleteResultSchema,
   FleetImportPreviewSchema,
   FleetSchema,
   ImportResultSchema,
@@ -683,6 +684,48 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         422: ErrorSchema,
       },
       detail: { summary: "Edit a fleet, replacing its member list" },
+    }
+  )
+
+  /**
+   * Delete a hand-picked selection of formations.
+   *
+   * One statement, unlike the master catalogues' and the unit registry's bulk
+   * deletes: nothing can refuse a fleet. Its two referrers — membership rows
+   * and the display bindings — both cascade, and the units themselves are
+   * untouched, so there is no per-id outcome to report and no reason to pay
+   * for partial success.
+   *
+   * `POST …/bulk-delete` rather than `DELETE /fleets`: the latter reads as
+   * "delete every formation", and bodies on DELETE are poorly supported by
+   * proxies.
+   */
+  .post(
+    "/bulk-delete",
+    async ({ body }) => {
+      // Distinct, so a caller that sends the same fleet twice cannot inflate
+      // the count it gets back.
+      const ids = [...new Set(body.ids)];
+      await db.delete(schema.fleets).where(inArray(schema.fleets.id, ids));
+      // Ids already gone count as deleted: the end state the caller asked for
+      // holds, and a list left open for a while should not read as a failure.
+      return { deleted: ids.length };
+    },
+    {
+      auth: { menu: "fleet-setting", mode: "manage" },
+      body: t.Object({
+        ids: t.Array(t.String({ format: "uuid" }), {
+          minItems: 1,
+          maxItems: 200,
+        }),
+      }),
+      response: {
+        200: FleetBulkDeleteResultSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Delete several fleets at once" },
     }
   )
 

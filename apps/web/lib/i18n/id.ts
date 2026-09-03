@@ -727,6 +727,12 @@ export const id = {
   flToastAdd: "Fleet ditambahkan",
   flToastEdit: "Fleet diperbarui",
   flToastDel: "Fleet dihapus",
+  flSelAll: "Pilih semua fleet di halaman ini",
+  flSelRow: "Pilih fleet ini",
+  flBulkDelT: "Hapus fleet terpilih?",
+  flBulkDelB:
+    "Formasi dihapus sekaligus — unit-unitnya kembali jadi unit lepas di papan alokasi.",
+  flBulkDelToast: "formasi fleet dihapus",
   faKompNone: "Kompetensi tidak sesuai unit ini",
   faModePlan: "Plan",
   faModeActual: "Actual",

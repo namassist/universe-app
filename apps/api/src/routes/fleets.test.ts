@@ -476,3 +476,99 @@ describe("the no-fleet entry", () => {
     expect(response.status).not.toBe(200);
   });
 });
+
+/* ------------------------------------------------------------ bulk delete */
+
+/**
+ * Disbanding a ticked selection in one go.
+ *
+ * Its own fixtures rather than the shared ones: the suites above consume the
+ * module-level units as they go, and a bulk delete has to be able to say
+ * exactly which formations it removed.
+ */
+describe("several formations disband at once", () => {
+  let fleetA = "";
+  let fleetB = "";
+  let hauler = { id: "", code: "" };
+
+  beforeAll(async () => {
+    const refs = {
+      classId: made.catalogues.find((c) => c.table === "classes")!.id,
+      modelId: made.catalogues.find((c) => c.table === "models")!.id,
+      brandId: made.catalogues.find((c) => c.table === "brands")!.id,
+    };
+    const typeId = made.catalogues.find((c) => c.table === "types")!.id;
+
+    const digA = await makeUnit(`ZZBX1${uid()}`, typeId, refs);
+    const digB = await makeUnit(`ZZBX2${uid()}`, typeId, refs);
+    hauler = await makeUnit(`ZZBH1${uid()}`, typeId, refs);
+    const haulerB = await makeUnit(`ZZBH2${uid()}`, typeId, refs);
+
+    fleetA = (
+      await createFleet({
+        diggerUnitId: digA.id,
+        workAreaId: miningArea,
+        unitIds: [hauler.id],
+      })
+    ).id;
+    fleetB = (
+      await createFleet({
+        diggerUnitId: digB.id,
+        workAreaId: miningArea,
+        unitIds: [haulerB.id],
+      })
+    ).id;
+  });
+
+  test("a viewer may not", async () => {
+    const response = await send("POST", "/fleets/bulk-delete", viewer.cookie, {
+      ids: [fleetA],
+    });
+    expect(response.status).toBe(403);
+  });
+
+  test("both go, their members are released, and the units survive", async () => {
+    const response = await send("POST", "/fleets/bulk-delete", admin.cookie, {
+      ids: [fleetA, fleetB],
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ deleted: 2 });
+
+    const rows = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .where(inArray(schema.fleets.id, [fleetA, fleetB]));
+    expect(rows).toEqual([]);
+
+    const memberships = await db
+      .select()
+      .from(schema.fleetUnits)
+      .where(inArray(schema.fleetUnits.fleetId, [fleetA, fleetB]));
+    expect(memberships).toEqual([]);
+
+    // The point of the whole screen: the machines outlive the formation.
+    const [unit] = await db
+      .select({ id: schema.units.id })
+      .from(schema.units)
+      .where(eq(schema.units.id, hauler.id));
+    expect(unit).toBeDefined();
+  });
+
+  test("an id already gone still counts as deleted", async () => {
+    // The end state the caller asked for holds. A list left open while someone
+    // else disbanded a fleet should not read as a failed delete.
+    const response = await send("POST", "/fleets/bulk-delete", admin.cookie, {
+      ids: [fleetA, fleetA, crypto.randomUUID()],
+    });
+    expect(response.status).toBe(200);
+    // Two distinct ids, not three: the repeat cannot inflate the count.
+    expect(await response.json()).toEqual({ deleted: 2 });
+  });
+
+  test("an empty selection is refused rather than treated as all", async () => {
+    const response = await send("POST", "/fleets/bulk-delete", admin.cookie, {
+      ids: [],
+    });
+    expect(response.status).toBe(422);
+  });
+});

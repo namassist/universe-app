@@ -711,6 +711,18 @@ export const NoFleetSchema = t.Object({
   units: t.Array(t.Object({ id: t.String(), code: t.String() })),
 });
 
+/**
+ * What a bulk fleet delete reports back.
+ *
+ * A count and nothing else, unlike the master and unit results next to it:
+ * nothing can refuse a fleet — both of its referrers cascade — so there is no
+ * refused list to carry. `deleted` is the number of distinct ids asked for,
+ * including any that were already gone.
+ */
+export const FleetBulkDeleteResultSchema = t.Object({
+  deleted: t.Integer(),
+});
+
 /* ------------------------------------------------------------------ employees */
 
 /** A qualification code an employee holds — key and name, like every reference. */

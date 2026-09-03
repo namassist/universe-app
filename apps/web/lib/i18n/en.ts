@@ -730,6 +730,12 @@ export const en: Dict = {
   flToastAdd: "Fleet added",
   flToastEdit: "Fleet updated",
   flToastDel: "Fleet deleted",
+  flSelAll: "Select every fleet on this page",
+  flSelRow: "Select this fleet",
+  flBulkDelT: "Delete the selected fleets?",
+  flBulkDelB:
+    "The formations go at once — their units return to the allocation board as loose units.",
+  flBulkDelToast: "fleet formations deleted",
   faKompNone: "Competency does not match this unit",
   faModePlan: "Plan",
   faModeActual: "Actual",

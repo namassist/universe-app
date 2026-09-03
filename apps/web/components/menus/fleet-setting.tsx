@@ -75,6 +75,9 @@ const isDigger = (u: UnitRow) =>
 /** Label tipe unit ringkas: "model · merk". */
 const unitTypeLabel = (u: UnitRow) => `${u.modelName} · ${u.brandName}`;
 
+/** Matches `maxItems` on the bulk-delete route; see the mutation for why. */
+const BULK_CHUNK = 200;
+
 export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
@@ -161,6 +164,14 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [errUnits, setErrUnits] = React.useState("");
   const [delTarget, setDelTarget] = React.useState<FleetRow | null>(null);
 
+  /**
+   * Selection is a set of ids, not of rows: the list is refetched after every
+   * write, and holding row objects would keep a tick attached to a stale copy
+   * of a formation whose members have since changed underneath it.
+   */
+  const [sel, setSel] = React.useState<ReadonlySet<string>>(() => new Set());
+  const [bulkOpen, setBulkOpen] = React.useState(false);
+
   // no-fleet dialog — a read-only list; membership is derived, not chosen
   const [nfOpen, setNfOpen] = React.useState(false);
   const [nfQ, setNfQ] = React.useState("");
@@ -214,9 +225,44 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       await invalidate();
       pushToast("success", t.flToastDel, row.diggerCode);
       setDelTarget(null);
+      setSel((prev) => {
+        if (!prev.has(row.id)) return prev;
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
     },
     onError: (error) =>
       pushToast("error", t.flDelT, errorMessage(error, t.loginErr)),
+  });
+
+  const bulkDel = useMutation({
+    /**
+     * Chunked to the endpoint's own `maxItems`, so a selection accumulated
+     * across pages cannot fail as a whole on a cap the operator never sees.
+     */
+    mutationFn: async (ids: string[]) => {
+      let deleted = 0;
+      for (let i = 0; i < ids.length; i += BULK_CHUNK) {
+        const result = await api.v1.fleets["bulk-delete"].post({
+          ids: ids.slice(i, i + BULK_CHUNK),
+        });
+        if (result.error) throw result.error;
+        deleted += result.data.deleted;
+      }
+      return deleted;
+    },
+    onSuccess: (deleted) => {
+      setBulkOpen(false);
+      setSel(new Set());
+      pushToast("success", t.flToastDel, `${deleted} ${t.flBulkDelToast}`);
+    },
+    onError: (error) =>
+      pushToast("error", t.flDelT, errorMessage(error, t.loginErr)),
+    // In `onSettled` rather than `onSuccess`: a chunk that throws may still
+    // have been preceded by chunks that landed, and the list has to catch up
+    // either way.
+    onSettled: () => invalidate(),
   });
 
   const [listQ, setListQ] = React.useState("");
@@ -230,6 +276,39 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       )
     : fleets;
   const pg = usePagination(listRows, "5");
+
+  // Resolved against the whole list rather than the filtered one, so typing in
+  // the search box does not silently drop formations already ticked on another
+  // page. Ids that no longer exist fall out here without needing to be pruned.
+  const selectedIds = React.useMemo(
+    () => fleets.filter((f) => sel.has(f.id)).map((f) => f.id),
+    [fleets, sel]
+  );
+
+  // The header checkbox governs the page, not the whole filtered set: ticking
+  // one box and silently arming a delete over formations on four other pages
+  // is the kind of help nobody asks for. Selections still accumulate.
+  const pageIds = pg.rows.map((f) => f.id);
+  const allPageSel = pageIds.length > 0 && pageIds.every((id) => sel.has(id));
+  const somePageSel = pageIds.some((id) => sel.has(id));
+
+  function toggleRow(id: string) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+  function togglePage() {
+    setSel((prev) => {
+      const next = new Set(prev);
+      for (const id of pageIds) {
+        if (allPageSel) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
 
   const diggerTypeOf = (code: string) => DIGGERS[code] ?? "—";
   const diggerOpts = Object.keys(DIGGERS)
@@ -383,11 +462,33 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
               value={listQ}
               onChange={(e) => setListQ(e.target.value)}
             />
+            {/* Appended rather than prepended so the search box keeps its
+                position when a selection appears and disappears. */}
+            {canW && selectedIds.length ? (
+              <Button variant="destructive" onClick={() => setBulkOpen(true)}>
+                <Trash2 />
+                {t.mdBulkDel} ({selectedIds.length})
+              </Button>
+            ) : null}
           </ToolbarGroup>
         </Toolbar>
         <Table>
           <TableHeader>
             <tr>
+              {canW ? (
+                <TableHead style={{ width: 44 }}>
+                  <Checkbox
+                    ref={(el) => {
+                      // Indeterminate is a DOM property, not an attribute —
+                      // there is no way to express it in JSX.
+                      if (el) el.indeterminate = somePageSel && !allPageSel;
+                    }}
+                    checked={allPageSel}
+                    onChange={togglePage}
+                    aria-label={t.flSelAll}
+                  />
+                </TableHead>
+              ) : null}
               <TableHead>Fleet</TableHead>
               <TableHead>{t.flLoc}</TableHead>
               <TableHead className="max-xl:hidden">{t.flBus}</TableHead>
@@ -407,6 +508,9 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 result that does not match. */}
             {!listNeedle ? (
               <TableRow>
+                {/* Empty rather than absent: there is no record here to
+                    delete, and the columns still have to line up. */}
+                {canW ? <TableCell /> : null}
                 <TableCell>
                   <NameCell name={t.flNoFleet} sub={t.flNoFleetSub} />
                 </TableCell>
@@ -449,7 +553,16 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
               </TableRow>
             ) : null}
             {pg.rows.map((f) => (
-              <TableRow key={f.id}>
+              <TableRow key={f.id} selected={sel.has(f.id)}>
+                {canW ? (
+                  <TableCell>
+                    <Checkbox
+                      checked={sel.has(f.id)}
+                      onChange={() => toggleRow(f.id)}
+                      aria-label={`${t.flSelRow} — ${f.diggerCode}`}
+                    />
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <NameCell
                     name={f.diggerCode}
@@ -749,6 +862,33 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             }}
           >
             {t.empDelDo}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog hapus beberapa fleet sekaligus */}
+      <Dialog
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        labelledBy="flb-t"
+      >
+        <DialogIcon variant="danger">
+          <Trash2 />
+        </DialogIcon>
+        <DialogTitle id="flb-t">{t.flBulkDelT}</DialogTitle>
+        <DialogBody>
+          <b>{selectedIds.length}</b> {t.flSumB} — {t.flBulkDelB}
+        </DialogBody>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setBulkOpen(false)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={bulkDel.isPending || !selectedIds.length}
+            onClick={() => bulkDel.mutate(selectedIds)}
+          >
+            {t.mdBulkDel}
           </Button>
         </DialogActions>
       </Dialog>
