@@ -42,6 +42,8 @@ let miningName = "";
 let officeName = "";
 let busTypeId = "";
 let busTypeCreated = false;
+let manhaulTypeId = "";
+let manhaulTypeCreated = false;
 
 let digger1 = { id: "", code: "" };
 let digger2 = { id: "", code: "" };
@@ -51,6 +53,7 @@ let hauler2 = { id: "", code: "" };
 let hauler3 = { id: "", code: "" };
 let hauler4 = { id: "", code: "" };
 let busUnit = { id: "", code: "" };
+let manhaulUnit = { id: "", code: "" };
 
 /* ------------------------------------------------------------- fixtures */
 
@@ -178,6 +181,22 @@ beforeAll(async () => {
     busTypeCreated = true;
   }
 
+  const [existingManhaul] = await db
+    .select({ id: schema.unitTypes.id })
+    .from(schema.unitTypes)
+    .where(sql`lower(${schema.unitTypes.name}) = 'manhaul truck'`)
+    .limit(1);
+  if (existingManhaul) {
+    manhaulTypeId = existingManhaul.id;
+  } else {
+    const [created] = await db
+      .insert(schema.unitTypes)
+      .values({ name: "MANHAUL TRUCK" })
+      .returning({ id: schema.unitTypes.id });
+    manhaulTypeId = created!.id;
+    manhaulTypeCreated = true;
+  }
+
   miningName = `${tag} PIT`;
   officeName = `${tag} OFFICE`;
   const [mining] = await db
@@ -199,6 +218,7 @@ beforeAll(async () => {
   hauler3 = await makeUnit(`ZZFT3${uid()}`, typ!.id, refs);
   hauler4 = await makeUnit(`ZZFT4${uid()}`, typ!.id, refs);
   busUnit = await makeUnit(`ZZFB1${uid()}`, busTypeId, refs);
+  manhaulUnit = await makeUnit(`ZZFM1${uid()}`, manhaulTypeId, refs);
 });
 
 afterAll(async () => {
@@ -230,6 +250,10 @@ afterAll(async () => {
   }
   if (busTypeCreated)
     await db.delete(schema.unitTypes).where(eq(schema.unitTypes.id, busTypeId));
+  if (manhaulTypeCreated)
+    await db
+      .delete(schema.unitTypes)
+      .where(eq(schema.unitTypes.id, manhaulTypeId));
   if (made.workAreas.length)
     await db
       .delete(schema.workAreas)
@@ -331,6 +355,14 @@ describe("validation previews without writing", () => {
     expect(issues).toContain("ZZNOPE98");
     expect(issues).toContain("Mining");
     expect(issues).toContain("BUS");
+  });
+
+  test("a manhaul truck is transport too, not only a bus", async () => {
+    const preview = await validate([
+      [digger1.code, miningName, manhaulUnit.code, hauler1.code],
+    ]);
+    expect(preview.errorCount).toBe(0);
+    expect(preview.rows[0]).toMatchObject({ bus: manhaulUnit.code });
   });
 
   test("a digger cannot haul — for itself, or in another row", async () => {

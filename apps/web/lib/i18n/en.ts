@@ -705,7 +705,7 @@ export const en: Dict = {
   flEditT: "Edit Fleet",
   flSaveAdd: "Save fleet",
   flLoc: "Work location",
-  flBus: "Default bus",
+  flBus: "Default transport",
   flUnits: "Units in fleet",
   flUnitsHelp:
     "Pick from the Unit Database — units already used by another fleet are hidden.",

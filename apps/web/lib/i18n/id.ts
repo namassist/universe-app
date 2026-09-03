@@ -702,7 +702,7 @@ export const id = {
   flEditT: "Edit Fleet",
   flSaveAdd: "Simpan fleet",
   flLoc: "Lokasi kerja",
-  flBus: "Bus default",
+  flBus: "Angkutan default",
   flUnits: "Unit dalam fleet",
   flUnitsHelp:
     "Pilih dari Database Unit — unit yang sudah dipakai fleet lain tidak muncul.",

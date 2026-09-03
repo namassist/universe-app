@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
 
-import { FLEET_MAX_UNITS, FLEET_MIN_UNITS } from "@universe/contracts";
+import {
+  FLEET_MAX_UNITS,
+  FLEET_MIN_UNITS,
+  FLEET_TRANSPORT_TYPE_NAMES,
+} from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
@@ -71,8 +75,6 @@ const isDigger = (u: UnitRow) =>
 /** Label tipe unit ringkas: "model · merk". */
 const unitTypeLabel = (u: UnitRow) => `${u.modelName} · ${u.brandName}`;
 
-const BUS_TYPE_NAME = "BUS";
-
 export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
@@ -113,10 +115,22 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     [units]
   );
   const OHT_POOL = React.useMemo(() => Object.keys(OHT_TYPE), [OHT_TYPE]);
-  /* Kode bus dari unit berjenis BUS — kosong sampai unit BUS ada di master. */
-  const BUS_OPTS = React.useMemo(
-    () => units.filter((u) => u.typeName === BUS_TYPE_NAME).map((u) => u.code),
+  /* Angkutan fleet: bus, dan manhaul truck yang mengantar ke lokasi juga.
+     Dikelompokkan per jenis — MH1001 di antara UD-BU07 dan UD-BU08 terlihat
+     seperti kesalahan data sampai jenisnya ikut tertulis. */
+  const BUS_GROUPS = React.useMemo(
+    () =>
+      FLEET_TRANSPORT_TYPE_NAMES.map((name) => ({
+        name,
+        codes: units
+          .filter((u) => u.typeName.trim().toUpperCase() === name)
+          .map((u) => u.code),
+      })).filter((g) => g.codes.length),
     [units]
+  );
+  const BUS_OPTS = React.useMemo(
+    () => BUS_GROUPS.flatMap((g) => g.codes),
+    [BUS_GROUPS]
   );
   /* Lokasi kerja = area kerja bertipe Mining (lokasi operasi fleet). */
   const MINING_AREAS = React.useMemo(
@@ -544,12 +558,18 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 onChange={(e) => setFBus(e.target.value)}
               >
                 <option value="">
-                  {BUS_OPTS.length ? "— pilih bus —" : "— belum ada bus —"}
+                  {BUS_OPTS.length
+                    ? "— pilih angkutan —"
+                    : "— belum ada bus/manhaul —"}
                 </option>
-                {BUS_OPTS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
+                {BUS_GROUPS.map((g) => (
+                  <optgroup key={g.name} label={g.name}>
+                    {g.codes.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </Select>
             </Field>

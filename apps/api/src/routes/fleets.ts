@@ -23,6 +23,8 @@ import { Elysia, t } from "elysia";
 import {
   FLEET_MAX_UNITS,
   FLEET_MIN_UNITS,
+  FLEET_TRANSPORT_TYPES_TEXT,
+  isFleetTransportType,
   type FleetImportPreview,
 } from "@universe/contracts";
 
@@ -161,8 +163,8 @@ export async function refuseComposition(input: {
   if (missing.length)
     return `${missing.length} unit anggota tidak ada di master`;
 
-  if (busUnitId && byId.get(busUnitId)!.typeName !== "BUS")
-    return `Unit ${byId.get(busUnitId)!.code} bukan unit berjenis BUS`;
+  if (busUnitId && !isFleetTransportType(byId.get(busUnitId)!.typeName))
+    return `Unit ${byId.get(busUnitId)!.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`;
 
   const [area] = await db
     .select({ type: schema.workAreas.type })

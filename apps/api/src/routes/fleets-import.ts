@@ -15,6 +15,8 @@ import {
   FLEET_IMPORT_COLUMNS,
   FLEET_MAX_UNITS,
   FLEET_MIN_UNITS,
+  FLEET_TRANSPORT_TYPES_TEXT,
+  isFleetTransportType,
   type FleetImportChange,
   type FleetImportPreviewRow,
   type ImportErrorRow,
@@ -237,13 +239,13 @@ export async function validateFleetWorkbook(
         );
         continue;
       }
-      if (busUnit.typeName !== "BUS") {
+      if (!isFleetTransportType(busUnit.typeName)) {
         errors.push(
           danger(
             n,
             digger.code,
             busUnit.code,
-            `Unit ${busUnit.code} bukan unit berjenis BUS`
+            `Unit ${busUnit.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`
           )
         );
         continue;
