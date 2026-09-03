@@ -1046,6 +1046,51 @@ export const fleetActualDocuments = pgTable(
 );
 
 /**
+ * The formations of one board, copied from Fleet Setting when it was built.
+ *
+ * A copy, not a reference, and that is the whole point of the table. Fleet
+ * Setting describes *today* — a panel is opened, worked and abandoned within
+ * days, and admins reshuffle formations between shifts. A board describes one
+ * shift that has already happened. Reading the second through the first made
+ * the board lie twice over: a formation since deleted took its units off the
+ * TV entirely, and a digger reused in a new formation silently relabelled an
+ * old board with today's work area — a board that reads as correct and is not.
+ *
+ * So the digger code, the work area and the bus code are stored here as text,
+ * the same way `fleet_actual_slots` already stores the tap it decided by.
+ * `source_fleet_id` is a breadcrumb only — `set null` on delete, because the
+ * live formation going away must not take the record of the shift with it.
+ *
+ * Unique on (`document_id`, `digger_code`): a digger leads at most one fleet,
+ * so its code names the formation within a board without depending on an id
+ * that may no longer exist.
+ */
+export const fleetActualFleets = pgTable(
+  "fleet_actual_fleets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => fleetActualDocuments.id, { onDelete: "cascade" }),
+    /** Which live formation this was copied from, while it still exists. */
+    sourceFleetId: uuid("source_fleet_id").references(() => fleets.id, {
+      onDelete: "set null",
+    }),
+    diggerCode: text("digger_code").notNull(),
+    workArea: text("work_area").notNull(),
+    /** Null for a formation with no crew bus — a real state, not missing data. */
+    busCode: text("bus_code"),
+  },
+  (table) => [
+    uniqueIndex("fleet_actual_fleets_document_digger_idx").on(
+      table.documentId,
+      table.diggerCode
+    ),
+    index("fleet_actual_fleets_document_id_idx").on(table.documentId),
+  ]
+);
+
+/**
  * One unit's line on the board.
  *
  * `employee_id` is nullable and **null is the point**: a unit nobody could be
@@ -1071,6 +1116,16 @@ export const fleetActualSlots = pgTable(
     employeeId: uuid("employee_id").references(() => employees.id, {
       onDelete: "restrict",
     }),
+    /**
+     * The formation this unit was in *on this board*, as copied at generate
+     * time. Nullable because boards built before the snapshot existed have no
+     * copy to point at, and because nothing guarantees a future unit is in a
+     * formation at all.
+     */
+    boardFleetId: uuid("board_fleet_id").references(
+      () => fleetActualFleets.id,
+      { onDelete: "cascade" }
+    ),
     source: actualSlotSource("source"),
     /** "HH:MM:SS", site-local — the tap, not an instant on our clock. */
     tappedAt: time("tapped_at"),

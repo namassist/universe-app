@@ -74,6 +74,19 @@ the definition — when they disagree, the code wins. Change flow: edit
   distinguishable from "a supervisor did"; `tapped_at` is the fingerprint moment
   the FCFS order was decided by, so a placement can be explained later rather
   than only asserted. The board is never frozen and keeps no history (owner).
+- `fleet_actual_fleets` — the formations of one board, **copied** from Fleet
+  Setting when it was generated: `digger_code`, `work_area`, `bus_code` as
+  text, plus `source_fleet_id` as a breadcrumb (`set null` on delete, so a
+  disbanded formation cannot take the record of the shift with it). Unique on
+  (`document_id`, `digger_code`). `fleet_actual_slots.board_fleet_id` points
+  here, and every reader of a board — the Actual menu, its audit table, the
+  fleet TV — groups by this table rather than by `fleets`. Copied rather than
+  referenced because Fleet Setting describes _today_ and is rewritten between
+  shifts, while a board describes a shift that has already happened; reading
+  the second through the first erased old boards from the wall and relabelled
+  them with later work areas. Null on boards generated before the table
+  existed, which read as "no formation" — the honest answer for a record that
+  was never kept.
 - `fingerprint_machines` — the fingerprint machines on site: name, `ip`
   (**unique** — the address is the machine's identity, and what a reachability
   probe will dial), `active`. Owned here rather than read from Nakula's

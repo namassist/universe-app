@@ -65,6 +65,32 @@ path goes through the check; a hand-written `INSERT` does not.
 
 ## Closed
 
+### Reshuffling Fleet Setting rewrote every board already generated _(closed)_
+
+`fleet_actual_slots` stored the unit and the operator but not the formation, so
+"which fleet was this unit in" was re-derived from `fleets` on every read. Fleet
+Setting is rewritten between shifts — five formations in the morning, three
+different ones at night — and the past moved with it, in two directions at once.
+A disbanded formation made its units join no fleet, and the TV drops those
+silently (`groupIntoFleets`), so the morning board vanished from the wall
+entirely. Worse, a digger reused in a new formation pulled the old board into
+it: on the dev database a board from 2026-08-31 reported a work area first typed
+on 2026-09-03. The first reads as broken; the second reads as correct.
+
+**Symptom:** "the morning's allocation is gone" — but the list of boards still
+counts its units, and the Actual menu still lists every row, now under "no
+fleet". A supervisor checking a disputed shift sees the right operators against
+the wrong pit, or no pit at all.
+
+Now covered by `fleet_actual_fleets`: the board carries its own copy of its
+formations, written by `storeBoard` from what Fleet Setting said at generate
+time, and every reader groups by that copy. Pinned by `allocation.test.ts`
+("keeps the formation after Fleet Setting disbands it") and
+`routes/fleet-actual.test.ts` ("a board whose formation was disbanded
+afterwards"). Boards generated before the change keep no formation and are left
+that way — the record was never written, and borrowing today's is what the
+defect was.
+
 ### Renaming an employee's NIK orphaned the account holding it _(closed)_
 
 Nothing updated `users.nik`, so the account pointed at nobody and its holder

@@ -18,7 +18,7 @@ import {
   expect,
   test,
 } from "bun:test";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import type { EmployeeStatus } from "@universe/contracts";
 
@@ -906,6 +906,97 @@ describe("storing it", () => {
       .from(schema.fleetActualSlots)
       .where(eq(schema.fleetActualSlots.documentId, second));
     expect(stored.length).toBe(board.slots.length);
+  });
+
+  /**
+   * A board records a shift that has already happened; Fleet Setting records
+   * today. Reading the second through the first is what let an evening
+   * reshuffle erase the morning board from the wall and relabel it with an
+   * evening work area — a board that reads as correct and is not.
+   */
+  test("copies the formation onto the board rather than referencing it", async () => {
+    const date = nextDate();
+    await addUnit({ code: `${tag}-S1` });
+    const doc = await storeBoard(
+      await buildBoard(date, "day", DEADLINE, FTW_CLOSE)
+    );
+    made.docs.push(doc);
+
+    const [snap] = await db
+      .select()
+      .from(schema.fleetActualFleets)
+      .where(
+        and(
+          eq(schema.fleetActualFleets.documentId, doc),
+          eq(schema.fleetActualFleets.diggerCode, `${tag}-EX`)
+        )
+      );
+    // The words, not a pointer to where the words currently live.
+    expect(snap?.workArea).toBe(`${tag} Pit`);
+    expect(snap?.sourceFleetId).toBe(fleetId);
+
+    const stored = await db
+      .select()
+      .from(schema.fleetActualSlots)
+      .where(eq(schema.fleetActualSlots.documentId, doc));
+    const mineOnly = stored.filter((r) => made.units.includes(r.unitId));
+    expect(mineOnly.length).toBeGreaterThan(0);
+    // Every unit on the board is filed under a formation of *this* board.
+    for (const row of mineOnly) expect(row.boardFleetId).toBe(snap!.id);
+  });
+
+  test("keeps the formation after Fleet Setting disbands it", async () => {
+    const date = nextDate();
+    /* A formation of its own, disbanded mid-test — the admin who sets up five
+       fleets in the morning and three different ones at night. */
+    const [digger] = await db
+      .insert(schema.units)
+      .values({
+        code: `${tag}-EVE`,
+        classId: cls,
+        typeId: typ,
+        modelId: mdl,
+        brandId: brd,
+      })
+      .returning({ id: schema.units.id });
+    made.units.push(digger!.id);
+    const [evening] = await db
+      .insert(schema.fleets)
+      .values({ diggerUnitId: digger!.id, workArea: `${tag} Panel Malam` })
+      .returning({ id: schema.fleets.id });
+
+    const doc = await storeBoard(
+      await buildBoard(date, "day", DEADLINE, FTW_CLOSE)
+    );
+    made.docs.push(doc);
+    await db.delete(schema.fleets).where(eq(schema.fleets.id, evening!.id));
+
+    const [snap] = await db
+      .select()
+      .from(schema.fleetActualFleets)
+      .where(
+        and(
+          eq(schema.fleetActualFleets.documentId, doc),
+          eq(schema.fleetActualFleets.diggerCode, `${tag}-EVE`)
+        )
+      );
+    /* The formation is gone from Fleet Setting and the board still knows where
+       that unit worked. `source_fleet_id` is `set null`, so the breadcrumb
+       goes and the record does not. */
+    expect(snap).toBeDefined();
+    expect(snap!.workArea).toBe(`${tag} Panel Malam`);
+    expect(snap!.sourceFleetId).toBeNull();
+
+    const [slot] = await db
+      .select()
+      .from(schema.fleetActualSlots)
+      .where(
+        and(
+          eq(schema.fleetActualSlots.documentId, doc),
+          eq(schema.fleetActualSlots.unitId, digger!.id)
+        )
+      );
+    expect(slot?.boardFleetId).toBe(snap!.id);
   });
 
   test("a regenerated board is identical — placement is deterministic", async () => {

@@ -509,6 +509,25 @@ fill the gap from the spare pool.
 - The static port's mock (`ACTUAL_INIT`) and its "create then lock" flow are
   gone. There was never a lock — the board is generated twice a day and stays
   editable.
+- **A board carries its own copy of the formations it was built in** (owner,
+  2026-09-04). Generating writes the digger code, work area and bus code of
+  every formation onto the board itself (`fleet_actual_fleets`), and the Actual
+  menu, its audit table and the fleet TV all group by that copy rather than by
+  Fleet Setting. Fleet Setting describes today and is legitimately rewritten
+  between shifts — five formations in the morning, three different ones at
+  night — while a board describes a shift that has already happened. Reading
+  the second through the first erased the morning board from the wall when a
+  formation was disbanded, and silently relabelled it with a later work area
+  when a digger was reused.
+- **The copy is a copy, not a link.** Disbanding a formation leaves the board
+  intact and only clears the breadcrumb back to Fleet Setting. Boards generated
+  before this shipped carry no copy and read as "no formation": that record was
+  never written, and borrowing today's is exactly what the defect was.
+- **A TV scoped to particular formations shows only boards it can still match.**
+  A screen's picks name live fleets, so a board whose formation has been
+  disbanded drops off that screen — it was pointed at a pit that no longer
+  exists, and guessing a match would put the wrong pit on the wall. The board
+  still shows in full on an unscoped screen and on the Actual menu.
 
 ### The fleet wall (Display Fleet) — shipped
 

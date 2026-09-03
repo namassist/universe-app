@@ -169,6 +169,13 @@
       "when": 1788440791072,
       "tag": "0023_concerned_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788471627968,
+      "tag": "0024_violet_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

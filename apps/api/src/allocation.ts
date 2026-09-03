@@ -22,7 +22,8 @@
  * by the ingest stages; nothing here opens a socket to an external source.
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
@@ -44,11 +45,34 @@ export type BoardSlot = {
   tappedAt: string | null;
   /** Why the planned operator lost the unit, for the screen that shows it. */
   readiness: Readiness | null;
+  /**
+   * Which of the board's own formations this unit sat in, by digger code.
+   *
+   * The code rather than a fleet id, because the id is the thing that does not
+   * survive: `storeBoard` resolves it against the rows it has just written.
+   */
+  fleetDiggerCode: string | null;
+};
+
+/**
+ * One formation as it stood when the board was built.
+ *
+ * Copied onto the board rather than referenced, because Fleet Setting is
+ * rewritten between shifts and a board is a record of a shift that has already
+ * happened. See `fleet_actual_fleets` for the full reasoning.
+ */
+export type BoardFleet = {
+  /** The live formation it was copied from — a breadcrumb, not a dependency. */
+  sourceFleetId: string;
+  diggerCode: string;
+  workArea: string;
+  busCode: string | null;
 };
 
 export type Board = {
   date: string;
   shift: ShiftKind;
+  fleets: BoardFleet[];
   slots: BoardSlot[];
 };
 
@@ -170,6 +194,10 @@ async function skillsByEmployee(
 
 /* -------------------------------------------------------------- the board */
 
+/** The two units a formation is named and served by, joined per unit row. */
+const fleetDigger = alias(schema.units, "fleet_digger");
+const fleetBus = alias(schema.units, "fleet_bus");
+
 /**
  * Build one shift's board. Pure of side effects — `storeBoard` writes it.
  *
@@ -208,6 +236,18 @@ export async function buildBoard(
       requiresFtw: schema.units.ftw,
       /** Null for a unit the plan says nothing about. */
       employeeId: schema.fleetPlanSlots.employeeId,
+      /*
+       * The formation, read once here and then copied onto the board.
+       *
+       * `isFleetConfigured` below already guarantees every unit in this list
+       * is in one, so these are non-null in practice; the join is left outer
+       * because the compiler cannot know that and a crash on a board is worse
+       * than a null.
+       */
+      fleetId: schema.fleets.id,
+      fleetDiggerCode: fleetDigger.code,
+      fleetWorkArea: schema.fleets.workArea,
+      fleetBusCode: fleetBus.code,
     })
     .from(schema.units)
     .leftJoin(
@@ -222,6 +262,19 @@ export async function buildBoard(
       schema.simperCodes,
       eq(schema.simperCodes.id, schema.units.simperCodeId)
     )
+    /* A unit belongs to a formation by either route — leading it or hauling
+       for it — so the condition is an `or` rather than one foreign key. Both
+       columns are unique, so neither route can double a row. */
+    .leftJoin(schema.fleetUnits, eq(schema.fleetUnits.unitId, schema.units.id))
+    .leftJoin(
+      schema.fleets,
+      or(
+        eq(schema.fleets.diggerUnitId, schema.units.id),
+        eq(schema.fleets.id, schema.fleetUnits.fleetId)
+      )
+    )
+    .leftJoin(fleetDigger, eq(fleetDigger.id, schema.fleets.diggerUnitId))
+    .leftJoin(fleetBus, eq(fleetBus.id, schema.fleets.busUnitId))
     .where(
       and(
         eq(schema.units.active, true),
@@ -292,6 +345,26 @@ export async function buildBoard(
     byUnit.set(row.unitId, list);
   }
 
+  /*
+   * The formations this board is about, copied as they stand right now.
+   *
+   * Gathered from the same rows the slots are, so the board cannot end up
+   * naming a formation none of its units is in. Keyed by digger code because
+   * that is what a slot carries and what the yard calls the formation; the
+   * fleet id rides along only as a breadcrumb back to Fleet Setting.
+   */
+  const fleets = new Map<string, BoardFleet>();
+  for (const row of planned) {
+    if (!row.fleetId || !row.fleetDiggerCode || fleets.has(row.fleetDiggerCode))
+      continue;
+    fleets.set(row.fleetDiggerCode, {
+      sourceFleetId: row.fleetId,
+      diggerCode: row.fleetDiggerCode,
+      workArea: row.fleetWorkArea ?? "",
+      busCode: row.fleetBusCode,
+    });
+  }
+
   const slots: BoardSlot[] = [];
   const taken = new Set<string>();
 
@@ -314,6 +387,7 @@ export async function buildBoard(
         source: "plan",
         tappedAt: readiness.tappedAt,
         readiness,
+        fleetDiggerCode: first.fleetDiggerCode,
       });
     } else {
       slots.push({
@@ -323,6 +397,7 @@ export async function buildBoard(
         source: null,
         tappedAt: null,
         readiness,
+        fleetDiggerCode: first.fleetDiggerCode,
       });
     }
   }
@@ -405,7 +480,7 @@ export async function buildBoard(
     slot.readiness = readyFor(row.requiresFtw, spare);
   }
 
-  return { date, shift, slots };
+  return { date, shift, fleets: [...fleets.values()], slots };
 }
 
 /**
@@ -431,12 +506,39 @@ export async function storeBoard(board: Board): Promise<string> {
       .values({ date: board.date, shift: board.shift })
       .returning({ id: schema.fleetActualDocuments.id });
 
+    /* The formations first, because the slots point at them. Written per
+       document rather than shared between documents: two boards on the same
+       day are two records of two shifts, and a formation edited between them
+       must show up as the difference it was. */
+    const fleetIdByDigger = new Map<string, string>();
+    if (board.fleets.length) {
+      const rows = await tx
+        .insert(schema.fleetActualFleets)
+        .values(
+          board.fleets.map((f) => ({
+            documentId: doc!.id,
+            sourceFleetId: f.sourceFleetId,
+            diggerCode: f.diggerCode,
+            workArea: f.workArea,
+            busCode: f.busCode,
+          }))
+        )
+        .returning({
+          id: schema.fleetActualFleets.id,
+          diggerCode: schema.fleetActualFleets.diggerCode,
+        });
+      for (const row of rows) fleetIdByDigger.set(row.diggerCode, row.id);
+    }
+
     if (board.slots.length)
       await tx.insert(schema.fleetActualSlots).values(
         board.slots.map((s) => ({
           documentId: doc!.id,
           unitId: s.unitId,
           employeeId: s.employeeId,
+          boardFleetId: s.fleetDiggerCode
+            ? (fleetIdByDigger.get(s.fleetDiggerCode) ?? null)
+            : null,
           source: s.source,
           tappedAt: s.tappedAt,
         }))

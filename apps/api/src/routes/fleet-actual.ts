@@ -77,80 +77,77 @@ const digger = alias(schema.units, "digger_unit");
 /**
  * The slots of one board, joined to what a screen needs to name them.
  *
- * The fleet embed mirrors the PLAN board's, and by the same join: a unit
- * belongs to a fleet either as its digger or as one of its members, so the
- * condition is an `or` rather than one foreign key. The Actual board groups by
- * fleet exactly as PLAN does — a formation is how the yard thinks about its
- * machines, and a flat list of unit codes makes the reader rebuild it.
+ * The fleet embed comes from `fleet_actual_fleets` — the board's **own copy**
+ * of its formations, taken when it was generated — and deliberately not from
+ * `fleets`, which describes today. Reading the live table here is what let a
+ * reshuffle between shifts erase the morning board from the TV and relabel it
+ * with an evening work area. A board is a record of a shift that has already
+ * happened; nothing about it may change because Fleet Setting did.
+ *
+ * The Actual board still groups by fleet exactly as PLAN does — a formation is
+ * how the yard thinks about its machines, and a flat list of unit codes makes
+ * the reader rebuild it.
+ *
+ * `fleetId` here is the *snapshot* row's id, which is what every screen groups
+ * and filters by. `sourceFleetId` is the live formation it was copied from,
+ * carried only so a TV's own picks — which name live fleets — can still be
+ * matched against the board.
  */
 async function boardSlots(documentId: string) {
-  return db
-    .select({
-      unitId: schema.fleetActualSlots.unitId,
-      unitCode: schema.units.code,
-      requiresFtw: schema.units.ftw,
-      simperCodeName: schema.simperCodes.name,
-      departmentName: schema.departments.name,
-      modelName: schema.unitModels.name,
-      brandName: schema.unitBrands.name,
-      fleetId: schema.fleets.id,
-      diggerCode: digger.code,
-      area: schema.fleets.workArea,
-      employeeId: schema.fleetActualSlots.employeeId,
-      source: schema.fleetActualSlots.source,
-      tappedAt: schema.fleetActualSlots.tappedAt,
-    })
-    .from(schema.fleetActualSlots)
-    .innerJoin(
-      schema.units,
-      eq(schema.units.id, schema.fleetActualSlots.unitId)
-    )
-    .innerJoin(
-      schema.unitModels,
-      eq(schema.unitModels.id, schema.units.modelId)
-    )
-    .innerJoin(
-      schema.unitBrands,
-      eq(schema.unitBrands.id, schema.units.brandId)
-    )
-    .leftJoin(
-      schema.simperCodes,
-      eq(schema.simperCodes.id, schema.units.simperCodeId)
-    )
-    .leftJoin(
-      schema.departments,
-      eq(schema.departments.id, schema.units.departmentId)
-    )
-    .leftJoin(schema.fleetUnits, eq(schema.fleetUnits.unitId, schema.units.id))
-    .leftJoin(
-      schema.fleets,
-      or(
-        eq(schema.fleets.diggerUnitId, schema.units.id),
-        eq(schema.fleets.id, schema.fleetUnits.fleetId)
+  return (
+    db
+      .select({
+        unitId: schema.fleetActualSlots.unitId,
+        unitCode: schema.units.code,
+        requiresFtw: schema.units.ftw,
+        simperCodeName: schema.simperCodes.name,
+        departmentName: schema.departments.name,
+        modelName: schema.unitModels.name,
+        brandName: schema.unitBrands.name,
+        fleetId: schema.fleetActualFleets.id,
+        sourceFleetId: schema.fleetActualFleets.sourceFleetId,
+        diggerCode: schema.fleetActualFleets.diggerCode,
+        area: schema.fleetActualFleets.workArea,
+        busCode: schema.fleetActualFleets.busCode,
+        employeeId: schema.fleetActualSlots.employeeId,
+        source: schema.fleetActualSlots.source,
+        tappedAt: schema.fleetActualSlots.tappedAt,
+      })
+      .from(schema.fleetActualSlots)
+      .innerJoin(
+        schema.units,
+        eq(schema.units.id, schema.fleetActualSlots.unitId)
       )
-    )
-    .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-    .where(eq(schema.fleetActualSlots.documentId, documentId))
-    .orderBy(asc(schema.units.code));
+      .innerJoin(
+        schema.unitModels,
+        eq(schema.unitModels.id, schema.units.modelId)
+      )
+      .innerJoin(
+        schema.unitBrands,
+        eq(schema.unitBrands.id, schema.units.brandId)
+      )
+      .leftJoin(
+        schema.simperCodes,
+        eq(schema.simperCodes.id, schema.units.simperCodeId)
+      )
+      .leftJoin(
+        schema.departments,
+        eq(schema.departments.id, schema.units.departmentId)
+      )
+      /* Left, not inner: a board generated before the snapshot existed has no
+       copy to join to, and its units must still list — as belonging to no
+       formation, which is the honest reading of a record that was never
+       kept. */
+      .leftJoin(
+        schema.fleetActualFleets,
+        eq(schema.fleetActualFleets.id, schema.fleetActualSlots.boardFleetId)
+      )
+      .where(eq(schema.fleetActualSlots.documentId, documentId))
+      .orderBy(asc(schema.units.code))
+  );
 }
 
 const busUnit = alias(schema.units, "bus_unit");
-
-/**
- * Each fleet's bus, by fleet id. Separate from `boardSlots` on purpose: the
- * bus is a property of the *formation*, shown once in a group header, and
- * joining it per slot would carry the same code down every hauler row for the
- * two screens that have no use for it.
- */
-async function fleetBuses(ids: string[]) {
-  if (!ids.length) return new Map<string, string>();
-  const rows = await db
-    .select({ fleetId: schema.fleets.id, busCode: busUnit.code })
-    .from(schema.fleets)
-    .innerJoin(busUnit, eq(busUnit.id, schema.fleets.busUnitId))
-    .where(inArray(schema.fleets.id, ids));
-  return new Map(rows.map((r) => [r.fleetId, r.busCode]));
-}
 
 /**
  * The standing PLAN, as it would fall on one date and shift — the provisional
@@ -176,6 +173,7 @@ export async function planSlots(date: string, shift: ShiftKind) {
       fleetId: schema.fleets.id,
       diggerCode: digger.code,
       area: schema.fleets.workArea,
+      busCode: busUnit.code,
       employeeId: schema.fleetPlanSlots.employeeId,
       /** Non-null only when that operator is rostered to *this* shift. */
       rosterId: schema.rosterDays.id,
@@ -210,6 +208,7 @@ export async function planSlots(date: string, shift: ShiftKind) {
       )
     )
     .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
+    .leftJoin(busUnit, eq(busUnit.id, schema.fleets.busUnitId))
     .where(
       and(
         eq(schema.units.active, true),
@@ -230,6 +229,11 @@ export async function planSlots(date: string, shift: ShiftKind) {
   }
   return [...byUnit.values()].map((r) => ({
     ...r,
+    /* The provisional line-up is read from Fleet Setting as it stands, so the
+       formation it names *is* the live one — unlike a board, which names its
+       own copy. Stated rather than implied, because both answers flow into the
+       same wall through the same shape. */
+    sourceFleetId: r.fleetId,
     employeeId: r.rosterId ? r.employeeId : null,
   }));
 }
@@ -420,9 +424,22 @@ export type WallSlot = {
   unitCode: string;
   modelName: string;
   brandName: string;
+  /**
+   * The formation to group under. For a generated board this is the board's
+   * own snapshot row; for the provisional plan it is the live fleet.
+   */
   fleetId: string | null;
+  /**
+   * The *live* formation behind it, or null once that formation is gone.
+   *
+   * Only one reader needs it: a TV's picks name live fleets, so scoping a
+   * board to a screen has to match through here rather than through `fleetId`.
+   * Grouping, ordering and display all use `fleetId`.
+   */
+  sourceFleetId: string | null;
   diggerCode: string | null;
   area: string | null;
+  busCode: string | null;
   employeeNik: string | null;
   employeeName: string | null;
   /** Stored file name of their photo, or null — the wall falls back to initials. */
@@ -449,7 +466,10 @@ export type WallFleet = {
   idle: number;
   /** Crewed by someone other than the planned holder: spare or manual. */
   substituted: number;
-  units: Omit<WallSlot, "fleetId" | "diggerCode" | "area">[];
+  units: Omit<
+    WallSlot,
+    "fleetId" | "sourceFleetId" | "diggerCode" | "area" | "busCode"
+  >[];
 };
 
 /**
@@ -471,25 +491,33 @@ export type WallFleet = {
  */
 export function groupIntoFleets(
   slots: WallSlot[],
-  buses: Map<string, string>,
   /**
    * The screen's own formations in pick order; `null` (or empty) means every
    * one of them.
+   *
+   * These are **live** fleet ids — a device's picks are made in Fleet Setting
+   * — so they are matched against `sourceFleetId`, not `fleetId`. A board
+   * whose formation has since been deleted therefore drops off a scoped
+   * screen: that screen was told to show a formation that no longer exists,
+   * and inventing a match would put the wrong pit on the wrong wall. It still
+   * shows in full on the unscoped board and on the Actual menu.
    */
   scope: readonly string[] | null = null
 ): WallFleet[] {
   const wanted = scope && scope.length ? new Set(scope) : null;
   const groups = new Map<string, WallFleet>();
+  /** Group id → the live fleet behind it, for the pick order below only. */
+  const liveOf = new Map<string, string | null>();
   for (const s of slots) {
     if (!s.fleetId || !s.diggerCode) continue;
-    if (wanted && !wanted.has(s.fleetId)) continue;
+    if (wanted && !(s.sourceFleetId && wanted.has(s.sourceFleetId))) continue;
     let group = groups.get(s.fleetId);
     if (!group) {
       group = {
         id: s.fleetId,
         diggerCode: s.diggerCode,
         area: s.area,
-        busCode: buses.get(s.fleetId) ?? null,
+        busCode: s.busCode,
         total: 0,
         crewed: 0,
         idle: 0,
@@ -497,6 +525,7 @@ export function groupIntoFleets(
         units: [],
       };
       groups.set(s.fleetId, group);
+      liveOf.set(s.fleetId, s.sourceFleetId);
     }
     group.total += 1;
     if (s.employeeName) group.crewed += 1;
@@ -532,7 +561,8 @@ export function groupIntoFleets(
   const rank = wanted ? new Map(scope!.map((id, i) => [id, i])) : null;
   return [...groups.values()].sort((a, b) =>
     rank
-      ? (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity)
+      ? (rank.get(liveOf.get(a.id) ?? "") ?? Infinity) -
+        (rank.get(liveOf.get(b.id) ?? "") ?? Infinity)
       : a.diggerCode.localeCompare(b.diggerCode)
   );
 }
@@ -704,12 +734,6 @@ export const fleetActualRoutes = new Elysia({
             .map(normalizeNik)
         ),
       ]);
-      const buses = await fleetBuses([
-        ...new Set(
-          slots.map((s) => s.fleetId).filter((id): id is string => !!id)
-        ),
-      ]);
-
       return {
         servedAt: new Date().toISOString(),
         date: now.date,
@@ -732,8 +756,10 @@ export const fleetActualRoutes = new Elysia({
               modelName: s.modelName,
               brandName: s.brandName,
               fleetId: s.fleetId,
+              sourceFleetId: s.sourceFleetId,
               diggerCode: s.diggerCode,
               area: s.area,
+              busCode: s.busCode,
               employeeNik: person?.nik ?? null,
               employeeName: person?.name ?? null,
               employeePhotoFile: person?.photoFile ?? null,
@@ -745,7 +771,6 @@ export const fleetActualRoutes = new Elysia({
               ftw: readiness?.ftw ?? null,
             };
           }),
-          buses,
           scope
         ),
       };
@@ -958,8 +983,12 @@ export const fleetActualRoutes = new Elysia({
         .limit(1);
       /* The unit the board put them on, and *its* formation — not their
          standing unit's. A spare who filled a seat in EX4001 worked EX4001
-         today, and someone asking about that formation wants them. */
-      const actualDigger = alias(schema.units, "actual_digger");
+         today, and someone asking about that formation wants them.
+
+         The formation comes from the board's own copy, so this table keeps
+         agreeing with the board it audits after Fleet Setting is reshuffled.
+         The plan rows above stay on the live table on purpose: the standing
+         plan *is* a statement about today, and has no snapshot to read. */
       const actual = new Map<
         string,
         {
@@ -974,7 +1003,7 @@ export const fleetActualRoutes = new Elysia({
           .select({
             employeeId: schema.fleetActualSlots.employeeId,
             unitCode: schema.units.code,
-            diggerCode: actualDigger.code,
+            diggerCode: schema.fleetActualFleets.diggerCode,
             requiresFtw: schema.units.ftw,
             source: schema.fleetActualSlots.source,
           })
@@ -984,19 +1013,11 @@ export const fleetActualRoutes = new Elysia({
             eq(schema.units.id, schema.fleetActualSlots.unitId)
           )
           .leftJoin(
-            schema.fleetUnits,
-            eq(schema.fleetUnits.unitId, schema.fleetActualSlots.unitId)
-          )
-          .leftJoin(
-            schema.fleets,
-            or(
-              eq(schema.fleets.id, schema.fleetUnits.fleetId),
-              eq(schema.fleets.diggerUnitId, schema.fleetActualSlots.unitId)
+            schema.fleetActualFleets,
+            eq(
+              schema.fleetActualFleets.id,
+              schema.fleetActualSlots.boardFleetId
             )
-          )
-          .leftJoin(
-            actualDigger,
-            eq(actualDigger.id, schema.fleets.diggerUnitId)
           )
           .where(eq(schema.fleetActualSlots.documentId, doc.id));
         for (const row of rows)
