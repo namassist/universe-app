@@ -21,7 +21,6 @@ import {
   noFleetQueryOptions,
   type FleetRow,
 } from "@/lib/queries/fleets";
-import { masterQueryOptions, recordType } from "@/lib/queries/master";
 import { unitsQueryOptions, type UnitRow } from "@/lib/queries/units";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
@@ -34,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FormGrid } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
   FootSum,
@@ -97,9 +97,8 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     [noFleetQ.data]
   );
 
-  // Active units and active Mining work areas — the values this screen offers.
+  // Active units — the only catalogue this screen still offers from.
   const unitsQ = useQuery(unitsQueryOptions({ active: true }));
-  const areasQ = useQuery(masterQueryOptions("area-kerja", true));
   const units = React.useMemo(() => unitsQ.data ?? [], [unitsQ.data]);
 
   const DIGGERS = React.useMemo(
@@ -135,16 +134,6 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     () => BUS_GROUPS.flatMap((g) => g.codes),
     [BUS_GROUPS]
   );
-  /* Lokasi kerja = area kerja bertipe Mining (lokasi operasi fleet). */
-  const MINING_AREAS = React.useMemo(
-    () => (areasQ.data ?? []).filter((a) => recordType(a) === "Mining"),
-    [areasQ.data]
-  );
-  const AREA_OPTS = React.useMemo(
-    () => MINING_AREAS.map((a) => a.name),
-    [MINING_AREAS]
-  );
-
   /** Code → id at the submit edge; the API speaks ids, the operator codes. */
   const unitIdByCode = React.useMemo(
     () => new Map(units.map((u) => [u.code, u.id])),
@@ -161,6 +150,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [unitQ, setUnitQ] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
   const [errDigger, setErrDigger] = React.useState(false);
+  const [errLoc, setErrLoc] = React.useState(false);
   const [errUnits, setErrUnits] = React.useState("");
   const [delTarget, setDelTarget] = React.useState<FleetRow | null>(null);
 
@@ -189,14 +179,14 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     mutationFn: async (input: {
       id: string | null;
       diggerUnitId: string;
-      workAreaId: string;
+      workArea: string;
       busUnitId: string | null;
       unitIds: string[];
       active: boolean;
     }) => {
       const body = {
         diggerUnitId: input.diggerUnitId,
-        workAreaId: input.workAreaId,
+        workArea: input.workArea,
         busUnitId: input.busUnitId,
         unitIds: input.unitIds,
         active: input.active,
@@ -271,7 +261,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     ? fleets.filter(
         (f) =>
           f.diggerCode.toLowerCase().includes(listNeedle) ||
-          f.workAreaName.toLowerCase().includes(listNeedle) ||
+          f.workArea.toLowerCase().includes(listNeedle) ||
           (f.busCode ?? "").toLowerCase().includes(listNeedle)
       )
     : fleets;
@@ -372,11 +362,12 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     setEditId(null);
     setFDigger(diggerOpts[0] || "");
     setFBus(BUS_OPTS[0] ?? "");
-    setFLoc(AREA_OPTS[0] ?? "");
+    setFLoc("");
     setFUnits([]);
     setUnitQ("");
     setFActive(true);
     setErrDigger(false);
+    setErrLoc(false);
     setErrUnits("");
     setDlgOpen(true);
   }
@@ -385,11 +376,12 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     setEditId(f.id);
     setFDigger(f.diggerCode);
     setFBus(f.busCode ?? "");
-    setFLoc(f.workAreaName);
+    setFLoc(f.workArea);
     setFUnits(f.units.map((u) => u.code));
     setUnitQ("");
     setFActive(f.active);
     setErrDigger(false);
+    setErrLoc(false);
     setErrUnits("");
     setDlgOpen(true);
   }
@@ -400,6 +392,10 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     const badDigger =
       !digger || fleets.some((f) => f.diggerCode === digger && f.id !== editId);
     setErrDigger(badDigger);
+    // Nothing behind this field validates it any more, so the emptiness check
+    // that the master list used to make implicit is made here.
+    const workArea = fLoc.trim();
+    setErrLoc(!workArea);
     const unitsErr =
       fUnits.length > FLEET_MAX_UNITS
         ? t.flErrMax
@@ -407,16 +403,16 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           ? t.flErrMin
           : "";
     setErrUnits(unitsErr);
-    if (badDigger || unitsErr) return;
+    if (badDigger || !workArea || unitsErr) return;
 
     // The maps are built from the same lists the selects offered, so a miss
     // here means the catalogue changed under the open dialog — surfaced as
-    // an error rather than submitted as a broken reference.
+    // an error rather than submitted as a broken reference. The work area is
+    // not among them: it is typed, so there is nothing to resolve.
     const diggerUnitId = unitIdByCode.get(digger);
-    const workAreaId = MINING_AREAS.find((a) => a.name === fLoc)?.id;
     const busUnitId = fBus ? unitIdByCode.get(fBus) : null;
     const unitIds = fUnits.map((c) => unitIdByCode.get(c));
-    if (!diggerUnitId || !workAreaId || unitIds.some((id) => !id)) {
+    if (!diggerUnitId || unitIds.some((id) => !id)) {
       pushToast("error", t.flAdd, t.loginErr);
       return;
     }
@@ -424,7 +420,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     save.mutate({
       id: editId,
       diggerUnitId,
-      workAreaId,
+      workArea,
       busUnitId: busUnitId ?? null,
       unitIds: unitIds as string[],
       active: fActive,
@@ -569,7 +565,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                     sub={diggerTypeOf(f.diggerCode)}
                   />
                 </TableCell>
-                <TableCell>{f.workAreaName}</TableCell>
+                <TableCell>{f.workArea}</TableCell>
                 <TableCell className="font-mono max-xl:hidden">
                   {f.busCode ?? "—"}
                 </TableCell>
@@ -691,18 +687,20 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
               label={t.flLoc}
               htmlFor="fl-loc"
               required
+              error={errLoc}
+              errorMessage={t.flErrLoc}
             >
-              <Select
+              {/* Typed, not picked: pits open and close within days, so a
+                  master list of them would be mostly dead rows. Nothing keeps
+                  the spelling uniform — that is the trade. */}
+              <Input
                 id="fl-loc"
                 value={fLoc}
                 onChange={(e) => setFLoc(e.target.value)}
-              >
-                {AREA_OPTS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
+                placeholder={t.flLocPh}
+                maxLength={120}
+                autoComplete="off"
+              />
             </Field>
             <Field
               className="col-span-full"

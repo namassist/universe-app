@@ -54,8 +54,7 @@ const fleetColumns = {
   id: schema.fleets.id,
   diggerUnitId: schema.fleets.diggerUnitId,
   diggerCode: digger.code,
-  workAreaId: schema.fleets.workAreaId,
-  workAreaName: schema.workAreas.name,
+  workArea: schema.fleets.workArea,
   busUnitId: schema.fleets.busUnitId,
   busCode: bus.code,
   active: schema.fleets.active,
@@ -67,10 +66,6 @@ function fleetQuery() {
     .select(fleetColumns)
     .from(schema.fleets)
     .innerJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-    .innerJoin(
-      schema.workAreas,
-      eq(schema.workAreas.id, schema.fleets.workAreaId)
-    )
     .leftJoin(bus, eq(bus.id, schema.fleets.busUnitId));
 }
 
@@ -104,8 +99,7 @@ function toFleet(row: FleetRow, units: { id: string; code: string }[]) {
     id: row.id,
     diggerUnitId: row.diggerUnitId,
     diggerCode: row.diggerCode,
-    workAreaId: row.workAreaId,
-    workAreaName: row.workAreaName,
+    workArea: row.workArea,
     busUnitId: row.busUnitId,
     busCode: row.busCode,
     units,
@@ -129,12 +123,11 @@ const invalid = (message: string) => ({ code: "validation_failed", message });
  */
 export async function refuseComposition(input: {
   diggerUnitId: string;
-  workAreaId: string;
   busUnitId: string | null;
   unitIds: string[];
   selfIds?: string[];
 }): Promise<string | null> {
-  const { diggerUnitId, workAreaId, busUnitId, unitIds } = input;
+  const { diggerUnitId, busUnitId, unitIds } = input;
   const selfIds = input.selfIds ?? [];
 
   if (unitIds.includes(diggerUnitId))
@@ -166,15 +159,6 @@ export async function refuseComposition(input: {
 
   if (busUnitId && !isFleetTransportType(byId.get(busUnitId)!.typeName))
     return `Unit ${byId.get(busUnitId)!.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`;
-
-  const [area] = await db
-    .select({ type: schema.workAreas.type })
-    .from(schema.workAreas)
-    .where(eq(schema.workAreas.id, workAreaId))
-    .limit(1);
-  if (!area) return "Area kerja yang dipilih tidak ada di master";
-  if (area.type !== "Mining")
-    return "Lokasi fleet harus area kerja bertipe Mining";
 
   // Exclusivity, named. The digger may not haul for anyone, and a member may
   // not already haul elsewhere or lead a fleet of its own. The unique indexes
@@ -251,24 +235,16 @@ async function importCatalogues(): Promise<FleetCatalogues> {
     })
     .from(schema.units)
     .innerJoin(schema.unitTypes, eq(schema.unitTypes.id, schema.units.typeId));
-  const areas = await db
-    .select({
-      id: schema.workAreas.id,
-      name: schema.workAreas.name,
-      type: schema.workAreas.type,
-    })
-    .from(schema.workAreas);
   const fleets = await fleetQuery();
   const members = await membersOf(fleets.map((f) => f.id));
   return {
     unitsByCode: new Map(units.map((u) => [u.code.toLowerCase(), u])),
-    areasByName: new Map(areas.map((a) => [a.name.toLowerCase(), a])),
     fleetsByDigger: new Map(
       fleets.map((f) => [
         f.diggerCode.toLowerCase(),
         {
           id: f.id,
-          areaName: f.workAreaName,
+          area: f.workArea,
           busCode: f.busCode,
           memberCodes: (members.get(f.id) ?? []).map((m) => m.code),
         },
@@ -305,7 +281,6 @@ async function parseFleetImport(
   for (const row of parsed.rows) {
     const refusal = await refuseComposition({
       diggerUnitId: row.diggerUnitId,
-      workAreaId: row.workAreaId,
       busUnitId: row.busUnitId,
       unitIds: row.unitIds,
       selfIds,
@@ -340,7 +315,12 @@ async function parseFleetImport(
 
 const fleetBody = {
   diggerUnitId: t.String({ format: "uuid" }),
-  workAreaId: t.String({ format: "uuid" }),
+  /**
+   * Typed, not chosen: pits open and close within days, so there is no
+   * catalogue behind this. Trimmed and length-capped at the boundary because
+   * nothing downstream will.
+   */
+  workArea: t.String({ minLength: 1, maxLength: 120 }),
   busUnitId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
   unitIds: t.Array(t.String({ format: "uuid" }), {
     minItems: FLEET_MIN_UNITS,
@@ -485,7 +465,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
             await tx
               .update(schema.fleets)
               .set({
-                workAreaId: row.workAreaId,
+                workArea: row.workArea,
                 busUnitId: row.busUnitId,
               })
               .where(eq(schema.fleets.id, row.selfId!));
@@ -494,7 +474,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
               .insert(schema.fleets)
               .values({
                 diggerUnitId: row.diggerUnitId,
-                workAreaId: row.workAreaId,
+                workArea: row.workArea,
                 busUnitId: row.busUnitId,
               })
               .returning({ id: schema.fleets.id });
@@ -551,7 +531,6 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
 
       const refusal = await refuseComposition({
         diggerUnitId: body.diggerUnitId,
-        workAreaId: body.workAreaId,
         busUnitId: body.busUnitId ?? null,
         unitIds,
       });
@@ -563,7 +542,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
             .insert(schema.fleets)
             .values({
               diggerUnitId: body.diggerUnitId,
-              workAreaId: body.workAreaId,
+              workArea: body.workArea.trim(),
               busUnitId: body.busUnitId ?? null,
               active: body.active ?? true,
             })
@@ -623,7 +602,6 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
 
       const refusal = await refuseComposition({
         diggerUnitId: body.diggerUnitId,
-        workAreaId: body.workAreaId,
         busUnitId: body.busUnitId ?? null,
         unitIds,
         selfIds: [existing.id],
@@ -639,7 +617,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
             .update(schema.fleets)
             .set({
               diggerUnitId: body.diggerUnitId,
-              workAreaId: body.workAreaId,
+              workArea: body.workArea.trim(),
               busUnitId: body.busUnitId ?? null,
               ...(body.active !== undefined ? { active: body.active } : {}),
             })

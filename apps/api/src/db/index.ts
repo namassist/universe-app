@@ -56,7 +56,6 @@ export type {
   UnitRow,
   UnitTypeRow,
   UserRow,
-  WorkAreaRow,
 } from "./schema";
 
 const UNIQUE_VIOLATION = "23505";

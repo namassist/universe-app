@@ -3,16 +3,12 @@
  * schedule are built from.
  *
  * These live here rather than in the web app because three consumers have to
- * agree on them and none of the three may be the source: the Postgres enums are
- * generated from `AREA_TYPES` and `TIMELINE_ACTIONS`, the API's TypeBox schemas
- * validate against the same lists, and the client renders their labels. A value
- * added in one place and missed in another is exactly the drift a shared
- * contract exists to prevent.
+ * agree on them and none of the three may be the source: the Postgres enum is
+ * generated from `TIMELINE_ACTIONS`, the API's TypeBox schemas validate against
+ * the same lists, and the client renders their labels. A value added in one
+ * place and missed in another is exactly the drift a shared contract exists to
+ * prevent.
  */
-
-/** A work area is mining ground or it is not; nothing else distinguishes one. */
-export const AREA_TYPES = ["Mining", "Non Mining"] as const;
-export type AreaType = (typeof AREA_TYPES)[number];
 
 /**
  * Employment status, and only employment (design D7).

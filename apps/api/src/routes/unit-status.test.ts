@@ -32,7 +32,6 @@ const made = {
     mdl: "",
     brd: "",
   },
-  workAreas: [] as string[],
 };
 
 let admin: { cookie: string };
@@ -148,12 +147,6 @@ beforeAll(async () => {
     brd: brd!.id,
   };
 
-  const [area] = await db
-    .insert(schema.workAreas)
-    .values({ name: `${tag} PIT`, type: "Mining" })
-    .returning({ id: schema.workAreas.id });
-  made.workAreas.push(area!.id);
-
   digger = await makeUnit(`ZZSX1${uid()}`);
   hauler = await makeUnit(`ZZSD1${uid()}`);
   loner = await makeUnit(`ZZSL1${uid()}`);
@@ -161,7 +154,7 @@ beforeAll(async () => {
 
   const [fleet] = await db
     .insert(schema.fleets)
-    .values({ diggerUnitId: digger.id, workAreaId: area!.id })
+    .values({ diggerUnitId: digger.id, workArea: `${tag} PIT` })
     .returning({ id: schema.fleets.id });
   made.fleets.push(fleet!.id);
   await db
@@ -185,10 +178,6 @@ afterAll(async () => {
   await db.delete(schema.unitTypes).where(eq(schema.unitTypes.id, typ));
   await db.delete(schema.unitModels).where(eq(schema.unitModels.id, mdl));
   await db.delete(schema.unitBrands).where(eq(schema.unitBrands.id, brd));
-  if (made.workAreas.length)
-    await db
-      .delete(schema.workAreas)
-      .where(inArray(schema.workAreas.id, made.workAreas));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)

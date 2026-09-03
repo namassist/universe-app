@@ -303,24 +303,6 @@ describe("catalogue import", () => {
     );
     expect("code" in result && result.code).toBe("unknown_columns");
   });
-
-  test("a work-area type outside the vocabulary fails its row", async () => {
-    const areas = catalogue([
-      { id: "a1", name: "Workshop", type: "Non Mining", active: true },
-    ]);
-    const wb = await sheet(
-      ["nama", "tipe", "aktif"],
-      [["Quarry Baru", "Quarry", "TRUE"]]
-    );
-    const result = validateWorkbook(
-      "a.xlsx",
-      catalogueTarget("area-kerja", "type", areas),
-      wb
-    );
-    if ("code" in result) throw new Error(result.message);
-    expect(result.preview.errorCount).toBe(1);
-    expect(result.preview.errors[0]!.issue).toContain("Mining");
-  });
 });
 
 /* ------------------------------------------------------- owned catalogues */

@@ -59,7 +59,7 @@ let unitDept: Unit; // owned by dept A, no requirement
 let unitFree: Unit; // global, no requirement
 
 /** The formation every fixture unit hauls for — scaffolding, not subject. */
-let fleetId: string, fleetArea: string, fleetDigger: string;
+let fleetId: string, fleetDigger: string;
 
 /* ------------------------------------------------------------- fixtures */
 
@@ -297,15 +297,10 @@ beforeAll(async () => {
 
   /* The suite's formation. Its digger is standby so it never occupies a slot
      of its own; it exists only to give `fleet_units` something to point at. */
-  const [area] = await db
-    .insert(schema.workAreas)
-    .values({ name: `ZZ Pit ${uid()}`, type: "Mining" })
-    .returning({ id: schema.workAreas.id });
-  fleetArea = area!.id;
   fleetDigger = (await unitRow({ standby: true })).id;
   const [fleet] = await db
     .insert(schema.fleets)
-    .values({ diggerUnitId: fleetDigger, workAreaId: fleetArea })
+    .values({ diggerUnitId: fleetDigger, workArea: `ZZ Pit ${uid()}` })
     .returning({ id: schema.fleets.id });
   fleetId = fleet!.id;
 
@@ -371,8 +366,6 @@ afterAll(async () => {
       .where(inArray(schema.fleetUnits.unitId, made.units));
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
   }
-  if (fleetArea)
-    await db.delete(schema.workAreas).where(eq(schema.workAreas.id, fleetArea));
   if (made.positions.length)
     await db
       .delete(schema.positions)

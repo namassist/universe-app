@@ -55,7 +55,7 @@ async function unitRows() {
       brandName: schema.unitBrands.name,
       standby: schema.units.standby,
       breakdown: schema.units.breakdown,
-      location: schema.workAreas.name,
+      location: schema.fleets.workArea,
     })
     .from(schema.units)
     .innerJoin(
@@ -73,10 +73,6 @@ async function unitRows() {
         eq(schema.fleets.diggerUnitId, schema.units.id),
         eq(schema.fleets.id, schema.fleetUnits.fleetId)
       )
-    )
-    .leftJoin(
-      schema.workAreas,
-      eq(schema.workAreas.id, schema.fleets.workAreaId)
     )
     .where(eq(schema.units.active, true))
     .orderBy(asc(schema.units.code));

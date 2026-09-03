@@ -20,7 +20,6 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type {
-  AreaType,
   BloodType,
   EmployeeStatus,
   McuResult,
@@ -448,32 +447,6 @@ export const ORGANISATION: CompanySeed[] = [
  * query happened to return first. The operating contractor owns the fleet.
  */
 const FLEET_COMPANY = "UDU";
-
-const WORK_AREAS: [name: string, type: AreaType][] = [
-  ["Panel East Puncak Utara", "Mining"],
-  ["Panel East Puncak Selatan", "Mining"],
-  ["Panel East Tengah", "Mining"],
-  ["Panel East Bawah", "Mining"],
-  ["Kasturi Puncak", "Mining"],
-  ["Kasturi Tengah", "Mining"],
-  ["Kasturi Bawah", "Mining"],
-  ["High Dump", "Mining"],
-  ["Low Wall", "Mining"],
-  ["Ambalat", "Mining"],
-  ["Mandalika", "Mining"],
-  ["Disposal T4", "Mining"],
-  ["CPP33", "Non Mining"],
-  ["Workshop", "Non Mining"],
-  ["Pondok Kontainer", "Non Mining"],
-  ["V Point", "Non Mining"],
-  ["Parkiran T6", "Non Mining"],
-  ["Parkiran Sebatik", "Non Mining"],
-  ["Parkiran Panel East", "Non Mining"],
-  ["Stock Room T6", "Non Mining"],
-  ["Readyline", "Non Mining"],
-  ["Bank Soil", "Mining"],
-  ["Parkiran Wash Bay", "Non Mining"],
-];
 
 /* -------------------------------------------------- allocation & display */
 
@@ -1084,11 +1057,6 @@ async function seedCatalogues(): Promise<OrganisationIds> {
     schema.simperCodes,
     SIMPER_CODES.map(([name, description]) => ({ name, description }))
   );
-  await seedNamed(
-    "area kerja",
-    schema.workAreas,
-    WORK_AREAS.map(([name, type]) => ({ name, type }))
-  );
   return seedOrganisation();
 }
 
@@ -1402,13 +1370,11 @@ async function seedFleets(): Promise<void> {
     .from(schema.units)
     .where(inArray(schema.units.code, codes));
   const unitByCode = new Map(units.map((u) => [u.code, u.id]));
-  const areas = await idsByName(schema.workAreas);
 
   for (const fleet of SAMPLE_FLEETS) {
     const diggerId = unitByCode.get(fleet.digger);
-    const areaId = areas.get(fleet.area.toLowerCase());
     const memberIds = fleet.units.map((c) => unitByCode.get(c));
-    if (!diggerId || !areaId || memberIds.some((id) => !id)) {
+    if (!diggerId || memberIds.some((id) => !id)) {
       console.log(
         `  fleets — sample units for Fleet ${fleet.digger} not present, skipped`
       );
@@ -1416,7 +1382,7 @@ async function seedFleets(): Promise<void> {
     }
     const [row] = await db
       .insert(schema.fleets)
-      .values({ diggerUnitId: diggerId, workAreaId: areaId })
+      .values({ diggerUnitId: diggerId, workArea: fleet.area })
       .returning({ id: schema.fleets.id });
     await db.insert(schema.fleetUnits).values(
       (memberIds as string[]).map((unitId) => ({

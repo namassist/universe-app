@@ -32,14 +32,12 @@ const made = {
     table: "classes" | "types" | "models" | "brands";
     id: string;
   }[],
-  workAreas: [] as string[],
 };
 
 let admin: { cookie: string };
 let viewer: { cookie: string };
 
 let miningName = "";
-let officeName = "";
 let busTypeId = "";
 let busTypeCreated = false;
 let manhaulTypeId = "";
@@ -198,16 +196,6 @@ beforeAll(async () => {
   }
 
   miningName = `${tag} PIT`;
-  officeName = `${tag} OFFICE`;
-  const [mining] = await db
-    .insert(schema.workAreas)
-    .values({ name: miningName, type: "Mining" })
-    .returning({ id: schema.workAreas.id });
-  const [office] = await db
-    .insert(schema.workAreas)
-    .values({ name: officeName, type: "Non Mining" })
-    .returning({ id: schema.workAreas.id });
-  made.workAreas.push(mining!.id, office!.id);
 
   const refs = { classId: cls!.id, modelId: mdl!.id, brandId: brd!.id };
   digger1 = await makeUnit(`ZZFX1${uid()}`, typ!.id, refs);
@@ -254,10 +242,6 @@ afterAll(async () => {
     await db
       .delete(schema.unitTypes)
       .where(eq(schema.unitTypes.id, manhaulTypeId));
-  if (made.workAreas.length)
-    await db
-      .delete(schema.workAreas)
-      .where(inArray(schema.workAreas.id, made.workAreas));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
@@ -343,8 +327,8 @@ describe("validation previews without writing", () => {
       ["ZZNOPE99", miningName, null, hauler1.code],
       // Unknown member code.
       [digger1.code, miningName, null, "ZZNOPE98"],
-      // Non-Mining area.
-      [digger2.code, officeName, null, hauler1.code],
+      // Blank area — the only thing the column can still get wrong.
+      [digger2.code, "", null, hauler1.code],
       // Bus that is not a BUS.
       [digger3.code, miningName, hauler2.code, hauler1.code],
     ]);
@@ -353,7 +337,7 @@ describe("validation previews without writing", () => {
     const issues = preview.errors.map((e) => e.issue).join(" | ");
     expect(issues).toContain("ZZNOPE99");
     expect(issues).toContain("ZZNOPE98");
-    expect(issues).toContain("Mining");
+    expect(issues).toContain("area");
     expect(issues).toContain("BUS");
   });
 

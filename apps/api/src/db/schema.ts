@@ -17,7 +17,6 @@ import {
 } from "drizzle-orm/pg-core";
 import {
   ACCESS_MODES,
-  AREA_TYPES,
   BLOOD_TYPES,
   DEVICE_KINDS,
   DISPLAY_LAYOUTS,
@@ -37,7 +36,6 @@ export const scope = pgEnum("scope", SCOPES);
 export const accessMode = pgEnum("access_mode", ACCESS_MODES);
 export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const displayLayout = pgEnum("display_layout", DISPLAY_LAYOUTS);
-export const areaType = pgEnum("area_type", AREA_TYPES);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
 export const actualSlotSource = pgEnum("actual_slot_source", [
@@ -383,15 +381,6 @@ export const departments = pgTable(
   ]
 );
 
-export const workAreas = pgTable(
-  "work_areas",
-  {
-    ...catalogueColumns(),
-    type: areaType("type").notNull(),
-  },
-  (table) => [lowerNameUnique("work_areas", table.name)]
-);
-
 /**
  * The employing company, and the job title (design D5).
  *
@@ -553,9 +542,17 @@ export const fleets = pgTable("fleets", {
     .notNull()
     .unique()
     .references(() => units.id, { onDelete: "restrict" }),
-  workAreaId: uuid("work_area_id")
-    .notNull()
-    .references(() => workAreas.id, { onDelete: "restrict" }),
+  /**
+   * Where the fleet is working, as somebody typed it (owner, 2026-09-03).
+   *
+   * Text rather than a reference to a catalogue: a panel is opened, worked and
+   * abandoned within days, so a master list of them would grow without bound
+   * and be mostly dead rows. Two things are given up knowingly — nothing keeps
+   * the spelling uniform, and nothing remembers where a fleet worked
+   * yesterday. This column holds today's answer, and every screen that shows a
+   * location shows today's.
+   */
+  workArea: text("work_area").notNull(),
   busUnitId: uuid("bus_unit_id").references(() => units.id, {
     onDelete: "restrict",
   }),
@@ -1205,7 +1202,6 @@ export type UnitClassRow = typeof unitClasses.$inferSelect;
 export type SimperTypeRow = typeof simperTypes.$inferSelect;
 export type SimperCodeRow = typeof simperCodes.$inferSelect;
 export type DepartmentRow = typeof departments.$inferSelect;
-export type WorkAreaRow = typeof workAreas.$inferSelect;
 export type CompanyRow = typeof companies.$inferSelect;
 export type PositionRow = typeof positions.$inferSelect;
 export type UnitRow = typeof units.$inferSelect;

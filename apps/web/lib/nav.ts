@@ -130,7 +130,7 @@ export const NAV: NavEntry[] = [
       ),
       ...section("Organisasi", "perusahaan", "departemen", "jabatan"),
       ...section("SIMPER", "simper", "kode-simper"),
-      ...section("Lokasi & Fasilitas", "area-kerja", "bus", "mess"),
+      ...section("Lokasi & Fasilitas", "bus", "mess"),
       ...section(
         "Perangkat & Konten",
         "mesin-fingerprint",

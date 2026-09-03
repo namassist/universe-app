@@ -20,7 +20,7 @@ the definition — when they disagree, the code wins. Change flow: edit
 
 - Units: `unit_types`, `unit_brands`, `unit_models`, `unit_classes`
 - SIMPER (operator skill licences): `simper_types`, `simper_codes`
-- Organisation: `departments`, `work_areas`, `companies`, `positions`, `mess`
+- Organisation: `departments`, `companies`, `positions`, `mess`
 
 **People**
 
@@ -33,10 +33,10 @@ the definition — when they disagree, the code wins. Change flow: edit
 - `units` — the machines; keyed by unit code, classed and typed via the
   catalogues. PLAN pairing of operators to units.
 - `bus_schedules` — crew transport schedule.
-- `fleets` — a digger and its work area; the digger reference is unique (a
+- `fleets` — a digger and its work location; the digger reference is unique (a
   digger leads at most one fleet) and _is_ the fleet's identity — no name
-  column. Optional `bus_unit_id` (route-enforced type BUS); `work_area_id`
-  route-enforced type Mining.
+  column. Optional `bus_unit_id` (route-enforced type BUS or MANHAUL TRUCK);
+  `work_area` is free text, with no catalogue behind it.
 - `fleet_units` — the fleet's haulers; `unit_id` unique across the table, so
   a unit hauls for at most one fleet. Rows cascade with their fleet.
 - `unit_status_history` — append-only trail of status changes with mandatory

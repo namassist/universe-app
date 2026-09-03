@@ -36,9 +36,6 @@ export type MasterRecord = Awaited<
 export const recordDescription = (row: MasterRecord): string =>
   "description" in row ? row.description : "";
 
-export const recordType = (row: MasterRecord): string =>
-  "type" in row ? row.type : "";
-
 /** Companies only — the short form the site refers to them by. */
 export const recordCode = (row: MasterRecord): string =>
   "code" in row ? row.code : "";

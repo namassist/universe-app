@@ -165,7 +165,6 @@ export const MASTER_IMPORT_COLUMNS: Record<MasterKind, readonly string[]> = {
   "kelas-unit": ["nama", "deskripsi", "aktif"],
   simper: ["nama", "deskripsi", "aktif"],
   "kode-simper": ["nama", "deskripsi", "aktif"],
-  "area-kerja": ["nama", "tipe", "aktif"],
   perusahaan: ["nama", "kode", "deskripsi", "aktif"],
   departemen: ["perusahaan", "nama", "deskripsi", "aktif"],
   jabatan: [

@@ -95,7 +95,7 @@ async function boardSlots(documentId: string) {
       brandName: schema.unitBrands.name,
       fleetId: schema.fleets.id,
       diggerCode: digger.code,
-      area: schema.workAreas.name,
+      area: schema.fleets.workArea,
       employeeId: schema.fleetActualSlots.employeeId,
       source: schema.fleetActualSlots.source,
       tappedAt: schema.fleetActualSlots.tappedAt,
@@ -130,10 +130,6 @@ async function boardSlots(documentId: string) {
       )
     )
     .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-    .leftJoin(
-      schema.workAreas,
-      eq(schema.workAreas.id, schema.fleets.workAreaId)
-    )
     .where(eq(schema.fleetActualSlots.documentId, documentId))
     .orderBy(asc(schema.units.code));
 }
@@ -179,7 +175,7 @@ export async function planSlots(date: string, shift: ShiftKind) {
       brandName: schema.unitBrands.name,
       fleetId: schema.fleets.id,
       diggerCode: digger.code,
-      area: schema.workAreas.name,
+      area: schema.fleets.workArea,
       employeeId: schema.fleetPlanSlots.employeeId,
       /** Non-null only when that operator is rostered to *this* shift. */
       rosterId: schema.rosterDays.id,
@@ -214,10 +210,6 @@ export async function planSlots(date: string, shift: ShiftKind) {
       )
     )
     .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-    .leftJoin(
-      schema.workAreas,
-      eq(schema.workAreas.id, schema.fleets.workAreaId)
-    )
     .where(
       and(
         eq(schema.units.active, true),

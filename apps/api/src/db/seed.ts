@@ -110,7 +110,6 @@ const ROLE_SEEDS: RoleSeed[] = [
       "simper",
       "kode-simper",
       "departemen",
-      "area-kerja",
       "bus",
       "mess",
       "perusahaan",

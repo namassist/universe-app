@@ -632,14 +632,10 @@ export const fleetAllocationRoutes = new Elysia({
         .select({
           id: schema.fleets.id,
           diggerCode: digger.code,
-          area: schema.workAreas.name,
+          area: schema.fleets.workArea,
         })
         .from(schema.fleets)
         .innerJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-        .innerJoin(
-          schema.workAreas,
-          eq(schema.workAreas.id, schema.fleets.workAreaId)
-        )
         .orderBy(asc(digger.code));
 
       return {

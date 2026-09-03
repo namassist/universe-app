@@ -702,6 +702,7 @@ export const id = {
   flEditT: "Edit Fleet",
   flSaveAdd: "Simpan fleet",
   flLoc: "Lokasi kerja",
+  flLocPh: "mis. Panel East Puncak Utara",
   flBus: "Angkutan default",
   flUnits: "Unit dalam fleet",
   flUnitsHelp:
@@ -710,6 +711,7 @@ export const id = {
   flSearchPh: "Cari fleet / digger…",
   flListTitle: "Daftar formasi fleet",
   flErrDigger: "Digger wajib dipilih dan belum memimpin fleet lain.",
+  flErrLoc: "Lokasi kerja wajib diisi.",
   flErrMax: "Maksimal 12 unit OHT dalam satu fleet (13 termasuk digger).",
   flErrMin: "Minimal 8 unit OHT dalam satu fleet (9 termasuk digger).",
   flDlgB:

@@ -35,7 +35,7 @@ export type ImportUnit = { id: string; code: string; typeName: string };
 
 export type ExistingFleet = {
   id: string;
-  areaName: string;
+  area: string;
   busCode: string | null;
   memberCodes: string[];
 };
@@ -43,8 +43,6 @@ export type ExistingFleet = {
 export type FleetCatalogues = {
   /** Keyed lowercase code. */
   unitsByCode: Map<string, ImportUnit>;
-  /** Keyed lowercase name. */
-  areasByName: Map<string, { id: string; name: string; type: string }>;
   /** Keyed lowercase digger code. */
   fleetsByDigger: Map<string, ExistingFleet>;
 };
@@ -53,7 +51,7 @@ export type FleetCatalogues = {
 export type ParsedFleetRow = {
   preview: FleetImportPreviewRow;
   diggerUnitId: string;
-  workAreaId: string;
+  workArea: string;
   busUnitId: string | null;
   unitIds: string[];
   /** The fleet this digger already leads, when the row is an update. */
@@ -201,29 +199,10 @@ export async function validateFleetWorkbook(
       continue;
     }
 
-    const area = catalogues.areasByName.get(areaCell.toLowerCase());
-    if (!area) {
-      errors.push(
-        danger(
-          n,
-          digger.code,
-          areaCell,
-          `Area "${areaCell}" tidak ada di master area kerja`
-        )
-      );
-      continue;
-    }
-    if (area.type !== "Mining") {
-      errors.push(
-        danger(
-          n,
-          digger.code,
-          area.name,
-          "Lokasi fleet harus area kerja bertipe Mining"
-        )
-      );
-      continue;
-    }
+    // Taken as typed. There is no catalogue of pits to check it against any
+    // more, so the only thing the file can get wrong here is leaving it blank,
+    // which the empty-cell check above already caught.
+    const area = areaCell;
 
     let busUnit: ImportUnit | null = null;
     if (busCell) {
@@ -326,8 +305,8 @@ export async function validateFleetWorkbook(
       catalogues.fleetsByDigger.get(digger.code.toLowerCase()) ?? null;
     const changes: FleetImportChange[] = [];
     if (existing) {
-      if (existing.areaName.toLowerCase() !== area.name.toLowerCase())
-        changes.push({ field: "area", from: existing.areaName, to: area.name });
+      if (existing.area.toLowerCase() !== area.toLowerCase())
+        changes.push({ field: "area", from: existing.area, to: area });
       if ((existing.busCode ?? "") !== (busUnit?.code ?? ""))
         changes.push({
           field: "bus",
@@ -345,13 +324,13 @@ export async function validateFleetWorkbook(
         row: n,
         kind: existing ? "updated" : "new",
         digger: digger.code,
-        area: area.name,
+        area,
         bus: busUnit?.code ?? null,
         units: members.map((m) => m.code),
         changes,
       },
       diggerUnitId: digger.id,
-      workAreaId: area.id,
+      workArea: area,
       busUnitId: busUnit?.id ?? null,
       unitIds: members.map((m) => m.id),
       selfId: existing?.id ?? null,

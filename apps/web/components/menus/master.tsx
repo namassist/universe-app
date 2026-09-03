@@ -13,12 +13,7 @@ import {
   Upload,
 } from "lucide-react";
 
-import {
-  AREA_TYPES,
-  MENU_LABELS,
-  type AreaType,
-  type MasterKind,
-} from "@universe/contracts";
+import { MENU_LABELS, type MasterKind } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage, fetchBlob } from "@/lib/api";
@@ -29,7 +24,6 @@ import {
   recordDescription,
   recordFleetAllocation,
   recordParentId,
-  recordType,
   type MasterRecord,
 } from "@/lib/queries/master";
 import { Badge } from "@/components/ui/badge";
@@ -68,7 +62,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 
 /**
- * The eleven lookup catalogues, through one component and one route (design D3).
+ * The ten lookup catalogues, through one component and one route (design D3).
  *
  * The static port flattened every category into `{ name, a, b, c }`, where `a`
  * meant "description" here and "type" there. That is gone: `colsFor` names each
@@ -81,7 +75,7 @@ import { useToast } from "@/components/ui/toast";
  * shared a domain with these, only a table with a dialog.
  */
 
-type Extra = "none" | "description" | "type";
+type Extra = "none" | "description";
 
 const EXTRA_OF_KIND: Record<MasterKind, Extra> = {
   "jenis-unit": "none",
@@ -92,7 +86,6 @@ const EXTRA_OF_KIND: Record<MasterKind, Extra> = {
   simper: "description",
   "kode-simper": "description",
   departemen: "description",
-  "area-kerja": "type",
   perusahaan: "description",
   jabatan: "description",
 };
@@ -113,7 +106,7 @@ const PARENT_OF_KIND: Partial<
 };
 
 type Col = {
-  key: "name" | "description" | "type" | "code" | "parent" | "fleet";
+  key: "name" | "description" | "code" | "parent" | "fleet";
   label: string;
   kind?: "text" | "select" | "bool";
   opts?: readonly string[];
@@ -153,11 +146,6 @@ function colsFor(kind: MasterKind, t: ReturnType<typeof useI18n>["t"]): Col[] {
         { key: "description", label: t.mdDesc },
         ...fleet,
       ];
-    case "type":
-      return [
-        name,
-        { key: "type", label: t.thCat, kind: "select", opts: AREA_TYPES },
-      ];
     default:
       return [name];
   }
@@ -175,11 +163,9 @@ const valueOf = (row: MasterRecord, key: Col["key"]): string =>
         ? recordCode(row)
         : key === "parent"
           ? recordParentId(row)
-          : key === "fleet"
-            ? recordFleetAllocation(row)
-              ? "1"
-              : "0"
-            : recordType(row);
+          : recordFleetAllocation(row)
+            ? "1"
+            : "0";
 
 export function MasterMenu({
   mode,
@@ -241,7 +227,6 @@ export function MasterMenu({
   const [editing, setEditing] = React.useState<MasterRecord | null>(null);
   const [fName, setFName] = React.useState("");
   const [fDesc, setFDesc] = React.useState("");
-  const [fType, setFType] = React.useState<AreaType>(AREA_TYPES[0]);
   const [fCode, setFCode] = React.useState("");
   const [fParent, setFParent] = React.useState("");
   const [fFleet, setFFleet] = React.useState(false);
@@ -285,7 +270,6 @@ export function MasterMenu({
       id: string | null;
       name: string;
       description: string;
-      type: AreaType;
       code: string;
       parentId: string;
       fleetAllocation: boolean;
@@ -294,7 +278,6 @@ export function MasterMenu({
       const body = {
         name: input.name,
         ...(extra === "description" ? { description: input.description } : {}),
-        ...(extra === "type" ? { type: input.type } : {}),
         ...(cat === "perusahaan" ? { code: input.code } : {}),
         ...(cat === "jabatan"
           ? { fleetAllocation: input.fleetAllocation }
@@ -471,7 +454,6 @@ export function MasterMenu({
     setEditing(null);
     setFName("");
     setFDesc("");
-    setFType(AREA_TYPES[0]);
     setFCode("");
     setFFleet(false);
     // Pre-selected when there is exactly one to choose, which is the common
@@ -489,7 +471,6 @@ export function MasterMenu({
     setEditing(r);
     setFName(r.name);
     setFDesc(recordDescription(r));
-    setFType((recordType(r) || AREA_TYPES[0]) as AreaType);
     setFCode(recordCode(r));
     setFParent(recordParentId(r));
     setFFleet(recordFleetAllocation(r));
@@ -511,7 +492,6 @@ export function MasterMenu({
       id: editing?.id ?? null,
       name,
       description: fDesc,
-      type: fType,
       code: fCode.trim(),
       parentId: fParent,
       fleetAllocation: fFleet,
@@ -526,9 +506,7 @@ export function MasterMenu({
         ? fDesc
         : key === "code"
           ? fCode
-          : key === "parent"
-            ? fParent
-            : fType;
+          : fParent;
   const setFieldValue = (key: Col["key"], v: string) =>
     key === "name"
       ? setFName(v)
@@ -536,9 +514,7 @@ export function MasterMenu({
         ? setFDesc(v)
         : key === "code"
           ? setFCode(v)
-          : key === "parent"
-            ? setFParent(v)
-            : setFType(v as AreaType);
+          : setFParent(v);
 
   return (
     <div className="flex flex-col gap-6">

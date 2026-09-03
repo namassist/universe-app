@@ -281,7 +281,7 @@ export function DisplayAdminMenu({
     return fleets.filter(
       (f) =>
         f.diggerCode.toLowerCase().includes(needle) ||
-        f.workAreaName.toLowerCase().includes(needle)
+        f.workArea.toLowerCase().includes(needle)
     );
   }, [fleets, fleetQ]);
 
@@ -766,7 +766,7 @@ export function DisplayAdminMenu({
                               <span className="min-w-0 flex-1 truncate">
                                 {`Fleet ${f.diggerCode}`}
                                 <span className="text-(--text-tertiary)">
-                                  {` — ${f.workAreaName} · ${f.units.length + 1} unit`}
+                                  {` — ${f.workArea} · ${f.units.length + 1} unit`}
                                 </span>
                               </span>
                             </ToggleRow>

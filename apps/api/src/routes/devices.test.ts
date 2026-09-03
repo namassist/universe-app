@@ -67,12 +67,6 @@ async function makeFleets(count: number): Promise<string[]> {
     { table: "unitModels", id: mdl!.id },
     { table: "unitBrands", id: brd!.id }
   );
-  const [area] = await db
-    .insert(schema.workAreas)
-    .values({ name: `${tag} Pit`, type: "Mining" })
-    .returning({ id: schema.workAreas.id });
-  made.areas.push(area!.id);
-
   const ids: string[] = [];
   for (let i = 0; i < count; i++) {
     const [unit] = await db
@@ -88,7 +82,7 @@ async function makeFleets(count: number): Promise<string[]> {
     made.units.push(unit!.id);
     const [fleet] = await db
       .insert(schema.fleets)
-      .values({ diggerUnitId: unit!.id, workAreaId: area!.id })
+      .values({ diggerUnitId: unit!.id, workArea: `${tag} Pit` })
       .returning({ id: schema.fleets.id });
     made.fleets.push(fleet!.id);
     ids.push(fleet!.id);
@@ -164,10 +158,6 @@ afterAll(async () => {
       .where(inArray(schema.fleets.id, made.fleets));
   if (made.units.length)
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
-  if (made.areas.length)
-    await db
-      .delete(schema.workAreas)
-      .where(inArray(schema.workAreas.id, made.areas));
   for (const { table, id } of made.catalogues)
     await db.delete(schema[table]).where(eq(schema[table].id, id));
 });

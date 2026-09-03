@@ -54,7 +54,6 @@ import {
   MasterImportResultSchema,
   MasterKindSchema,
   MasterRecordSchema,
-  OptionalAreaTypeSchema,
 } from "./schemas";
 
 /**
@@ -73,7 +72,6 @@ const MENU_OF_KIND: Record<MasterKind, MenuSlug> = {
   simper: "simper",
   "kode-simper": "kode-simper",
   departemen: "departemen",
-  "area-kerja": "area-kerja",
   mess: "mess",
   perusahaan: "perusahaan",
   jabatan: "jabatan",
@@ -109,7 +107,7 @@ type ParentConfig = {
 type KindConfig = {
   table: NamedCatalogue;
   /** Which optional column this catalogue carries, if any. */
-  extra: "none" | "description" | "type";
+  extra: "none" | "description";
   /** Companies carry a short code beside their name — `UDU`, `RBS`. */
   hasCode?: boolean;
   /** Positions carry whether the allocation engine may draw from them. */
@@ -119,10 +117,9 @@ type KindConfig = {
   /**
    * What points at this record, counted per referrer.
    *
-   * `null` only where nothing references the catalogue at all — work areas,
-   * which no table keys on yet. Everything else has at least one referrer since
-   * `employees` landed: mess and permit types acquired their first, and
-   * departments and qualification codes acquired a second beside units.
+   * `null` where nothing references the catalogue at all. Nothing sets it
+   * today — every remaining catalogue has at least one referrer since
+   * `employees` landed — and it stays for the next one that does not.
    *
    * A list rather than a single number because the two answers differ: "still
    * used by 3 units and 12 employees" tells an operator where to look, and
@@ -224,11 +221,6 @@ const KIND_TABLES: Record<MasterKind, KindConfig> = {
       }
     ),
   },
-  "area-kerja": {
-    table: schema.workAreas,
-    extra: "type",
-    countReferences: null,
-  },
   mess: {
     table: schema.mess,
     extra: "none",
@@ -283,8 +275,8 @@ function describeReferences(counts: ReferenceCount[]): string {
  *
  * The two casts are the price of one handler over nine tables: `NamedCatalogue`
  * describes only the four columns every catalogue shares, and `extra` is what
- * says whether this particular one also has `description` or `type`. The map
- * and the table definitions are the pairing that keeps them honest.
+ * says whether this particular one also has a `description`. The map and the
+ * table definitions are the pairing that keeps them honest.
  */
 function projection(config: KindConfig): Record<string, AnyPgColumn> {
   const table = config.table;
@@ -294,9 +286,7 @@ function projection(config: KindConfig): Record<string, AnyPgColumn> {
           description: (table as unknown as { description: AnyPgColumn })
             .description,
         }
-      : config.extra === "type"
-        ? { type: (table as unknown as { type: AnyPgColumn }).type }
-        : {};
+      : {};
   return {
     id: table.id,
     name: table.name,
@@ -583,12 +573,6 @@ export const masterRoutes = new Elysia({
           code: "validation_failed",
           message: "Nama tidak boleh kosong",
         });
-      if (config.extra === "type" && body.type === undefined)
-        return status(422, {
-          code: "validation_failed",
-          message: "Tipe area wajib diisi",
-        });
-
       const code = body.code?.trim();
       if (config.hasCode && !code)
         return status(422, {
@@ -624,7 +608,6 @@ export const masterRoutes = new Elysia({
             ...(config.extra === "description"
               ? { description: body.description?.trim() ?? "" }
               : {}),
-            ...(config.extra === "type" ? { type: body.type } : {}),
             ...(config.hasCode ? { code } : {}),
             ...(config.hasFleetFlag
               ? { fleetAllocation: body.fleetAllocation ?? false }
@@ -648,7 +631,6 @@ export const masterRoutes = new Elysia({
       body: t.Object({
         name: t.String({ minLength: 1 }),
         description: t.Optional(t.String()),
-        type: OptionalAreaTypeSchema,
         active: t.Optional(t.Boolean()),
         code: t.Optional(t.String()),
         fleetAllocation: t.Optional(t.Boolean()),
@@ -805,7 +787,6 @@ export const masterRoutes = new Elysia({
             ...(config.extra === "description"
               ? { description: row.parsed.description ?? "" }
               : {}),
-            ...(config.extra === "type" ? { type: row.parsed.type } : {}),
             ...(config.hasCode ? { code: row.parsed.code } : {}),
             ...(config.hasFleetFlag
               ? { fleetAllocation: row.parsed.fleetAllocation }
@@ -957,9 +938,6 @@ export const masterRoutes = new Elysia({
         ...(config.extra === "description" && body.description !== undefined
           ? { description: body.description.trim() }
           : {}),
-        ...(config.extra === "type" && body.type !== undefined
-          ? { type: body.type }
-          : {}),
         ...(config.hasCode && body.code !== undefined
           ? { code: body.code.trim() }
           : {}),
@@ -1008,7 +986,6 @@ export const masterRoutes = new Elysia({
       body: t.Object({
         name: t.Optional(t.String()),
         description: t.Optional(t.String()),
-        type: OptionalAreaTypeSchema,
         active: t.Optional(t.Boolean()),
         code: t.Optional(t.String()),
         fleetAllocation: t.Optional(t.Boolean()),

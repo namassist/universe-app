@@ -58,7 +58,6 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   simper: (p) => <MasterMenu {...p} cat="simper" />,
   "kode-simper": (p) => <MasterMenu {...p} cat="kode-simper" />,
   departemen: (p) => <MasterMenu {...p} cat="departemen" />,
-  "area-kerja": (p) => <MasterMenu {...p} cat="area-kerja" />,
   mess: (p) => <MasterMenu {...p} cat="mess" />,
   perusahaan: (p) => <MasterMenu {...p} cat="perusahaan" />,
   jabatan: (p) => <MasterMenu {...p} cat="jabatan" />,

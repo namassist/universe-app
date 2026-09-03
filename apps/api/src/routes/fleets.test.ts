@@ -31,14 +31,12 @@ const made = {
     table: "classes" | "types" | "models" | "brands";
     id: string;
   }[],
-  workAreas: [] as string[],
 };
 
 let admin: { cookie: string };
 let viewer: { cookie: string };
 
-let miningArea = "";
-let officeArea = "";
+const pit = `${tag} PIT`;
 let busTypeId = "";
 let busTypeCreated = false;
 
@@ -106,7 +104,7 @@ const send = (method: string, path: string, cookie: string, body?: unknown) =>
 type FleetBody = {
   id: string;
   diggerCode: string;
-  workAreaName: string;
+  workArea: string;
   busCode: string | null;
   units: { id: string; code: string }[];
   active: boolean;
@@ -169,18 +167,6 @@ beforeAll(async () => {
     busTypeCreated = true;
   }
 
-  const [mining] = await db
-    .insert(schema.workAreas)
-    .values({ name: `${tag} PIT`, type: "Mining" })
-    .returning({ id: schema.workAreas.id });
-  const [office] = await db
-    .insert(schema.workAreas)
-    .values({ name: `${tag} OFFICE`, type: "Non Mining" })
-    .returning({ id: schema.workAreas.id });
-  miningArea = mining!.id;
-  officeArea = office!.id;
-  made.workAreas.push(miningArea, officeArea);
-
   const refs = { classId: cls!.id, modelId: mdl!.id, brandId: brd!.id };
   digger1 = await makeUnit(`ZZEX1${uid()}`, typ!.id, refs);
   digger2 = await makeUnit(`ZZEX2${uid()}`, typ!.id, refs);
@@ -208,10 +194,6 @@ afterAll(async () => {
   }
   if (busTypeCreated)
     await db.delete(schema.unitTypes).where(eq(schema.unitTypes.id, busTypeId));
-  if (made.workAreas.length)
-    await db
-      .delete(schema.workAreas)
-      .where(inArray(schema.workAreas.id, made.workAreas));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
@@ -226,7 +208,7 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
     expect(list.status).toBe(200);
     const create = await send("POST", "/fleets", viewer.cookie, {
       diggerUnitId: digger1.id,
-      workAreaId: miningArea,
+      workArea: pit,
       unitIds: [hauler1.id],
     });
     expect(create.status).toBe(403);
@@ -235,12 +217,12 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
   test("a fleet is created whole — digger, bus, members, area", async () => {
     const fleet = await createFleet({
       diggerUnitId: digger1.id,
-      workAreaId: miningArea,
+      workArea: pit,
       busUnitId: busUnit.id,
       unitIds: [hauler1.id, hauler2.id],
     });
     expect(fleet.diggerCode).toBe(digger1.code);
-    expect(fleet.workAreaName).toBe(`${tag} PIT`);
+    expect(fleet.workArea).toBe(pit);
     expect(fleet.busCode).toBe(busUnit.code);
     expect(fleet.units.map((u) => u.code).sort()).toEqual(
       [hauler1.code, hauler2.code].sort()
@@ -251,7 +233,7 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
   test("a digger leads at most one fleet", async () => {
     const response = await send("POST", "/fleets", admin.cookie, {
       diggerUnitId: digger1.id,
-      workAreaId: miningArea,
+      workArea: pit,
       unitIds: [hauler3.id],
     });
     expect(response.status).toBe(409);
@@ -261,7 +243,7 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
   test("a hauler hauls for one fleet, and the refusal names it", async () => {
     const response = await send("POST", "/fleets", admin.cookie, {
       diggerUnitId: digger2.id,
-      workAreaId: miningArea,
+      workArea: pit,
       unitIds: [hauler1.id],
     });
     expect(response.status).toBe(422);
@@ -272,7 +254,7 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
   test("a digger cannot haul for itself", async () => {
     const response = await send("POST", "/fleets", admin.cookie, {
       diggerUnitId: digger2.id,
-      workAreaId: miningArea,
+      workArea: pit,
       unitIds: [digger2.id],
     });
     expect(response.status).toBe(422);
@@ -281,7 +263,7 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
   test("a fleet leader cannot be another fleet's hauler", async () => {
     const response = await send("POST", "/fleets", admin.cookie, {
       diggerUnitId: digger2.id,
-      workAreaId: miningArea,
+      workArea: pit,
       unitIds: [digger1.id],
     });
     expect(response.status).toBe(422);
@@ -292,7 +274,7 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
   test("the bus must be a unit of type BUS", async () => {
     const response = await send("POST", "/fleets", admin.cookie, {
       diggerUnitId: digger2.id,
-      workAreaId: miningArea,
+      workArea: pit,
       busUnitId: hauler3.id,
       unitIds: [hauler3.id],
     });
@@ -301,21 +283,19 @@ describe("a fleet is a digger, its haulers, and a Mining work area", () => {
     expect(body.message).toContain("BUS");
   });
 
-  test("the location must be a Mining work area", async () => {
+  test("a blank location is refused — it is typed, so nothing else checks it", async () => {
     const response = await send("POST", "/fleets", admin.cookie, {
       diggerUnitId: digger2.id,
-      workAreaId: officeArea,
+      workArea: "",
       unitIds: [hauler3.id],
     });
     expect(response.status).toBe(422);
-    const body = (await response.json()) as { message: string };
-    expect(body.message).toContain("Mining");
   });
 
   test("the member list is bounded", async () => {
     const response = await send("POST", "/fleets", admin.cookie, {
       diggerUnitId: digger2.id,
-      workAreaId: miningArea,
+      workArea: pit,
       unitIds: Array.from({ length: 14 }, () => crypto.randomUUID()),
     });
     expect(response.status).toBe(422);
@@ -338,7 +318,7 @@ describe("editing replaces the member list; deleting releases it", () => {
     // one. hauler1 is dropped, hauler3 picked up.
     const response = await send("PATCH", `/fleets/${fleet!.id}`, admin.cookie, {
       diggerUnitId: digger1.id,
-      workAreaId: miningArea,
+      workArea: pit,
       busUnitId: null,
       unitIds: [hauler2.id, hauler3.id],
     });
@@ -352,7 +332,7 @@ describe("editing replaces the member list; deleting releases it", () => {
     // The freed hauler is immediately offerable to a second fleet.
     const second = await createFleet({
       diggerUnitId: digger2.id,
-      workAreaId: miningArea,
+      workArea: pit,
       unitIds: [hauler1.id],
       active: false,
     });
@@ -507,14 +487,14 @@ describe("several formations disband at once", () => {
     fleetA = (
       await createFleet({
         diggerUnitId: digA.id,
-        workAreaId: miningArea,
+        workArea: pit,
         unitIds: [hauler.id],
       })
     ).id;
     fleetB = (
       await createFleet({
         diggerUnitId: digB.id,
-        workAreaId: miningArea,
+        workArea: pit,
         unitIds: [haulerB.id],
       })
     ).id;

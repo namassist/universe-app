@@ -15,7 +15,6 @@ import { t } from "elysia";
 import {
   ACCESS_MODES,
   ACCOUNT_IMPORT_FIELDS,
-  AREA_TYPES,
   BLOOD_TYPES,
   DEVICE_KINDS,
   DISPLAY_LAYOUTS,
@@ -41,7 +40,6 @@ export const MenuSlugSchema = t.UnionEnum(MENU_SLUGS);
 export const DeviceKindSchema = t.UnionEnum(DEVICE_KINDS);
 export const DisplayLayoutSchema = t.UnionEnum(DISPLAY_LAYOUTS);
 export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
-export const AreaTypeSchema = t.UnionEnum(AREA_TYPES);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
 export const TimelineActionSchema = t.UnionEnum(TIMELINE_ACTIONS);
 export const ShiftKindSchema = t.UnionEnum(SHIFT_KINDS);
@@ -80,8 +78,6 @@ const DeviceKindUnion = t.Union([
   t.Literal("fitwork"),
   t.Literal("fingerprint"),
 ]);
-
-const AreaTypeUnion = t.Union([t.Literal("Mining"), t.Literal("Non Mining")]);
 
 const RunTextColorUnion = t.Union([
   t.Literal("Cyan"),
@@ -182,9 +178,6 @@ type _ScopeInSync = Assert<
 type _DeviceKindInSync = Assert<
   IsExact<(typeof DeviceKindUnion)["static"], (typeof DEVICE_KINDS)[number]>
 >;
-type _AreaTypeInSync = Assert<
-  IsExact<(typeof AreaTypeUnion)["static"], (typeof AREA_TYPES)[number]>
->;
 type _RunTextColorInSync = Assert<
   IsExact<(typeof RunTextColorUnion)["static"], (typeof RUNTEXT_COLORS)[number]>
 >;
@@ -228,7 +221,6 @@ type _RosterRevisionStatusInSync = Assert<
 
 export const OptionalScopeSchema = t.Optional(ScopeUnion);
 export const OptionalDeviceKindSchema = t.Optional(DeviceKindUnion);
-export const OptionalAreaTypeSchema = t.Optional(AreaTypeUnion);
 export const OptionalRunTextColorSchema = t.Optional(RunTextColorUnion);
 export const OptionalTimelineActionSchema = t.Optional(TimelineActionUnion);
 /** Nullable as well as optional: absent leaves the shift, `null` clears it. */
@@ -515,14 +507,6 @@ export const MasterDescribedSchema = t.Object({
   createdAt: t.String(),
 });
 
-export const MasterWorkAreaSchema = t.Object({
-  id: t.String(),
-  name: t.String(),
-  type: AreaTypeSchema,
-  active: t.Boolean(),
-  createdAt: t.String(),
-});
-
 /** A company: described, plus the short code the site refers to it by. */
 export const MasterCompanySchema = t.Object({
   id: t.String(),
@@ -556,9 +540,9 @@ export const MasterPositionSchema = t.Object({
 });
 
 /**
- * Order is load-bearing: a union is checked variant by variant, and every
- * work-area row also satisfies the name-only shape (extra members are allowed).
- * Most specific first, or a described row validates as a bare name and its
+ * Order is load-bearing: a union is checked variant by variant, and a described
+ * row also satisfies the name-only shape (extra members are allowed). Most
+ * specific first, or a described row validates as a bare name and its
  * `description` is normalised away before it reaches the client.
  *
  * The three owned shapes lead for the same reason — a department row also
@@ -569,7 +553,6 @@ export const MasterRecordSchema = t.Union([
   MasterCompanySchema,
   MasterDepartmentSchema,
   MasterPositionSchema,
-  MasterWorkAreaSchema,
   MasterDescribedSchema,
   MasterNameSchema,
 ]);
@@ -690,8 +673,7 @@ export const FleetSchema = t.Object({
   id: t.String(),
   diggerUnitId: t.String(),
   diggerCode: t.String(),
-  workAreaId: t.String(),
-  workAreaName: t.String(),
+  workArea: t.String(),
   busUnitId: t.Nullable(t.String()),
   busCode: t.Nullable(t.String()),
   units: t.Array(t.Object({ id: t.String(), code: t.String() })),

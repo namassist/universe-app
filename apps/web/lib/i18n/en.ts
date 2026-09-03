@@ -705,6 +705,7 @@ export const en: Dict = {
   flEditT: "Edit Fleet",
   flSaveAdd: "Save fleet",
   flLoc: "Work location",
+  flLocPh: "e.g. Panel East Puncak Utara",
   flBus: "Default transport",
   flUnits: "Units in fleet",
   flUnitsHelp:
@@ -713,6 +714,7 @@ export const en: Dict = {
   flSearchPh: "Search fleet / digger…",
   flListTitle: "Fleet formations",
   flErrDigger: "A digger is required and must not lead another fleet.",
+  flErrLoc: "A work location is required.",
   flErrMax: "Maximum 12 OHT units in one fleet (13 incl. digger).",
   flErrMin: "Minimum 8 OHT units in one fleet (9 incl. digger).",
   flDlgB:

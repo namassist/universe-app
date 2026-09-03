@@ -68,7 +68,7 @@ let cls: string, typ: string, mdl: string, brd: string;
  * because they are scaffolding rather than subject matter; the haulers come
  * and go with each test.
  */
-let fleetId: string, fleetArea: string, fleetDigger: string;
+let fleetId: string, fleetDigger: string;
 
 let deptA: string, deptB: string, posAlloc: string, posOther: string;
 let codeA: string;
@@ -258,11 +258,6 @@ beforeAll(async () => {
   /* The suite's formation. Its digger is a unit like any other, but it is not
      in `made.units` — that list is emptied after every test, and the fleet
      that references the digger would block its deletion. */
-  const [area] = await db
-    .insert(schema.workAreas)
-    .values({ name: `${tag} Pit`, type: "Mining" })
-    .returning({ id: schema.workAreas.id });
-  fleetArea = area!.id;
   const [digger] = await db
     .insert(schema.units)
     .values({
@@ -281,7 +276,7 @@ beforeAll(async () => {
   fleetDigger = digger!.id;
   const [fleet] = await db
     .insert(schema.fleets)
-    .values({ diggerUnitId: fleetDigger, workAreaId: fleetArea })
+    .values({ diggerUnitId: fleetDigger, workArea: `${tag} Pit` })
     .returning({ id: schema.fleets.id });
   fleetId = fleet!.id;
 });
@@ -297,8 +292,6 @@ afterAll(async () => {
       .where(eq(schema.fleetActualSlots.unitId, fleetDigger));
     await db.delete(schema.units).where(eq(schema.units.id, fleetDigger));
   }
-  if (fleetArea)
-    await db.delete(schema.workAreas).where(eq(schema.workAreas.id, fleetArea));
 
   for (const id of made.docs)
     await db

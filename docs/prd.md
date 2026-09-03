@@ -16,8 +16,15 @@ fill the gap from the spare pool.
 ### Fleet composition (Fleet Settings) — shipped
 
 - A fleet is one **digger** (leader), 1–13 **member units** (haulers/support),
-  a **Mining work area**, and optionally a **crew bus** (a unit of type BUS).
+  a **work location**, and optionally a **crew bus** (a unit of type BUS or
+  MANHAUL TRUCK).
   Bounds live in `@universe/contracts` (`FLEET_MIN_UNITS`/`FLEET_MAX_UNITS`).
+- The work location is **free text on the fleet**, not a catalogue (owner,
+  2026-09-03). Pits open and close within days, so a master list of them would
+  grow without bound and be mostly dead rows. Two consequences are accepted
+  knowingly: nothing keeps the spelling uniform, and nothing records where a
+  fleet worked yesterday — the column holds today's answer, and every screen
+  that shows a location shows today's.
 - A digger leads at most one fleet; a unit hauls for at most one fleet; a
   fleet leader never hauls for another fleet. All held by unique indexes, with
   route prechecks that name the offending unit in the refusal.
@@ -33,8 +40,8 @@ fill the gap from the spare pool.
 - Changing status requires a reason; every change appends to a per-unit
   history timeline (`unit_status_history`), written in the same transaction
   as the flags. The list reports only active units.
-- A unit's displayed location is its fleet's work area — whether it leads the
-  fleet or hauls in it; a unit in no fleet shows none.
+- A unit's displayed location is its fleet's work location — whether it leads
+  the fleet or hauls in it; a unit in no fleet shows none.
 
 ### Fleet allocation — Plan tab shipped, Actual deferred
 
@@ -608,7 +615,7 @@ fill the gap from the spare pool.
   `2 × ceil(n/2) ≥ n`, nothing is ever cut, and the wall keeps its promise that
   an idle unit is never summarised away.
 - **Each quadrant names its formation the way the yard does**: `Fleet <digger>`
-  with the work area beside it, then the bus and the digger as badges and its
+  with the work location beside it, then the bus and the digger as badges and its
   own counts (`n unit · n siap · n kosong · n spare`). A quadrant whose
   formation has an empty seat outlines itself red, so a missing operator is
   visible before a single card is read.
@@ -626,7 +633,7 @@ fill the gap from the spare pool.
   would have to rescan the wall every time it came round.
 - **Each layout heads itself with what its screen is about** (owner,
   2026-08-31). A slideshow is about one formation, so it reads
-  `Fleet <digger>` over the work area and the bus. A monitor is about four, so
+  `Fleet <digger>` over the work location and the bus. A monitor is about four, so
   no formation can name it — it takes the screen's own registered name
   (`devices.name`, now delivered with the board) over
   `Halaman 1/3 | fleet 1–4 dari 9`. Both keep the shift badge — the wall turns

@@ -148,6 +148,20 @@
       "when": 1788175680775,
       "tag": "0020_strange_fallen_one",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788439384463,
+      "tag": "0021_condemned_the_renegades",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788439400861,
+      "tag": "0022_confused_mongoose",
+      "breakpoints": true
     }
   ]
 }

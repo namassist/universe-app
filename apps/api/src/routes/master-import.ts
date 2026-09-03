@@ -31,7 +31,6 @@
 
 import ExcelJS from "exceljs";
 import {
-  AREA_TYPES,
   BLOOD_TYPES,
   EMPLOYEE_IMPORT_COLUMNS,
   EMPLOYEE_STATUSES,
@@ -40,7 +39,6 @@ import {
   MCU_RESULTS,
   SKILL_SEPARATOR,
   UNIT_IMPORT_COLUMNS,
-  type AreaType,
   type BloodType,
   type EmployeeStatus,
   type ImportErrorRow,
@@ -485,7 +483,6 @@ export type CatalogueExisting = {
   id: string;
   name: string;
   description?: string;
-  type?: string;
   /** Companies only — the short form beside the name. */
   code?: string;
   /** Positions only — whether the allocation engine may draw from this one. */
@@ -501,7 +498,6 @@ export type CatalogueExisting = {
 export type ParsedCatalogue = {
   name: string;
   description: string | undefined;
-  type: AreaType | undefined;
   code: string | undefined;
   fleetAllocation: boolean | undefined;
   /** The resolved owner, where the kind has one. */
@@ -533,7 +529,7 @@ export type CatalogueShape = {
 
 export function catalogueTarget(
   kind: MasterKind,
-  extra: "none" | "description" | "type",
+  extra: "none" | "description",
   existing: Map<string, CatalogueExisting>,
   shape: CatalogueShape = {}
 ): ImportTarget<CatalogueExisting, ParsedCatalogue> {
@@ -579,26 +575,6 @@ export function catalogueTarget(
       if (shape.hasCode && !code && !current)
         return { issue: "Kode wajib diisi", key: name, label: "" };
 
-      let type: AreaType | undefined;
-      if (extra === "type") {
-        const raw = read("tipe");
-        // Empty is allowed on an update — the row keeps the type it has. On a
-        // new row there is nothing to keep, so it has to be stated.
-        if (!raw && current) type = current.type as AreaType;
-        else {
-          const matched = AREA_TYPES.find(
-            (t) => t.toLowerCase() === raw.toLowerCase()
-          );
-          if (!matched)
-            return {
-              issue: `Tipe "${raw || "—"}" bukan ${AREA_TYPES.join(" atau ")}`,
-              key: name,
-              label: raw,
-            };
-          type = matched;
-        }
-      }
-
       return {
         name,
         description:
@@ -609,7 +585,6 @@ export function catalogueTarget(
               // description off every row it touched.
               read("deskripsi") || (current?.description ?? "")
             : undefined,
-        type,
         code: shape.hasCode ? code || (current?.code ?? "") : undefined,
         // Blank keeps what the record has, like every other optional column
         // here — a file that omits the column must not clear the flag off
@@ -623,7 +598,7 @@ export function catalogueTarget(
       };
     },
     keyOf: (p) => p.key,
-    labelOf: (p) => p.description ?? p.type ?? "",
+    labelOf: (p) => p.description ?? "",
     // The key *is* the master entry here, so a new one close to an existing one
     // is the near-duplicate worth catching.
     nearMatch: (key) =>
@@ -645,12 +620,6 @@ export function catalogueTarget(
           field: "deskripsi",
           from: current.description ?? "",
           to: parsed.description,
-        });
-      if (parsed.type !== undefined && current.type !== parsed.type)
-        changes.push({
-          field: "tipe",
-          from: current.type ?? null,
-          to: parsed.type,
         });
       if (parsed.code !== undefined && (current.code ?? "") !== parsed.code)
         changes.push({
@@ -694,7 +663,7 @@ function catalogueSheet(
 
 export async function catalogueWorkbook(
   kind: MasterKind,
-  extra: "none" | "description" | "type",
+  extra: "none" | "description",
   rows: CatalogueExisting[]
 ): Promise<Buffer> {
   const [wb, ws] = catalogueSheet(kind);
@@ -708,7 +677,6 @@ export async function catalogueWorkbook(
       ),
       nama: row.name,
       ...(extra === "description" ? { deskripsi: row.description ?? "" } : {}),
-      ...(extra === "type" ? { tipe: row.type ?? "" } : {}),
       ...(row.code !== undefined ? { kode: row.code } : {}),
       ...(row.fleetAllocation !== undefined
         ? { alokasi_fleet: boolText(row.fleetAllocation) }
@@ -722,10 +690,8 @@ export async function catalogueWorkbook(
  * One filled-in row per kind, so the expected shape is obvious without a
  * manual — the same job the account template's example row does.
  *
- * A worked example rather than a description: `area-kerja` shows `Mining` in
- * the `tipe` column, which says what that column accepts more precisely than a
- * note beside it would, and `kelas-unit` shows a code beside its description so
- * the two are not transposed.
+ * A worked example rather than a description: `kelas-unit` shows a code beside
+ * its description so the two are not transposed.
  */
 const CATALOGUE_EXAMPLE: Record<MasterKind, Record<string, string>> = {
   "jenis-unit": { nama: "EXCAVATOR" },
@@ -738,7 +704,6 @@ const CATALOGUE_EXAMPLE: Record<MasterKind, Record<string, string>> = {
     nama: "EXC 2600",
     deskripsi: "Excavator Hitachi EX2600 / EX2000",
   },
-  "area-kerja": { nama: "Panel East Puncak Utara", tipe: "Mining" },
   perusahaan: {
     nama: "PT UNGGUL DINAMIKA UTAMA",
     kode: "UDU",
