@@ -20,7 +20,10 @@ import {
 } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
 
+import type { EmployeeStatus } from "@universe/contracts";
+
 import { buildBoard, storeBoard } from "./allocation";
+import { pairingRefusal } from "./routes/fleet-allocation";
 import { db, schema } from "./db";
 import { redis } from "./redis";
 
@@ -82,7 +85,7 @@ async function addEmployee(input: {
   departmentId?: string;
   positionId?: string;
   simperExp?: string | null;
-  status?: "aktif" | "nonaktif";
+  status?: EmployeeStatus;
 }) {
   const [row] = await db
     .insert(schema.employees)
@@ -425,6 +428,74 @@ describe("the planned operator", () => {
 
     const slot = (await mine(date, "day")).find((s) => s.unitId === unit);
     expect(slot?.employeeId).toBeNull();
+  });
+});
+
+describe("employment status is the first gate", () => {
+  /*
+   * Only `aktif` is allocatable (owner, 2026-09-03). `standby` is on the
+   * payroll but not to be given a unit, and the roster does not know that —
+   * these two pin that a full day's evidence (rostered, tapped in time, FTW
+   * filed) still does not put such a person on a machine.
+   */
+  for (const status of ["standby", "nonaktif"] as const) {
+    test(`a ${status} operator loses their own unit, however well they tapped`, async () => {
+      const date = nextDate();
+      const nik = newNik();
+      const person = await addEmployee({ nik, status });
+      const unit = await addUnit({ code: `${tag}-S${status[0]!}1` });
+      await roster(date, person, "D");
+      await plan(unit, person);
+      await tapAt(date, nik, "05:01:00");
+
+      const slot = (await mine(date)).find((s) => s.unitId === unit);
+      expect(slot?.employeeId).toBeNull();
+      // Not "late", not "missing" — they were never judged. The status gate
+      // runs before readiness, so there is no readiness to report.
+      expect(slot?.readiness).toBeNull();
+    });
+
+    test(`nor can a ${status} operator fill a vacancy as a spare`, async () => {
+      const date = nextDate();
+      const unit = await addUnit({ code: `${tag}-S${status[0]!}2` });
+
+      const nik = newNik();
+      const person = await addEmployee({ nik, status });
+      await roster(date, person, "D");
+      await tapAt(date, nik, "04:00:00");
+
+      expect(
+        (await mine(date)).find((s) => s.unitId === unit)?.employeeId
+      ).toBeNull();
+    });
+  }
+
+  test("a standby operator is refused by name when assigned by hand", async () => {
+    const person = {
+      id: "x",
+      nik: "1",
+      name: "x",
+      statusValue: "standby" as const,
+      departmentId: deptA,
+      simperExp: null,
+      positionName: "Driver OHT",
+      fleetAllocation: true,
+    };
+    const refusal = pairingRefusal(
+      {
+        id: "u",
+        code: "U",
+        departmentId: null,
+        departmentName: null,
+        simperCodeId: null,
+        simperCodeName: null,
+      },
+      person,
+      { holdsCode: false, today: "2026-09-03" }
+    );
+    // The message names the status: "standby" and "nonaktif" call for
+    // different follow-ups, and "sudah tidak aktif" would misreport the first.
+    expect(refusal).toContain("standby");
   });
 });
 

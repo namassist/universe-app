@@ -52,11 +52,24 @@ fill the gap from the spare pool.
   (`sameShift` in the candidate list). The board arrives composed from
   `GET /v1/fleet-allocation/plan` — units with status/location/fleet embeds
   and resolved pairs, the fleet filter options, and the spare pool.
-- **Candidate eligibility:** position carries `fleetAllocation`; if the unit
-  requires a SIMPER code, the operator holds it (`employee_skills`) and their
-  SIMPER is not expired; a unit owned by a department only accepts operators
-  of that department (a unit with no department is global); an operator pairs
-  with at most one unit.
+- **Candidate eligibility:** employment status is `aktif`; position carries
+  `fleetAllocation`; if the unit requires a SIMPER code, the operator holds it
+  (`employee_skills`) and their SIMPER is not expired; a unit owned by a
+  department only accepts operators of that department (a unit with no
+  department is global); an operator pairs with at most one unit.
+- **Only `aktif` is allocatable** (owner, 2026-09-03). `EMPLOYEE_STATUSES` is
+  `aktif | standby | nonaktif`; `standby` is on the payroll but not to be given
+  a unit — light duty, a lapsed permit, an investigation. Every gate spells the
+  rule out positively (`status = 'aktif'`) rather than excluding `nonaktif`, so
+  a status added later is excluded by default, which is the safe direction for
+  this list to fail in. The gate runs _before_ readiness: such a person is
+  never judged, so their unit reports an empty seat with no verdict rather than
+  a late or missing one.
+- A rostered shift for anyone not `aktif` is a data mismatch, not an allocation
+  outcome. The roster import warns on it by row; the roster itself is left
+  alone, because the fix belongs on the Karyawan screen. Note the walls do not
+  filter on employment status — such a person still appears on the muster-room
+  and FTW displays if they tap and file.
 - **Spare pool** = fleet-allocation-position operators with no assigned unit.
   Spares follow their own roster and cannot be called outside their shift.
 

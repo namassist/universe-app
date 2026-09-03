@@ -223,6 +223,7 @@ export function EmployeeDetail({ nik }: { nik: string }) {
 
   const statusMap: Record<EmployeeStatus, { v: BadgeVariant; l: string }> = {
     aktif: { v: "success", l: t.stAktif },
+    standby: { v: "warning", l: t.stStandby },
     nonaktif: { v: "danger", l: t.stNonaktif },
   };
   const st = statusMap[emp.status];

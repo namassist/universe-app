@@ -373,7 +373,11 @@ export function pairingRefusal(
     today: string;
   }
 ): string | null {
-  if (person.statusValue !== "aktif") return "Karyawan sudah tidak aktif";
+  /* Positive, not `=== "nonaktif"`: only `aktif` is allocatable, so a status
+     added to the vocabulary is refused here by default. The message names the
+     status because "standby" and "nonaktif" call for different follow-ups. */
+  if (person.statusValue !== "aktif")
+    return `Karyawan berstatus ${person.statusValue} — hanya karyawan aktif yang masuk alokasi`;
   if (!person.fleetAllocation)
     return `Posisi "${person.positionName}" tidak masuk alokasi fleet`;
   if (unit.departmentId && person.departmentId !== unit.departmentId)

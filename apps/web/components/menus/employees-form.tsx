@@ -792,8 +792,9 @@ function EmployeeFields({
                     onChange={(e) => up("joinDate", e.target.value)}
                   />
                 </Field>
-                {/* Two values, not three: leave is dated and owned by the roster
-                  (design D7). */}
+                {/* Employment only. Leave is dated and owned by the roster
+                  (design D7), so it is not a value here. `standby` is —
+                  on the payroll, but not given a unit. */}
                 <Field label={t.thStatus} htmlFor="ef-status">
                   <Select
                     id="ef-status"
@@ -803,6 +804,7 @@ function EmployeeFields({
                     }
                   >
                     <option value="aktif">{t.stAktif}</option>
+                    <option value="standby">{t.stStandby}</option>
                     <option value="nonaktif">{t.stNonaktif}</option>
                   </Select>
                 </Field>

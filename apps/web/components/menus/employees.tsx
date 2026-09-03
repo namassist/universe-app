@@ -165,6 +165,8 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
   function statusBadge(row: EmployeeRow) {
     const map: Record<EmployeeStatus, { v: BadgeVariant; l: string }> = {
       aktif: { v: "success", l: t.stAktif },
+      // Warning, not danger: standby is on the payroll, just not on a unit.
+      standby: { v: "warning", l: t.stStandby },
       nonaktif: { v: "danger", l: t.stNonaktif },
     };
     const m = map[row.status];
@@ -220,6 +222,7 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
             >
               <option value="">{t.allStatus}</option>
               <option value="aktif">{t.stAktif}</option>
+              <option value="standby">{t.stStandby}</option>
               <option value="nonaktif">{t.stNonaktif}</option>
             </Select>
             <Button variant="secondary" onClick={exportSheet}>

@@ -37,6 +37,7 @@ import {
   isRosterCode,
   ROSTER_CODE_KIND,
   ROSTER_IMPORT_FIXED_COLUMNS,
+  type EmployeeStatus,
   type ImportErrorRow,
   type MasterImportPreview,
   type MasterImportPreviewRow,
@@ -223,7 +224,7 @@ export type RosterEmployee = {
   name: string;
   departmentId: string;
   departmentName: string;
-  status: "aktif" | "nonaktif";
+  status: EmployeeStatus;
 };
 
 /** An approved revision on the document a re-upload would replace (design D9). */
@@ -534,13 +535,16 @@ export function validateRosterSheet(
       const k = ROSTER_CODE_KIND[codes[i]!];
       return k === "day" || k === "night";
     });
-    if (shiftAt && employee.status === "nonaktif")
+    /* Not `=== "nonaktif"`: `standby` is rostered-but-unallocatable too, and
+       this warning exists to catch exactly that mismatch. Written positively
+       so a status added later warns by default rather than passing silently. */
+    if (shiftAt && employee.status !== "aktif")
       warnings.push(
         remark(
           sheetRow.row,
           nik,
           employee.name,
-          `Masih dirosterkan shift (${codes[days.indexOf(shiftAt)]} pada ${shiftAt}) tapi status karyawan nonaktif — status tidak diubah oleh import, perbaiki di layar Karyawan bila perlu`,
+          `Masih dirosterkan shift (${codes[days.indexOf(shiftAt)]} pada ${shiftAt}) tapi status karyawan ${employee.status} — status tidak diubah oleh import, perbaiki di layar Karyawan bila perlu`,
           "Status berbeda"
         )
       );

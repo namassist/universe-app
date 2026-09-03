@@ -162,6 +162,13 @@
       "when": 1788439400861,
       "tag": "0022_confused_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788440791072,
+      "tag": "0023_concerned_champions",
+      "breakpoints": true
     }
   ]
 }

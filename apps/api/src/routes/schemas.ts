@@ -100,6 +100,7 @@ const ShiftKindUnion = t.Union([t.Literal("day"), t.Literal("night")]);
 
 const EmployeeStatusUnion = t.Union([
   t.Literal("aktif"),
+  t.Literal("standby"),
   t.Literal("nonaktif"),
 ]);
 

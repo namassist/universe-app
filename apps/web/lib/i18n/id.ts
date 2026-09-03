@@ -255,6 +255,7 @@ export const id = {
   dirtyStay: "Tetap di sini",
   dirtyLeave: "Buang perubahan",
   stNonaktif: "Nonaktif",
+  stStandby: "Standby",
   ftwSub:
     "Kelayakan kerja operator berdasarkan log tidur — ambang fit: ≥ 6 jam.",
   ftwLog: "Log tidur operator",

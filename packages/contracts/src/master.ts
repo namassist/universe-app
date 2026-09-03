@@ -13,12 +13,22 @@
 /**
  * Employment status, and only employment (design D7).
  *
- * Two values, not three. "Cuti" was the third in the static port, and it is
- * gone: leave is a fact about a *date*, owned by the roster, and a column with
- * no date cannot answer "on leave until when". Keeping it here would leave two
- * sources of truth for the same question, one of which can never win.
+ * "Cuti" is deliberately not here, and never will be: leave is a fact about a
+ * *date*, owned by the roster, and a column with no date cannot answer "on
+ * leave until when". Keeping it here would leave two sources of truth for the
+ * same question, one of which can never win.
+ *
+ * `standby` is on the payroll but not to be given a unit (owner, 2026-09-03) —
+ * for a spell of light duty, a lapsed permit, an investigation. It is a third
+ * *employment* state rather than a date, which is what keeps it on this list
+ * and keeps leave off it.
+ *
+ * Only `aktif` reaches allocation. Every gate spells that out positively
+ * (`status = 'aktif'`) rather than excluding `nonaktif`, so a status added
+ * here is excluded from allocation by default — which is the safe direction
+ * for this particular list to fail in.
  */
-export const EMPLOYEE_STATUSES = ["aktif", "nonaktif"] as const;
+export const EMPLOYEE_STATUSES = ["aktif", "standby", "nonaktif"] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 
 export function isEmployeeStatus(value: string): value is EmployeeStatus {
