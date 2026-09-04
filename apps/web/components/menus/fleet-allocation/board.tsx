@@ -74,22 +74,37 @@ const NO_FLEET = "no-fleet";
  */
 const SUPPORT = "support";
 /**
- * Every unit on the board, whatever formation it sits in.
+ * Every formation at once — and support, which is one of them.
  *
- * Added on 2026-09-04 at the owner's request, matching the ACTUAL detail
- * screen: the board deliberately showed one formation at a time, which answers
- * "how is fleet X crewed" but never "which units are still without an
- * operator" — the question the unallocated filter is actually asked, and one
- * that cannot be answered eleven formations at a time.
+ * Added on 2026-09-04 at the owner's request: the board deliberately showed
+ * one formation at a time, which answers "how is fleet X crewed" but never
+ * "which units are still without an operator" — the question the unallocated
+ * filter is actually asked, and one that cannot be answered eleven formations
+ * at a time.
+ *
+ * It is the union of the options *below* it, not literally every unit on the
+ * board (owner, 2026-09-04). A unit Fleet Setting left out of every formation
+ * has an entry of its own, and somebody asking for all the fleets is not
+ * asking for the units that are in none — those do not take part in allocation
+ * at all, and on this yard they outnumber the ones that do.
  */
 const ALL_FLEETS = "all";
 
-/** Whether a unit belongs to whatever the formation filter currently names. */
+/**
+ * Whether a unit belongs to whatever the formation filter currently names.
+ *
+ * `noFleetOffered` is what makes "all" safe to narrow: it excludes the
+ * formationless only where they have an option of their own to be found under.
+ * Where that option is not offered, "all" still means all, so no unit on the
+ * board is left unreachable by every choice in the list.
+ */
 const inSelectedFleet = (
   unit: { fleet: { id: string } | null; fleetSupport?: boolean },
-  active: string
+  active: string,
+  noFleetOffered: boolean
 ) => {
-  if (active === ALL_FLEETS) return true;
+  if (active === ALL_FLEETS)
+    return !noFleetOffered || !!unit.fleet || !!unit.fleetSupport;
   if (active === SUPPORT) return !unit.fleet && !!unit.fleetSupport;
   /* A unit on this board with no formation *is* the no-fleet entry — the whole
      active register is here on PLAN, and "no fleet" is a place rather than a
@@ -516,7 +531,7 @@ export function AllocBoard({
 
   const needle = q.trim().toLowerCase();
   const allFiltered = units.filter((u) => {
-    if (!inSelectedFleet(u, activeFleet)) return false;
+    if (!inSelectedFleet(u, activeFleet, noFleetOffered)) return false;
     const kind = kindOf(u);
     if (filter === "unalloc" && u.slots.length) return false;
     if (filter === "alloc" && !u.slots.length) return false;
@@ -542,7 +557,9 @@ export function AllocBoard({
      eight-unit fleet describes nothing anybody is looking at. `q` and the
      status filter are deliberately not applied — the summary is about the
      formation, not about the search. */
-  const inSelection = units.filter((u) => inSelectedFleet(u, activeFleet));
+  const inSelection = units.filter((u) =>
+    inSelectedFleet(u, activeFleet, noFleetOffered)
+  );
   const summary = {
     allocated: inSelection.filter((u) => u.slots.length).length,
     total: inSelection.length,
@@ -720,11 +737,11 @@ export function AllocBoard({
               </SegmentedButton>
             ))}
           </Segmented>
-          {/* What Fleet Setting holds — its formations, its support entry, its
-              no-fleet entry — under one option that lifts the narrowing
-              altogether. Everything below "all" is something someone
-              configured, so choosing one still names a decision rather than a
-              leftover. */}
+          {/* What Fleet Setting holds: its formations, its support entry, its
+              no-fleet entry — and, at the top, every formation at once. Each
+              option is something someone configured, so choosing one names a
+              decision rather than a leftover; "all" names all of those
+              decisions and, deliberately, not the units left out of them. */}
           <Select
             aria-label="Filter fleet"
             wrapperClassName="w-auto"
