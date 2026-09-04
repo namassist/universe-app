@@ -15,7 +15,11 @@
 import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
-import { SHIFT_KINDS, type ShiftKind } from "@universe/contracts";
+import {
+  SHIFT_KINDS,
+  SUPPORT_DEVICE_ID,
+  type ShiftKind,
+} from "@universe/contracts";
 
 import { buildBoard, candidates, storeBoard } from "../allocation";
 import { currentShift } from "../current-shift";
@@ -110,6 +114,9 @@ async function boardSlots(documentId: string) {
         groupKind: schema.fleetActualFleets.kind,
         leaderCode: schema.fleetActualFleets.leaderCode,
         area: schema.fleetActualFleets.workArea,
+        /* The unit's own, which is the only one a support unit has — its group
+           covers several panels and so carries none. */
+        unitArea: schema.fleetActualSlots.workArea,
         busCode: schema.fleetActualSlots.transportCode,
         employeeId: schema.fleetActualSlots.employeeId,
         source: schema.fleetActualSlots.source,
@@ -179,6 +186,7 @@ export async function planSlots(date: string, shift: ShiftKind) {
          leader's area on write — so there is nothing left to read off the
          fleet. */
       area: schema.units.workArea,
+      unitArea: schema.units.workArea,
       busCode: busUnit.code,
       employeeId: schema.fleetPlanSlots.employeeId,
       /** Non-null only when that operator is rostered to *this* shift. */
@@ -452,7 +460,10 @@ export type WallSlot = {
    */
   sourceFleetId: string | null;
   leaderCode: string | null;
+  /** The group's, which the support group has none of. */
   area: string | null;
+  /** This unit's own — the only one a support unit has. */
+  unitArea: string | null;
   busCode: string | null;
   employeeNik: string | null;
   employeeName: string | null;
@@ -518,7 +529,15 @@ export function groupIntoFleets(
    * and inventing a match would put the wrong pit on the wrong wall. It still
    * shows in full on the unscoped board and on the Actual menu.
    */
-  scope: readonly string[] | null = null
+  scope: readonly string[] | null = null,
+  /**
+   * The support wall: show that group and nothing else.
+   *
+   * Separate from `scope` because it is a different question. A scope names
+   * formations an admin picked; this names the one group nobody picks, on the
+   * one screen whose subject is what it is.
+   */
+  supportOnly = false
 ): WallFleet[] {
   const wanted = scope && scope.length ? new Set(scope) : null;
   const groups = new Map<string, WallFleet>();
@@ -530,6 +549,7 @@ export function groupIntoFleets(
        needs nothing, which is why the two are told apart by `kind` rather than
        by whether a code happens to be there. */
     if (s.groupKind === "fleet" && !s.leaderCode) continue;
+    if (supportOnly !== (s.groupKind === "support")) continue;
     if (wanted && !(s.sourceFleetId && wanted.has(s.sourceFleetId))) continue;
     let group = groups.get(s.fleetId);
     if (!group) {
@@ -557,6 +577,7 @@ export function groupIntoFleets(
       unitCode: s.unitCode,
       modelName: s.modelName,
       brandName: s.brandName,
+      unitArea: s.unitArea,
       busCode: s.busCode,
       employeeNik: s.employeeNik,
       employeeName: s.employeeName,
@@ -701,7 +722,16 @@ export const fleetActualRoutes = new Elysia({
           message: "Display fleet tersebut tidak ditemukan",
         });
 
-      const scope = screen ? await deviceFleetScope(screen.id) : null;
+      /*
+       * The support wall shows the support group and nothing else.
+       *
+       * Not a scope — a scope names formations, and this group is not one. It
+       * is a screen whose subject is decided by which screen it is, which is
+       * why it has no picks to make and none to lose.
+       */
+      const supportOnly = screen?.id === SUPPORT_DEVICE_ID;
+      const scope =
+        screen && !supportOnly ? await deviceFleetScope(screen.id) : null;
       const rotate = screen?.rotateSeconds ?? DEFAULT_ROTATE_SECONDS;
       /* A wall nobody registered — a person previewing the site-wide board —
          reads as a slideshow: it has no picks, so it has nothing to lay four
@@ -796,6 +826,7 @@ export const fleetActualRoutes = new Elysia({
               sourceFleetId: s.sourceFleetId,
               leaderCode: s.leaderCode,
               area: s.area,
+              unitArea: s.unitArea,
               busCode: s.busCode,
               employeeNik: person?.nik ?? null,
               employeeName: person?.name ?? null,
@@ -808,7 +839,8 @@ export const fleetActualRoutes = new Elysia({
               ftw: readiness?.ftw ?? null,
             };
           }),
-          scope
+          scope,
+          supportOnly
         ),
       };
     },

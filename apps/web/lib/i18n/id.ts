@@ -462,6 +462,8 @@ export const id = {
   dspLayoutSlideShort: "Slideshow",
   dspLayoutMonShort: "Monitor",
   dspPicked: "dipilih",
+  dspSupportLocked:
+    "Layar bawaan — isinya otomatis mengikuti unit fleet support. Hanya durasi slide yang bisa diubah.",
   dspSelAll: "Pilih semua",
   dspFleetSearch: "Cari fleet…",
   dspFleetAllNote: "kosong = semua fleet",

@@ -21,6 +21,7 @@ import {
   DISPLAY_ROUTE_OF_KIND,
   MONITOR_FLEETS_PER_PAGE,
   RUNTEXT_COLORS,
+  SUPPORT_DEVICE_ID,
   type DeviceKind,
   type DisplayLayout,
   type RunTextColor,
@@ -268,6 +269,9 @@ export function DisplayAdminMenu({
      slideshow the order is a queue, on a monitor it is the quadrant and the
      page the formation lands on. */
   const monitor = kind === "fleet" && fLayout === "monitor";
+  /* The support wall: fixed in every respect but its dwell. What it shows is
+     decided by what it is, so there is nothing on this form to decide. */
+  const locked = editing?.id === SUPPORT_DEVICE_ID;
   /* How many turns of the wall the current picks make. On a slideshow that is
      one per formation; on a monitor, one per four. */
   const monPages = Math.max(
@@ -570,13 +574,20 @@ export function DisplayAdminMenu({
                           >
                             <Pencil />
                           </IconButton>
-                          <IconButton
-                            danger
-                            aria-label={t.empDel}
-                            onClick={() => setDelTarget(d)}
-                          >
-                            <Trash2 />
-                          </IconButton>
+                          {/* The support wall is part of the product, not
+                              something somebody set up — deleting it would
+                              only mean the next list call created it again.
+                              Its dwell is still editable, which is why the
+                              pencil beside this stays. */}
+                          {d.id === SUPPORT_DEVICE_ID ? null : (
+                            <IconButton
+                              danger
+                              aria-label={t.empDel}
+                              onClick={() => setDelTarget(d)}
+                            >
+                              <Trash2 />
+                            </IconButton>
+                          )}
                         </>
                       ) : null}
                     </div>
@@ -648,11 +659,22 @@ export function DisplayAdminMenu({
               />
             </Field>
 
+            {/* Everything below decides what a screen shows, and the support
+                wall's subject is decided by which screen it is. Only its dwell
+                is a real question — that depends on the room the television is
+                in — so the rest is absent rather than shown greyed out, which
+                would read as something to unlock. */}
+            {locked ? (
+              <p className="rounded-control border border-(--badge-info-border) bg-(--badge-info-fill) px-3.5 py-2.5 text-sm text-(--text-secondary)">
+                {t.dspSupportLocked}
+              </p>
+            ) : null}
+
             {/* Above the fleet picker because it changes that picker's rules:
                 choosing `monitor` puts a ceiling of four on it and turns the
                 order into a layout. Asked after the picks, it would silently
                 discard some of them. */}
-            {kind === "fleet" ? (
+            {kind === "fleet" && !locked ? (
               <Field
                 label={t.dspLayout}
                 htmlFor="dsp-layout"
@@ -669,7 +691,7 @@ export function DisplayAdminMenu({
               </Field>
             ) : null}
 
-            {kind === "fleet" ? (
+            {kind === "fleet" && !locked ? (
               <Field
                 label={
                   <span className="flex w-full items-center gap-2">
@@ -830,6 +852,7 @@ export function DisplayAdminMenu({
             >
               <Input
                 id="dsp-name"
+                disabled={locked}
                 placeholder={NAME_PLACEHOLDER[kind]}
                 value={fName}
                 onChange={(e) => {

@@ -526,6 +526,7 @@ const slot = (over: Partial<WallSlot> = {}): WallSlot => ({
   groupKind: "fleet",
   leaderCode: null,
   area: null,
+  unitArea: null,
   busCode: null,
   employeeNik: null,
   employeeName: null,

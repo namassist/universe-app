@@ -604,6 +604,34 @@ fill the gap from the spare pool.
   intact and only clears the breadcrumb back to Fleet Setting. Boards generated
   before this shipped carry no copy and read as "no formation": that record was
   never written, and borrowing today's is exactly what the defect was.
+
+### The support wall — shipped
+
+- **A reserved screen of its own** (owner, 2026-09-04), id `fleet-support`,
+  created the first time anybody opens the Display menu. Support is not a pit:
+  its machines are scattered across the site, so putting them in a pit screen's
+  rotation would have a TV at one panel cycling through dozers working
+  somewhere else. The yard always has support units, so the screen is part of
+  the product rather than something to set up.
+- **Fixed in every respect but its dwell.** Name, layout and contents are
+  decided by what it is; `rotateSeconds` is the one honest question, because
+  how long a slide should hold depends on the room. Changes to the rest are
+  refused with a message, not ignored — and refused on a _real_ change, so a
+  form echoing values back unchanged still goes through. It cannot be deleted,
+  and its id cannot be taken by a new device.
+- **Six cards to a slide, one row.** Half a formation slide's widest row,
+  because each of these cards carries two badges a formation card does not:
+  where the unit is working, and which vehicle brings its crew. Those two are
+  the whole reason somebody walks up to this screen. Fifty-nine support units
+  is ten slides.
+- **The unit's own work area is on the board**, not only its group's. A
+  formation's members share one and the group carries it; the support group has
+  none, and without a per-slot column each of its machines' whereabouts that
+  shift was simply not recorded.
+- The formation header drops its bus and leader badges on this screen: neither
+  is a fact about the support group, and two dashes standing in for things that
+  do not exist say less than nothing.
+
 - **A TV scoped to particular formations shows only boards it can still match.**
   A screen's picks name live fleets, so a board whose formation has been
   disbanded drops off that screen — it was pointed at a pit that no longer

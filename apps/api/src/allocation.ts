@@ -54,7 +54,8 @@ export type BoardSlot = {
    * written.
    */
   groupKey: string | null;
-  /** The vehicle this unit's crew rode, copied like everything else here. */
+  /** Where this unit worked, and what carried its crew — copied, like the rest. */
+  workArea: string | null;
   transportCode: string | null;
 };
 
@@ -422,6 +423,7 @@ export async function buildBoard(
         tappedAt: readiness.tappedAt,
         readiness,
         groupKey: groupOf(first),
+        workArea: first.workArea,
         transportCode: first.transportCode,
       });
     } else {
@@ -433,6 +435,7 @@ export async function buildBoard(
         tappedAt: null,
         readiness,
         groupKey: groupOf(first),
+        workArea: first.workArea,
         transportCode: first.transportCode,
       });
     }
@@ -575,6 +578,7 @@ export async function storeBoard(board: Board): Promise<string> {
           unitId: s.unitId,
           employeeId: s.employeeId,
           boardFleetId: s.groupKey ? (groupIds.get(s.groupKey) ?? null) : null,
+          workArea: s.workArea,
           transportCode: s.transportCode,
           source: s.source,
           tappedAt: s.tappedAt,

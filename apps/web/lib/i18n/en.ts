@@ -466,6 +466,8 @@ export const en: Dict = {
   dspLayoutSlideShort: "Slideshow",
   dspLayoutMonShort: "Monitor",
   dspPicked: "selected",
+  dspSupportLocked:
+    "Built-in screen — its contents follow the fleet support units automatically. Only the slide duration can be changed.",
   dspSelAll: "Select all",
   dspFleetSearch: "Search fleets…",
   dspFleetAllNote: "empty = every fleet",

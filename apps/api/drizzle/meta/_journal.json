@@ -190,6 +190,13 @@
       "when": 1788498823818,
       "tag": "0026_rich_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788507432246,
+      "tag": "0027_robust_loki",
+      "breakpoints": true
     }
   ]
 }

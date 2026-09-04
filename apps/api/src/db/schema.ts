@@ -1167,6 +1167,17 @@ export const fleetActualSlots = pgTable(
       { onDelete: "cascade" }
     ),
     /**
+     * Where this unit was working, as it stood at generate time.
+     *
+     * On the slot for the same reason `units.work_area` exists at all: a
+     * location is a fact about a unit. A formation's members all carry their
+     * leader's, so the group above holds it too and the two agree; the support
+     * group has no single area, and without this column each of its units'
+     * whereabouts was simply not recorded — 59 machines on the owner's first
+     * board with nowhere to say where they spent the shift.
+     */
+    workArea: text("work_area"),
+    /**
      * The bus or manhaul this unit's crew rode, as it stood at generate time.
      *
      * On the slot rather than on the group because transport is a fact about a

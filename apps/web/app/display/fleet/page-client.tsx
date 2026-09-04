@@ -16,6 +16,8 @@ import {
 import {
   MONITOR_FLEETS_PER_PAGE,
   SHIFT_KIND_LABELS,
+  SUPPORT_DEVICE_NAME,
+  SUPPORT_SLIDE_SIZE,
 } from "@universe/contracts";
 
 import { isStatus } from "@/lib/api";
@@ -122,11 +124,25 @@ const MAX_COLS = 7;
 const MAX_ROWS = 3;
 const PAGE_SIZE = MAX_COLS * MAX_ROWS;
 
-function gridOf(count: number): { cols: number; rows: number } {
+function gridOf(
+  count: number,
+  support = false
+): { cols: number; rows: number } {
   if (count <= 0) return { cols: 1, rows: 1 };
+  /* The support wall is one row of six (owner, 2026-09-04). Each of its cards
+     carries two badges a formation card does not — where the unit is working
+     and what brings its crew — and those are the whole reason somebody walks
+     up to this screen, so they get the width. */
+  if (support) return { cols: Math.min(SUPPORT_SLIDE_SIZE, count), rows: 1 };
   const rows = Math.min(MAX_ROWS, Math.ceil(count / MAX_COLS));
   return { cols: Math.min(MAX_COLS, Math.ceil(count / rows)), rows };
 }
+
+/** What a group is called on screen. Support has no leader to be named after. */
+const fleetTitle = (fleet: { kind: string; leaderCode: string | null }) =>
+  fleet.kind === "support"
+    ? SUPPORT_DEVICE_NAME
+    : `Fleet ${fleet.leaderCode ?? "—"}`;
 
 /**
  * One turn of the rotation.
@@ -147,11 +163,12 @@ type Page = {
 
 function paginate(fleets: FleetDisplayFleet[]): Page[] {
   return fleets.flatMap((fleet) => {
-    const parts = Math.max(1, Math.ceil(fleet.units.length / PAGE_SIZE));
+    const size = fleet.kind === "support" ? SUPPORT_SLIDE_SIZE : PAGE_SIZE;
+    const parts = Math.max(1, Math.ceil(fleet.units.length / size));
     return Array.from({ length: parts }, (_, i) => ({
       key: `${fleet.id ?? "none"}-${i}`,
       fleet,
-      units: fleet.units.slice(i * PAGE_SIZE, i * PAGE_SIZE + PAGE_SIZE),
+      units: fleet.units.slice(i * size, i * size + size),
       part: i + 1,
       parts,
     }));
@@ -218,10 +235,20 @@ function UnitCard({
    * which is the one thing the card exists to say.
    */
   compact = false,
+  /**
+   * Show where this unit is working and what brings its crew.
+   *
+   * Only the support wall asks for it. A formation's cards would repeat one
+   * area sixty times over — the header already says it once — and one vehicle
+   * with it. Support has neither: its machines are scattered, and each may be
+   * on a different bus.
+   */
+  detailed = false,
 }: {
   unit: FleetDisplayUnit;
   provisional: boolean;
   compact?: boolean;
+  detailed?: boolean;
 }) {
   const { tone, label } = toneOf(unit);
   return (
@@ -294,6 +321,18 @@ function UnitCard({
           >
             {unit.employeeName ?? "Belum ada operator"}
           </div>
+          {detailed ? (
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-2.5 py-0.5 text-[15px] font-bold text-(--badge-warning-text)">
+                <Pickaxe className="size-3.5 flex-none" />
+                <span className="truncate">{unit.unitArea ?? "—"}</span>
+              </span>
+              <span className="inline-flex flex-none items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-2.5 py-0.5 font-mono text-[15px] font-bold text-(--color-primary-bright)">
+                <Bus className="size-3.5" />
+                {unit.busCode ?? "—"}
+              </span>
+            </div>
+          ) : null}
           {/* NIK and readiness on one line: the identity and what it still
               owes are read together, and stacking them cost a row of height
               that a quadrant on a monitor wall does not have to spare.
@@ -386,7 +425,7 @@ function FleetQuadrant({
         {/* The formation's name is its digger, everywhere in this app — an
             ordinal would be a vocabulary the yard does not use. */}
         <b className="truncate font-mono text-[26px] leading-none font-bold">
-          Fleet {fleet.leaderCode}
+          {fleetTitle(fleet)}
         </b>
         <span className="ml-auto truncate text-[17px] text-(--text-secondary)">
           {fleet.area ?? "—"}
@@ -394,16 +433,22 @@ function FleetQuadrant({
       </div>
 
       <div className="flex flex-none flex-wrap items-center gap-2">
-        {/* The bus, because it is how the crew gets to the formation — on a
-            single-fleet wall it sits in the header for the same reason. */}
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-3 py-0.5 text-[16px] font-bold text-(--color-primary-bright)">
-          <Bus className="size-4" />
-          {fleet.busCode ?? "—"}
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-3 py-0.5 text-[16px] font-bold text-(--badge-warning-text)">
-          <Pickaxe className="size-4" />
-          {fleet.leaderCode}
-        </span>
+        {/* The bus and the leader, on a formation. Neither is a fact about the
+            support group — its machines ride different vehicles and it is led
+            by none — so a header there would be two dashes standing in for
+            things that do not exist. The cards carry the true answers. */}
+        {fleet.kind === "fleet" ? (
+          <>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-3 py-0.5 text-[16px] font-bold text-(--color-primary-bright)">
+              <Bus className="size-4" />
+              {fleet.busCode ?? "—"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-3 py-0.5 text-[16px] font-bold text-(--badge-warning-text)">
+              <Pickaxe className="size-4" />
+              {fleet.leaderCode}
+            </span>
+          </>
+        ) : null}
         <span className="rounded-full border border-(--badge-neutral-border) bg-(--badge-neutral-fill) px-3 py-0.5 text-[16px] font-semibold text-(--badge-neutral-text)">
           {fleet.total} unit · {fleet.crewed} siap
           {fleet.idle ? ` · ${fleet.idle} kosong` : ""}
@@ -560,7 +605,7 @@ export default function DisplayFleetPage() {
      empty before showing the right thing. */
   const pos = turns ? idx % turns : 0;
   const page = pages[pos];
-  const grid = gridOf(page?.units.length ?? 0);
+  const grid = gridOf(page?.units.length ?? 0, page?.fleet.kind === "support");
 
   /* Always MONITOR_FLEETS_PER_PAGE slots. The blanks on the last page are
      rendered rather than dropped so that a formation keeps its position from
@@ -590,7 +635,7 @@ export default function DisplayFleetPage() {
   const title = isMonitor
     ? (screenName ?? "Alokasi Aktual")
     : page
-      ? `Fleet ${page.fleet.leaderCode}`
+      ? fleetTitle(page.fleet)
       : "Alokasi Aktual";
   /* Site-wide counts belong to a slideshow, whose header is about the one
      formation on the glass. A monitor's header would be about four, so it
@@ -802,6 +847,7 @@ export default function DisplayFleetPage() {
               key={u.unitId}
               unit={u}
               provisional={data?.provisional ?? false}
+              detailed={page?.fleet.kind === "support"}
             />
           ))}
         </div>

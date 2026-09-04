@@ -1062,6 +1062,16 @@ export const FleetDisplayUnitSchema = t.Object({
    * of them.
    */
   busCode: t.Nullable(t.String()),
+  /**
+   * Where this unit was working, as the board recorded it.
+   *
+   * `unitArea` rather than `area`, because the group above carries one of that
+   * name and they are different facts: a formation's is one value its members
+   * share, while the support group has none at all and each of its machines
+   * is somewhere else. On the card because that is the question the support
+   * screen exists to answer — where to walk to.
+   */
+  unitArea: t.Nullable(t.String()),
   /** Null on an idle unit — the vacancy the wall exists to make obvious. */
   employeeNik: t.Nullable(t.String()),
   employeeName: t.Nullable(t.String()),

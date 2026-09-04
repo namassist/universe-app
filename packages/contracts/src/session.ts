@@ -75,6 +75,40 @@ export type DisplayLayout = (typeof DISPLAY_LAYOUTS)[number];
  */
 export const MONITOR_FLEETS_PER_PAGE = 4;
 
+/**
+ * The one screen that shows the support units, and nothing else.
+ *
+ * A reserved device rather than a formation somebody may pick alongside others
+ * (owner, 2026-09-04). Support is not a pit: its machines are scattered across
+ * the site, so putting them in a pit screen's rotation would mean a TV at one
+ * panel cycling through dozers working somewhere else. It is its own wall, and
+ * it exists whether or not anybody created it — the yard always has support
+ * units, so a screen for them is part of the product rather than something to
+ * set up.
+ *
+ * Fixed in every respect except its dwell: the name, the layout and what it
+ * shows are all decided by what it *is*. `rotate_seconds` is the one honest
+ * question, because how long a slide should hold depends on the room the
+ * television is in.
+ *
+ * The id is reserved, so nothing else can take it: `devices.id` is the primary
+ * key, which is what makes "there is exactly one of these" a fact the database
+ * holds rather than a rule somebody maintains.
+ */
+export const SUPPORT_DEVICE_ID = "fleet-support";
+export const SUPPORT_DEVICE_NAME = "Fleet Support";
+
+/**
+ * How many support units one slide carries.
+ *
+ * Six across in a single row (owner, 2026-09-04) — half the count of a
+ * formation slide's widest row, because each of these cards carries two badges
+ * a formation card does not: where the unit is working, and which vehicle
+ * brings its crew. A support unit is scattered, so those two are the whole
+ * reason somebody walks up to this screen.
+ */
+export const SUPPORT_SLIDE_SIZE = 6;
+
 /** Which transport a login wants its session delivered over. */
 export const SESSION_TRANSPORTS = ["cookie", "bearer"] as const;
 export type SessionTransport = (typeof SESSION_TRANSPORTS)[number];

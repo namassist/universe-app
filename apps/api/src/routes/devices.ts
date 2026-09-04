@@ -2,6 +2,8 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import {
   DISPLAY_ROUTE_OF_KIND,
+  SUPPORT_DEVICE_ID,
+  SUPPORT_DEVICE_NAME,
   type AccessMode,
   type DeviceKind,
   type EffectivePermissions,
@@ -143,6 +145,27 @@ const MAX_ROTATE_SECONDS = 600;
  * The fleet picks of many devices, in one query rather than one per row — a
  * registry of twenty TVs must not cost twenty round trips to list.
  */
+/**
+ * Make sure the support wall exists, without ever overwriting it.
+ *
+ * `onConflictDoNothing` rather than an upsert: the row is created once and
+ * then belongs to whoever set its dwell. Called from the list read because
+ * that is the first thing the Display menu does, so the screen is there the
+ * first time anybody looks — no seed step to remember, and no migration that
+ * would put it only on databases that ran it.
+ */
+async function ensureSupportDevice(): Promise<void> {
+  await db
+    .insert(schema.devices)
+    .values({
+      id: SUPPORT_DEVICE_ID,
+      name: SUPPORT_DEVICE_NAME,
+      kind: "fleet",
+      layout: "slideshow",
+    })
+    .onConflictDoNothing();
+}
+
 async function fleetPicksOf(deviceIds: string[]) {
   const picks = new Map<string, string[]>();
   if (!deviceIds.length) return picks;
@@ -263,6 +286,7 @@ export const devicesRoutes = new Elysia({
   .get(
     "/",
     async ({ query, permissions }) => {
+      await ensureSupportDevice();
       const rows = query.kind
         ? await db
             .select()
@@ -289,6 +313,11 @@ export const devicesRoutes = new Elysia({
   .post(
     "/",
     async ({ body, permissions, status }) => {
+      if (body.id.trim() === SUPPORT_DEVICE_ID)
+        return status(422, {
+          code: "reserved_id",
+          message: `ID "${SUPPORT_DEVICE_ID}" dipakai layar Fleet Support bawaan`,
+        });
       if (!mayTouch(permissions, body.kind, "manage"))
         return status(403, {
           code: "forbidden",
@@ -360,28 +389,84 @@ export const devicesRoutes = new Elysia({
     async ({ params, body, permissions, status }) => {
       const denied = await refuseUnlessOwned(params.id, permissions);
       if (denied) return status(denied.status, denied.body);
+
+      /*
+       * The support wall is fixed in everything but its dwell.
+       *
+       * Its name, its layout and what it shows are decided by what it is —
+       * there is no version of this screen that shows something else, so the
+       * fields are refused rather than quietly ignored. How long a slide holds
+       * is the one honest question, because that depends on the room.
+       */
+      const [current] = await db
+        .select()
+        .from(schema.devices)
+        .where(eq(schema.devices.id, params.id))
+        .limit(1);
+      if (!current)
+        return status(404, {
+          code: "device_not_found",
+          message: "Perangkat tidak ditemukan",
+        });
+
+      /*
+       * What the request would actually change, not what it mentions.
+       *
+       * `t.UnionEnum` hands the route its first member when the field is
+       * omitted, so `layout` arrives as "slideshow" on every partial patch —
+       * a request about a name would quietly re-lay out a monitor wall. The
+       * web form always sends it, which is why nobody had hit it. Comparing
+       * against the stored row is the fix that does not depend on knowing
+       * which validator fills in what.
+       */
       const patch = {
-        ...(body.name !== undefined ? { name: body.name.trim() } : {}),
-        ...(body.active !== undefined ? { active: body.active } : {}),
-        ...(body.rotateSeconds !== undefined
+        ...(body.name !== undefined && body.name.trim() !== current.name
+          ? { name: body.name.trim() }
+          : {}),
+        ...(body.active !== undefined && body.active !== current.active
+          ? { active: body.active }
+          : {}),
+        ...(body.rotateSeconds !== undefined &&
+        body.rotateSeconds !== current.rotateSeconds
           ? { rotateSeconds: body.rotateSeconds }
           : {}),
-        ...(body.layout !== undefined ? { layout: body.layout } : {}),
+        ...(body.layout !== undefined && body.layout !== current.layout
+          ? { layout: body.layout }
+          : {}),
       };
+
+      /*
+       * The support wall is fixed in everything but its dwell.
+       *
+       * Its name, its layout and what it shows are decided by what it is —
+       * there is no version of this screen that shows something else. Refused
+       * on a real change rather than on the mention of one, so a form that
+       * echoes the values back unchanged still goes through.
+       */
+      const locked = params.id === SUPPORT_DEVICE_ID;
+      if (
+        locked &&
+        (patch.name !== undefined ||
+          patch.layout !== undefined ||
+          body.fleetIds?.length)
+      )
+        return status(422, {
+          code: "device_locked",
+          message:
+            "Layar Fleet Support hanya bisa diubah durasi slide-nya — isinya mengikuti setting fleet",
+        });
+
       // A request that changes only the fleet picks touches no device column,
-      // and `set({})` is an error rather than a no-op — so the row is read
-      // instead of written.
+      // and `set({})` is an error rather than a no-op.
       const [row] = Object.keys(patch).length
         ? await db
             .update(schema.devices)
             .set(patch)
             .where(eq(schema.devices.id, params.id))
             .returning()
-        : await db
-            .select()
-            .from(schema.devices)
-            .where(eq(schema.devices.id, params.id))
-            .limit(1);
+        : [current];
+      // The update targeted a row that was read a moment ago, so it exists —
+      // the branch above is the only one the compiler cannot see that through.
       if (!row)
         return status(404, {
           code: "device_not_found",
@@ -389,7 +474,7 @@ export const devicesRoutes = new Elysia({
         });
       // Absent leaves the picks alone; an empty array is how a screen is
       // handed back to every fleet. The two are deliberately different.
-      if (body.fleetIds !== undefined) {
+      if (!locked && body.fleetIds !== undefined) {
         const refused = await replaceFleetPicks(
           row.id,
           row.kind,
@@ -434,6 +519,14 @@ export const devicesRoutes = new Elysia({
     async ({ params, permissions, status }) => {
       const denied = await refuseUnlessOwned(params.id, permissions);
       if (denied) return status(denied.status, denied.body);
+      /* The yard always has support units, so a screen for them is part of the
+         product rather than something somebody set up and may undo. Deleting
+         it would only mean the next list call created it again. */
+      if (params.id === SUPPORT_DEVICE_ID)
+        return status(422, {
+          code: "device_locked",
+          message: "Layar Fleet Support bawaan tidak bisa dihapus",
+        });
       const [row] = await db
         .delete(schema.devices)
         .where(eq(schema.devices.id, params.id))
@@ -454,6 +547,7 @@ export const devicesRoutes = new Elysia({
         401: ErrorSchema,
         403: ErrorSchema,
         404: ErrorSchema,
+        422: ErrorSchema,
       },
       detail: { summary: "Remove a display device" },
     }
