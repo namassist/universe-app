@@ -833,8 +833,16 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           {editId ? `${t.flEditT} ${fLeader}` : t.flAdd}
         </DialogTitle>
         <DialogBody>{t.flDlgB}</DialogBody>
-        <form onSubmit={submit} noValidate>
-          <FormGrid className="mt-4">
+        {/* The dialog caps its own height and expects one child to be the
+            scrolling area; a plain <form> was neither, so a tall formation
+            simply overflowed off the screen with no way to reach the rest.
+            The fields scroll and the actions stay put. */}
+        <form
+          onSubmit={submit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <FormGrid className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
             <Field
               label={t.flLeader}
               htmlFor="fl-digger"
@@ -954,7 +962,10 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                     {t.flBusSameAll}
                   </Button>
                 </div>
-                <div className="max-h-56 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
+                {/* No scroll of its own: it is at most fourteen rows, and a
+                    second scrollbar inside a dialog that already scrolls is
+                    the one you catch by accident. */}
+                <div className="rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
                   {[fLeader, ...fUnits].filter(Boolean).map((code) => (
                     <div
                       key={code}
@@ -1121,14 +1132,14 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
         className="w-[min(560px,100%)]"
         labelledBy="sup-t"
       >
-        <form onSubmit={submitSupport}>
+        <form onSubmit={submitSupport} className="flex min-h-0 flex-1 flex-col">
           <DialogIcon variant="info">
             <Truck />
           </DialogIcon>
           <DialogTitle id="sup-t">{t.flSupAddT}</DialogTitle>
           <DialogBody>{t.flSupAddB}</DialogBody>
 
-          <div className="mt-4 flex flex-col gap-4">
+          <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
             <Field
               label={t.flLoc}
               htmlFor="sup-loc"
