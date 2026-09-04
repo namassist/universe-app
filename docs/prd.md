@@ -628,9 +628,14 @@ fill the gap from the spare pool.
   formation's members share one and the group carries it; the support group has
   none, and without a per-slot column each of its machines' whereabouts that
   shift was simply not recorded.
-- The formation header drops its bus and leader badges on this screen: neither
-  is a fact about the support group, and two dashes standing in for things that
-  do not exist say less than nothing.
+- The formation header drops its leader badge on this screen — the support
+  group is led by none.
+- **The bus is on every card, on both walls.** It is a fact about a unit now,
+  so a group header can only ever speak for the case where a formation's units
+  all ride the same one: it says the vehicle when they agree and says nothing
+  when they do not, because a dash there would read as "no bus" about a fleet
+  where every card names one. The work area stays off a formation's cards,
+  where the header already says it once for all sixty.
 
 - **A TV scoped to particular formations shows only boards it can still match.**
   A screen's picks name live fleets, so a board whose formation has been

@@ -236,19 +236,24 @@ function UnitCard({
    */
   compact = false,
   /**
-   * Show where this unit is working and what brings its crew.
+   * Show where this unit is working.
    *
-   * Only the support wall asks for it. A formation's cards would repeat one
-   * area sixty times over — the header already says it once — and one vehicle
-   * with it. Support has neither: its machines are scattered, and each may be
-   * on a different bus.
+   * Only the support wall asks for it. A formation's members all work the one
+   * place its header already names, so putting it on the cards would say it
+   * sixty times over. Support has no such header — its machines are scattered,
+   * and where to walk to is the question that screen exists to answer.
+   *
+   * The **bus is on every card**, on both walls (owner, 2026-09-04). It is a
+   * fact about a unit now, not about a formation: two units of one fleet
+   * legitimately ride different vehicles, and a header can only ever speak for
+   * the case where they do not.
    */
-  detailed = false,
+  showArea = false,
 }: {
   unit: FleetDisplayUnit;
   provisional: boolean;
   compact?: boolean;
-  detailed?: boolean;
+  showArea?: boolean;
 }) {
   const { tone, label } = toneOf(unit);
   return (
@@ -321,16 +326,44 @@ function UnitCard({
           >
             {unit.employeeName ?? "Belum ada operator"}
           </div>
-          {detailed ? (
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-2.5 py-0.5 text-[15px] font-bold text-(--badge-warning-text)">
-                <Pickaxe className="size-3.5 flex-none" />
-                <span className="truncate">{unit.unitArea ?? "—"}</span>
-              </span>
-              <span className="inline-flex flex-none items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-2.5 py-0.5 font-mono text-[15px] font-bold text-(--color-primary-bright)">
-                <Bus className="size-3.5" />
-                {unit.busCode ?? "—"}
-              </span>
+          {showArea || unit.busCode ? (
+            <div
+              className={cn(
+                "flex min-w-0 flex-wrap items-center",
+                compact ? "mt-1 gap-1" : "mt-1 gap-2"
+              )}
+            >
+              {showArea ? (
+                <span
+                  className={cn(
+                    "inline-flex min-w-0 items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) font-bold text-(--badge-warning-text)",
+                    compact
+                      ? "px-1.5 py-0 text-[11px]"
+                      : "px-2.5 py-0.5 text-[15px]"
+                  )}
+                >
+                  <Pickaxe
+                    className={cn("flex-none", compact ? "size-3" : "size-3.5")}
+                  />
+                  <span className="truncate">{unit.unitArea ?? "—"}</span>
+                </span>
+              ) : null}
+              {/* Absent rather than dashed: a unit with no vehicle recorded is
+                  not the same statement as one whose vehicle is unknown, and
+                  on a wall read at ten metres a dash is just noise. */}
+              {unit.busCode ? (
+                <span
+                  className={cn(
+                    "inline-flex flex-none items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) font-mono font-bold text-(--color-primary-bright)",
+                    compact
+                      ? "px-1.5 py-0 text-[11px]"
+                      : "px-2.5 py-0.5 text-[15px]"
+                  )}
+                >
+                  <Bus className={compact ? "size-3" : "size-3.5"} />
+                  {unit.busCode}
+                </span>
+              ) : null}
             </div>
           ) : null}
           {/* NIK and readiness on one line: the identity and what it still
@@ -433,16 +466,20 @@ function FleetQuadrant({
       </div>
 
       <div className="flex flex-none flex-wrap items-center gap-2">
-        {/* The bus and the leader, on a formation. Neither is a fact about the
-            support group — its machines ride different vehicles and it is led
-            by none — so a header there would be two dashes standing in for
-            things that do not exist. The cards carry the true answers. */}
+        {/* The leader names the formation; the support group is led by none.
+
+            The bus only when the whole formation rides it — since transport
+            went per unit a header can no longer speak for all of them, and a
+            dash there would say "no bus" about a fleet where every card names
+            one. When they differ the cards are the answer. */}
         {fleet.kind === "fleet" ? (
           <>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-3 py-0.5 text-[16px] font-bold text-(--color-primary-bright)">
-              <Bus className="size-4" />
-              {fleet.busCode ?? "—"}
-            </span>
+            {fleet.busCode ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-3 py-0.5 text-[16px] font-bold text-(--color-primary-bright)">
+                <Bus className="size-4" />
+                {fleet.busCode}
+              </span>
+            ) : null}
             <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-3 py-0.5 text-[16px] font-bold text-(--badge-warning-text)">
               <Pickaxe className="size-4" />
               {fleet.leaderCode}
@@ -847,7 +884,7 @@ export default function DisplayFleetPage() {
               key={u.unitId}
               unit={u}
               provisional={data?.provisional ?? false}
-              detailed={page?.fleet.kind === "support"}
+              showArea={page?.fleet.kind === "support"}
             />
           ))}
         </div>
