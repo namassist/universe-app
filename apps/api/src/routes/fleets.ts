@@ -17,7 +17,16 @@
  * and class as a heuristic, and a heuristic is not a thing to refuse on.
  */
 
-import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
@@ -257,6 +266,39 @@ async function applyUnitFacts(
       .where(eq(schema.units.id, unitId));
 }
 
+/**
+ * Take a disbanded formation's units out of today's operation.
+ *
+ * Membership rows die with the fleet on their own (cascade), but since
+ * 2026-09-04 the units also carry where they are working and what brings their
+ * crew — and a formation that no longer exists is not working anywhere. Left
+ * behind, those values keep the Unit Status screen naming a pit the machine
+ * was pulled out of.
+ *
+ * The leader is included: it is the fleet's identity, not a member row, so
+ * nothing else would clear it.
+ */
+async function releaseFleetUnits(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  fleetIds: string[]
+): Promise<void> {
+  if (!fleetIds.length) return;
+  const members = await tx
+    .select({ unitId: schema.fleetUnits.unitId })
+    .from(schema.fleetUnits)
+    .where(inArray(schema.fleetUnits.fleetId, fleetIds));
+  const leaders = await tx
+    .select({ unitId: schema.fleets.leaderUnitId })
+    .from(schema.fleets)
+    .where(inArray(schema.fleets.id, fleetIds));
+  const ids = [...new Set([...members, ...leaders].map((r) => r.unitId))];
+  if (!ids.length) return;
+  await tx
+    .update(schema.units)
+    .set({ workArea: null, transportUnitId: null })
+    .where(inArray(schema.units.id, ids));
+}
+
 /** The vehicles a transport map actually names, for the type check. */
 const transportsNamed = (map?: Record<string, string | null>) =>
   Object.values(map ?? {}).filter((id): id is string => id !== null);
@@ -316,16 +358,24 @@ async function importCatalogues(): Promise<FleetCatalogues> {
   const fleets = await fleetQuery();
   const members = await membersOf(fleets.map((f) => f.id));
 
-  /* Everything the file could release: a formation member, a leader, or a
-     support unit. Read once here so the preview can name what would drop out
-     of today's operation before the commit does it. */
+  /* Everything the file could release: a formation member, a leader, a support
+     unit — or a unit that merely still carries a work area, which is what a
+     formation disbanded by hand leaves behind. Read once here so the preview
+     can name what drops out of today's operation before the commit does it.
+
+     Wider than allocation scope on purpose. A unit holding a location it is no
+     longer worked at is a wrong reading on the Unit Status screen, and the
+     daily file is the one thing that knows it. */
   const operating = await db
     .select({ id: schema.units.id, code: schema.units.code })
     .from(schema.units)
     .where(
       and(
         eq(schema.units.active, true),
-        takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
+        or(
+          takesPartInAllocation(schema.units.id, schema.units.fleetSupport),
+          isNotNull(schema.units.workArea)
+        )
       )
     );
 
@@ -872,7 +922,11 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
       // Distinct, so a caller that sends the same fleet twice cannot inflate
       // the count it gets back.
       const ids = [...new Set(body.ids)];
-      await db.delete(schema.fleets).where(inArray(schema.fleets.id, ids));
+      await db.transaction(async (tx) => {
+        // Before the delete, while the membership rows are still there to read.
+        await releaseFleetUnits(tx, ids);
+        await tx.delete(schema.fleets).where(inArray(schema.fleets.id, ids));
+      });
       // Ids already gone count as deleted: the end state the caller asked for
       // holds, and a list left open for a while should not read as a failure.
       return { deleted: ids.length };
@@ -899,12 +953,17 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
     "/:id",
     async ({ params, status }) => {
       // Membership rows die with the fleet (cascade) — they are its edge
-      // list. The units themselves are untouched and immediately offerable
-      // to another fleet.
-      const [row] = await db
-        .delete(schema.fleets)
-        .where(eq(schema.fleets.id, params.id))
-        .returning({ id: schema.fleets.id });
+      // list. The units themselves survive and are immediately offerable to
+      // another fleet; what they lose is the location and the ride this
+      // formation gave them.
+      const row = await db.transaction(async (tx) => {
+        await releaseFleetUnits(tx, [params.id]);
+        const [deleted] = await tx
+          .delete(schema.fleets)
+          .where(eq(schema.fleets.id, params.id))
+          .returning({ id: schema.fleets.id });
+        return deleted;
+      });
       if (!row) return status(404, notFound);
       return { ok: true };
     },

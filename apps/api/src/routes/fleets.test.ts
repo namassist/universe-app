@@ -46,6 +46,9 @@ let hauler1 = { id: "", code: "" };
 let hauler2 = { id: "", code: "" };
 let hauler3 = { id: "", code: "" };
 let busUnit = { id: "", code: "" };
+/** A formation of its own, so disbanding it disturbs no other test. */
+let spare1 = { id: "", code: "" };
+let spare2 = { id: "", code: "" };
 
 /* ------------------------------------------------------------- fixtures */
 
@@ -172,6 +175,8 @@ beforeAll(async () => {
   }
 
   const refs = { classId: cls!.id, modelId: mdl!.id, brandId: brd!.id };
+  spare1 = await makeUnit(`ZZEX9${uid()}`, typ!.id, refs);
+  spare2 = await makeUnit(`ZZDT9${uid()}`, typ!.id, refs);
   digger1 = await makeUnit(`ZZEX1${uid()}`, typ!.id, refs);
   digger2 = await makeUnit(`ZZEX2${uid()}`, typ!.id, refs);
   hauler1 = await makeUnit(`ZZDT1${uid()}`, typ!.id, refs);
@@ -302,6 +307,32 @@ describe("a fleet is a leader, its haulers, and one work area", () => {
     expect(response.status).toBe(422);
     const body = (await response.json()) as { message: string };
     expect(body.message).toContain("BUS");
+  });
+
+  test("disbanding takes its units out of the location it gave them", async () => {
+    const fleet = await createFleet({
+      leaderUnitId: spare1.id,
+      workArea: `${tag} BUBAR`,
+      unitIds: [spare2.id],
+      transports: { [spare1.id]: busUnit.id, [spare2.id]: busUnit.id },
+    });
+
+    const response = await send("DELETE", `/fleets/${fleet.id}`, admin.cookie);
+    expect(response.status).toBe(200);
+
+    /* The units survive and are offerable again — what they lose is the
+       location and the ride the formation gave them. Left behind, those values
+       had the Unit Status screen naming a pit the machine was pulled out of. */
+    const rows = await db
+      .select({
+        workArea: schema.units.workArea,
+        transportUnitId: schema.units.transportUnitId,
+      })
+      .from(schema.units)
+      .where(inArray(schema.units.id, [spare1.id, spare2.id]));
+    expect(rows).toHaveLength(2);
+    for (const row of rows)
+      expect(row).toMatchObject({ workArea: null, transportUnitId: null });
   });
 
   test("a blank location is refused — it is typed, so nothing else checks it", async () => {

@@ -69,6 +69,14 @@ fill the gap from the spare pool.
 - Refused by row, with the row named: a unit listed twice, a leader with no row
   of its own, a unit that both leads and hauls, and members of one formation
   that disagree about their area.
+- **Released means cleared, not merely unflagged.** A unit the file does not
+  name loses its support flag, its work area and its transport together — a
+  machine nobody named today is not working anywhere, and a leftover area had
+  the Unit Status screen naming a pit the unit had been pulled out of.
+- The sweep is **wider than allocation scope**: it reaches any active unit
+  still carrying a work area, which is what a formation disbanded by hand
+  leaves behind. Disbanding also clears its own units now, so the two paths
+  agree; the sweep is what catches everything already stranded.
 
 ### Unit status — shipped
 

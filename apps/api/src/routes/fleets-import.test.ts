@@ -661,6 +661,77 @@ describe("the commit writes the unit facts, not just the formation", () => {
     expect(released).toMatchObject({ workArea: null, fleetSupport: false });
   });
 
+  test("a support unit the next file drops is released, not left behind", async () => {
+    const first = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file([
+          ...fleetRows(digger1.code, [hauler1.code]),
+          [hauler3.code, `${tag} DISPOSAL`, null, busUnit.code],
+        ])
+      )
+    );
+    expect(first.status).toBe(200);
+
+    // The next day's file says nothing about hauler3 at all.
+    const preview = await validate(fleetRows(digger1.code, [hauler1.code]));
+    expect(preview.released).toContain(hauler3.code);
+
+    const second = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(await file(fleetRows(digger1.code, [hauler1.code])))
+    );
+    expect(second.status).toBe(200);
+
+    const [row] = await db
+      .select({
+        fleetSupport: schema.units.fleetSupport,
+        workArea: schema.units.workArea,
+        transportUnitId: schema.units.transportUnitId,
+      })
+      .from(schema.units)
+      .where(eq(schema.units.id, hauler3.id));
+    /* Cleared outright rather than merely un-flagged: a machine nobody named
+       today is not working anywhere, and a leftover area is what had the Unit
+       Status screen naming a pit the unit had been pulled out of. */
+    expect(row).toMatchObject({
+      fleetSupport: false,
+      workArea: null,
+      transportUnitId: null,
+    });
+  });
+
+  test("an area left behind by a hand-disbanded fleet is swept too", async () => {
+    /*
+     * Wider than allocation scope on purpose. Deleting a formation takes its
+     * units out of allocation, but before 2026-09-04 nothing held their work
+     * area — 245 units on the owner's site carried one while belonging to
+     * nothing. The daily file is what knows they are no longer working.
+     */
+    await db
+      .update(schema.units)
+      .set({ workArea: `${tag} SISA` })
+      .where(eq(schema.units.id, hauler4.id));
+
+    const preview = await validate(fleetRows(digger1.code, [hauler1.code]));
+    expect(preview.released).toContain(hauler4.code);
+
+    const commit = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(await file(fleetRows(digger1.code, [hauler1.code])))
+    );
+    expect(commit.status).toBe(200);
+
+    const [row] = await db
+      .select({ workArea: schema.units.workArea })
+      .from(schema.units)
+      .where(eq(schema.units.id, hauler4.id));
+    expect(row?.workArea).toBeNull();
+  });
+
   test("nothing outside the file can conflict with it any more", async () => {
     /*
      * Worth pinning because it used to be the opposite. When a file described
