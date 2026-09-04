@@ -65,6 +65,28 @@ const FA_PLAN_MAX_OPS = 2;
  * engine allocates formations only, so the option is not offered there.
  */
 const NO_FLEET = "no-fleet";
+/**
+ * Crewed without a formation — the entry Fleet Setting calls Fleet support.
+ *
+ * Its own option because "no fleet" was two answers in one: a dozer somebody
+ * has to crew, and a forklift nobody does. This board carries the whole active
+ * register, so both were sitting in the same list.
+ */
+const SUPPORT = "support";
+
+/** Whether a unit belongs to whatever the formation filter currently names. */
+const inSelectedFleet = (
+  unit: { fleet: { id: string } | null; fleetSupport?: boolean },
+  active: string
+) => {
+  if (active === SUPPORT) return !unit.fleet && !!unit.fleetSupport;
+  /* A unit on this board with no formation *is* the no-fleet entry — the whole
+     active register is here on PLAN, and "no fleet" is a place rather than a
+     residual, because Fleet Setting decides it. Support units left it on
+     2026-09-04, when they got an entry of their own. */
+  if (active === NO_FLEET) return !unit.fleet && !unit.fleetSupport;
+  return unit.fleet?.id === active;
+};
 
 /**
  * How many SIMPER codes a spare card shows before it gives up and counts.
@@ -277,6 +299,7 @@ function toBoardUnits(board: PlanBoard | undefined): BoardUnit[] {
     requiresFtw: u.requiresFtw,
     departmentName: u.departmentName,
     fleet: u.fleet ? { id: u.fleet.id, digger: u.fleet.leaderCode } : null,
+    fleetSupport: u.fleetSupport,
     slots: u.slots.map((s) => ({
       nik: s.nik,
       name: s.name,
@@ -375,8 +398,12 @@ export function AllocBoard({
    * there are no formations at all.
    */
   const noFleetOffered = mode === "plan";
+  /* Only when the site actually has support units — an option that filters to
+     nothing is a question with no answer behind it. */
+  const supportOffered = noFleetOffered && units.some((u) => u.fleetSupport);
   const activeFleet =
     (noFleetOffered && fleetF === NO_FLEET) ||
+    (supportOffered && fleetF === SUPPORT) ||
     fleetOptions.some((f) => f.id === fleetF)
       ? fleetF
       : (fleetOptions[0]?.id ?? (noFleetOffered ? NO_FLEET : ""));
@@ -477,12 +504,7 @@ export function AllocBoard({
 
   const needle = q.trim().toLowerCase();
   const allFiltered = units.filter((u) => {
-    /* A unit on this board with no formation *is* the no-fleet entry — the
-       whole active register is here on PLAN, and "no fleet" is a place rather
-       than a residual, because Fleet Setting decides it. */
-    const inFleet =
-      activeFleet === NO_FLEET ? !u.fleet : u.fleet?.id === activeFleet;
-    if (!inFleet) return false;
+    if (!inSelectedFleet(u, activeFleet)) return false;
     const kind = kindOf(u);
     if (filter === "unalloc" && u.slots.length) return false;
     if (filter === "alloc" && !u.slots.length) return false;
@@ -508,9 +530,7 @@ export function AllocBoard({
      eight-unit fleet describes nothing anybody is looking at. `q` and the
      status filter are deliberately not applied — the summary is about the
      formation, not about the search. */
-  const inSelection = units.filter((u) =>
-    activeFleet === NO_FLEET ? !u.fleet : u.fleet?.id === activeFleet
-  );
+  const inSelection = units.filter((u) => inSelectedFleet(u, activeFleet));
   const summary = {
     allocated: inSelection.filter((u) => u.slots.length).length,
     total: inSelection.length,
@@ -710,8 +730,11 @@ export function AllocBoard({
                 Fleet {f.digger} — {f.area}
               </option>
             ))}
-            {/* PLAN only: the engine allocates formations, so on ACTUAL there
-                would be nothing behind this option. */}
+            {/* PLAN only: on ACTUAL the board carries its own groups, and the
+                filter is built from those instead. */}
+            {supportOffered ? (
+              <option value={SUPPORT}>{t.faSupport}</option>
+            ) : null}
             {noFleetOffered ? (
               <option value={NO_FLEET}>{t.faNoFleet}</option>
             ) : null}

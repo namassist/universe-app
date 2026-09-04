@@ -412,6 +412,11 @@ fill the gap from the spare pool.
   transport rather than a machine the pool crews — across every board generated
   so far, all 52 bus slots were empty — and two buses serve more than one
   formation, so a bus has no single fleet to be filed under.
+- **Support has its own filter option on every screen that has one**: the PLAN
+  board, the Actual board, and the audit table. "No fleet" was two answers in
+  one — a dozer somebody has to crew, and a forklift nobody does — and on PLAN,
+  which carries the whole active register, both sat in the same list. The
+  option only appears where the board actually holds one.
 - **Support units are in scope, and grouped apart** (owner, 2026-09-04). A
   dozer, a water truck or a spare digger is crewed like anything else; what it
   lacks is a formation, not an operator. `units.fleet_support` — set by the

@@ -823,6 +823,46 @@ describe("a board whose formation was disbanded afterwards", () => {
     expect(body.fleets.map((f) => f.leaderCode)).toContain(`${tag}-H`);
   });
 
+  test('the support group is an option of its own, not "no fleet"', async () => {
+    /* A board's groups include the support one, and it has no leader to be
+       named after. Filtering it out of the options was what left its units
+       filed beside the ones the board seated nowhere. */
+    const [doc] = await db
+      .select({ id: schema.fleetActualDocuments.id })
+      .from(schema.fleetActualDocuments)
+      .where(eq(schema.fleetActualDocuments.date, HIST));
+    const [group] = await db
+      .insert(schema.fleetActualFleets)
+      .values({ documentId: doc!.id, kind: "support" })
+      .returning({ id: schema.fleetActualFleets.id });
+    await db.insert(schema.fleetActualSlots).values({
+      documentId: doc!.id,
+      unitId: unitB,
+      boardFleetId: group!.id,
+      employeeId: null,
+      source: null,
+    });
+
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/${HIST}/day`,
+      viewer.cookie
+    );
+    const body = (await res.json()) as {
+      fleets: { id: string; kind: string; leaderCode: string | null }[];
+      slots: {
+        unitId: string;
+        fleet: { kind: string; leaderCode: string | null } | null;
+      }[];
+    };
+    const support = body.fleets.find((f) => f.kind === "support");
+    expect(support).toBeDefined();
+    expect(support!.leaderCode).toBeNull();
+    // And the slot points at it rather than reading as unfiled.
+    const row = body.slots.find((s) => s.unitId === unitB);
+    expect(row?.fleet?.kind).toBe("support");
+  });
+
   test("names it in the audit table too", async () => {
     const res = await send(
       "GET",
@@ -831,12 +871,12 @@ describe("a board whose formation was disbanded afterwards", () => {
     );
     if (res.status === 422) return; // no deadline configured for this shift
     const body = (await res.json()) as {
-      rows: { nik: string; fleetDiggerCode: string | null }[];
+      rows: { nik: string; fleetLeaderCode: string | null }[];
     };
     const row = body.rows.find((r) => r.nik === nikOne);
     /* The audit reads the board's copy for the same reason the board does —
        a table that disagreed with the board it audits is worse than none. */
-    if (row) expect(row.fleetDiggerCode).toBe(`${tag}-H`);
+    if (row) expect(row.fleetLeaderCode).toBe(`${tag}-H`);
   });
 });
 
@@ -868,12 +908,12 @@ describe("the board's audit table", () => {
     if (res.status === 422) return;
     const rows = (
       (await res.json()) as {
-        rows: { fleetDiggerCode: string | null }[];
+        rows: { fleetLeaderCode: string | null }[];
       }
     ).rows;
     // Everything with a formation comes before everything without one.
-    const firstSpare = rows.findIndex((r) => !r.fleetDiggerCode);
-    const withFleet = rows.filter((r) => r.fleetDiggerCode).length;
+    const firstSpare = rows.findIndex((r) => !r.fleetLeaderCode);
+    const withFleet = rows.filter((r) => r.fleetLeaderCode).length;
     if (firstSpare !== -1) expect(firstSpare).toBe(withFleet);
   });
 

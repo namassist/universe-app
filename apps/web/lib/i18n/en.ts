@@ -671,6 +671,7 @@ export const en: Dict = {
   faSkillClear: "Clear selection",
   faSpareSumB: "spare operators",
   faNoFleet: "No-fleet — no formation",
+  faSupport: "Support fleet",
   faAllocUnits: "active units",
   faBdNoAlloc: "Breakdown — cannot be allocated",
   faBdFix: "Fix the status first",

@@ -233,9 +233,13 @@ export function FleetAllocationDetail() {
             }}
           >
             <option value="all">{t.faFleetAll}</option>
+            {/* Straight from the board, support group included — it is one of
+                the board's own groups, and leaving it out was what filed its
+                units under "no fleet" on the one screen that could tell them
+                apart. It has no leader to be named after. */}
             {(boardQ.data?.fleets ?? []).map((f) => (
               <option key={f.id} value={f.id}>
-                Fleet {f.leaderCode}
+                {f.kind === "support" ? t.faSupport : `Fleet ${f.leaderCode}`}
               </option>
             ))}
             <option value="none">{t.faActNoFleet}</option>
@@ -317,7 +321,11 @@ export function FleetAllocationDetail() {
                   {s.requiresFtw ? <Badge variant="warning">FTW</Badge> : null}
                   {s.fleet ? (
                     <>
-                      <Badge variant="info">Fleet {s.fleet.leaderCode}</Badge>
+                      <Badge variant="info">
+                        {s.fleet.kind === "support"
+                          ? t.faSupport
+                          : `Fleet ${s.fleet.leaderCode}`}
+                      </Badge>
                       {s.fleet.area ? (
                         <span className="text-xs text-(--text-tertiary)">
                           {s.fleet.area}
@@ -754,13 +762,18 @@ const AUDIT_FTW: Record<
 };
 
 /**
- * The formation filter's value for "belongs to none".
+ * The formation filter's values for the two answers that are not a formation.
  *
- * A sentinel rather than the empty string, which already means "no filter" —
- * and rows outside a formation are a real answer, not the absence of one.
- * Underscored so it can never collide with a digger's unit code.
+ * Sentinels rather than the empty string, which already means "no filter" —
+ * and each of these is a real answer, not the absence of one. Underscored so
+ * neither can collide with a unit code.
+ *
+ * They were one value until 2026-09-04, which read as a lie once support units
+ * started being crewed: somebody who worked a dozer all shift was filed beside
+ * somebody the board never seated.
  */
 const NO_FLEET_ROW = "__no-fleet";
+const SUPPORT_ROW = "__support";
 
 /**
  * What the board did, in one word and one colour.
@@ -825,12 +838,18 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
   const fleetOptions = React.useMemo(
     () =>
       [
-        ...new Set(rows.map((r) => r.fleetDiggerCode).filter(Boolean)),
+        ...new Set(rows.map((r) => r.fleetLeaderCode).filter(Boolean)),
       ].sort() as string[],
     [rows]
   );
+  const hasSupport = React.useMemo(
+    () => rows.some((r) => r.fleetSupport),
+    [rows]
+  );
+  /* Neither a formation nor support: the board seated them nowhere, or they
+     hold a machine that is in neither. */
   const hasUnfleeted = React.useMemo(
-    () => rows.some((r) => !r.fleetDiggerCode),
+    () => rows.some((r) => !r.fleetLeaderCode && !r.fleetSupport),
     [rows]
   );
 
@@ -863,9 +882,11 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
   const shown = React.useMemo(
     () =>
       rows.filter((r) => {
-        if (fleetF === NO_FLEET_ROW) {
-          if (r.fleetDiggerCode) return false;
-        } else if (fleetF && r.fleetDiggerCode !== fleetF) return false;
+        if (fleetF === SUPPORT_ROW) {
+          if (!r.fleetSupport) return false;
+        } else if (fleetF === NO_FLEET_ROW) {
+          if (r.fleetLeaderCode || r.fleetSupport) return false;
+        } else if (fleetF && r.fleetLeaderCode !== fleetF) return false;
         if (ftwF && r.ftw !== ftwF) return false;
         if (fingerF && r.finger !== fingerF) return false;
         /* Any, not all: a unit asks for one code, so holding any of the ticked
@@ -878,7 +899,7 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
           r.nik.includes(needle) ||
           (r.planUnitCode ?? "").toLowerCase().includes(needle) ||
           (r.actualUnitCode ?? "").toLowerCase().includes(needle) ||
-          (r.fleetDiggerCode ?? "").toLowerCase().includes(needle)
+          (r.fleetLeaderCode ?? "").toLowerCase().includes(needle)
         );
       }),
     [rows, needle, fleetF, ftwF, fingerF, skillF]
@@ -941,6 +962,9 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
                 Fleet {code}
               </option>
             ))}
+            {hasSupport ? (
+              <option value={SUPPORT_ROW}>{t.faSupport}</option>
+            ) : null}
             {hasUnfleeted ? (
               <option value={NO_FLEET_ROW}>{t.faNoFleet}</option>
             ) : null}
@@ -1081,9 +1105,17 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
               {pageRows.map((r) => (
                 <TableRow key={r.nik}>
                   <TableCell className="font-mono">
-                    {r.fleetDiggerCode ?? (
-                      <span className="text-(--text-tertiary)">—</span>
-                    )}
+                    {/* A support unit has no leader to be named after, so the
+                        cell says what it is instead of showing a dash it
+                        shares with somebody the board seated nowhere. */}
+                    {r.fleetLeaderCode ??
+                      (r.fleetSupport ? (
+                        <span className="text-(--text-secondary)">
+                          {t.faSupport}
+                        </span>
+                      ) : (
+                        <span className="text-(--text-tertiary)">—</span>
+                      ))}
                   </TableCell>
                   <TableCell>
                     {/* No standing unit is not missing data — it is what a

@@ -40,6 +40,8 @@ export type BoardUnit = {
   /** Owning department's name; null/absent means a global unit. */
   departmentName?: string | null;
   fleet: { id: string; digger: string } | null;
+  /** Crewed without a formation — a dozer, a water truck, a spare digger. */
+  fleetSupport?: boolean;
   downtime?: boolean;
   slots: Slot[];
 };

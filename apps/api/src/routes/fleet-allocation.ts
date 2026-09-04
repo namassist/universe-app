@@ -91,6 +91,14 @@ const BoardUnitSchema = t.Object({
   requiresFtw: t.Boolean(),
   /** The owning department's name — null for a global unit. */
   departmentName: t.Nullable(t.String()),
+  /**
+   * Crewed without a formation — a dozer, a water truck, a spare digger.
+   *
+   * Separate from `fleet` being null, which on this board means several
+   * different things: PLAN carries the whole active register, so a forklift
+   * nobody crews is null here too.
+   */
+  fleetSupport: t.Boolean(),
   fleet: t.Nullable(t.Object({ id: t.String(), leaderCode: t.String() })),
   slots: t.Array(SlotSchema),
 });
@@ -561,6 +569,11 @@ export const fleetAllocationRoutes = new Elysia({
           requiresFtw: schema.units.ftw,
           standby: schema.units.standby,
           breakdown: schema.units.breakdown,
+          /* Crewed without a formation. The board carries the whole register,
+             so "no fleet" here already meant several different things; this is
+             what separates a dozer somebody has to crew from a forklift nobody
+             does. */
+          fleetSupport: schema.units.fleetSupport,
           fleetId: schema.fleets.id,
           leaderCode: digger.code,
           departmentName: schema.departments.name,
@@ -652,6 +665,7 @@ export const fleetAllocationRoutes = new Elysia({
           simperCodeName: u.simperCodeName,
           requiresFtw: u.requiresFtw,
           departmentName: u.departmentName,
+          fleetSupport: u.fleetSupport,
           fleet:
             u.fleetId && u.leaderCode
               ? { id: u.fleetId, leaderCode: u.leaderCode }

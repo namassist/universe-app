@@ -908,11 +908,19 @@ export const ActualSlotSchema = t.Object({
   departmentName: t.Nullable(t.String()),
   modelName: t.String(),
   brandName: t.String(),
-  /** Null for a unit in no formation — support gear, and the spare pool's. */
+  /**
+   * The board group this unit sat in, or null for a unit the board recorded
+   * outside every group.
+   *
+   * `kind` tells a formation from the support group, which has no leader and
+   * no single area — the screen labels that one rather than printing a code it
+   * does not have.
+   */
   fleet: t.Nullable(
     t.Object({
       id: t.String(),
-      leaderCode: t.String(),
+      kind: t.UnionEnum(["fleet", "support"] as const),
+      leaderCode: t.Nullable(t.String()),
       area: t.Nullable(t.String()),
     })
   ),
@@ -927,7 +935,18 @@ export const ActualBoardSchema = t.Object({
   date: t.String(),
   shift: ShiftKindSchema,
   generatedAt: t.String(),
-  fleets: t.Array(t.Object({ id: t.String(), leaderCode: t.String() })),
+  /**
+   * The filter's options: the board's formations, then its support group when
+   * it has one. `leaderCode` is null on support, which has no leader — the
+   * screen labels it from `kind` rather than from a code it does not have.
+   */
+  fleets: t.Array(
+    t.Object({
+      id: t.String(),
+      kind: t.UnionEnum(["fleet", "support"] as const),
+      leaderCode: t.Nullable(t.String()),
+    })
+  ),
   slots: t.Array(ActualSlotSchema),
 });
 
@@ -940,8 +959,16 @@ export const ActualBoardSchema = t.Object({
  * already visible on the board above.
  */
 export const ActualAuditRowSchema = t.Object({
-  /** The formation their standing unit belongs to; null makes them a spare. */
-  fleetDiggerCode: t.Nullable(t.String()),
+  /** The formation they worked in, or their standing unit's; null on neither. */
+  fleetLeaderCode: t.Nullable(t.String()),
+  /**
+   * They worked a support unit — crewed, in no formation.
+   *
+   * Its own field rather than a sentinel in `fleetLeaderCode`, because a
+   * support group has no leader to be named after and "no formation at all"
+   * has to stay a different answer from it.
+   */
+  fleetSupport: t.Boolean(),
   /** Their standing unit, or null — which the screen shows as SPARE. */
   planUnitCode: t.Nullable(t.String()),
   nik: t.String(),

@@ -899,10 +899,20 @@ export const fleetActualRoutes = new Elysia({
         fleets: [
           ...new Map(
             slots
-              .filter((s) => s.fleetId && s.leaderCode)
+              /* A formation needs its leader's code to be named by; the support
+                 group needs neither, and dropping it here was what left its
+                 units filed under "no fleet" on the one screen that could have
+                 told them apart. */
+              .filter(
+                (s) => s.fleetId && (s.groupKind === "support" || s.leaderCode)
+              )
               .map((s) => [
                 s.fleetId!,
-                { id: s.fleetId!, leaderCode: s.leaderCode! },
+                {
+                  id: s.fleetId!,
+                  kind: s.groupKind ?? ("fleet" as const),
+                  leaderCode: s.leaderCode,
+                },
               ])
           ).values(),
         ],
@@ -915,8 +925,13 @@ export const fleetActualRoutes = new Elysia({
           modelName: s.modelName,
           brandName: s.brandName,
           fleet:
-            s.fleetId && s.leaderCode
-              ? { id: s.fleetId, leaderCode: s.leaderCode, area: s.area }
+            s.fleetId && (s.groupKind === "support" || s.leaderCode)
+              ? {
+                  id: s.fleetId,
+                  kind: s.groupKind ?? ("fleet" as const),
+                  leaderCode: s.leaderCode,
+                  area: s.area,
+                }
               : null,
           employeeId: s.employeeId,
           employeeNik: s.employeeId
@@ -990,6 +1005,10 @@ export const fleetActualRoutes = new Elysia({
           employeeId: schema.fleetPlanSlots.employeeId,
           unitCode: planUnit.code,
           leaderCode: planLeader.code,
+          /* A support unit belongs to no formation and is crewed anyway, so
+             the absence of a leader code is not enough to call its operator a
+             spare. */
+          fleetSupport: planUnit.fleetSupport,
           requiresFtw: planUnit.ftw,
         })
         .from(schema.fleetPlanSlots)
@@ -1031,6 +1050,7 @@ export const fleetActualRoutes = new Elysia({
         {
           unitCode: string;
           leaderCode: string | null;
+          fleetSupport: boolean;
           requiresFtw: boolean;
           source: "plan" | "spare" | "manual" | null;
         }
@@ -1041,6 +1061,7 @@ export const fleetActualRoutes = new Elysia({
             employeeId: schema.fleetActualSlots.employeeId,
             unitCode: schema.units.code,
             leaderCode: schema.fleetActualFleets.leaderCode,
+            groupKind: schema.fleetActualFleets.kind,
             requiresFtw: schema.units.ftw,
             source: schema.fleetActualSlots.source,
           })
@@ -1062,6 +1083,7 @@ export const fleetActualRoutes = new Elysia({
             actual.set(row.employeeId, {
               unitCode: row.unitCode,
               leaderCode: row.leaderCode,
+              fleetSupport: row.groupKind === "support",
               requiresFtw: row.requiresFtw,
               source: row.source,
             });
@@ -1093,7 +1115,13 @@ export const fleetActualRoutes = new Elysia({
              was this formation's business today": its standing operators,
              including the ones it lost, and whoever actually drove its units
              in their place. */
-          fleetDiggerCode: placed?.leaderCode ?? standing?.leaderCode ?? null,
+          fleetLeaderCode: placed?.leaderCode ?? standing?.leaderCode ?? null,
+          /* The board's answer first, the standing unit's second — the same
+             order the formation above is read in, because a spare who filled a
+             support unit worked support today whatever they usually hold. */
+          fleetSupport: placed
+            ? placed.fleetSupport
+            : (standing?.fleetSupport ?? false),
           planUnitCode: standing?.unitCode ?? null,
           nik: entry.person.nik,
           name: entry.person.name,
@@ -1125,8 +1153,10 @@ export const fleetActualRoutes = new Elysia({
          A spare here is anyone with no formation: no standing unit at all, or
          a standing unit that belongs to none. */
       rows.sort((a, b) => {
-        const fa = a.fleetDiggerCode;
-        const fb = b.fleetDiggerCode;
+        /* Support sorts with the formations rather than with the spares: its
+           units were crewed, which is the question this table answers. */
+        const fa = a.fleetLeaderCode ?? (a.fleetSupport ? "\uffff" : null);
+        const fb = b.fleetLeaderCode ?? (b.fleetSupport ? "\uffff" : null);
         if (fa && fb && fa !== fb) return fa.localeCompare(fb);
         if (fa && !fb) return -1;
         if (!fa && fb) return 1;

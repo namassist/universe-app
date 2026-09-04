@@ -668,6 +668,7 @@ export const id = {
   faSkillClear: "Bersihkan pilihan",
   faSpareSumB: "operator spare",
   faNoFleet: "No-fleet — tanpa formasi",
+  faSupport: "Fleet support",
   faAllocUnits: "unit aktif",
   faBdNoAlloc: "Breakdown — tidak bisa dialokasikan",
   faBdFix: "Perbaiki status dulu",
