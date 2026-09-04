@@ -823,6 +823,11 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
   const [fleetF, setFleetF] = React.useState("");
   const [ftwF, setFtwF] = React.useState("");
   const [fingerF, setFingerF] = React.useState("");
+  /* Who the row is, before anything the board did to them: somebody the
+     roster gave a standing unit, or somebody it did not. "Spare" is a badge in
+     the Unit plan column and was the one thing on the row nobody could filter
+     by — and it is the whole population a short shift is read against. */
+  const [opF, setOpF] = React.useState<"" | "spare" | "plan">("");
   const [skillF, setSkillF] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
   const [per, setPer] = React.useState("10");
@@ -850,6 +855,15 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
      hold a machine that is in neither. */
   const hasUnfleeted = React.useMemo(
     () => rows.some((r) => !r.fleetLeaderCode && !r.fleetSupport),
+    [rows]
+  );
+
+  const hasSpare = React.useMemo(
+    () => rows.some((r) => !r.planUnitCode),
+    [rows]
+  );
+  const hasPlanned = React.useMemo(
+    () => rows.some((r) => !!r.planUnitCode),
     [rows]
   );
 
@@ -889,6 +903,8 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
         } else if (fleetF && r.fleetLeaderCode !== fleetF) return false;
         if (ftwF && r.ftw !== ftwF) return false;
         if (fingerF && r.finger !== fingerF) return false;
+        if (opF === "spare" && r.planUnitCode) return false;
+        if (opF === "plan" && !r.planUnitCode) return false;
         /* Any, not all: a unit asks for one code, so holding any of the ticked
            ones is what makes an operator relevant to the question. */
         if (skillF.length && !skillF.some((c) => r.skills.includes(c)))
@@ -902,7 +918,7 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
           (r.fleetLeaderCode ?? "").toLowerCase().includes(needle)
         );
       }),
-    [rows, needle, fleetF, ftwF, fingerF, skillF]
+    [rows, needle, fleetF, ftwF, fingerF, opF, skillF]
   );
 
   const sorted = React.useMemo(() => {
@@ -968,6 +984,27 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
             {hasUnfleeted ? (
               <option value={NO_FLEET_ROW}>{t.faNoFleet}</option>
             ) : null}
+          </Select>
+        ) : null}
+        {/* Beside the formation, because the two together are the question
+            "who was this fleet's business today, and which of them arrived
+            without a machine of their own". Offered only when the shift
+            actually has both kinds — a filter with one answer is a control
+            that can only ever empty the table. */}
+        {hasSpare && hasPlanned ? (
+          <Select
+            aria-label={t.faAuditOpAll}
+            wrapperClassName="min-w-[150px] flex-1"
+            className="h-10 w-full"
+            value={opF}
+            onChange={(e) => {
+              setOpF(e.target.value as "" | "spare" | "plan");
+              setPage(1);
+            }}
+          >
+            <option value="">{t.faAuditOpAll}</option>
+            <option value="spare">{t.faAuditOpSpare}</option>
+            <option value="plan">{t.faAuditOpPlan}</option>
           </Select>
         ) : null}
         {/* Single choice: a row has exactly one verdict, so "pass or fail"
@@ -1044,7 +1081,7 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
         <TableSkeleton rows={6} />
       ) : !shown.length ? (
         <p className="text-sm text-(--text-tertiary)">
-          {needle || fleetF || ftwF || fingerF || skillF.length
+          {needle || fleetF || ftwF || fingerF || opF || skillF.length
             ? t.faNoMatch
             : t.faAuditEmpty}
         </p>
