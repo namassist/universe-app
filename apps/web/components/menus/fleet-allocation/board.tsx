@@ -73,12 +73,23 @@ const NO_FLEET = "no-fleet";
  * register, so both were sitting in the same list.
  */
 const SUPPORT = "support";
+/**
+ * Every unit on the board, whatever formation it sits in.
+ *
+ * Added on 2026-09-04 at the owner's request, matching the ACTUAL detail
+ * screen: the board deliberately showed one formation at a time, which answers
+ * "how is fleet X crewed" but never "which units are still without an
+ * operator" — the question the unallocated filter is actually asked, and one
+ * that cannot be answered eleven formations at a time.
+ */
+const ALL_FLEETS = "all";
 
 /** Whether a unit belongs to whatever the formation filter currently names. */
 const inSelectedFleet = (
   unit: { fleet: { id: string } | null; fleetSupport?: boolean },
   active: string
 ) => {
+  if (active === ALL_FLEETS) return true;
   if (active === SUPPORT) return !unit.fleet && !!unit.fleetSupport;
   /* A unit on this board with no formation *is* the no-fleet entry — the whole
      active register is here on PLAN, and "no fleet" is a place rather than a
@@ -402,6 +413,7 @@ export function AllocBoard({
      nothing is a question with no answer behind it. */
   const supportOffered = noFleetOffered && units.some((u) => u.fleetSupport);
   const activeFleet =
+    fleetF === ALL_FLEETS ||
     (noFleetOffered && fleetF === NO_FLEET) ||
     (supportOffered && fleetF === SUPPORT) ||
     fleetOptions.some((f) => f.id === fleetF)
@@ -708,10 +720,11 @@ export function AllocBoard({
               </SegmentedButton>
             ))}
           </Segmented>
-          {/* Purely what Fleet Setting holds: its formations, and its no-fleet
-              entry. There is no "all" and no residual bucket — every option
-              here is something someone configured, so choosing one names a
-              decision rather than a leftover. */}
+          {/* What Fleet Setting holds — its formations, its support entry, its
+              no-fleet entry — under one option that lifts the narrowing
+              altogether. Everything below "all" is something someone
+              configured, so choosing one still names a decision rather than a
+              leftover. */}
           <Select
             aria-label="Filter fleet"
             wrapperClassName="w-auto"
@@ -722,6 +735,7 @@ export function AllocBoard({
               setPage(1);
             }}
           >
+            <option value={ALL_FLEETS}>{t.faFleetAll}</option>
             {/* The area rides on the option, so it is in front of you at the
                 moment you choose a formation — and the closed select goes on
                 stating it for the one you picked. */}
