@@ -46,6 +46,8 @@ let hauler1 = { id: "", code: "" };
 let hauler2 = { id: "", code: "" };
 let hauler3 = { id: "", code: "" };
 let busUnit = { id: "", code: "" };
+/** A second vehicle, for the case where one formation rides two. */
+let busUnit2 = { id: "", code: "" };
 /** A formation of its own, so disbanding it disturbs no other test. */
 let spare1 = { id: "", code: "" };
 let spare2 = { id: "", code: "" };
@@ -183,6 +185,7 @@ beforeAll(async () => {
   hauler2 = await makeUnit(`ZZDT2${uid()}`, typ!.id, refs);
   hauler3 = await makeUnit(`ZZDT3${uid()}`, typ!.id, refs);
   busUnit = await makeUnit(`ZZBS1${uid()}`, busTypeId, refs);
+  busUnit2 = await makeUnit(`ZZBS2${uid()}`, busTypeId, refs);
 });
 
 afterAll(async () => {
@@ -456,7 +459,7 @@ describe("fleet support is written by hand as well as by the file", () => {
     const response = await send("POST", "/fleets/support", admin.cookie, {
       unitIds: [spare2.id],
       workArea: `${tag} DISPOSAL`,
-      transportUnitId: busUnit.id,
+      transports: { [spare2.id]: busUnit.id },
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ changed: 1 });
@@ -473,7 +476,7 @@ describe("fleet support is written by hand as well as by the file", () => {
     await send("POST", "/fleets/support", admin.cookie, {
       unitIds: [spare2.id],
       workArea: `${tag} DISPOSAL`,
-      transportUnitId: busUnit.id,
+      transports: { [spare2.id]: busUnit.id },
     });
     expect(await supportOf(spare2.id)).toMatchObject({
       workArea: `${tag} DISPOSAL`,
@@ -484,7 +487,7 @@ describe("fleet support is written by hand as well as by the file", () => {
     const response = await send("POST", "/fleets/support", admin.cookie, {
       unitIds: [spare2.id],
       workArea: `${tag} DISPOSAL`,
-      transportUnitId: hauler3.id,
+      transports: { [spare2.id]: hauler3.id },
     });
     expect(response.status).toBe(422);
     const body = (await response.json()) as { message: string };
@@ -501,6 +504,40 @@ describe("fleet support is written by hand as well as by the file", () => {
     expect(response.status).toBe(422);
     const body = (await response.json()) as { message: string };
     expect(body.message).toContain(hauler2.code);
+  });
+
+  test("two support units may ride different vehicles", async () => {
+    /* A support group is not one machine. Two dozers on the same panel can be
+       brought by different buses, and the entry has to be able to say so. */
+    const response = await send("POST", "/fleets/support", admin.cookie, {
+      unitIds: [spare1.id, spare2.id],
+      workArea: `${tag} DISPOSAL`,
+      transports: { [spare1.id]: busUnit.id, [spare2.id]: busUnit2.id },
+    });
+    expect(response.status).toBe(200);
+    expect(await supportOf(spare1.id)).toMatchObject({
+      transportUnitId: busUnit.id,
+    });
+    expect(await supportOf(spare2.id)).toMatchObject({
+      transportUnitId: busUnit2.id,
+    });
+
+    // Put spare1 back where the tests after this one expect it.
+    await send("POST", "/fleets/support/release", admin.cookie, {
+      unitIds: [spare1.id],
+    });
+  });
+
+  test("a unit the map says nothing about gets no ride", async () => {
+    // The route states what these units are rather than patching them, so
+    // silence about a vehicle means there is none — not "leave the old one".
+    await send("POST", "/fleets/support", admin.cookie, {
+      unitIds: [spare2.id],
+      workArea: `${tag} DISPOSAL`,
+    });
+    expect(await supportOf(spare2.id)).toMatchObject({
+      transportUnitId: null,
+    });
   });
 
   test("releasing clears the location and the ride, not only the flag", async () => {

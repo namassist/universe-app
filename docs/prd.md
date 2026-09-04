@@ -54,8 +54,13 @@ fill the gap from the spare pool.
   stored flag with an area and a ride beside it. Until 2026-09-04 only the daily
   import could set them, and a dozer moved to a new panel at ten in the morning
   had nowhere to be recorded. Adding states what the units are rather than
-  appending to a list, so pressing save twice changes nothing; releasing clears
-  the same three columns the import's sweep does.
+  appending to a list, so pressing save twice changes nothing — and silence
+  about a unit's vehicle means it has none, rather than keeping the old one.
+  Releasing clears the same three columns the import's sweep does.
+- **Transport is per unit there too.** A support group is not one machine: two
+  dozers on the same panel can be brought by different buses, and the dialog
+  offers a row per selected unit with the same "samakan semua" shortcut the
+  formation dialog has.
 - **Joining a formation ends support**, or the entry would keep claiming a
   machine listed under its fleet.
 

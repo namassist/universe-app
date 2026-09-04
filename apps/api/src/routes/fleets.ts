@@ -953,7 +953,12 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
     "/support",
     async ({ body, status }) => {
       const unitIds = [...new Set(body.unitIds)];
-      const transportUnitId = body.transportUnitId ?? null;
+      const transports: Record<string, string | null> = body.transports ?? {};
+      const vehicleIds = [
+        ...new Set(
+          Object.values(transports).filter((id): id is string => id !== null)
+        ),
+      ];
 
       const found = await db
         .select({
@@ -966,12 +971,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
           schema.unitTypes,
           eq(schema.unitTypes.id, schema.units.typeId)
         )
-        .where(
-          inArray(schema.units.id, [
-            ...unitIds,
-            ...(transportUnitId ? [transportUnitId] : []),
-          ])
-        );
+        .where(inArray(schema.units.id, [...unitIds, ...vehicleIds]));
       const byId = new Map(found.map((u) => [u.id, u]));
 
       const missing = unitIds.filter((id) => !byId.has(id));
@@ -980,16 +980,18 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
           422,
           invalid(`${missing.length} unit tidak ada di master`)
         );
-      if (transportUnitId) {
-        const vehicle = byId.get(transportUnitId);
-        if (!vehicle)
-          return status(422, invalid("Unit transport tidak ada di master"));
-        if (!isFleetTransportType(vehicle.typeName))
-          return status(
-            422,
-            invalid(`Unit ${vehicle.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`)
-          );
-      }
+      if (vehicleIds.some((id) => !byId.has(id)))
+        return status(422, invalid("Unit transport tidak ada di master"));
+      const notVehicle = vehicleIds.find(
+        (id) => !isFleetTransportType(byId.get(id)!.typeName)
+      );
+      if (notVehicle)
+        return status(
+          422,
+          invalid(
+            `Unit ${byId.get(notVehicle)!.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`
+          )
+        );
 
       /* A unit in a formation is already crewed through it, and the support
          entry lists what belongs to none — so admitting one here would put the
@@ -1011,14 +1013,25 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
           )
         );
 
-      await db
-        .update(schema.units)
-        .set({
-          fleetSupport: true,
-          workArea: body.workArea.trim(),
-          transportUnitId,
-        })
-        .where(inArray(schema.units.id, unitIds));
+      /* Grouped by ride rather than one statement per unit: a support group is
+         usually on one vehicle, so this is almost always a single update and
+         never more than a handful. */
+      const byVehicle = new Map<string | null, string[]>();
+      for (const id of unitIds) {
+        const ride = transports[id] ?? null;
+        byVehicle.set(ride, [...(byVehicle.get(ride) ?? []), id]);
+      }
+      await db.transaction(async (tx) => {
+        for (const [transportUnitId, ids] of byVehicle)
+          await tx
+            .update(schema.units)
+            .set({
+              fleetSupport: true,
+              workArea: body.workArea.trim(),
+              transportUnitId,
+            })
+            .where(inArray(schema.units.id, ids));
+      });
       return { changed: unitIds.length };
     },
     {
@@ -1029,7 +1042,18 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
           maxItems: 500,
         }),
         workArea: t.String({ minLength: 1, maxLength: 120 }),
-        transportUnitId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
+        /**
+         * Which vehicle carries each unit's crew, keyed by unit id.
+         *
+         * Per unit, like a formation's — a support group is not one machine,
+         * and two dozers on one panel can legitimately be brought by different
+         * buses. A unit absent from the map gets **none**: this route states
+         * what these units are rather than patching them, so silence about a
+         * ride means there is no ride.
+         */
+        transports: t.Optional(
+          t.Record(t.String(), t.Nullable(t.String({ format: "uuid" })))
+        ),
       }),
       response: {
         200: FleetSupportResultSchema,

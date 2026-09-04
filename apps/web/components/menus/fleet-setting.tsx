@@ -204,7 +204,8 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     () => new Set()
   );
   const [supArea, setSupArea] = React.useState("");
-  const [supBus, setSupBus] = React.useState("");
+  /** The vehicle each selected unit rides, by unit id — see the fleet dialog. */
+  const [supBus, setSupBus] = React.useState<Record<string, string>>({});
   const [supErr, setSupErr] = React.useState(false);
 
   const [nfOpen, setNfOpen] = React.useState(false);
@@ -231,7 +232,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     mutationFn: async (input: {
       unitIds: string[];
       workArea: string;
-      transportUnitId: string | null;
+      transports: Record<string, string | null>;
     }) => {
       const result = await api.v1.fleets.support.post(input);
       if (result.error) throw result.error;
@@ -456,7 +457,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     setSupSel(new Set());
     setSupQ("");
     setSupArea("");
-    setSupBus("");
+    setSupBus({});
     setSupErr(false);
     setSupOpen(true);
   }
@@ -469,7 +470,12 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     saveSupport.mutate({
       unitIds: [...supSel],
       workArea,
-      transportUnitId: supBus ? (unitIdByCode.get(supBus) ?? null) : null,
+      transports: Object.fromEntries(
+        [...supSel].map((id) => [
+          id,
+          supBus[id] ? (unitIdByCode.get(supBus[id]!) ?? null) : null,
+        ])
+      ),
     });
   }
 
@@ -1129,7 +1135,9 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       <Dialog
         open={supOpen}
         onClose={() => setSupOpen(false)}
-        className="w-[min(560px,100%)]"
+        // Same width as the add/edit dialog: it carries the same per-unit
+        // transport list, and 560px is where its selects started to be cut off.
+        className="w-[min(760px,100%)]"
         labelledBy="sup-t"
       >
         <form onSubmit={submitSupport} className="flex min-h-0 flex-1 flex-col">
@@ -1155,29 +1163,6 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 maxLength={120}
                 autoComplete="off"
               />
-            </Field>
-
-            <Field label={t.flBus} htmlFor="sup-bus">
-              <Select
-                id="sup-bus"
-                value={supBus}
-                onChange={(e) => setSupBus(e.target.value)}
-              >
-                <option value="">
-                  {BUS_OPTS.length
-                    ? "— tanpa angkutan —"
-                    : "— belum ada bus/manhaul —"}
-                </option>
-                {BUS_GROUPS.map((g) => (
-                  <optgroup key={g.name} label={g.name}>
-                    {g.codes.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </Select>
             </Field>
 
             <Field label={`${t.flSupPick} (${supSel.size} ${t.flSupSelected})`}>
@@ -1222,6 +1207,80 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 </div>
               </div>
             </Field>
+
+            {/* Same shape as a formation's, and for the same reason: a support
+                group is not one machine, so two dozers on one panel can be
+                brought by different buses. Only what is actually selected —
+                an empty list here would be a field about nothing. */}
+            {supSel.size ? (
+              <Field label={t.flBus}>
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-(--text-tertiary)">
+                      {t.flBusPerUnit}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => {
+                        const first = [...supSel][0]!;
+                        const ride = supBus[first] ?? "";
+                        setSupBus(
+                          Object.fromEntries(
+                            [...supSel].map((id) => [id, ride])
+                          )
+                        );
+                      }}
+                    >
+                      <Copy />
+                      {t.flBusSameAll}
+                    </Button>
+                  </div>
+                  <div className="rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
+                    {idleUnits
+                      .filter((u) => supSel.has(u.id))
+                      .map((u) => (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-3 px-2 py-1.5"
+                        >
+                          <span className="w-[120px] shrink-0 font-mono text-sm font-semibold">
+                            {u.code}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-xs text-(--text-tertiary)">
+                            {unitTypeOf.get(u.code) ?? "—"}
+                          </span>
+                          <Select
+                            aria-label={`${t.flBus} — ${u.code}`}
+                            wrapperClassName="w-[220px] shrink-0"
+                            className="h-9"
+                            value={supBus[u.id] ?? ""}
+                            onChange={(e) =>
+                              setSupBus({ ...supBus, [u.id]: e.target.value })
+                            }
+                          >
+                            <option value="">
+                              {BUS_OPTS.length
+                                ? "— tanpa angkutan —"
+                                : "— belum ada bus/manhaul —"}
+                            </option>
+                            {BUS_GROUPS.map((g) => (
+                              <optgroup key={g.name} label={g.name}>
+                                {g.codes.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </Select>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </Field>
+            ) : null}
           </div>
 
           <DialogActions>
