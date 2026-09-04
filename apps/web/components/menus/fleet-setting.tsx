@@ -107,9 +107,13 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const fleetsQ = useQuery(fleetsQueryOptions());
   const fleets = React.useMemo(() => fleetsQ.data ?? [], [fleetsQ.data]);
 
-  /* The no-fleet entry — machines in no formation that still get an operator.
-     Fetched separately because it is not a fleet: no digger, no area, no bus,
-     and nothing to disband. */
+  /* The two pinned entries. Neither is a fleet — no leader, no members,
+     nothing to disband — so both are fetched from the same derived list and
+     told apart by `fleetSupport`.
+
+     They mean opposite things and were one row until 2026-09-04, which read as
+     a lie once support units started being crewed: the entry says "not
+     allocated" and 59 of its 239 units were. */
   const noFleetQ = useQuery(noFleetQueryOptions());
   const noFleet = React.useMemo(
     () => noFleetQ.data?.units ?? [],
@@ -186,6 +190,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
 
   // no-fleet dialog — a read-only list; membership is derived, not chosen
   const [nfOpen, setNfOpen] = React.useState(false);
+  const [nfKind, setNfKind] = React.useState<"support" | "none">("none");
   const [nfQ, setNfQ] = React.useState("");
 
   /* The no-fleet entry follows the formations, so every write that changes a
@@ -352,18 +357,30 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       ]),
     [fleets]
   );
+  /** Crewed without a formation: dozers, water trucks, spare diggers. */
+  const supportUnits = React.useMemo(
+    () => noFleet.filter((u) => u.fleetSupport),
+    [noFleet]
+  );
+  /** In no formation and crewed by nobody — most of the register. */
+  const idleUnits = React.useMemo(
+    () => noFleet.filter((u) => !u.fleetSupport),
+    [noFleet]
+  );
+  const nfSource = nfKind === "support" ? supportUnits : idleUnits;
   const nfFiltered = React.useMemo(() => {
     const needle = nfQ.trim().toUpperCase();
     return needle
-      ? noFleet.filter((u) => u.code.toUpperCase().includes(needle))
-      : noFleet;
-  }, [noFleet, nfQ]);
+      ? nfSource.filter((u) => u.code.toUpperCase().includes(needle))
+      : nfSource;
+  }, [nfSource, nfQ]);
   const unitTypeOf = React.useMemo(
     () => new Map(units.map((u) => [u.code, unitTypeLabel(u)])),
     [units]
   );
 
-  function openNoFleet() {
+  function openNoFleet(kind: "support" | "none") {
+    setNfKind(kind);
     setNfQ("");
     setNfOpen(true);
   }
@@ -532,60 +549,86 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             </tr>
           </TableHeader>
           <TableBody>
-            {/* Pinned above the formations, and there is no delete on it: it
-                has no record to delete. A site always has machines that belong
-                to no formation and still have to be crewed, so the entry is
-                part of the screen rather than something to create.
+            {/* Two pinned entries above the formations, neither of them a
+                fleet: they have no record, so there is nothing to delete and
+                nothing to create. They were one row until 2026-09-04, when it
+                stopped being true — the row said "not allocated" and 59 of its
+                239 units were being crewed.
 
-                Hidden while the list is being searched — the search is for a
+                Hidden while the list is being searched: the search is for a
                 formation, and a fixed row that ignored it would read as a
                 result that does not match. */}
-            {!listNeedle ? (
-              <TableRow>
-                {/* Empty rather than absent: there is no record here to
-                    delete, and the columns still have to line up. */}
-                {canW ? <TableCell /> : null}
-                <TableCell>
-                  <NameCell name={t.flNoFleet} sub={t.flNoFleetSub} />
-                </TableCell>
-                <TableCell className="text-(--text-tertiary)">—</TableCell>
-                <TableCell className="text-(--text-tertiary) max-xl:hidden">
-                  —
-                </TableCell>
-                <TableCell>
-                  {/* A count and a sample, not the whole list: this is most of
-                      the register, and several hundred badges would bury the
-                      formations underneath it. The dialog has the full list. */}
-                  {noFleet.length ? (
-                    <div className="flex max-w-[320px] flex-wrap items-center gap-1">
-                      {noFleet.slice(0, 3).map((u) => (
-                        <Badge key={u.id} variant="info">
-                          {u.code}
-                        </Badge>
-                      ))}
-                      {noFleet.length > 3 ? (
-                        <span className="text-xs text-(--text-tertiary)">
-                          +{noFleet.length - 3} {t.flSumB.toLowerCase()}
+            {!listNeedle
+              ? (
+                  [
+                    {
+                      kind: "support" as const,
+                      name: t.flSupport,
+                      sub: t.flSupportSub,
+                      badge: t.flSupportFixed,
+                      variant: "info" as const,
+                      units: supportUnits,
+                    },
+                    {
+                      kind: "none" as const,
+                      name: t.flNoFleet,
+                      sub: t.flNoFleetSub,
+                      badge: t.flNoFleetFixed,
+                      variant: "neutral" as const,
+                      units: idleUnits,
+                    },
+                  ] as const
+                ).map((entry) => (
+                  <TableRow key={entry.kind}>
+                    {/* Empty rather than absent: there is no record here to
+                        delete, and the columns still have to line up. */}
+                    {canW ? <TableCell /> : null}
+                    <TableCell>
+                      <NameCell name={entry.name} sub={entry.sub} />
+                    </TableCell>
+                    <TableCell className="text-(--text-tertiary)">—</TableCell>
+                    <TableCell className="text-(--text-tertiary) max-xl:hidden">
+                      —
+                    </TableCell>
+                    <TableCell>
+                      {/* A count and a sample, not the whole list: between them
+                          these are most of the register, and several hundred
+                          badges would bury the formations underneath. The
+                          dialog has the full list. */}
+                      {entry.units.length ? (
+                        <div className="flex max-w-[320px] flex-wrap items-center gap-1">
+                          {entry.units.slice(0, 3).map((u) => (
+                            <Badge key={u.id} variant="info">
+                              {u.code}
+                            </Badge>
+                          ))}
+                          {entry.units.length > 3 ? (
+                            <span className="text-xs text-(--text-tertiary)">
+                              +{entry.units.length - 3} {t.flSumB.toLowerCase()}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-(--text-tertiary) italic">
+                          {t.flNoFleetEmpty}
                         </span>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-(--text-tertiary) italic">
-                      {t.flNoFleetEmpty}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="neutral">{t.flNoFleetFixed}</Badge>
-                </TableCell>
-                <TableCell>
-                  {/* Not gated on write access: there is nothing to write. */}
-                  <IconButton aria-label={t.flNoFleet} onClick={openNoFleet}>
-                    <Eye />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ) : null}
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={entry.variant}>{entry.badge}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {/* Not gated on write access: there is nothing to write. */}
+                      <IconButton
+                        aria-label={entry.name}
+                        onClick={() => openNoFleet(entry.kind)}
+                      >
+                        <Eye />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              : null}
             {pg.rows.map((f) => (
               <TableRow key={f.id} selected={sel.has(f.id)}>
                 {canW ? (
@@ -840,8 +883,12 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
         <DialogIcon variant="info">
           <Truck />
         </DialogIcon>
-        <DialogTitle id="nf-t">{t.flNoFleet}</DialogTitle>
-        <DialogBody>{t.flNoFleetDlgB}</DialogBody>
+        <DialogTitle id="nf-t">
+          {nfKind === "support" ? t.flSupport : t.flNoFleet}
+        </DialogTitle>
+        <DialogBody>
+          {nfKind === "support" ? t.flSupportDlgB : t.flNoFleetDlgB}
+        </DialogBody>
         {/* Read-only: membership is a consequence of the formations, so there
             is nothing here to submit. The search is worth keeping — the list
             is the size of the yard minus its fleets. */}
@@ -865,11 +912,22 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                   <span className="text-xs text-(--text-tertiary)">
                     {unitTypeOf.get(u.code) ?? "—"}
                   </span>
+                  {/* A support unit is crewed, so where it works and what
+                      brings its crew are the two things a reader is here for.
+                      A unit in no operation has neither, and shows neither. */}
+                  {u.workArea ? (
+                    <span className="ml-auto text-xs text-(--text-secondary)">
+                      {u.workArea}
+                    </span>
+                  ) : null}
+                  {u.transportCode ? (
+                    <Badge variant="neutral">{u.transportCode}</Badge>
+                  ) : null}
                 </div>
               ))
             ) : (
               <p className="px-2 py-1.5 text-xs text-(--text-tertiary)">
-                {noFleet.length ? t.noResTitle : t.flNoFleetEmpty}
+                {nfSource.length ? t.noResTitle : t.flNoFleetEmpty}
               </p>
             )}
           </div>

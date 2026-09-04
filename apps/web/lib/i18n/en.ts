@@ -729,11 +729,16 @@ export const en: Dict = {
   flDlgB:
     "Formations are relatively fixed — daily operator allocation happens in Unit No-Operator.",
   flNoFleet: "No-fleet",
-  flNoFleetSub: "No formation — outside allocation",
+  flNoFleetSub: "No formation and no operator",
+  flSupport: "Support fleet",
+  flSupportSub: "Units in no formation that are still given an operator",
+  flSupportFixed: "In allocation",
+  flSupportDlgB:
+    "Units that work without a formation — dozers, water trucks, manhauls, spare diggers. They are still crewed, and appear on the board as their own Support group. This list is filled by the Fleet Setting import, from rows whose fleet cell is blank.",
   flNoFleetFixed: "Automatic",
   flNoFleetEmpty: "Every active unit belongs to a formation",
   flNoFleetDlgB:
-    "Every active unit that belongs to no formation. The list keeps itself: a unit taken out of a fleet appears here at once, and one put into a fleet leaves. Units here do NOT take part in allocation.",
+    "Active units in no formation and not marked as support. The list keeps itself: a unit taken out of a fleet appears here at once, and one put into a fleet leaves. Units here do NOT take part in allocation — if one should still be crewed, name it in the Fleet Setting import so it lands in Support fleet instead.",
   flSumB: "fleet formations",
   flDelT: "Delete",
   flDelB:

@@ -726,11 +726,16 @@ export const id = {
   flDlgB:
     "Formasi relatif tetap — alokasi operator harian dilakukan di Unit No-Operator.",
   flNoFleet: "No-fleet",
-  flNoFleetSub: "Tanpa formasi — di luar alokasi",
+  flNoFleetSub: "Tanpa formasi dan tanpa operator",
+  flSupport: "Fleet support",
+  flSupportSub: "Unit tanpa formasi yang tetap dialokasikan operator",
+  flSupportFixed: "Masuk alokasi",
+  flSupportDlgB:
+    "Unit yang bekerja tanpa formasi — dozer, water truck, manhaul, excavator cadangan. Mereka tetap mendapat operator dan muncul di papan alokasi sebagai grup Support tersendiri. Daftar ini diisi oleh import Fleet Setting, dari baris yang kolom fleet-nya kosong.",
   flNoFleetFixed: "Otomatis",
   flNoFleetEmpty: "Semua unit aktif sudah masuk formasi",
   flNoFleetDlgB:
-    "Semua unit aktif yang tidak masuk formasi mana pun. Daftar ini terisi sendiri: unit yang dikeluarkan dari sebuah fleet langsung muncul di sini, dan yang dimasukkan ke fleet langsung hilang. Unit di sini TIDAK ikut perhitungan alokasi.",
+    "Unit aktif yang tidak masuk formasi mana pun dan tidak ditandai sebagai unit support. Daftar ini terisi sendiri: unit yang dikeluarkan dari sebuah fleet langsung muncul di sini, dan yang dimasukkan ke fleet langsung hilang. Unit di sini TIDAK ikut perhitungan alokasi — kalau sebuah unit seharusnya tetap diawaki, sebut dia di file import Fleet Setting supaya masuk ke Fleet support.",
   flSumB: "formasi fleet",
   flDelT: "Hapus",
   flDelB:
