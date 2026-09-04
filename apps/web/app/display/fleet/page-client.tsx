@@ -326,52 +326,31 @@ function UnitCard({
           >
             {unit.employeeName ?? "Belum ada operator"}
           </div>
-          {showArea || unit.busCode ? (
+          {/* The area gets a line of its own: it is prose, and long enough
+              ("PANEL EAST - UTARA BAWAH") that sharing a row with the badges
+              would push them onto a second one anyway. */}
+          {showArea ? (
             <div
               className={cn(
-                "flex min-w-0 flex-wrap items-center",
-                compact ? "mt-1 gap-1" : "mt-1 gap-2"
+                "mt-1 flex min-w-0 items-center gap-1.5 font-bold text-(--badge-warning-text)",
+                compact ? "text-[11px]" : "text-[15px]"
               )}
             >
-              {showArea ? (
-                <span
-                  className={cn(
-                    "inline-flex min-w-0 items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) font-bold text-(--badge-warning-text)",
-                    compact
-                      ? "px-1.5 py-0 text-[11px]"
-                      : "px-2.5 py-0.5 text-[15px]"
-                  )}
-                >
-                  <Pickaxe
-                    className={cn("flex-none", compact ? "size-3" : "size-3.5")}
-                  />
-                  <span className="truncate">{unit.unitArea ?? "—"}</span>
-                </span>
-              ) : null}
-              {/* Absent rather than dashed: a unit with no vehicle recorded is
-                  not the same statement as one whose vehicle is unknown, and
-                  on a wall read at ten metres a dash is just noise. */}
-              {unit.busCode ? (
-                <span
-                  className={cn(
-                    "inline-flex flex-none items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) font-mono font-bold text-(--color-primary-bright)",
-                    compact
-                      ? "px-1.5 py-0 text-[11px]"
-                      : "px-2.5 py-0.5 text-[15px]"
-                  )}
-                >
-                  <Bus className={compact ? "size-3" : "size-3.5"} />
-                  {unit.busCode}
-                </span>
-              ) : null}
+              <Pickaxe
+                className={cn("flex-none", compact ? "size-3" : "size-3.5")}
+              />
+              <span className="truncate">{unit.unitArea ?? "—"}</span>
             </div>
           ) : null}
-          {/* NIK and readiness on one line: the identity and what it still
-              owes are read together, and stacking them cost a row of height
-              that a quadrant on a monitor wall does not have to spare.
+          {/* The bus and the two readiness verdicts, on one row.
+              The NIK left it on 2026-09-04: the card carries the operator's
+              photograph and their name, and a number identifying somebody
+              already looking out of the card is height a quadrant on a monitor
+              wall does not have to spare. It is still fetched — the photo is
+              addressed by it.
 
               `items-center`, not `items-baseline` — a pill has no baseline to
-              share with the digits beside it, and aligning to one sits it low.
+              share with what sits beside it, and aligning to one sits it low.
 
               The badges matter most before the board exists. Between a shift's
               changeover and `spare-validate` the wall shows the standing plan,
@@ -379,11 +358,25 @@ function UnitCard({
               finger" are the whole of what they still owe. */}
           <div
             className={cn(
-              "mt-0.5 flex min-w-0 flex-wrap items-center font-mono text-(--text-secondary) tabular-nums",
-              compact ? "gap-1.5 text-[11px]" : "gap-2 text-base"
+              "mt-1 flex min-w-0 flex-wrap items-center font-mono text-(--text-secondary) tabular-nums",
+              compact ? "gap-1 text-[11px]" : "gap-1.5 text-base"
             )}
           >
-            {unit.employeeNik ? <span>{unit.employeeNik}</span> : null}
+            {/* Absent rather than dashed: a unit with no vehicle recorded is
+                not the same statement as one whose vehicle is unknown, and on a
+                wall read at ten metres a dash is only noise. */}
+            {unit.busCode ? (
+              <DisplayBadge
+                tone="info"
+                className={cn(
+                  "flex-none gap-1 py-0 font-mono [&>span]:hidden",
+                  compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
+                )}
+              >
+                <Bus className={compact ? "size-2.5" : "size-3"} />
+                {unit.busCode}
+              </DisplayBadge>
+            ) : null}
             {/* Only where there is somebody they are about: an idle unit is
                 already saying the one thing it has to say. */}
             {unit.employeeName
@@ -397,7 +390,7 @@ function UnitCard({
                       key={badge.label}
                       tone={badge.tone}
                       className={cn(
-                        "flex-none gap-1 py-0.5 font-mono [&>span]:size-1.5",
+                        "flex-none gap-1 py-0 font-mono [&>span]:size-1.5",
                         compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
                       )}
                     >

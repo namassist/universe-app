@@ -630,6 +630,13 @@ fill the gap from the spare pool.
   shift was simply not recorded.
 - The formation header drops its leader badge on this screen — the support
   group is led by none.
+- **The card shows no NIK** (owner, 2026-09-04). It carries the operator's
+  photograph and their name, and a number identifying somebody already looking
+  out of the card was a line of height a quadrant on a monitor wall cannot
+  spare. It is still fetched, because the photograph is addressed by it.
+- **The bus and the two readiness verdicts share one row**, at badge size. The
+  work area keeps a line of its own on the support wall: it is prose, and long
+  enough that sharing a row would push the badges onto a second one anyway.
 - **The bus is on every card, on both walls.** It is a fact about a unit now,
   so a group header can only ever speak for the case where a formation's units
   all ride the same one: it says the vehicle when they agree and says nothing
