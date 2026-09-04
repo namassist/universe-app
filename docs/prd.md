@@ -43,7 +43,21 @@ fill the gap from the spare pool.
 - A unit leads at most one fleet; a unit hauls for at most one fleet; a fleet
   leader never hauls for another fleet. All held by unique indexes, with route
   prechecks that name the offending unit in the refusal.
-- Deleting a fleet releases its members; the units themselves are untouched.
+- Deleting a fleet releases its members and clears the work area and transport
+  it gave them — the units survive and are immediately offerable to another
+  formation. Untouched was the right rule while those columns lived on the
+  fleet and died with it; on the unit it became "keeps asserting something
+  nobody said".
+- **The support entry is writable by hand, and the no-fleet entry is not.** The
+  difference is what each one _is_: no-fleet membership is derived, so an
+  endpoint could only ever disagree with the formations, while support is a
+  stored flag with an area and a ride beside it. Until 2026-09-04 only the daily
+  import could set them, and a dozer moved to a new panel at ten in the morning
+  had nowhere to be recorded. Adding states what the units are rather than
+  appending to a list, so pressing save twice changes nothing; releasing clears
+  the same three columns the import's sweep does.
+- **Joining a formation ends support**, or the entry would keep claiming a
+  machine listed under its fleet.
 
 ### Fleet setting import — shipped
 

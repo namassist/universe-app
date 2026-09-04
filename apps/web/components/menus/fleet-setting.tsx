@@ -70,26 +70,24 @@ import { useToast } from "@/components/ui/toast";
  * the API's own exclusivity rules do the refusing.
  */
 
-/**
- * What the transport select shows for a formation whose units already ride
- * different vehicles: leave them as they are.
- */
-const KEEP_TRANSPORT = "\u0000keep";
-
 /** What the list column shows for a formation's transport. */
 const transportSummary = (f: FleetRow) => {
-  const rides = [...new Set(f.units.map((u) => u.transportCode ?? ""))].filter(
-    (c) => c.length > 0
-  );
+  const rides = [
+    ...new Set(
+      [f.leaderTransportCode, ...f.units.map((u) => u.transportCode)].filter(
+        (c): c is string => !!c
+      )
+    ),
+  ];
   if (!rides.length) return "—";
   return rides.length === 1 ? rides[0]! : `${rides.length} angkutan`;
 };
 
-/** The one vehicle a formation rides, or the sentinel when it rides several. */
-const transportOf = (f: FleetRow) => {
-  const rides = new Set(f.units.map((u) => u.transportCode ?? ""));
-  return rides.size <= 1 ? ([...rides][0] ?? "") : KEEP_TRANSPORT;
-};
+/** Each unit's ride, by code — the leader's first, then every member's. */
+const transportsOf = (f: FleetRow): Record<string, string> => ({
+  [f.leaderCode]: f.leaderTransportCode ?? "",
+  ...Object.fromEntries(f.units.map((u) => [u.code, u.transportCode ?? ""])),
+});
 
 /** Label tipe unit ringkas: "model · merk". */
 const unitTypeLabel = (u: UnitRow) => `${u.modelName} · ${u.brandName}`;
@@ -162,15 +160,14 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [editId, setEditId] = React.useState<string | null>(null);
   const [fLeader, setFLeader] = React.useState("");
   /**
-   * The vehicle for the whole formation, or `KEEP_TRANSPORT` when its units
-   * already ride different ones.
+   * The vehicle each unit rides, by unit code — the leader's included.
    *
-   * Transport is per unit now, and the import is where per-unit differences
-   * come from. This dialog edits a formation, so it offers one value — and
-   * rather than flatten a mixed formation on every save, it opens on the
-   * sentinel and submits nothing at all for transport unless somebody picks.
+   * Per unit, not per formation (owner, 2026-09-04). One select for the whole
+   * fleet was the old shape and it cannot say what the yard's own file says:
+   * two units of one formation legitimately ride different vehicles. The
+   * "samakan semua" button covers the ordinary case where they do not.
    */
-  const [fBus, setFBus] = React.useState("");
+  const [fBus, setFBus] = React.useState<Record<string, string>>({});
   const [fLoc, setFLoc] = React.useState("");
   const [fUnits, setFUnits] = React.useState<string[]>([]);
   const [unitQ, setUnitQ] = React.useState("");
@@ -189,6 +186,18 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [bulkOpen, setBulkOpen] = React.useState(false);
 
   // no-fleet dialog — a read-only list; membership is derived, not chosen
+  /* Adding to support is its own small dialog rather than a mode of the
+     viewer: it asks for a work area and a ride, which the viewer has nothing
+     to do with. */
+  const [supOpen, setSupOpen] = React.useState(false);
+  const [supQ, setSupQ] = React.useState("");
+  const [supSel, setSupSel] = React.useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const [supArea, setSupArea] = React.useState("");
+  const [supBus, setSupBus] = React.useState("");
+  const [supErr, setSupErr] = React.useState(false);
+
   const [nfOpen, setNfOpen] = React.useState(false);
   const [nfKind, setNfKind] = React.useState<"support" | "none">("none");
   const [nfQ, setNfQ] = React.useState("");
@@ -201,6 +210,47 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       queryClient.invalidateQueries({ queryKey: fleetsKey }),
       queryClient.invalidateQueries({ queryKey: noFleetKey }),
     ]);
+
+  /**
+   * Put units into the support entry, or move the ones already in it.
+   *
+   * The import is the usual way this list is written, and it rewrites the whole
+   * yard once a day. This is the other half of that: a dozer moved to a new
+   * panel at ten in the morning, without waiting for tomorrow's file.
+   */
+  const saveSupport = useMutation({
+    mutationFn: async (input: {
+      unitIds: string[];
+      workArea: string;
+      transportUnitId: string | null;
+    }) => {
+      const result = await api.v1.fleets.support.post(input);
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (data) => {
+      await invalidate();
+      setSupOpen(false);
+      pushToast("success", t.flSupport, `${data.changed} ${t.flSupToastAdd}`);
+    },
+    onError: (error) =>
+      pushToast("error", t.flSupport, errorMessage(error, t.loginErr)),
+  });
+
+  const releaseSupport = useMutation({
+    mutationFn: async (unitIds: string[]) => {
+      const result = await api.v1.fleets.support.release.post({ unitIds });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (data) => {
+      await invalidate();
+      setSupSel(new Set());
+      pushToast("success", t.flSupport, `${data.changed} ${t.flSupToastOut}`);
+    },
+    onError: (error) =>
+      pushToast("error", t.flSupport, errorMessage(error, t.loginErr)),
+  });
 
   const save = useMutation({
     mutationFn: async (input: {
@@ -330,17 +380,23 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   }
 
   const leaderTypeOf = (code: string) => UNIT_TYPE[code] ?? "—";
-  const leaderOpts = Object.keys(UNIT_TYPE)
-    .filter(
-      (code) => !fleets.some((f) => f.leaderCode === code && f.id !== editId)
-    )
-    .sort();
   /* unit milik fleet lain disembunyikan */
   const usedElsewhere = new Set(
     fleets
       .filter((f) => f.id !== editId)
       .flatMap((f) => f.units.map((u) => u.code))
   );
+  /* Every unit may lead since 2026-09-04, so this list is the whole register —
+     minus anything another formation already holds, as leader *or* as hauler.
+     Offering those was a trap the moment excavators stopped being the only
+     candidates: the API refuses them by name, after the dialog is filled in. */
+  const leaderOpts = Object.keys(UNIT_TYPE)
+    .filter(
+      (code) =>
+        !usedElsewhere.has(code) &&
+        !fleets.some((f) => f.leaderCode === code && f.id !== editId)
+    )
+    .sort();
   const unitOpts = OHT_POOL.filter((c) => !usedElsewhere.has(c)).sort();
   const unitOptsFiltered = unitOpts.filter((c) =>
     c.toUpperCase().includes(unitQ.trim().toUpperCase())
@@ -379,6 +435,44 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     [units]
   );
 
+  /** Units the support entry can still take: unattached, and not already in it. */
+  const supCandidates = React.useMemo(() => {
+    const needle = supQ.trim().toUpperCase();
+    return idleUnits.filter(
+      (u) => !needle || u.code.toUpperCase().includes(needle)
+    );
+  }, [idleUnits, supQ]);
+
+  function openSupportAdd() {
+    setSupSel(new Set());
+    setSupQ("");
+    setSupArea("");
+    setSupBus("");
+    setSupErr(false);
+    setSupOpen(true);
+  }
+
+  function submitSupport(e: React.FormEvent) {
+    e.preventDefault();
+    const workArea = supArea.trim();
+    setSupErr(!workArea);
+    if (!workArea || !supSel.size) return;
+    saveSupport.mutate({
+      unitIds: [...supSel],
+      workArea,
+      transportUnitId: supBus ? (unitIdByCode.get(supBus) ?? null) : null,
+    });
+  }
+
+  /** The ordinary case: one vehicle for the whole formation, in one click. */
+  function applyBusToAll(code: string) {
+    setFBus(
+      Object.fromEntries(
+        [fLeader, ...fUnits].filter(Boolean).map((c) => [c, code])
+      )
+    );
+  }
+
   function openNoFleet(kind: "support" | "none") {
     setNfKind(kind);
     setNfQ("");
@@ -402,7 +496,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   function openAdd() {
     setEditId(null);
     setFLeader(leaderOpts[0] || "");
-    setFBus("");
+    setFBus({});
     setFLoc("");
     setFUnits([]);
     setUnitQ("");
@@ -416,7 +510,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   function openEdit(f: FleetRow) {
     setEditId(f.id);
     setFLeader(f.leaderCode);
-    setFBus(transportOf(f));
+    setFBus(transportsOf(f));
     setFLoc(f.workArea);
     setFUnits(f.units.map((u) => u.code));
     setUnitQ("");
@@ -457,20 +551,15 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       return;
     }
 
-    /* Left out entirely on the sentinel, which is what keeps a formation whose
-       units ride different vehicles from being flattened by an edit that was
-       never about transport. */
-    const busUnitId =
-      fBus && fBus !== KEEP_TRANSPORT ? (unitIdByCode.get(fBus) ?? null) : null;
-    const transports =
-      fBus === KEEP_TRANSPORT
-        ? undefined
-        : Object.fromEntries(
-            [leaderUnitId, ...(unitIds as string[])].map((id) => [
-              id,
-              busUnitId,
-            ])
-          );
+    /* One entry per unit on the form, so a formation whose units ride
+       different vehicles keeps saying so. A code the catalogue no longer has
+       resolves to null rather than to a broken reference. */
+    const transports = Object.fromEntries(
+      [digger, ...fUnits].map((code) => [
+        unitIdByCode.get(code)!,
+        fBus[code] ? (unitIdByCode.get(fBus[code]!) ?? null) : null,
+      ])
+    );
 
     save.mutate({
       id: editId,
@@ -618,13 +707,25 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                       <Badge variant={entry.variant}>{entry.badge}</Badge>
                     </TableCell>
                     <TableCell>
-                      {/* Not gated on write access: there is nothing to write. */}
-                      <IconButton
-                        aria-label={entry.name}
-                        onClick={() => openNoFleet(entry.kind)}
-                      >
-                        <Eye />
-                      </IconButton>
+                      <div className="flex items-center gap-1">
+                        {/* Viewing is never gated — there is nothing to write
+                            on the no-fleet entry, and support is the one that
+                            has an editable flag behind it. */}
+                        <IconButton
+                          aria-label={entry.name}
+                          onClick={() => openNoFleet(entry.kind)}
+                        >
+                          <Eye />
+                        </IconButton>
+                        {canW && entry.kind === "support" ? (
+                          <IconButton
+                            aria-label={t.flSupAddT}
+                            onClick={openSupportAdd}
+                          >
+                            <Plus />
+                          </IconButton>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -744,32 +845,64 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 ))}
               </Select>
             </Field>
-            <Field label={t.flBus} htmlFor="fl-bus">
-              <Select
-                id="fl-bus"
-                value={fBus}
-                onChange={(e) => setFBus(e.target.value)}
-              >
-                {/* Only offered when the formation actually is mixed, so the
-                    ordinary case keeps a two-item choice. */}
-                {fBus === KEEP_TRANSPORT ? (
-                  <option value={KEEP_TRANSPORT}>{t.flBusMixed}</option>
-                ) : null}
-                <option value="">
-                  {BUS_OPTS.length
-                    ? "— pilih angkutan —"
-                    : "— belum ada bus/manhaul —"}
-                </option>
-                {BUS_GROUPS.map((g) => (
-                  <optgroup key={g.name} label={g.name}>
-                    {g.codes.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </Select>
+            <Field label={t.flBus}>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-(--text-tertiary)">
+                    {t.flBusPerUnit}
+                  </span>
+                  {/* The ordinary case, in one click: most formations ride one
+                      vehicle, and typing it once per unit would be the price of
+                      supporting the case where they do not. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => applyBusToAll(fBus[fLeader] ?? "")}
+                  >
+                    {t.flBusSameAll}
+                  </Button>
+                </div>
+                <div className="max-h-44 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
+                  {[fLeader, ...fUnits].filter(Boolean).map((code) => (
+                    <div
+                      key={code}
+                      className="flex items-center gap-2 px-1 py-1"
+                    >
+                      <span className="w-[110px] shrink-0 font-mono text-xs font-semibold">
+                        {code}
+                      </span>
+                      {code === fLeader ? (
+                        <Badge variant="info">{t.flLeaderTag}</Badge>
+                      ) : null}
+                      <Select
+                        aria-label={`${t.flBus} — ${code}`}
+                        wrapperClassName="ml-auto w-[190px]"
+                        className="h-8"
+                        value={fBus[code] ?? ""}
+                        onChange={(e) =>
+                          setFBus({ ...fBus, [code]: e.target.value })
+                        }
+                      >
+                        <option value="">
+                          {BUS_OPTS.length
+                            ? "— tanpa angkutan —"
+                            : "— belum ada bus/manhaul —"}
+                        </option>
+                        {BUS_GROUPS.map((g) => (
+                          <optgroup key={g.name} label={g.name}>
+                            {g.codes.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </Field>
             <Field
               className="col-span-full"
@@ -893,12 +1026,29 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             is nothing here to submit. The search is worth keeping — the list
             is the size of the yard minus its fleets. */}
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-2">
-          <SearchInput
-            placeholder={t.flUnitSearchPh}
-            aria-label={t.flUnitSearchPh}
-            value={nfQ}
-            onChange={(e) => setNfQ(e.target.value)}
-          />
+          <div className="flex items-center gap-2">
+            <SearchInput
+              className="flex-1"
+              placeholder={t.flUnitSearchPh}
+              aria-label={t.flUnitSearchPh}
+              value={nfQ}
+              onChange={(e) => setNfQ(e.target.value)}
+            />
+            {/* Only on support: no-fleet membership is derived, so there would
+                be nothing for a button here to write. */}
+            {canW && nfKind === "support" && supportUnits.length ? (
+              <Button
+                variant="destructive"
+                className="h-9"
+                disabled={releaseSupport.isPending}
+                onClick={() =>
+                  releaseSupport.mutate(supportUnits.map((u) => u.id))
+                }
+              >
+                {t.flSupOutAll}
+              </Button>
+            ) : null}
+          </div>
           <div className="max-h-72 min-h-0 flex-1 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
             {nfFiltered.length ? (
               nfFiltered.map((u) => (
@@ -923,6 +1073,15 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                   {u.transportCode ? (
                     <Badge variant="neutral">{u.transportCode}</Badge>
                   ) : null}
+                  {canW && nfKind === "support" ? (
+                    <IconButton
+                      aria-label={`${t.flSupOut} — ${u.code}`}
+                      disabled={releaseSupport.isPending}
+                      onClick={() => releaseSupport.mutate([u.id])}
+                    >
+                      <X />
+                    </IconButton>
+                  ) : null}
                 </div>
               ))
             ) : (
@@ -937,6 +1096,123 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             {t.btnClose}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Dialog tambah unit support — lokasi dan angkutan, tanpa formasi */}
+      <Dialog
+        open={supOpen}
+        onClose={() => setSupOpen(false)}
+        className="w-[min(560px,100%)]"
+        labelledBy="sup-t"
+      >
+        <form onSubmit={submitSupport}>
+          <DialogIcon variant="info">
+            <Truck />
+          </DialogIcon>
+          <DialogTitle id="sup-t">{t.flSupAddT}</DialogTitle>
+          <DialogBody>{t.flSupAddB}</DialogBody>
+
+          <div className="mt-4 flex flex-col gap-4">
+            <Field
+              label={t.flLoc}
+              htmlFor="sup-loc"
+              required
+              error={supErr}
+              errorMessage={t.flErrLoc}
+            >
+              <Input
+                id="sup-loc"
+                value={supArea}
+                onChange={(e) => setSupArea(e.target.value)}
+                placeholder={t.flLocPh}
+                maxLength={120}
+                autoComplete="off"
+              />
+            </Field>
+
+            <Field label={t.flBus} htmlFor="sup-bus">
+              <Select
+                id="sup-bus"
+                value={supBus}
+                onChange={(e) => setSupBus(e.target.value)}
+              >
+                <option value="">
+                  {BUS_OPTS.length
+                    ? "— tanpa angkutan —"
+                    : "— belum ada bus/manhaul —"}
+                </option>
+                {BUS_GROUPS.map((g) => (
+                  <optgroup key={g.name} label={g.name}>
+                    {g.codes.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label={`${t.flSupPick} (${supSel.size} ${t.flSupSelected})`}>
+              <div className="flex flex-col gap-2">
+                <SearchInput
+                  placeholder={t.flUnitSearchPh}
+                  aria-label={t.flUnitSearchPh}
+                  value={supQ}
+                  onChange={(e) => setSupQ(e.target.value)}
+                />
+                <div className="max-h-56 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
+                  {supCandidates.length ? (
+                    supCandidates.map((u) => (
+                      <label
+                        key={u.id}
+                        className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-(--fill-hover)"
+                      >
+                        <Checkbox
+                          checked={supSel.has(u.id)}
+                          onChange={() =>
+                            setSupSel((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(u.id)) next.delete(u.id);
+                              else next.add(u.id);
+                              return next;
+                            })
+                          }
+                        />
+                        <span className="font-mono text-sm font-semibold">
+                          {u.code}
+                        </span>
+                        <span className="text-xs text-(--text-tertiary)">
+                          {unitTypeOf.get(u.code) ?? "—"}
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="px-2 py-1.5 text-xs text-(--text-tertiary)">
+                      {idleUnits.length ? t.noResTitle : t.flSupNone}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Field>
+          </div>
+
+          <DialogActions>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setSupOpen(false)}
+            >
+              {t.btnCancel}
+            </Button>
+            <Button
+              type="submit"
+              disabled={!supSel.size || saveSupport.isPending}
+            >
+              {t.flSupAddT}
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
 
       {/* Dialog hapus fleet */}

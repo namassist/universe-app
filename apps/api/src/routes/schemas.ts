@@ -718,6 +718,9 @@ export const FleetSchema = t.Object({
   leaderCode: t.String(),
   /** The leader's, which every member is held to on write. */
   workArea: t.String(),
+  /** The leader's own ride — it is not a member row, so it is carried here. */
+  leaderTransportUnitId: t.Nullable(t.String()),
+  leaderTransportCode: t.Nullable(t.String()),
   units: t.Array(FleetMemberSchema),
   active: t.Boolean(),
   createdAt: t.String(),
@@ -754,6 +757,11 @@ export const NoFleetSchema = t.Object({
  */
 export const FleetBulkDeleteResultSchema = t.Object({
   deleted: t.Integer(),
+});
+
+/** How many units a support write touched. */
+export const FleetSupportResultSchema = t.Object({
+  changed: t.Integer(),
 });
 
 /* ------------------------------------------------------------------ employees */

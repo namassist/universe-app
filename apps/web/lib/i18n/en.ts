@@ -715,7 +715,9 @@ export const en: Dict = {
   flLoc: "Work location",
   flLocPh: "e.g. Panel East Puncak Utara",
   flBus: "Default transport",
-  flBusMixed: "— leave as they are (differs per unit) —",
+  flBusPerUnit: "Transport is set per unit",
+  flBusSameAll: "Same for all",
+  flLeaderTag: "Leader",
   flUnits: "Units in fleet",
   flUnitsHelp:
     "Pick from the Unit Database — units already used by another fleet are hidden.",
@@ -735,6 +737,16 @@ export const en: Dict = {
   flSupportFixed: "In allocation",
   flSupportDlgB:
     "Units that work without a formation — dozers, water trucks, manhauls, spare diggers. They are still crewed, and appear on the board as their own Support group. This list is filled by the Fleet Setting import, from rows whose fleet cell is blank.",
+  flSupToastAdd: "units added to support",
+  flSupToastOut: "units taken out of support",
+  flSupAddT: "Add units to support",
+  flSupAddB:
+    "The selected units will be crewed without joining a formation. Give them a work area and the vehicle that brings their crew.",
+  flSupPick: "Pick units",
+  flSupNone: "No unattached units left to add",
+  flSupOut: "Take out of support",
+  flSupOutAll: "Clear all",
+  flSupSelected: "selected",
   flNoFleetFixed: "Automatic",
   flNoFleetEmpty: "Every active unit belongs to a formation",
   flNoFleetDlgB:

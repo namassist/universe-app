@@ -712,7 +712,9 @@ export const id = {
   flLoc: "Lokasi kerja",
   flLocPh: "mis. Panel East Puncak Utara",
   flBus: "Angkutan default",
-  flBusMixed: "— biarkan seperti sekarang (berbeda per unit) —",
+  flBusPerUnit: "Angkutan diatur per unit",
+  flBusSameAll: "Samakan semua",
+  flLeaderTag: "Pemimpin",
   flUnits: "Unit dalam fleet",
   flUnitsHelp:
     "Pilih dari Database Unit — unit yang sudah dipakai fleet lain tidak muncul.",
@@ -732,6 +734,16 @@ export const id = {
   flSupportFixed: "Masuk alokasi",
   flSupportDlgB:
     "Unit yang bekerja tanpa formasi — dozer, water truck, manhaul, excavator cadangan. Mereka tetap mendapat operator dan muncul di papan alokasi sebagai grup Support tersendiri. Daftar ini diisi oleh import Fleet Setting, dari baris yang kolom fleet-nya kosong.",
+  flSupToastAdd: "unit masuk fleet support",
+  flSupToastOut: "unit keluar dari fleet support",
+  flSupAddT: "Tambah unit ke fleet support",
+  flSupAddB:
+    "Unit yang dipilih akan diawaki tanpa masuk formasi. Isi lokasi kerjanya dan angkutan yang membawa krunya.",
+  flSupPick: "Pilih unit",
+  flSupNone: "Tidak ada unit lepas yang bisa ditambahkan",
+  flSupOut: "Keluarkan dari support",
+  flSupOutAll: "Kosongkan semua",
+  flSupSelected: "dipilih",
   flNoFleetFixed: "Otomatis",
   flNoFleetEmpty: "Semua unit aktif sudah masuk formasi",
   flNoFleetDlgB:

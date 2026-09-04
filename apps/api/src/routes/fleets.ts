@@ -39,7 +39,11 @@ import {
 
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
-import { isNotFleetConfigured, takesPartInAllocation } from "../fleet-scope";
+import {
+  isFleetConfigured,
+  isNotFleetConfigured,
+  takesPartInAllocation,
+} from "../fleet-scope";
 import {
   buildTemplate,
   validateFleetWorkbook,
@@ -54,10 +58,12 @@ import {
   FleetImportPreviewSchema,
   FleetImportResultSchema,
   FleetSchema,
+  FleetSupportResultSchema,
   NoFleetSchema,
 } from "./schemas";
 
 const leader = alias(schema.units, "leader_unit");
+const leaderTransport = alias(schema.units, "leader_transport");
 
 /**
  * A fleet joined to what names it.
@@ -72,6 +78,10 @@ const fleetColumns = {
   leaderUnitId: schema.fleets.leaderUnitId,
   leaderCode: leader.code,
   workArea: leader.workArea,
+  /* The leader rides something too, and it is not a member row — so nothing
+     else on this screen would carry it. */
+  leaderTransportUnitId: leader.transportUnitId,
+  leaderTransportCode: leaderTransport.code,
   active: schema.fleets.active,
   createdAt: schema.fleets.createdAt,
 };
@@ -80,7 +90,8 @@ function fleetQuery() {
   return db
     .select(fleetColumns)
     .from(schema.fleets)
-    .innerJoin(leader, eq(leader.id, schema.fleets.leaderUnitId));
+    .innerJoin(leader, eq(leader.id, schema.fleets.leaderUnitId))
+    .leftJoin(leaderTransport, eq(leaderTransport.id, leader.transportUnitId));
 }
 
 type FleetRow = Awaited<ReturnType<typeof fleetQuery>>[number];
@@ -128,6 +139,8 @@ function toFleet(row: FleetRow, units: FleetMember[]) {
     leaderUnitId: row.leaderUnitId,
     leaderCode: row.leaderCode,
     workArea: row.workArea ?? "",
+    leaderTransportUnitId: row.leaderTransportUnitId,
+    leaderTransportCode: row.leaderTransportCode,
     units,
     active: row.active,
     createdAt: row.createdAt.toISOString(),
@@ -254,7 +267,13 @@ async function applyUnitFacts(
   if (input.unitIds.length)
     await tx
       .update(schema.units)
-      .set({ workArea: input.workArea })
+      .set({
+        workArea: input.workArea,
+        /* Joining a formation ends support. The flag says "crewed without a
+           formation", and leaving it set on a unit that now has one would keep
+           the support entry claiming a machine listed under its fleet. */
+        fleetSupport: false,
+      })
       .where(inArray(schema.units.id, input.unitIds));
 
   for (const [unitId, transportUnitId] of Object.entries(
@@ -916,6 +935,150 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
    * "delete every formation", and bodies on DELETE are poorly supported by
    * proxies.
    */
+  /**
+   * Put units into the support entry, or move them within it.
+   *
+   * A write route on a screen whose other pinned entry deliberately has none,
+   * and the difference is what each one *is*. No-fleet membership is derived —
+   * "everything no formation holds" — so an endpoint could only ever disagree
+   * with the formations. Support is a stored flag with a work area and a ride
+   * beside it, and until now the only thing that could set them was the daily
+   * import. A dozer moved to a new panel at ten in the morning had nowhere to
+   * be recorded (owner, 2026-09-04).
+   *
+   * Idempotent by shape: it states what these units are, rather than adding to
+   * a list, so re-sending the same call changes nothing.
+   */
+  .post(
+    "/support",
+    async ({ body, status }) => {
+      const unitIds = [...new Set(body.unitIds)];
+      const transportUnitId = body.transportUnitId ?? null;
+
+      const found = await db
+        .select({
+          id: schema.units.id,
+          code: schema.units.code,
+          typeName: schema.unitTypes.name,
+        })
+        .from(schema.units)
+        .innerJoin(
+          schema.unitTypes,
+          eq(schema.unitTypes.id, schema.units.typeId)
+        )
+        .where(
+          inArray(schema.units.id, [
+            ...unitIds,
+            ...(transportUnitId ? [transportUnitId] : []),
+          ])
+        );
+      const byId = new Map(found.map((u) => [u.id, u]));
+
+      const missing = unitIds.filter((id) => !byId.has(id));
+      if (missing.length)
+        return status(
+          422,
+          invalid(`${missing.length} unit tidak ada di master`)
+        );
+      if (transportUnitId) {
+        const vehicle = byId.get(transportUnitId);
+        if (!vehicle)
+          return status(422, invalid("Unit transport tidak ada di master"));
+        if (!isFleetTransportType(vehicle.typeName))
+          return status(
+            422,
+            invalid(`Unit ${vehicle.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`)
+          );
+      }
+
+      /* A unit in a formation is already crewed through it, and the support
+         entry lists what belongs to none — so admitting one here would put the
+         same machine in two places on the same screen. */
+      const inFleet = await db
+        .select({ code: schema.units.code })
+        .from(schema.units)
+        .where(
+          and(
+            inArray(schema.units.id, unitIds),
+            isFleetConfigured(schema.units.id)
+          )
+        );
+      if (inFleet.length)
+        return status(
+          422,
+          invalid(
+            `Unit ${inFleet.map((u) => u.code).join(", ")} sudah masuk sebuah fleet`
+          )
+        );
+
+      await db
+        .update(schema.units)
+        .set({
+          fleetSupport: true,
+          workArea: body.workArea.trim(),
+          transportUnitId,
+        })
+        .where(inArray(schema.units.id, unitIds));
+      return { changed: unitIds.length };
+    },
+    {
+      auth: { menu: "fleet-setting", mode: "manage" },
+      body: t.Object({
+        unitIds: t.Array(t.String({ format: "uuid" }), {
+          minItems: 1,
+          maxItems: 500,
+        }),
+        workArea: t.String({ minLength: 1, maxLength: 120 }),
+        transportUnitId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
+      }),
+      response: {
+        200: FleetSupportResultSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Mark units as fleet support" },
+    }
+  )
+
+  /**
+   * Take units back out of support.
+   *
+   * The same clearing the import's release sweep does, and deliberately the
+   * same three columns: a machine nobody is crewing is not working anywhere
+   * either, and a leftover area is what had Unit Status naming a pit the unit
+   * had been pulled out of.
+   */
+  .post(
+    "/support/release",
+    async ({ body }) => {
+      const unitIds = [...new Set(body.unitIds)];
+      await db
+        .update(schema.units)
+        .set({ fleetSupport: false, workArea: null, transportUnitId: null })
+        .where(inArray(schema.units.id, unitIds));
+      // Ids already released count as changed: the end state the caller asked
+      // for holds, and a list left open for a while should not read as failure.
+      return { changed: unitIds.length };
+    },
+    {
+      auth: { menu: "fleet-setting", mode: "manage" },
+      body: t.Object({
+        unitIds: t.Array(t.String({ format: "uuid" }), {
+          minItems: 1,
+          maxItems: 500,
+        }),
+      }),
+      response: {
+        200: FleetSupportResultSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Take units out of fleet support" },
+    }
+  )
+
   .post(
     "/bulk-delete",
     async ({ body }) => {

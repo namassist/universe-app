@@ -431,6 +431,115 @@ describe("editing replaces the member list; deleting releases it", () => {
  * above, so the units under test are read from the database rather than
  * assumed.
  */
+describe("fleet support is written by hand as well as by the file", () => {
+  const supportOf = async (unitId: string) => {
+    const [row] = await db
+      .select({
+        fleetSupport: schema.units.fleetSupport,
+        workArea: schema.units.workArea,
+        transportUnitId: schema.units.transportUnitId,
+      })
+      .from(schema.units)
+      .where(eq(schema.units.id, unitId));
+    return row;
+  };
+
+  test("view may not write it", async () => {
+    const response = await send("POST", "/fleets/support", viewer.cookie, {
+      unitIds: [spare2.id],
+      workArea: `${tag} DISPOSAL`,
+    });
+    expect(response.status).toBe(403);
+  });
+
+  test("marking a unit records where it works and what carries its crew", async () => {
+    const response = await send("POST", "/fleets/support", admin.cookie, {
+      unitIds: [spare2.id],
+      workArea: `${tag} DISPOSAL`,
+      transportUnitId: busUnit.id,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ changed: 1 });
+    expect(await supportOf(spare2.id)).toMatchObject({
+      fleetSupport: true,
+      workArea: `${tag} DISPOSAL`,
+      transportUnitId: busUnit.id,
+    });
+  });
+
+  test("re-sending the same call changes nothing", async () => {
+    // Stated, not appended: the route says what these units are, so an
+    // operator pressing save twice cannot end up with a different answer.
+    await send("POST", "/fleets/support", admin.cookie, {
+      unitIds: [spare2.id],
+      workArea: `${tag} DISPOSAL`,
+      transportUnitId: busUnit.id,
+    });
+    expect(await supportOf(spare2.id)).toMatchObject({
+      workArea: `${tag} DISPOSAL`,
+    });
+  });
+
+  test("transport must be a bus or a manhaul truck here too", async () => {
+    const response = await send("POST", "/fleets/support", admin.cookie, {
+      unitIds: [spare2.id],
+      workArea: `${tag} DISPOSAL`,
+      transportUnitId: hauler3.id,
+    });
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { message: string };
+    expect(body.message).toContain("BUS");
+  });
+
+  test("a unit already in a formation is refused by name", async () => {
+    // It is crewed through its fleet; admitting it here would put the same
+    // machine in two places on the one screen.
+    const response = await send("POST", "/fleets/support", admin.cookie, {
+      unitIds: [hauler2.id],
+      workArea: `${tag} DISPOSAL`,
+    });
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { message: string };
+    expect(body.message).toContain(hauler2.code);
+  });
+
+  test("releasing clears the location and the ride, not only the flag", async () => {
+    const response = await send(
+      "POST",
+      "/fleets/support/release",
+      admin.cookie,
+      { unitIds: [spare2.id] }
+    );
+    expect(response.status).toBe(200);
+    /* The same three columns the import's release sweep clears: a machine
+       nobody is crewing is not working anywhere either. */
+    expect(await supportOf(spare2.id)).toMatchObject({
+      fleetSupport: false,
+      workArea: null,
+      transportUnitId: null,
+    });
+  });
+
+  test("joining a formation ends support", async () => {
+    await send("POST", "/fleets/support", admin.cookie, {
+      unitIds: [spare2.id],
+      workArea: `${tag} DISPOSAL`,
+    });
+    const fleet = await createFleet({
+      leaderUnitId: spare1.id,
+      workArea: `${tag} PANEL`,
+      unitIds: [spare2.id],
+    });
+    expect(fleet.units.map((u) => u.code)).toEqual([spare2.code]);
+    // Otherwise the support entry would keep claiming a machine now listed
+    // under its fleet.
+    expect(await supportOf(spare2.id)).toMatchObject({
+      fleetSupport: false,
+      workArea: `${tag} PANEL`,
+    });
+  });
+});
+
 describe("the no-fleet entry", () => {
   /** A unit currently leading a fleet, and one currently hauling for one. */
   async function claimed() {
