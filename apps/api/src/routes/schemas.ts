@@ -374,28 +374,62 @@ export const ImportResultSchema = t.Object({
  * component, so the wire shape has to be one shape.
  */
 const FleetImportChangeSchema = t.Object({
-  field: t.Union([t.Literal("area"), t.Literal("bus"), t.Literal("units")]),
+  field: t.Union([
+    t.Literal("area"),
+    t.Literal("units"),
+    t.Literal("transport"),
+  ]),
   from: t.Nullable(t.String()),
   to: t.Nullable(t.String()),
 });
 
 const FleetImportPreviewRowSchema = t.Object({
   row: t.Integer(),
-  kind: t.Union([t.Literal("new"), t.Literal("updated")]),
-  digger: t.String(),
+  kind: t.Union([
+    t.Literal("new"),
+    t.Literal("updated"),
+    t.Literal("unchanged"),
+  ]),
+  leader: t.String(),
   area: t.String(),
-  bus: t.Nullable(t.String()),
   units: t.Array(t.String()),
+  transports: t.Array(t.String()),
   changes: t.Array(FleetImportChangeSchema),
+});
+
+/** One crewed unit outside every formation, breakdowns included. */
+const FleetImportSupportRowSchema = t.Object({
+  row: t.Integer(),
+  unit: t.String(),
+  area: t.Nullable(t.String()),
+  transport: t.Nullable(t.String()),
+  breakdown: t.Boolean(),
 });
 
 export const FleetImportPreviewSchema = t.Object({
   fileName: t.String(),
   newCount: t.Integer(),
   updatedCount: t.Integer(),
+  unchangedCount: t.Integer(),
+  supportCount: t.Integer(),
+  breakdownCount: t.Integer(),
   errorCount: t.Integer(),
   rows: t.Array(FleetImportPreviewRowSchema),
+  support: t.Array(FleetImportSupportRowSchema),
+  /** Leader codes of formations this file would disband. */
+  disband: t.Array(t.String()),
+  /** Codes of units this file drops out of today's operation. */
+  released: t.Array(t.String()),
   errors: t.Array(ImportErrorSchema),
+});
+
+/** The fleet import reports more than two numbers; the shared one cannot. */
+export const FleetImportResultSchema = t.Object({
+  created: t.Integer(),
+  updated: t.Integer(),
+  disbanded: t.Integer(),
+  support: t.Integer(),
+  released: t.Integer(),
 });
 
 const PlanImportPreviewRowSchema = t.Object({
@@ -670,14 +704,21 @@ export const UnitStatusHistorySchema = t.Object({
  * member picker by what other fleets already hold, and labels the location by
  * name, so the ids alone would put a join on the client.
  */
+/** A unit in a formation, with the vehicle that brings its crew. */
+export const FleetMemberSchema = t.Object({
+  id: t.String(),
+  code: t.String(),
+  transportUnitId: t.Nullable(t.String()),
+  transportCode: t.Nullable(t.String()),
+});
+
 export const FleetSchema = t.Object({
   id: t.String(),
-  diggerUnitId: t.String(),
-  diggerCode: t.String(),
+  leaderUnitId: t.String(),
+  leaderCode: t.String(),
+  /** The leader's, which every member is held to on write. */
   workArea: t.String(),
-  busUnitId: t.Nullable(t.String()),
-  busCode: t.Nullable(t.String()),
-  units: t.Array(t.Object({ id: t.String(), code: t.String() })),
+  units: t.Array(FleetMemberSchema),
   active: t.Boolean(),
   createdAt: t.String(),
 });
@@ -691,7 +732,16 @@ export const FleetSchema = t.Object({
  * nobody can delete.
  */
 export const NoFleetSchema = t.Object({
-  units: t.Array(t.Object({ id: t.String(), code: t.String() })),
+  units: t.Array(
+    t.Object({
+      id: t.String(),
+      code: t.String(),
+      /** Whether this unit is crewed anyway — see `units.fleet_support`. */
+      fleetSupport: t.Boolean(),
+      workArea: t.Nullable(t.String()),
+      transportCode: t.Nullable(t.String()),
+    })
+  ),
 });
 
 /**
@@ -854,7 +904,7 @@ export const ActualSlotSchema = t.Object({
   fleet: t.Nullable(
     t.Object({
       id: t.String(),
-      diggerCode: t.String(),
+      leaderCode: t.String(),
       area: t.Nullable(t.String()),
     })
   ),
@@ -869,7 +919,7 @@ export const ActualBoardSchema = t.Object({
   date: t.String(),
   shift: ShiftKindSchema,
   generatedAt: t.String(),
-  fleets: t.Array(t.Object({ id: t.String(), diggerCode: t.String() })),
+  fleets: t.Array(t.Object({ id: t.String(), leaderCode: t.String() })),
   slots: t.Array(ActualSlotSchema),
 });
 
@@ -969,6 +1019,14 @@ export const FleetDisplayUnitSchema = t.Object({
   unitCode: t.String(),
   modelName: t.String(),
   brandName: t.String(),
+  /**
+   * The vehicle bringing this unit's crew, or null when none is set.
+   *
+   * Per unit since 2026-09-04: two units of one formation may legitimately
+   * ride different vehicles, so the group header can no longer speak for all
+   * of them.
+   */
+  busCode: t.Nullable(t.String()),
   /** Null on an idle unit — the vacancy the wall exists to make obvious. */
   employeeNik: t.Nullable(t.String()),
   employeeName: t.Nullable(t.String()),
@@ -1013,8 +1071,14 @@ export const FleetDisplayUnitSchema = t.Object({
  */
 export const FleetDisplayFleetSchema = t.Object({
   id: t.String(),
-  diggerCode: t.String(),
+  /**
+   * A formation, or the one group holding the units that belong to none.
+   * `support` sorts last and carries no leader and no single area.
+   */
+  kind: t.UnionEnum(["fleet", "support"] as const),
+  leaderCode: t.Nullable(t.String()),
   area: t.Nullable(t.String()),
+  /** Set only when every unit in the group rides the same vehicle. */
   busCode: t.Nullable(t.String()),
   total: t.Integer(),
   crewed: t.Integer(),
@@ -1059,10 +1123,13 @@ export const FleetDisplaySchema = t.Object({
    */
   deviceName: t.Nullable(t.String()),
   /**
-   * Formations only. Units belonging to no fleet are deliberately absent: the
-   * wall exists to show how each formation is crewed, and a unit in no
-   * formation has nothing to say about that. They stay on the Actual board,
-   * which is where they are meant to be seen and filled.
+   * The formations, then the support group.
+   *
+   * Units in no formation used to be dropped here entirely, on the grounds
+   * that the wall answers "how is this formation crewed". Since 2026-09-04 a
+   * dozer or a water truck is crewed too, so they arrive as one group at the
+   * end rather than disappearing — but as their own group, never mixed into a
+   * pit somebody is standing in front of.
    */
   fleets: t.Array(FleetDisplayFleetSchema),
 });

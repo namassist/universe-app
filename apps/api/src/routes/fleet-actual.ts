@@ -21,6 +21,7 @@ import { buildBoard, candidates, storeBoard } from "../allocation";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
+import { takesPartInAllocation } from "../fleet-scope";
 import {
   fingerInDeadline,
   ftwDeadline,
@@ -72,7 +73,7 @@ const BoardParams = t.Object({
   shift: t.UnionEnum(SHIFT_KINDS),
 });
 
-const digger = alias(schema.units, "digger_unit");
+const digger = alias(schema.units, "leader_unit");
 
 /**
  * The slots of one board, joined to what a screen needs to name them.
@@ -106,9 +107,10 @@ async function boardSlots(documentId: string) {
         brandName: schema.unitBrands.name,
         fleetId: schema.fleetActualFleets.id,
         sourceFleetId: schema.fleetActualFleets.sourceFleetId,
-        diggerCode: schema.fleetActualFleets.diggerCode,
+        groupKind: schema.fleetActualFleets.kind,
+        leaderCode: schema.fleetActualFleets.leaderCode,
         area: schema.fleetActualFleets.workArea,
-        busCode: schema.fleetActualFleets.busCode,
+        busCode: schema.fleetActualSlots.transportCode,
         employeeId: schema.fleetActualSlots.employeeId,
         source: schema.fleetActualSlots.source,
         tappedAt: schema.fleetActualSlots.tappedAt,
@@ -171,8 +173,12 @@ export async function planSlots(date: string, shift: ShiftKind) {
       modelName: schema.unitModels.name,
       brandName: schema.unitBrands.name,
       fleetId: schema.fleets.id,
-      diggerCode: digger.code,
-      area: schema.fleets.workArea,
+      leaderCode: digger.code,
+      /* Both from the unit now. A support unit has an area and a ride without
+         belonging to a formation, and a formation's members are held to their
+         leader's area on write — so there is nothing left to read off the
+         fleet. */
+      area: schema.units.workArea,
       busCode: busUnit.code,
       employeeId: schema.fleetPlanSlots.employeeId,
       /** Non-null only when that operator is rostered to *this* shift. */
@@ -203,18 +209,22 @@ export async function planSlots(date: string, shift: ShiftKind) {
     .leftJoin(
       schema.fleets,
       or(
-        eq(schema.fleets.diggerUnitId, schema.units.id),
+        eq(schema.fleets.leaderUnitId, schema.units.id),
         eq(schema.fleets.id, schema.fleetUnits.fleetId)
       )
     )
-    .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-    .leftJoin(busUnit, eq(busUnit.id, schema.fleets.busUnitId))
+    .leftJoin(digger, eq(digger.id, schema.fleets.leaderUnitId))
+    .leftJoin(busUnit, eq(busUnit.id, schema.units.transportUnitId))
     .where(
       and(
         eq(schema.units.active, true),
         // The same two exclusions the board makes: neither needs an operator.
         eq(schema.units.breakdown, false),
-        eq(schema.units.standby, false)
+        eq(schema.units.standby, false),
+        /* And the same scope. Without it the provisional wall showed a
+           different set of machines from the board that replaces it ten
+           minutes later — every forklift and ambulance among them. */
+        takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
       )
     )
     .orderBy(asc(schema.units.code));
@@ -234,6 +244,8 @@ export async function planSlots(date: string, shift: ShiftKind) {
        own copy. Stated rather than implied, because both answers flow into the
        same wall through the same shape. */
     sourceFleetId: r.fleetId,
+    groupKind: (r.fleetId && r.leaderCode ? "fleet" : "support") as
+      "fleet" | "support",
     employeeId: r.rosterId ? r.employeeId : null,
   }));
 }
@@ -429,6 +441,8 @@ export type WallSlot = {
    * own snapshot row; for the provisional plan it is the live fleet.
    */
   fleetId: string | null;
+  /** A formation, or the group holding the units that belong to none. */
+  groupKind: "fleet" | "support";
   /**
    * The *live* formation behind it, or null once that formation is gone.
    *
@@ -437,7 +451,7 @@ export type WallSlot = {
    * Grouping, ordering and display all use `fleetId`.
    */
   sourceFleetId: string | null;
-  diggerCode: string | null;
+  leaderCode: string | null;
   area: string | null;
   busCode: string | null;
   employeeNik: string | null;
@@ -457,7 +471,9 @@ export type WallSlot = {
 
 export type WallFleet = {
   id: string;
-  diggerCode: string;
+  kind: "fleet" | "support";
+  /** Null on the support group, which has no leader to be named after. */
+  leaderCode: string | null;
   area: string | null;
   busCode: string | null;
   /** This formation's own counts — the wall reports the fleet, not the site. */
@@ -468,7 +484,7 @@ export type WallFleet = {
   substituted: number;
   units: Omit<
     WallSlot,
-    "fleetId" | "sourceFleetId" | "diggerCode" | "area" | "busCode"
+    "fleetId" | "groupKind" | "sourceFleetId" | "leaderCode" | "area"
   >[];
 };
 
@@ -509,13 +525,18 @@ export function groupIntoFleets(
   /** Group id → the live fleet behind it, for the pick order below only. */
   const liveOf = new Map<string, string | null>();
   for (const s of slots) {
-    if (!s.fleetId || !s.diggerCode) continue;
+    if (!s.fleetId) continue;
+    /* A formation needs its leader's code to be named by; the support group
+       needs nothing, which is why the two are told apart by `kind` rather than
+       by whether a code happens to be there. */
+    if (s.groupKind === "fleet" && !s.leaderCode) continue;
     if (wanted && !(s.sourceFleetId && wanted.has(s.sourceFleetId))) continue;
     let group = groups.get(s.fleetId);
     if (!group) {
       group = {
         id: s.fleetId,
-        diggerCode: s.diggerCode,
+        kind: s.groupKind,
+        leaderCode: s.leaderCode,
         area: s.area,
         busCode: s.busCode,
         total: 0,
@@ -536,6 +557,7 @@ export function groupIntoFleets(
       unitCode: s.unitCode,
       modelName: s.modelName,
       brandName: s.brandName,
+      busCode: s.busCode,
       employeeNik: s.employeeNik,
       employeeName: s.employeeName,
       employeePhotoFile: s.employeePhotoFile,
@@ -547,10 +569,18 @@ export function groupIntoFleets(
 
   // The digger leads its own formation — a fleet is read as "EX-22 and what
   // hauls for it", not as an alphabetical list of unit codes.
+  /* The header speaks for the whole group or says nothing. Transport is per
+     unit now, so a header carrying the first unit's vehicle would quietly
+     misdirect the crews of every unit riding a different one. */
+  for (const group of groups.values()) {
+    const rides = new Set(group.units.map((u) => u.busCode));
+    group.busCode = rides.size === 1 ? (group.units[0]?.busCode ?? null) : null;
+  }
+
   for (const group of groups.values())
     group.units.sort((a, b) => {
       const lead = (u: { unitCode: string }) =>
-        u.unitCode === group.diggerCode ? 0 : 1;
+        group.leaderCode && u.unitCode === group.leaderCode ? 0 : 1;
       return lead(a) - lead(b) || a.unitCode.localeCompare(b.unitCode);
     });
 
@@ -559,12 +589,18 @@ export function groupIntoFleets(
      unscoped screen has no order to keep and falls back to the digger's code,
      which is the vocabulary the yard already sorts by. */
   const rank = wanted ? new Map(scope!.map((id, i) => [id, i])) : null;
-  return [...groups.values()].sort((a, b) =>
-    rank
-      ? (rank.get(liveOf.get(a.id) ?? "") ?? Infinity) -
+  return [...groups.values()].sort((a, b) => {
+    /* Support last, always. It is the leftovers of the yard rather than a pit
+       somebody stands in front of, and putting it in the alphabet would drop
+       it into the middle of the formations. */
+    if (a.kind !== b.kind) return a.kind === "support" ? 1 : -1;
+    if (rank)
+      return (
+        (rank.get(liveOf.get(a.id) ?? "") ?? Infinity) -
         (rank.get(liveOf.get(b.id) ?? "") ?? Infinity)
-      : a.diggerCode.localeCompare(b.diggerCode)
-  );
+      );
+    return (a.leaderCode ?? "").localeCompare(b.leaderCode ?? "");
+  });
 }
 
 export const fleetActualRoutes = new Elysia({
@@ -756,8 +792,9 @@ export const fleetActualRoutes = new Elysia({
               modelName: s.modelName,
               brandName: s.brandName,
               fleetId: s.fleetId,
+              groupKind: s.groupKind ?? "fleet",
               sourceFleetId: s.sourceFleetId,
-              diggerCode: s.diggerCode,
+              leaderCode: s.leaderCode,
               area: s.area,
               busCode: s.busCode,
               employeeNik: person?.nik ?? null,
@@ -862,10 +899,10 @@ export const fleetActualRoutes = new Elysia({
         fleets: [
           ...new Map(
             slots
-              .filter((s) => s.fleetId && s.diggerCode)
+              .filter((s) => s.fleetId && s.leaderCode)
               .map((s) => [
                 s.fleetId!,
-                { id: s.fleetId!, diggerCode: s.diggerCode! },
+                { id: s.fleetId!, leaderCode: s.leaderCode! },
               ])
           ).values(),
         ],
@@ -878,8 +915,8 @@ export const fleetActualRoutes = new Elysia({
           modelName: s.modelName,
           brandName: s.brandName,
           fleet:
-            s.fleetId && s.diggerCode
-              ? { id: s.fleetId, diggerCode: s.diggerCode, area: s.area }
+            s.fleetId && s.leaderCode
+              ? { id: s.fleetId, leaderCode: s.leaderCode, area: s.area }
               : null,
           employeeId: s.employeeId,
           employeeNik: s.employeeId
@@ -947,12 +984,12 @@ export const fleetActualRoutes = new Elysia({
         return { date: params.date, shift: params.shift, rows: [] };
 
       const planUnit = alias(schema.units, "plan_unit");
-      const planDigger = alias(schema.units, "plan_digger");
+      const planLeader = alias(schema.units, "leader_plan_unit");
       const planRows = await db
         .select({
           employeeId: schema.fleetPlanSlots.employeeId,
           unitCode: planUnit.code,
-          diggerCode: planDigger.code,
+          leaderCode: planLeader.code,
           requiresFtw: planUnit.ftw,
         })
         .from(schema.fleetPlanSlots)
@@ -964,10 +1001,10 @@ export const fleetActualRoutes = new Elysia({
           schema.fleets,
           or(
             eq(schema.fleets.id, schema.fleetUnits.fleetId),
-            eq(schema.fleets.diggerUnitId, planUnit.id)
+            eq(schema.fleets.leaderUnitId, planUnit.id)
           )
         )
-        .leftJoin(planDigger, eq(planDigger.id, schema.fleets.diggerUnitId))
+        .leftJoin(planLeader, eq(planLeader.id, schema.fleets.leaderUnitId))
         .where(inArray(schema.fleetPlanSlots.employeeId, ids));
       const plan = new Map(planRows.map((r) => [r.employeeId!, r]));
 
@@ -993,7 +1030,7 @@ export const fleetActualRoutes = new Elysia({
         string,
         {
           unitCode: string;
-          diggerCode: string | null;
+          leaderCode: string | null;
           requiresFtw: boolean;
           source: "plan" | "spare" | "manual" | null;
         }
@@ -1003,7 +1040,7 @@ export const fleetActualRoutes = new Elysia({
           .select({
             employeeId: schema.fleetActualSlots.employeeId,
             unitCode: schema.units.code,
-            diggerCode: schema.fleetActualFleets.diggerCode,
+            leaderCode: schema.fleetActualFleets.leaderCode,
             requiresFtw: schema.units.ftw,
             source: schema.fleetActualSlots.source,
           })
@@ -1024,7 +1061,7 @@ export const fleetActualRoutes = new Elysia({
           if (row.employeeId)
             actual.set(row.employeeId, {
               unitCode: row.unitCode,
-              diggerCode: row.diggerCode,
+              leaderCode: row.leaderCode,
               requiresFtw: row.requiresFtw,
               source: row.source,
             });
@@ -1056,7 +1093,7 @@ export const fleetActualRoutes = new Elysia({
              was this formation's business today": its standing operators,
              including the ones it lost, and whoever actually drove its units
              in their place. */
-          fleetDiggerCode: placed?.diggerCode ?? standing?.diggerCode ?? null,
+          fleetDiggerCode: placed?.leaderCode ?? standing?.leaderCode ?? null,
           planUnitCode: standing?.unitCode ?? null,
           nik: entry.person.nik,
           name: entry.person.name,

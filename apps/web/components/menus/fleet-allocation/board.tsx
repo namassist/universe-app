@@ -276,7 +276,7 @@ function toBoardUnits(board: PlanBoard | undefined): BoardUnit[] {
     simperCode: u.simperCodeName,
     requiresFtw: u.requiresFtw,
     departmentName: u.departmentName,
-    fleet: u.fleet ? { id: u.fleet.id, digger: u.fleet.diggerCode } : null,
+    fleet: u.fleet ? { id: u.fleet.id, digger: u.fleet.leaderCode } : null,
     slots: u.slots.map((s) => ({
       nik: s.nik,
       name: s.name,
@@ -339,7 +339,7 @@ export function AllocBoard({
       mode === "plan"
         ? (planQ.data?.fleets ?? []).map((f) => ({
             id: f.id,
-            digger: f.diggerCode,
+            digger: f.leaderCode,
             area: f.area,
           }))
         : FLEET_OPTIONS,

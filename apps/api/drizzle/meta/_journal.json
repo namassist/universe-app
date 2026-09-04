@@ -176,6 +176,20 @@
       "when": 1788471627968,
       "tag": "0024_violet_supreme_intelligence",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788498799228,
+      "tag": "0025_nervous_epoch",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788498823818,
+      "tag": "0026_rich_zaladane",
+      "breakpoints": true
     }
   ]
 }

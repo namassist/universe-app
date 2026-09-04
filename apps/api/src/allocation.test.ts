@@ -71,7 +71,7 @@ let cls: string, typ: string, mdl: string, brd: string;
  * because they are scaffolding rather than subject matter; the haulers come
  * and go with each test.
  */
-let fleetId: string, fleetDigger: string;
+let fleetId: string, fleetLeader: string;
 
 let deptA: string, deptB: string, posAlloc: string, posOther: string;
 let codeA: string;
@@ -132,6 +132,12 @@ async function addUnit(input: {
      assertion below would be about an empty list. Scoping itself is pinned
      separately. */
   await db.insert(schema.fleetUnits).values({ fleetId, unitId: row!.id });
+  /* Members carry their formation's area, because the area lives on the unit
+     since 2026-09-04 and a formation's is its leader's. */
+  await db
+    .update(schema.units)
+    .set({ workArea: `${tag} Pit` })
+    .where(eq(schema.units.id, row!.id));
   return row!.id;
 }
 
@@ -276,12 +282,16 @@ beforeAll(async () => {
       standby: true,
     })
     .returning({ id: schema.units.id });
-  fleetDigger = digger!.id;
+  fleetLeader = digger!.id;
   const [fleet] = await db
     .insert(schema.fleets)
-    .values({ diggerUnitId: fleetDigger, workArea: `${tag} Pit` })
+    .values({ leaderUnitId: fleetLeader })
     .returning({ id: schema.fleets.id });
   fleetId = fleet!.id;
+  await db
+    .update(schema.units)
+    .set({ workArea: `${tag} Pit` })
+    .where(eq(schema.units.id, fleetLeader));
 });
 
 afterAll(async () => {
@@ -289,11 +299,11 @@ afterAll(async () => {
      the digger references the catalogues this block goes on to delete. */
   if (fleetId)
     await db.delete(schema.fleets).where(eq(schema.fleets.id, fleetId));
-  if (fleetDigger) {
+  if (fleetLeader) {
     await db
       .delete(schema.fleetActualSlots)
-      .where(eq(schema.fleetActualSlots.unitId, fleetDigger));
-    await db.delete(schema.units).where(eq(schema.units.id, fleetDigger));
+      .where(eq(schema.fleetActualSlots.unitId, fleetLeader));
+    await db.delete(schema.units).where(eq(schema.units.id, fleetLeader));
   }
 
   for (const id of made.docs)
@@ -928,7 +938,7 @@ describe("storing it", () => {
       .where(
         and(
           eq(schema.fleetActualFleets.documentId, doc),
-          eq(schema.fleetActualFleets.diggerCode, `${tag}-EX`)
+          eq(schema.fleetActualFleets.leaderCode, `${tag}-EX`)
         )
       );
     // The words, not a pointer to where the words currently live.
@@ -960,9 +970,13 @@ describe("storing it", () => {
       })
       .returning({ id: schema.units.id });
     made.units.push(digger!.id);
+    await db
+      .update(schema.units)
+      .set({ workArea: `${tag} Panel Malam` })
+      .where(eq(schema.units.id, digger!.id));
     const [evening] = await db
       .insert(schema.fleets)
-      .values({ diggerUnitId: digger!.id, workArea: `${tag} Panel Malam` })
+      .values({ leaderUnitId: digger!.id })
       .returning({ id: schema.fleets.id });
 
     const doc = await storeBoard(
@@ -977,7 +991,7 @@ describe("storing it", () => {
       .where(
         and(
           eq(schema.fleetActualFleets.documentId, doc),
-          eq(schema.fleetActualFleets.diggerCode, `${tag}-EVE`)
+          eq(schema.fleetActualFleets.leaderCode, `${tag}-EVE`)
         )
       );
     /* The formation is gone from Fleet Setting and the board still knows where

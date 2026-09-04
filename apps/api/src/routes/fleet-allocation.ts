@@ -52,7 +52,7 @@ import { statusOf } from "./unit-status";
 
 const FA_PLAN_MAX_OPS = 2;
 
-const digger = alias(schema.units, "digger_unit");
+const digger = alias(schema.units, "leader_unit");
 
 /* ------------------------------------------------------------------ schemas */
 
@@ -91,7 +91,7 @@ const BoardUnitSchema = t.Object({
   requiresFtw: t.Boolean(),
   /** The owning department's name — null for a global unit. */
   departmentName: t.Nullable(t.String()),
-  fleet: t.Nullable(t.Object({ id: t.String(), diggerCode: t.String() })),
+  fleet: t.Nullable(t.Object({ id: t.String(), leaderCode: t.String() })),
   slots: t.Array(SlotSchema),
 });
 
@@ -99,7 +99,7 @@ const PlanBoardSchema = t.Object({
   units: t.Array(BoardUnitSchema),
   /** Each formation and the area it works — the one place the area is stated. */
   fleets: t.Array(
-    t.Object({ id: t.String(), diggerCode: t.String(), area: t.String() })
+    t.Object({ id: t.String(), leaderCode: t.String(), area: t.String() })
   ),
   spares: t.Array(
     t.Object({
@@ -562,7 +562,7 @@ export const fleetAllocationRoutes = new Elysia({
           standby: schema.units.standby,
           breakdown: schema.units.breakdown,
           fleetId: schema.fleets.id,
-          diggerCode: digger.code,
+          leaderCode: digger.code,
           departmentName: schema.departments.name,
         })
         .from(schema.units)
@@ -585,11 +585,11 @@ export const fleetAllocationRoutes = new Elysia({
         .leftJoin(
           schema.fleets,
           or(
-            eq(schema.fleets.diggerUnitId, schema.units.id),
+            eq(schema.fleets.leaderUnitId, schema.units.id),
             eq(schema.fleets.id, schema.fleetUnits.fleetId)
           )
         )
-        .leftJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
+        .leftJoin(digger, eq(digger.id, schema.fleets.leaderUnitId))
         /*
          * The PLAN board carries the whole active register, formation or not
          * (owner, 2026-08-31).
@@ -631,15 +631,16 @@ export const fleetAllocationRoutes = new Elysia({
 
       /* The area rides with the formation, not with each of its units: it is
          one value for the whole fleet, and sending it per unit is what had the
-         card printing it twice. */
+         card printing it twice. Stored on the leader since 2026-09-04, with
+         every member held to the same value on write. */
       const fleetRows = await db
         .select({
           id: schema.fleets.id,
-          diggerCode: digger.code,
-          area: schema.fleets.workArea,
+          leaderCode: digger.code,
+          area: digger.workArea,
         })
         .from(schema.fleets)
-        .innerJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
+        .innerJoin(digger, eq(digger.id, schema.fleets.leaderUnitId))
         .orderBy(asc(digger.code));
 
       return {
@@ -652,8 +653,8 @@ export const fleetAllocationRoutes = new Elysia({
           requiresFtw: u.requiresFtw,
           departmentName: u.departmentName,
           fleet:
-            u.fleetId && u.diggerCode
-              ? { id: u.fleetId, diggerCode: u.diggerCode }
+            u.fleetId && u.leaderCode
+              ? { id: u.fleetId, leaderCode: u.leaderCode }
               : null,
           slots: (slots.get(u.id) ?? []).map((s) => ({
             nik: s.nik,
@@ -662,7 +663,7 @@ export const fleetAllocationRoutes = new Elysia({
             rosterShift: kinds.get(s.employeeId) ?? null,
           })),
         })),
-        fleets: fleetRows,
+        fleets: fleetRows.map((f) => ({ ...f, area: f.area ?? "" })),
         spares: spares.map((s) => ({
           nik: s.nik,
           name: s.name,

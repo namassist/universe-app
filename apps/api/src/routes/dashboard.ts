@@ -324,7 +324,7 @@ export const dashboardRoutes = new Elysia({
               .where(
                 and(
                   eq(schema.units.active, true),
-                  sql`not exists (select 1 from fleets f where f.digger_unit_id = ${schema.units.id})`,
+                  sql`not exists (select 1 from fleets f where f.leader_unit_id = ${schema.units.id})`,
                   sql`not exists (select 1 from fleet_units fu where fu.unit_id = ${schema.units.id})`
                 )
               )

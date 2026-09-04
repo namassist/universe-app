@@ -63,14 +63,33 @@ import { useToast } from "@/components/ui/toast";
  * the dialog still *thinks* in unit codes and area names because that is what
  * the operator reads, and translates to ids at the edge when it submits.
  *
- * Digger-ness is derived here rather than stored: it is a property of the unit
- * type and class, and the catalogues do not carry a "this is a fleet leader"
- * flag. Kept as the same rule the static module used — the API deliberately
- * does not enforce a heuristic.
+ * **Any unit may lead** (owner, 2026-09-04). The screen used to offer only
+ * excavators, from a class heuristic it kept privately; the yard runs
+ * formations led by a road unit and by a dump truck, and the API never
+ * enforced the heuristic anyway. So both selects offer the whole register and
+ * the API's own exclusivity rules do the refusing.
  */
-const DIGGER_CLASSES = ["BIGDIGGER", "MEDIUMDIGGER", "SMALLDIGGER"];
-const isDigger = (u: UnitRow) =>
-  u.typeName === "EXCAVATOR" || DIGGER_CLASSES.includes(u.className);
+
+/**
+ * What the transport select shows for a formation whose units already ride
+ * different vehicles: leave them as they are.
+ */
+const KEEP_TRANSPORT = "\u0000keep";
+
+/** What the list column shows for a formation's transport. */
+const transportSummary = (f: FleetRow) => {
+  const rides = [...new Set(f.units.map((u) => u.transportCode ?? ""))].filter(
+    (c) => c.length > 0
+  );
+  if (!rides.length) return "—";
+  return rides.length === 1 ? rides[0]! : `${rides.length} angkutan`;
+};
+
+/** The one vehicle a formation rides, or the sentinel when it rides several. */
+const transportOf = (f: FleetRow) => {
+  const rides = new Set(f.units.map((u) => u.transportCode ?? ""));
+  return rides.size <= 1 ? ([...rides][0] ?? "") : KEEP_TRANSPORT;
+};
 
 /** Label tipe unit ringkas: "model · merk". */
 const unitTypeLabel = (u: UnitRow) => `${u.modelName} · ${u.brandName}`;
@@ -101,22 +120,16 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const unitsQ = useQuery(unitsQueryOptions({ active: true }));
   const units = React.useMemo(() => unitsQ.data ?? [], [unitsQ.data]);
 
-  const DIGGERS = React.useMemo(
+  /* Satu katalog untuk pemimpin maupun anggota: keduanya unit biasa, dan yang
+     memisahkan mereka adalah perannya di fleet ini, bukan jenisnya. */
+  const UNIT_TYPE = React.useMemo(
     () =>
       Object.fromEntries(
-        units.filter(isDigger).map((u) => [u.code, unitTypeLabel(u)])
+        units.map((u) => [u.code, unitTypeLabel(u)])
       ) as Record<string, string>,
     [units]
   );
-  /* Anggota fleet = unit non-digger (hauler/support), label "model · merk". */
-  const OHT_TYPE = React.useMemo(
-    () =>
-      Object.fromEntries(
-        units.filter((u) => !isDigger(u)).map((u) => [u.code, unitTypeLabel(u)])
-      ) as Record<string, string>,
-    [units]
-  );
-  const OHT_POOL = React.useMemo(() => Object.keys(OHT_TYPE), [OHT_TYPE]);
+  const OHT_POOL = React.useMemo(() => Object.keys(UNIT_TYPE), [UNIT_TYPE]);
   /* Angkutan fleet: bus, dan manhaul truck yang mengantar ke lokasi juga.
      Dikelompokkan per jenis — MH1001 di antara UD-BU07 dan UD-BU08 terlihat
      seperti kesalahan data sampai jenisnya ikut tertulis. */
@@ -143,13 +156,22 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   // add/edit dialog
   const [dlgOpen, setDlgOpen] = React.useState(false);
   const [editId, setEditId] = React.useState<string | null>(null);
-  const [fDigger, setFDigger] = React.useState("");
+  const [fLeader, setFLeader] = React.useState("");
+  /**
+   * The vehicle for the whole formation, or `KEEP_TRANSPORT` when its units
+   * already ride different ones.
+   *
+   * Transport is per unit now, and the import is where per-unit differences
+   * come from. This dialog edits a formation, so it offers one value — and
+   * rather than flatten a mixed formation on every save, it opens on the
+   * sentinel and submits nothing at all for transport unless somebody picks.
+   */
   const [fBus, setFBus] = React.useState("");
   const [fLoc, setFLoc] = React.useState("");
   const [fUnits, setFUnits] = React.useState<string[]>([]);
   const [unitQ, setUnitQ] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
-  const [errDigger, setErrDigger] = React.useState(false);
+  const [errLeader, setErrLeader] = React.useState(false);
   const [errLoc, setErrLoc] = React.useState(false);
   const [errUnits, setErrUnits] = React.useState("");
   const [delTarget, setDelTarget] = React.useState<FleetRow | null>(null);
@@ -178,18 +200,18 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const save = useMutation({
     mutationFn: async (input: {
       id: string | null;
-      diggerUnitId: string;
+      leaderUnitId: string;
       workArea: string;
-      busUnitId: string | null;
+      transports?: Record<string, string | null>;
       unitIds: string[];
       active: boolean;
     }) => {
       const body = {
-        diggerUnitId: input.diggerUnitId,
+        leaderUnitId: input.leaderUnitId,
         workArea: input.workArea,
-        busUnitId: input.busUnitId,
         unitIds: input.unitIds,
         active: input.active,
+        ...(input.transports ? { transports: input.transports } : {}),
       };
       const result = input.id
         ? await api.v1.fleets({ id: input.id }).patch(body)
@@ -199,7 +221,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     },
     onSuccess: async (_d, input) => {
       await invalidate();
-      pushToast("success", input.id ? t.flToastEdit : t.flToastAdd, fDigger);
+      pushToast("success", input.id ? t.flToastEdit : t.flToastAdd, fLeader);
       setDlgOpen(false);
     },
     onError: (error) =>
@@ -213,7 +235,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     },
     onSuccess: async (_d, row) => {
       await invalidate();
-      pushToast("success", t.flToastDel, row.diggerCode);
+      pushToast("success", t.flToastDel, row.leaderCode);
       setDelTarget(null);
       setSel((prev) => {
         if (!prev.has(row.id)) return prev;
@@ -260,9 +282,11 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const listRows = listNeedle
     ? fleets.filter(
         (f) =>
-          f.diggerCode.toLowerCase().includes(listNeedle) ||
+          f.leaderCode.toLowerCase().includes(listNeedle) ||
           f.workArea.toLowerCase().includes(listNeedle) ||
-          (f.busCode ?? "").toLowerCase().includes(listNeedle)
+          f.units.some((u) =>
+            (u.transportCode ?? "").toLowerCase().includes(listNeedle)
+          )
       )
     : fleets;
   const pg = usePagination(listRows, "5");
@@ -300,10 +324,10 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     });
   }
 
-  const diggerTypeOf = (code: string) => DIGGERS[code] ?? "—";
-  const diggerOpts = Object.keys(DIGGERS)
+  const leaderTypeOf = (code: string) => UNIT_TYPE[code] ?? "—";
+  const leaderOpts = Object.keys(UNIT_TYPE)
     .filter(
-      (code) => !fleets.some((f) => f.diggerCode === code && f.id !== editId)
+      (code) => !fleets.some((f) => f.leaderCode === code && f.id !== editId)
     )
     .sort();
   /* unit milik fleet lain disembunyikan */
@@ -323,7 +347,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const inAFleet = React.useMemo(
     () =>
       new Set([
-        ...fleets.map((f) => f.diggerCode),
+        ...fleets.map((f) => f.leaderCode),
         ...fleets.flatMap((f) => f.units.map((u) => u.code)),
       ]),
     [fleets]
@@ -360,13 +384,13 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
 
   function openAdd() {
     setEditId(null);
-    setFDigger(diggerOpts[0] || "");
-    setFBus(BUS_OPTS[0] ?? "");
+    setFLeader(leaderOpts[0] || "");
+    setFBus("");
     setFLoc("");
     setFUnits([]);
     setUnitQ("");
     setFActive(true);
-    setErrDigger(false);
+    setErrLeader(false);
     setErrLoc(false);
     setErrUnits("");
     setDlgOpen(true);
@@ -374,13 +398,13 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
 
   function openEdit(f: FleetRow) {
     setEditId(f.id);
-    setFDigger(f.diggerCode);
-    setFBus(f.busCode ?? "");
+    setFLeader(f.leaderCode);
+    setFBus(transportOf(f));
     setFLoc(f.workArea);
     setFUnits(f.units.map((u) => u.code));
     setUnitQ("");
     setFActive(f.active);
-    setErrDigger(false);
+    setErrLeader(false);
     setErrLoc(false);
     setErrUnits("");
     setDlgOpen(true);
@@ -388,10 +412,10 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const digger = fDigger.trim();
-    const badDigger =
-      !digger || fleets.some((f) => f.diggerCode === digger && f.id !== editId);
-    setErrDigger(badDigger);
+    const digger = fLeader.trim();
+    const badLeader =
+      !digger || fleets.some((f) => f.leaderCode === digger && f.id !== editId);
+    setErrLeader(badLeader);
     // Nothing behind this field validates it any more, so the emptiness check
     // that the master list used to make implicit is made here.
     const workArea = fLoc.trim();
@@ -403,25 +427,39 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           ? t.flErrMin
           : "";
     setErrUnits(unitsErr);
-    if (badDigger || !workArea || unitsErr) return;
+    if (badLeader || !workArea || unitsErr) return;
 
     // The maps are built from the same lists the selects offered, so a miss
     // here means the catalogue changed under the open dialog — surfaced as
     // an error rather than submitted as a broken reference. The work area is
     // not among them: it is typed, so there is nothing to resolve.
-    const diggerUnitId = unitIdByCode.get(digger);
-    const busUnitId = fBus ? unitIdByCode.get(fBus) : null;
+    const leaderUnitId = unitIdByCode.get(digger);
     const unitIds = fUnits.map((c) => unitIdByCode.get(c));
-    if (!diggerUnitId || unitIds.some((id) => !id)) {
+    if (!leaderUnitId || unitIds.some((id) => !id)) {
       pushToast("error", t.flAdd, t.loginErr);
       return;
     }
 
+    /* Left out entirely on the sentinel, which is what keeps a formation whose
+       units ride different vehicles from being flattened by an edit that was
+       never about transport. */
+    const busUnitId =
+      fBus && fBus !== KEEP_TRANSPORT ? (unitIdByCode.get(fBus) ?? null) : null;
+    const transports =
+      fBus === KEEP_TRANSPORT
+        ? undefined
+        : Object.fromEntries(
+            [leaderUnitId, ...(unitIds as string[])].map((id) => [
+              id,
+              busUnitId,
+            ])
+          );
+
     save.mutate({
       id: editId,
-      diggerUnitId,
+      leaderUnitId,
       workArea,
-      busUnitId: busUnitId ?? null,
+      transports,
       unitIds: unitIds as string[],
       active: fActive,
     });
@@ -555,19 +593,22 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                     <Checkbox
                       checked={sel.has(f.id)}
                       onChange={() => toggleRow(f.id)}
-                      aria-label={`${t.flSelRow} — ${f.diggerCode}`}
+                      aria-label={`${t.flSelRow} — ${f.leaderCode}`}
                     />
                   </TableCell>
                 ) : null}
                 <TableCell>
                   <NameCell
-                    name={f.diggerCode}
-                    sub={diggerTypeOf(f.diggerCode)}
+                    name={f.leaderCode}
+                    sub={leaderTypeOf(f.leaderCode)}
                   />
                 </TableCell>
                 <TableCell>{f.workArea}</TableCell>
                 <TableCell className="font-mono max-xl:hidden">
-                  {f.busCode ?? "—"}
+                  {/* The formation's ride when its units share one, otherwise
+                      how many they are spread across — a single code here
+                      would misdirect every crew not on it. */}
+                  {transportSummary(f)}
                 </TableCell>
                 <TableCell>
                   <div className="flex max-w-[320px] flex-wrap gap-1">
@@ -633,7 +674,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           <Truck />
         </DialogIcon>
         <DialogTitle id="fl-t">
-          {editId ? `${t.flEditT} ${fDigger}` : t.flAdd}
+          {editId ? `${t.flEditT} ${fLeader}` : t.flAdd}
         </DialogTitle>
         <DialogBody>{t.flDlgB}</DialogBody>
         <form onSubmit={submit} noValidate>
@@ -642,18 +683,18 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
               label="Digger (fleet leader)"
               htmlFor="fl-digger"
               required
-              error={errDigger}
-              errorMessage={t.flErrDigger}
+              error={errLeader}
+              errorMessage={t.flErrLeader}
             >
               <Select
                 id="fl-digger"
-                value={fDigger}
-                onChange={(e) => setFDigger(e.target.value)}
+                value={fLeader}
+                onChange={(e) => setFLeader(e.target.value)}
               >
-                {editId && !diggerOpts.includes(fDigger) ? (
-                  <option value={fDigger}>{fDigger}</option>
+                {editId && !leaderOpts.includes(fLeader) ? (
+                  <option value={fLeader}>{fLeader}</option>
                 ) : null}
-                {diggerOpts.map((c) => (
+                {leaderOpts.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -666,6 +707,11 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 value={fBus}
                 onChange={(e) => setFBus(e.target.value)}
               >
+                {/* Only offered when the formation actually is mixed, so the
+                    ordinary case keeps a two-item choice. */}
+                {fBus === KEEP_TRANSPORT ? (
+                  <option value={KEEP_TRANSPORT}>{t.flBusMixed}</option>
+                ) : null}
                 <option value="">
                   {BUS_OPTS.length
                     ? "— pilih angkutan —"
@@ -748,7 +794,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                           {code}
                         </span>
                         <span className="text-xs text-(--text-tertiary)">
-                          {OHT_TYPE[code] ?? "—"}
+                          {UNIT_TYPE[code] ?? "—"}
                         </span>
                       </label>
                     ))
@@ -845,7 +891,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           <Trash2 />
         </DialogIcon>
         <DialogTitle id="fld-t">
-          {t.flDelT} {delTarget?.diggerCode}?
+          {t.flDelT} {delTarget?.leaderCode}?
         </DialogTitle>
         <DialogBody>{t.flDelB}</DialogBody>
         <DialogActions>

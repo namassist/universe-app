@@ -386,7 +386,7 @@ function FleetQuadrant({
         {/* The formation's name is its digger, everywhere in this app — an
             ordinal would be a vocabulary the yard does not use. */}
         <b className="truncate font-mono text-[26px] leading-none font-bold">
-          Fleet {fleet.diggerCode}
+          Fleet {fleet.leaderCode}
         </b>
         <span className="ml-auto truncate text-[17px] text-(--text-secondary)">
           {fleet.area ?? "—"}
@@ -402,7 +402,7 @@ function FleetQuadrant({
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-3 py-0.5 text-[16px] font-bold text-(--badge-warning-text)">
           <Pickaxe className="size-4" />
-          {fleet.diggerCode}
+          {fleet.leaderCode}
         </span>
         <span className="rounded-full border border-(--badge-neutral-border) bg-(--badge-neutral-fill) px-3 py-0.5 text-[16px] font-semibold text-(--badge-neutral-text)">
           {fleet.total} unit · {fleet.crewed} siap
@@ -590,7 +590,7 @@ export default function DisplayFleetPage() {
   const title = isMonitor
     ? (screenName ?? "Alokasi Aktual")
     : page
-      ? `Fleet ${page.fleet.diggerCode}`
+      ? `Fleet ${page.fleet.leaderCode}`
       : "Alokasi Aktual";
   /* Site-wide counts belong to a slideshow, whose header is about the one
      formation on the glass. A monitor's header would be about four, so it

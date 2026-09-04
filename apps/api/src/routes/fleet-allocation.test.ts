@@ -59,7 +59,7 @@ let unitDept: Unit; // owned by dept A, no requirement
 let unitFree: Unit; // global, no requirement
 
 /** The formation every fixture unit hauls for — scaffolding, not subject. */
-let fleetId: string, fleetDigger: string;
+let fleetId: string, fleetLeader: string;
 
 /* ------------------------------------------------------------- fixtures */
 
@@ -297,10 +297,10 @@ beforeAll(async () => {
 
   /* The suite's formation. Its digger is standby so it never occupies a slot
      of its own; it exists only to give `fleet_units` something to point at. */
-  fleetDigger = (await unitRow({ standby: true })).id;
+  fleetLeader = (await unitRow({ standby: true })).id;
   const [fleet] = await db
     .insert(schema.fleets)
-    .values({ diggerUnitId: fleetDigger, workArea: `ZZ Pit ${uid()}` })
+    .values({ leaderUnitId: fleetLeader })
     .returning({ id: schema.fleets.id });
   fleetId = fleet!.id;
 

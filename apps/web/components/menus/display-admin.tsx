@@ -280,7 +280,7 @@ export function DisplayAdminMenu({
     if (!needle) return fleets;
     return fleets.filter(
       (f) =>
-        f.diggerCode.toLowerCase().includes(needle) ||
+        f.leaderCode.toLowerCase().includes(needle) ||
         f.workArea.toLowerCase().includes(needle)
     );
   }, [fleets, fleetQ]);
@@ -394,7 +394,7 @@ export function DisplayAdminMenu({
       setNameErr(true);
       return;
     }
-    const first = fSel.length ? fleetById.get(fSel[0]!)?.diggerCode : undefined;
+    const first = fSel.length ? fleetById.get(fSel[0]!)?.leaderCode : undefined;
     const name =
       kind === "fleet" && first && !fName.trim()
         ? fSel.length === 1
@@ -508,7 +508,7 @@ export function DisplayAdminMenu({
                       <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
                         {d.fleetIds.length
                           ? d.fleetIds
-                              .map((id) => fleetById.get(id)?.diggerCode)
+                              .map((id) => fleetById.get(id)?.leaderCode)
                               .filter(Boolean)
                               .join(" · ")
                           : t.dspFleetAllNote}
@@ -764,7 +764,7 @@ export function DisplayAdminMenu({
                                 onChange={() => toggleFleet(f.id)}
                               />
                               <span className="min-w-0 flex-1 truncate">
-                                {`Fleet ${f.diggerCode}`}
+                                {`Fleet ${f.leaderCode}`}
                                 <span className="text-(--text-tertiary)">
                                   {` — ${f.workArea} · ${f.units.length + 1} unit`}
                                 </span>

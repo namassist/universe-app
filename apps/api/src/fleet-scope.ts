@@ -2,7 +2,7 @@
  * Which units allocation is about.
  *
  * A unit takes part when it belongs to a formation: it leads one
- * (`fleets.digger_unit_id`) or it hauls for one (`fleet_units`). That is the
+ * (`fleets.leader_unit_id`) or it hauls for one (`fleet_units`). That is the
  * whole rule.
  *
  * Everything else in the register is **no-fleet**, and no-fleet is deliberately
@@ -24,7 +24,7 @@
  * all 52 bus slots were empty — and two buses serve more than one formation,
  * so a bus has no single fleet to be filed under.
  *
- * The two sources cannot overlap: `fleets.digger_unit_id` is unique and
+ * The two sources cannot overlap: `fleets.leader_unit_id` is unique and
  * `fleet_units.unit_id` is unique across the table. So a unit is configured in
  * exactly one place, and joining on either can never double a card.
  */
@@ -41,9 +41,30 @@ import type { PgColumn } from "drizzle-orm/pg-core";
  */
 export function isFleetConfigured(unitId: PgColumn): SQL {
   return sql`(
-    exists (select 1 from fleets f where f.digger_unit_id = ${unitId})
+    exists (select 1 from fleets f where f.leader_unit_id = ${unitId})
     or exists (select 1 from fleet_units fu where fu.unit_id = ${unitId})
   )`;
+}
+
+/**
+ * A `where` fragment: true when allocation is about this unit at all.
+ *
+ * Wider than `isFleetConfigured` since 2026-09-04, and the two are deliberately
+ * separate questions. Formation membership decides how a unit is *grouped* —
+ * which is what Fleet Setting lists and what the board headings are. This
+ * decides whether the unit gets a line on the board, and a support unit does: a
+ * dozer or a water truck is crewed like anything else, it just belongs to no
+ * formation.
+ *
+ * `fleet_support` is set by the Fleet Setting import, not derived. A unit
+ * quietly falling into scope because a text column stopped being empty is
+ * exactly the kind of accident this flag exists to prevent.
+ */
+export function takesPartInAllocation(
+  unitId: PgColumn,
+  supportFlag: PgColumn
+): SQL {
+  return sql`(${isFleetConfigured(unitId)} or ${supportFlag})`;
 }
 
 /**

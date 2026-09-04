@@ -164,6 +164,13 @@ beforeAll(async () => {
     .returning({ id: schema.units.id });
   [unitA, unitB] = units.map((u) => u.id) as [string, string];
   made.units.push(unitA, unitB);
+  /* Support units, so allocation is about them without a formation. Before
+     2026-09-04 a unit in no fleet was simply out of scope, and these fixtures
+     relied on the provisional wall listing every active unit. */
+  await db
+    .update(schema.units)
+    .set({ fleetSupport: true, workArea: `${tag} PIT` })
+    .where(inArray(schema.units.id, [unitA, unitB]));
 
   nikOne = `9911${uid().slice(0, 4)}`;
   nikTwo = `9912${uid().slice(0, 4)}`;
@@ -516,7 +523,8 @@ const slot = (over: Partial<WallSlot> = {}): WallSlot => ({
   modelName: "M",
   brandName: "B",
   fleetId: null,
-  diggerCode: null,
+  groupKind: "fleet",
+  leaderCode: null,
   area: null,
   busCode: null,
   employeeNik: null,
@@ -538,9 +546,9 @@ describe("arranging the board into formations", () => {
 
   test("puts the digger at the head of its own formation", () => {
     const groups = groupIntoFleets([
-      slot({ unitCode: "DT-102", fleetId: fleetOne, diggerCode: "EX-22" }),
-      slot({ unitCode: "EX-22", fleetId: fleetOne, diggerCode: "EX-22" }),
-      slot({ unitCode: "DT-101", fleetId: fleetOne, diggerCode: "EX-22" }),
+      slot({ unitCode: "DT-102", fleetId: fleetOne, leaderCode: "EX-22" }),
+      slot({ unitCode: "EX-22", fleetId: fleetOne, leaderCode: "EX-22" }),
+      slot({ unitCode: "DT-101", fleetId: fleetOne, leaderCode: "EX-22" }),
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.units.map((u) => u.unitCode)).toEqual([
@@ -552,16 +560,16 @@ describe("arranging the board into formations", () => {
 
   test("orders formations by digger code", () => {
     const groups = groupIntoFleets([
-      slot({ unitCode: "EX-70", fleetId: fleetTwo, diggerCode: "EX-70" }),
-      slot({ unitCode: "EX-22", fleetId: fleetOne, diggerCode: "EX-22" }),
+      slot({ unitCode: "EX-70", fleetId: fleetTwo, leaderCode: "EX-70" }),
+      slot({ unitCode: "EX-22", fleetId: fleetOne, leaderCode: "EX-22" }),
     ]);
-    expect(groups.map((g) => g.diggerCode)).toEqual(["EX-22", "EX-70"]);
+    expect(groups.map((g) => g.leaderCode)).toEqual(["EX-22", "EX-70"]);
   });
 
   test("leaves out units that belong to no fleet", () => {
     const groups = groupIntoFleets([
       slot({ unitCode: "WT-01" }),
-      slot({ unitCode: "EX-22", fleetId: fleetOne, diggerCode: "EX-22" }),
+      slot({ unitCode: "EX-22", fleetId: fleetOne, leaderCode: "EX-22" }),
       slot({ unitCode: "WT-02" }),
     ]);
     // The wall answers "how is this formation crewed"; a unit in no formation
@@ -575,7 +583,7 @@ describe("arranging the board into formations", () => {
       slot({
         unitCode: "EX-22",
         fleetId: fleetOne,
-        diggerCode: "EX-22",
+        leaderCode: "EX-22",
         busCode: "BUS-01",
       }),
     ]);
@@ -587,28 +595,28 @@ describe("arranging the board into formations", () => {
       slot({
         unitCode: "EX-22",
         fleetId: fleetOne,
-        diggerCode: "EX-22",
+        leaderCode: "EX-22",
         employeeName: "Andi",
         source: "plan",
       }),
       slot({
         unitCode: "DT-101",
         fleetId: fleetOne,
-        diggerCode: "EX-22",
+        leaderCode: "EX-22",
         employeeName: "Budi",
         source: "spare",
       }),
-      slot({ unitCode: "DT-102", fleetId: fleetOne, diggerCode: "EX-22" }),
+      slot({ unitCode: "DT-102", fleetId: fleetOne, leaderCode: "EX-22" }),
       slot({
         unitCode: "EX-70",
         fleetId: fleetTwo,
-        diggerCode: "EX-70",
+        leaderCode: "EX-70",
         employeeName: "Cakra",
         source: "manual",
       }),
     ]);
     expect(groups[0]).toMatchObject({
-      diggerCode: "EX-22",
+      leaderCode: "EX-22",
       total: 3,
       crewed: 2,
       idle: 1,
@@ -616,7 +624,7 @@ describe("arranging the board into formations", () => {
     });
     // The second formation knows nothing of the first's three units.
     expect(groups[1]).toMatchObject({
-      diggerCode: "EX-70",
+      leaderCode: "EX-70",
       total: 1,
       crewed: 1,
       idle: 0,
@@ -629,11 +637,11 @@ describe("arranging the board into formations", () => {
       slot({
         unitCode: "EX-22",
         fleetId: fleetOne,
-        diggerCode: "EX-22",
+        leaderCode: "EX-22",
         employeeName: "Andi",
         source: "plan",
       }),
-      slot({ unitCode: "DT-101", fleetId: fleetOne, diggerCode: "EX-22" }),
+      slot({ unitCode: "DT-101", fleetId: fleetOne, leaderCode: "EX-22" }),
     ]);
     expect(groups[0]!.units).toHaveLength(2);
     expect(groups[0]!.units[1]!.employeeName).toBeNull();
@@ -667,21 +675,24 @@ describe("the provisional line-up, before a board exists", () => {
     expect(byUnit.get(unitA)).toBeNull();
   });
 
-  test("lists every active unit exactly once", async () => {
+  test("lists every unit in today's operation exactly once", async () => {
     const rows = await planSlots(PLAN_DATE, "day");
     expect(new Set(rows.map((r) => r.unitId)).size).toBe(rows.length);
+    // Scoped the same way the board is, so the wall and the board that
+    // replaces it ten minutes later are about the same machines.
+    expect(rows.some((r) => r.unitId === unitA)).toBe(true);
   });
 });
 
 describe("a screen scoped to its own formations", () => {
   const rows = () => [
-    slot({ unitCode: "EX-22", fleetId: "f1", diggerCode: "EX-22" }),
-    slot({ unitCode: "EX-70", fleetId: "f2", diggerCode: "EX-70" }),
+    slot({ unitCode: "EX-22", fleetId: "f1", leaderCode: "EX-22" }),
+    slot({ unitCode: "EX-70", fleetId: "f2", leaderCode: "EX-70" }),
   ];
 
   test("shows only the formations it was given", () => {
     const groups = groupIntoFleets(rows(), ["f2"]);
-    expect(groups.map((g) => g.diggerCode)).toEqual(["EX-70"]);
+    expect(groups.map((g) => g.leaderCode)).toEqual(["EX-70"]);
   });
 
   test("shows every formation when it was given none", () => {
@@ -694,9 +705,9 @@ describe("a screen scoped to its own formations", () => {
   test("counts only what it shows", () => {
     const groups = groupIntoFleets(
       [
-        slot({ unitCode: "EX-22", fleetId: "f1", diggerCode: "EX-22" }),
-        slot({ unitCode: "DT-101", fleetId: "f1", diggerCode: "EX-22" }),
-        slot({ unitCode: "EX-70", fleetId: "f2", diggerCode: "EX-70" }),
+        slot({ unitCode: "EX-22", fleetId: "f1", leaderCode: "EX-22" }),
+        slot({ unitCode: "DT-101", fleetId: "f1", leaderCode: "EX-22" }),
+        slot({ unitCode: "EX-70", fleetId: "f2", leaderCode: "EX-70" }),
       ],
       ["f2"]
     );
@@ -714,7 +725,7 @@ describe("a screen scoped to its own formations", () => {
         unitCode: "EX-22",
         fleetId: "board-1",
         sourceFleetId: null,
-        diggerCode: "EX-22",
+        leaderCode: "EX-22",
       }),
     ];
     expect(groupIntoFleets(gone, ["f1"])).toHaveLength(0);
@@ -726,7 +737,7 @@ describe("a screen scoped to its own formations", () => {
     // way an admin says which pit belongs top-left. Sorting by digger code
     // here would silently overrule every one of those choices.
     const groups = groupIntoFleets(rows(), ["f2", "f1"]);
-    expect(groups.map((g) => g.diggerCode)).toEqual(["EX-70", "EX-22"]);
+    expect(groups.map((g) => g.leaderCode)).toEqual(["EX-70", "EX-22"]);
   });
 });
 
@@ -759,7 +770,7 @@ describe("a board whose formation was disbanded afterwards", () => {
 
     const [fleet] = await db
       .insert(schema.fleets)
-      .values({ diggerUnitId: histUnit, workArea: `${tag} Panel Pagi` })
+      .values({ leaderUnitId: histUnit })
       .returning({ id: schema.fleets.id });
 
     const [doc] = await db
@@ -771,10 +782,10 @@ describe("a board whose formation was disbanded afterwards", () => {
       .insert(schema.fleetActualFleets)
       .values({
         documentId: doc!.id,
+        kind: "fleet",
         sourceFleetId: fleet!.id,
-        diggerCode: `${tag}-H`,
+        leaderCode: `${tag}-H`,
         workArea: `${tag} Panel Pagi`,
-        busCode: null,
       })
       .returning({ id: schema.fleetActualFleets.id });
     await db.insert(schema.fleetActualSlots).values({
@@ -798,18 +809,18 @@ describe("a board whose formation was disbanded afterwards", () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      fleets: { diggerCode: string }[];
+      fleets: { leaderCode: string }[];
       slots: {
         unitId: string;
-        fleet: { diggerCode: string; area: string } | null;
+        fleet: { leaderCode: string; area: string } | null;
       }[];
     };
     const row = body.slots.find((s) => s.unitId === histUnit);
-    expect(row?.fleet?.diggerCode).toBe(`${tag}-H`);
+    expect(row?.fleet?.leaderCode).toBe(`${tag}-H`);
     // The morning's work area, not whatever Fleet Setting says now.
     expect(row?.fleet?.area).toBe(`${tag} Panel Pagi`);
     // And the filter still offers it, so the board can be read fleet by fleet.
-    expect(body.fleets.map((f) => f.diggerCode)).toContain(`${tag}-H`);
+    expect(body.fleets.map((f) => f.leaderCode)).toContain(`${tag}-H`);
   });
 
   test("names it in the audit table too", async () => {

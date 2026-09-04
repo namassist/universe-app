@@ -30,33 +30,39 @@ import {
 
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
-import { isNotFleetConfigured } from "../fleet-scope";
+import { isNotFleetConfigured, takesPartInAllocation } from "../fleet-scope";
 import {
   buildTemplate,
   validateFleetWorkbook,
   type FleetCatalogues,
   type ParsedFleetRow,
+  type ParsedSupportUnit,
 } from "./fleets-import";
 import { MAX_IMPORT_BYTES } from "./import-columns";
 import {
   ErrorSchema,
   FleetBulkDeleteResultSchema,
   FleetImportPreviewSchema,
+  FleetImportResultSchema,
   FleetSchema,
-  ImportResultSchema,
   NoFleetSchema,
 } from "./schemas";
 
-const digger = alias(schema.units, "digger_unit");
-const bus = alias(schema.units, "bus_unit");
+const leader = alias(schema.units, "leader_unit");
 
+/**
+ * A fleet joined to what names it.
+ *
+ * The area comes from the **leader unit**, not from the fleet: a location is a
+ * fact about a unit — a dozer in no formation has one too — and a formation's
+ * members are held to their leader's value on write. Transport left this table
+ * for the same reason and is now per member, so it is read with the members.
+ */
 const fleetColumns = {
   id: schema.fleets.id,
-  diggerUnitId: schema.fleets.diggerUnitId,
-  diggerCode: digger.code,
-  workArea: schema.fleets.workArea,
-  busUnitId: schema.fleets.busUnitId,
-  busCode: bus.code,
+  leaderUnitId: schema.fleets.leaderUnitId,
+  leaderCode: leader.code,
+  workArea: leader.workArea,
   active: schema.fleets.active,
   createdAt: schema.fleets.createdAt,
 };
@@ -65,43 +71,54 @@ function fleetQuery() {
   return db
     .select(fleetColumns)
     .from(schema.fleets)
-    .innerJoin(digger, eq(digger.id, schema.fleets.diggerUnitId))
-    .leftJoin(bus, eq(bus.id, schema.fleets.busUnitId));
+    .innerJoin(leader, eq(leader.id, schema.fleets.leaderUnitId));
 }
 
 type FleetRow = Awaited<ReturnType<typeof fleetQuery>>[number];
 
 /** Member codes for a set of fleets, one query however many fleets. */
+type FleetMember = {
+  id: string;
+  code: string;
+  transportUnitId: string | null;
+  transportCode: string | null;
+};
+
 async function membersOf(
   fleetIds: string[]
-): Promise<Map<string, { id: string; code: string }[]>> {
-  const map = new Map<string, { id: string; code: string }[]>(
-    fleetIds.map((id) => [id, []])
-  );
+): Promise<Map<string, FleetMember[]>> {
+  const map = new Map<string, FleetMember[]>(fleetIds.map((id) => [id, []]));
   if (!fleetIds.length) return map;
+  const transport = alias(schema.units, "member_transport");
   const rows = await db
     .select({
       fleetId: schema.fleetUnits.fleetId,
       id: schema.units.id,
       code: schema.units.code,
+      transportUnitId: schema.units.transportUnitId,
+      transportCode: transport.code,
     })
     .from(schema.fleetUnits)
     .innerJoin(schema.units, eq(schema.units.id, schema.fleetUnits.unitId))
+    .leftJoin(transport, eq(transport.id, schema.units.transportUnitId))
     .where(inArray(schema.fleetUnits.fleetId, fleetIds))
     .orderBy(asc(schema.units.code));
   for (const row of rows)
-    map.get(row.fleetId)?.push({ id: row.id, code: row.code });
+    map.get(row.fleetId)?.push({
+      id: row.id,
+      code: row.code,
+      transportUnitId: row.transportUnitId,
+      transportCode: row.transportCode,
+    });
   return map;
 }
 
-function toFleet(row: FleetRow, units: { id: string; code: string }[]) {
+function toFleet(row: FleetRow, units: FleetMember[]) {
   return {
     id: row.id,
-    diggerUnitId: row.diggerUnitId,
-    diggerCode: row.diggerCode,
-    workArea: row.workArea,
-    busUnitId: row.busUnitId,
-    busCode: row.busCode,
+    leaderUnitId: row.leaderUnitId,
+    leaderCode: row.leaderCode,
+    workArea: row.workArea ?? "",
     units,
     active: row.active,
     createdAt: row.createdAt.toISOString(),
@@ -122,24 +139,28 @@ const invalid = (message: string) => ({ code: "validation_failed", message });
  * either being refused for membership the same upload dissolves.
  */
 export async function refuseComposition(input: {
-  diggerUnitId: string;
-  busUnitId: string | null;
+  leaderUnitId: string;
   unitIds: string[];
+  /**
+   * Every distinct vehicle the write assigns as transport, for the type check.
+   *
+   * A list rather than one value: transport is per unit since 2026-09-04, so a
+   * formation can legitimately name several — and the refusal has to be able
+   * to say which one is not a vehicle.
+   */
+  transportUnitIds?: string[];
   selfIds?: string[];
 }): Promise<string | null> {
-  const { diggerUnitId, busUnitId, unitIds } = input;
+  const { leaderUnitId, unitIds } = input;
+  const transportUnitIds = [...new Set(input.transportUnitIds ?? [])];
   const selfIds = input.selfIds ?? [];
 
-  if (unitIds.includes(diggerUnitId))
-    return "Digger tidak bisa sekaligus menjadi anggota fleet-nya sendiri";
+  if (unitIds.includes(leaderUnitId))
+    return "Unit pemimpin tidak bisa sekaligus menjadi anggota fleet-nya sendiri";
 
-  // Every unit named — digger, bus, members — must exist. One query, and the
-  // refusal names what is missing rather than which constraint would fire.
-  const askedIds = [
-    diggerUnitId,
-    ...(busUnitId ? [busUnitId] : []),
-    ...unitIds,
-  ];
+  // Every unit named — leader, transport, members — must exist. One query, and
+  // the refusal names what is missing rather than which constraint would fire.
+  const askedIds = [leaderUnitId, ...transportUnitIds, ...unitIds];
   const found = await db
     .select({
       id: schema.units.id,
@@ -150,19 +171,27 @@ export async function refuseComposition(input: {
     .innerJoin(schema.unitTypes, eq(schema.unitTypes.id, schema.units.typeId))
     .where(inArray(schema.units.id, askedIds));
   const byId = new Map(found.map((u) => [u.id, u]));
-  if (!byId.has(diggerUnitId)) return "Digger yang dipilih tidak ada di master";
-  if (busUnitId && !byId.has(busUnitId))
-    return "Bus yang dipilih tidak ada di master";
+  if (!byId.has(leaderUnitId))
+    return "Unit pemimpin yang dipilih tidak ada di master";
+  const missingTransport = transportUnitIds.filter((id) => !byId.has(id));
+  if (missingTransport.length)
+    return "Unit transport yang dipilih tidak ada di master";
   const missing = unitIds.filter((id) => !byId.has(id));
   if (missing.length)
     return `${missing.length} unit anggota tidak ada di master`;
 
-  if (busUnitId && !isFleetTransportType(byId.get(busUnitId)!.typeName))
-    return `Unit ${byId.get(busUnitId)!.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`;
+  const notVehicle = transportUnitIds.find(
+    (id) => !isFleetTransportType(byId.get(id)!.typeName)
+  );
+  if (notVehicle)
+    return `Unit ${byId.get(notVehicle)!.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`;
 
-  // Exclusivity, named. The digger may not haul for anyone, and a member may
+  // Exclusivity, named. The leader may not haul for anyone, and a member may
   // not already haul elsewhere or lead a fleet of its own. The unique indexes
   // hold all of this too — these queries exist for the message.
+  /* Members and the leader only. A transport vehicle hauling for some fleet is
+     not a conflict — it is being named as a ride, not as a member. */
+  const memberIds = [leaderUnitId, ...unitIds];
   const othersOnly = selfIds.length
     ? notInArray(schema.fleetUnits.fleetId, selfIds)
     : undefined;
@@ -172,27 +201,65 @@ export async function refuseComposition(input: {
     .innerJoin(schema.units, eq(schema.units.id, schema.fleetUnits.unitId))
     .where(
       othersOnly
-        ? sql`${inArray(schema.fleetUnits.unitId, askedIds)} and ${othersOnly}`
-        : inArray(schema.fleetUnits.unitId, askedIds)
+        ? sql`${inArray(schema.fleetUnits.unitId, memberIds)} and ${othersOnly}`
+        : inArray(schema.fleetUnits.unitId, memberIds)
     );
-  if (taken.some((r) => r.unitId === diggerUnitId))
-    return `Unit ${byId.get(diggerUnitId)!.code} sudah menjadi anggota fleet lain`;
+  if (taken.some((r) => r.unitId === leaderUnitId))
+    return `Unit ${byId.get(leaderUnitId)!.code} sudah menjadi anggota fleet lain`;
   const takenMembers = taken.filter((r) => unitIds.includes(r.unitId));
   if (takenMembers.length)
     return `Unit ${takenMembers.map((r) => r.code).join(", ")} sudah menjadi anggota fleet lain`;
 
   const leaders = await db
-    .select({ id: schema.fleets.id, diggerUnitId: schema.fleets.diggerUnitId })
+    .select({ id: schema.fleets.id, leaderUnitId: schema.fleets.leaderUnitId })
     .from(schema.fleets)
-    .where(inArray(schema.fleets.diggerUnitId, unitIds));
+    .where(inArray(schema.fleets.leaderUnitId, unitIds));
   const leading = leaders.filter((l) => !selfIds.includes(l.id));
   if (leading.length)
     return `Unit ${leading
-      .map((l) => byId.get(l.diggerUnitId)?.code ?? "?")
+      .map((l) => byId.get(l.leaderUnitId)?.code ?? "?")
       .join(", ")} memimpin fleet lain dan tidak bisa menjadi anggota`;
 
   return null;
 }
+
+/**
+ * Write the unit-level facts a formation implies.
+ *
+ * The area goes on the leader **and every member**, which is how "one
+ * formation cannot span two areas" is enforced now that the area lives on the
+ * unit. Transports are per unit and only the ones named are touched, so a
+ * caller that says nothing about a unit's ride leaves it alone.
+ *
+ * Takes the transaction rather than `db` so a composition and the facts it
+ * implies land together or not at all.
+ */
+async function applyUnitFacts(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: {
+    unitIds: string[];
+    workArea: string;
+    transports?: Record<string, string | null>;
+  }
+): Promise<void> {
+  if (input.unitIds.length)
+    await tx
+      .update(schema.units)
+      .set({ workArea: input.workArea })
+      .where(inArray(schema.units.id, input.unitIds));
+
+  for (const [unitId, transportUnitId] of Object.entries(
+    input.transports ?? {}
+  ))
+    await tx
+      .update(schema.units)
+      .set({ transportUnitId })
+      .where(eq(schema.units.id, unitId));
+}
+
+/** The vehicles a transport map actually names, for the type check. */
+const transportsNamed = (map?: Record<string, string | null>) =>
+  Object.values(map ?? {}).filter((id): id is string => id !== null);
 
 /** Distinct ids in submitted order — a doubled selection is not two haulers. */
 const distinct = (ids: string[]) => [...new Set(ids)];
@@ -213,10 +280,21 @@ const distinct = (ids: string[]) => [...new Set(ids)];
  * allocation unnoticed, which is a question about visibility rather than a
  * second scope for the engine — see `fleet-scope.ts`.
  */
-async function noFleetUnits(): Promise<{ id: string; code: string }[]> {
+async function noFleetUnits() {
+  const transport = alias(schema.units, "nofleet_transport");
   return db
-    .select({ id: schema.units.id, code: schema.units.code })
+    .select({
+      id: schema.units.id,
+      code: schema.units.code,
+      /* Two different states share this list now: a unit nobody crews, and a
+         support unit that is crewed without a formation. The flag is what tells
+         a reader which of the two they are looking at. */
+      fleetSupport: schema.units.fleetSupport,
+      workArea: schema.units.workArea,
+      transportCode: transport.code,
+    })
     .from(schema.units)
+    .leftJoin(transport, eq(transport.id, schema.units.transportUnitId))
     .where(
       and(eq(schema.units.active, true), isNotFleetConfigured(schema.units.id))
     )
@@ -237,25 +315,50 @@ async function importCatalogues(): Promise<FleetCatalogues> {
     .innerJoin(schema.unitTypes, eq(schema.unitTypes.id, schema.units.typeId));
   const fleets = await fleetQuery();
   const members = await membersOf(fleets.map((f) => f.id));
+
+  /* Everything the file could release: a formation member, a leader, or a
+     support unit. Read once here so the preview can name what would drop out
+     of today's operation before the commit does it. */
+  const operating = await db
+    .select({ id: schema.units.id, code: schema.units.code })
+    .from(schema.units)
+    .where(
+      and(
+        eq(schema.units.active, true),
+        takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
+      )
+    );
+
   return {
     unitsByCode: new Map(units.map((u) => [u.code.toLowerCase(), u])),
-    fleetsByDigger: new Map(
+    fleetsByLeader: new Map(
       fleets.map((f) => [
-        f.diggerCode.toLowerCase(),
+        f.leaderCode.toLowerCase(),
         {
           id: f.id,
-          area: f.workArea,
-          busCode: f.busCode,
+          leaderUnitId: f.leaderUnitId,
+          area: f.workArea ?? "",
           memberCodes: (members.get(f.id) ?? []).map((m) => m.code),
+          transportCodes: [
+            ...new Set(
+              (members.get(f.id) ?? [])
+                .map((m) => m.transportCode)
+                .filter((c): c is string => c !== null)
+            ),
+          ],
         },
       ])
     ),
+    inOperation: new Map(operating.map((u) => [u.code.toLowerCase(), u.code])),
   };
 }
 
 type FleetImportOutcome = {
   preview: FleetImportPreview;
   rows: ParsedFleetRow[];
+  support: ParsedSupportUnit[];
+  disband: { id: string; leaderCode: string }[];
+  releasedIds: string[];
 };
 
 /**
@@ -276,19 +379,26 @@ async function parseFleetImport(
     .map((r) => r.selfId)
     .filter((id): id is string => id !== null);
 
+  /* Every formation the file replaces, including the ones it disbands: a
+     hauler moving out of a fleet this upload dissolves must not be refused for
+     membership that will not survive the commit. */
+  const replacedIds = [...selfIds, ...parsed.disband.map((d) => d.id)];
+
   const rows: ParsedFleetRow[] = [];
   const errors = [...parsed.errors];
   for (const row of parsed.rows) {
     const refusal = await refuseComposition({
-      diggerUnitId: row.diggerUnitId,
-      busUnitId: row.busUnitId,
+      leaderUnitId: row.leaderUnitId,
       unitIds: row.unitIds,
-      selfIds,
+      transportUnitIds: Object.values(row.transports).filter(
+        (id): id is string => id !== null
+      ),
+      selfIds: replacedIds,
     });
     if (refusal) {
       errors.push({
         row: String(row.preview.row),
-        nik: row.preview.digger,
+        nik: row.preview.leader,
         emp: row.preview.units.join(", "),
         issue: refusal,
         badgeVariant: "danger",
@@ -299,33 +409,59 @@ async function parseFleetImport(
     rows.push(row);
   }
 
+  const releasedCodes = new Set(parsed.released.map((c) => c.toLowerCase()));
+  const releasedRows = releasedCodes.size
+    ? await db
+        .select({ id: schema.units.id, code: schema.units.code })
+        .from(schema.units)
+        .where(inArray(schema.units.code, parsed.released))
+    : [];
+
   errors.sort((a, b) => Number(a.row) - Number(b.row));
   return {
     preview: {
       fileName: file.name,
       newCount: rows.filter((r) => r.preview.kind === "new").length,
       updatedCount: rows.filter((r) => r.preview.kind === "updated").length,
+      unchangedCount: rows.filter((r) => r.preview.kind === "unchanged").length,
+      supportCount: parsed.support.filter((u) => !u.breakdown).length,
+      breakdownCount: parsed.support.filter((u) => u.breakdown).length,
       errorCount: errors.length,
       rows: rows.map((r) => r.preview),
+      support: parsed.support.map((u) => u.preview),
+      disband: parsed.disband.map((d) => d.leaderCode),
+      released: parsed.released,
       errors,
     },
     rows,
+    support: parsed.support,
+    disband: parsed.disband,
+    releasedIds: releasedRows.map((u) => u.id),
   };
 }
 
 const fleetBody = {
-  diggerUnitId: t.String({ format: "uuid" }),
+  leaderUnitId: t.String({ format: "uuid" }),
   /**
    * Typed, not chosen: pits open and close within days, so there is no
    * catalogue behind this. Trimmed and length-capped at the boundary because
    * nothing downstream will.
    */
   workArea: t.String({ minLength: 1, maxLength: 120 }),
-  busUnitId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
   unitIds: t.Array(t.String({ format: "uuid" }), {
     minItems: FLEET_MIN_UNITS,
     maxItems: FLEET_MAX_UNITS,
   }),
+  /**
+   * Which vehicle carries each unit's crew, keyed by unit id — the leader's
+   * included. Absent means "leave it as it is"; an entry with `null` clears it.
+   *
+   * Per unit rather than one for the formation, because transport is reassigned
+   * daily and two units of one fleet can legitimately ride different vehicles.
+   */
+  transports: t.Optional(
+    t.Record(t.String(), t.Nullable(t.String({ format: "uuid" })))
+  ),
   active: t.Optional(t.Boolean()),
 };
 
@@ -335,7 +471,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
   .get(
     "/",
     async () => {
-      const rows = await fleetQuery().orderBy(asc(digger.code));
+      const rows = await fleetQuery().orderBy(asc(leader.code));
       const members = await membersOf(rows.map((r) => r.id));
       return rows.map((r) => toFleet(r, members.get(r.id) ?? []));
     },
@@ -344,7 +480,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
        * Readable from the Display menu too, because that is where a fleet wall
        * is pointed at its formations and the picker has to offer the real
        * ones. Only this list: creating, editing and disbanding a fleet stay
-       * `fleet-setting` alone. What it discloses — digger codes, work areas,
+       * `fleet-setting` alone. What it discloses — leader codes, work areas,
        * member units — is what the TV shows in the yard anyway.
        */
       auth: { menu: ["fleet-setting", "display-fleet"], mode: "view" },
@@ -454,6 +590,17 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         // dissolves is gone before any it grants exists — two fleets trading
         // a hauler must not trip the unique index mid-write.
         await db.transaction(async (tx) => {
+          /* Formations the file never named. The file is the whole yard for
+             one day, so absent means gone — and the preview showed this list
+             before anybody pressed commit. Members cascade with the fleet. */
+          if (outcome.disband.length)
+            await tx.delete(schema.fleets).where(
+              inArray(
+                schema.fleets.id,
+                outcome.disband.map((d) => d.id)
+              )
+            );
+
           if (updated.length)
             await tx.delete(schema.fleetUnits).where(
               inArray(
@@ -461,22 +608,10 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
                 updated.map((r) => r.selfId!)
               )
             );
-          for (const row of updated)
-            await tx
-              .update(schema.fleets)
-              .set({
-                workArea: row.workArea,
-                busUnitId: row.busUnitId,
-              })
-              .where(eq(schema.fleets.id, row.selfId!));
           for (const row of created) {
             const [fleet] = await tx
               .insert(schema.fleets)
-              .values({
-                diggerUnitId: row.diggerUnitId,
-                workArea: row.workArea,
-                busUnitId: row.busUnitId,
-              })
+              .values({ leaderUnitId: row.leaderUnitId })
               .returning({ id: schema.fleets.id });
             row.selfId = fleet!.id;
           }
@@ -487,15 +622,56 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
                 row.unitIds.map((unitId) => ({ fleetId: row.selfId!, unitId }))
               )
             );
+
+          /* Units first stop taking part, then the file's own rows put back
+             the ones it still names — ordered this way so a unit moving from
+             support into a formation is never briefly both. */
+          if (outcome.releasedIds.length)
+            await tx
+              .update(schema.units)
+              .set({
+                fleetSupport: false,
+                workArea: null,
+                transportUnitId: null,
+              })
+              .where(inArray(schema.units.id, outcome.releasedIds));
+
+          for (const row of outcome.rows) {
+            await applyUnitFacts(tx, {
+              unitIds: [row.leaderUnitId, ...row.unitIds],
+              workArea: row.workArea,
+              transports: row.transports,
+            });
+            await tx
+              .update(schema.units)
+              .set({ fleetSupport: false })
+              .where(
+                inArray(schema.units.id, [row.leaderUnitId, ...row.unitIds])
+              );
+          }
+
+          for (const unit of outcome.support)
+            await tx
+              .update(schema.units)
+              .set({
+                /* Broken machines are not crewed, so they take no part —
+                   and "BREAKDOWN" was a status in the area cell, never a
+                   place, so it is not kept as one. */
+                fleetSupport: !unit.breakdown,
+                breakdown: unit.breakdown,
+                workArea: unit.workArea,
+                transportUnitId: unit.transportUnitId,
+              })
+              .where(eq(schema.units.id, unit.unitId));
         });
       } catch (error) {
         // Validation reads the database a moment before the write: another
         // request can take a digger or a hauler in between.
-        if (isUniqueViolation(error, "fleets_digger_unit_id_unique"))
+        if (isUniqueViolation(error, "fleets_leader_unit_id_unique"))
           return status(409, {
             code: "fleet_exists",
             message:
-              "Sebuah digger dalam file ini baru saja memimpin fleet lain — validasi ulang filenya",
+              "Sebuah unit dalam file ini baru saja memimpin fleet lain — validasi ulang filenya",
           });
         if (isUniqueViolation(error, "fleet_units_unit_id_unique"))
           return status(409, {
@@ -506,13 +682,19 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         throw error;
       }
 
-      return { created: created.length, updated: updated.length };
+      return {
+        created: created.length,
+        updated: updated.length,
+        disbanded: outcome.disband.length,
+        support: outcome.support.filter((u) => !u.breakdown).length,
+        released: outcome.releasedIds.length,
+      };
     },
     {
       auth: { menu: "fleet-setting", mode: "manage" },
       body: t.Object({ file: t.File({ maxSize: MAX_IMPORT_BYTES }) }),
       response: {
-        200: ImportResultSchema,
+        200: FleetImportResultSchema,
         401: ErrorSchema,
         403: ErrorSchema,
         409: ErrorSchema,
@@ -530,9 +712,9 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         return status(422, invalid("Fleet butuh minimal satu unit anggota"));
 
       const refusal = await refuseComposition({
-        diggerUnitId: body.diggerUnitId,
-        busUnitId: body.busUnitId ?? null,
+        leaderUnitId: body.leaderUnitId,
         unitIds,
+        transportUnitIds: transportsNamed(body.transports),
       });
       if (refusal) return status(422, invalid(refusal));
 
@@ -541,15 +723,18 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
           const [fleet] = await tx
             .insert(schema.fleets)
             .values({
-              diggerUnitId: body.diggerUnitId,
-              workArea: body.workArea.trim(),
-              busUnitId: body.busUnitId ?? null,
+              leaderUnitId: body.leaderUnitId,
               active: body.active ?? true,
             })
             .returning({ id: schema.fleets.id });
           await tx
             .insert(schema.fleetUnits)
             .values(unitIds.map((unitId) => ({ fleetId: fleet!.id, unitId })));
+          await applyUnitFacts(tx, {
+            unitIds: [body.leaderUnitId, ...unitIds],
+            workArea: body.workArea.trim(),
+            transports: body.transports,
+          });
           return fleet!.id;
         });
 
@@ -559,10 +744,10 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
       } catch (error) {
         // The two exclusivity races the prechecks cannot see: another request
         // claimed the digger, or one of the members, between check and insert.
-        if (isUniqueViolation(error, "fleets_digger_unit_id_unique"))
+        if (isUniqueViolation(error, "fleets_leader_unit_id_unique"))
           return status(409, {
             code: "fleet_exists",
-            message: "Digger ini sudah memimpin fleet lain",
+            message: "Unit ini sudah memimpin fleet lain",
           });
         if (isUniqueViolation(error, "fleet_units_unit_id_unique"))
           return status(409, {
@@ -601,9 +786,9 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         return status(422, invalid("Fleet butuh minimal satu unit anggota"));
 
       const refusal = await refuseComposition({
-        diggerUnitId: body.diggerUnitId,
-        busUnitId: body.busUnitId ?? null,
+        leaderUnitId: body.leaderUnitId,
         unitIds,
+        transportUnitIds: transportsNamed(body.transports),
         selfIds: [existing.id],
       });
       if (refusal) return status(422, invalid(refusal));
@@ -616,9 +801,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
           await tx
             .update(schema.fleets)
             .set({
-              diggerUnitId: body.diggerUnitId,
-              workArea: body.workArea.trim(),
-              busUnitId: body.busUnitId ?? null,
+              leaderUnitId: body.leaderUnitId,
               ...(body.active !== undefined ? { active: body.active } : {}),
             })
             .where(eq(schema.fleets.id, existing.id));
@@ -630,12 +813,17 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
             .values(
               unitIds.map((unitId) => ({ fleetId: existing.id, unitId }))
             );
+          await applyUnitFacts(tx, {
+            unitIds: [body.leaderUnitId, ...unitIds],
+            workArea: body.workArea.trim(),
+            transports: body.transports,
+          });
         });
       } catch (error) {
-        if (isUniqueViolation(error, "fleets_digger_unit_id_unique"))
+        if (isUniqueViolation(error, "fleets_leader_unit_id_unique"))
           return status(409, {
             code: "fleet_exists",
-            message: "Digger ini sudah memimpin fleet lain",
+            message: "Unit ini sudah memimpin fleet lain",
           });
         if (isUniqueViolation(error, "fleet_units_unit_id_unique"))
           return status(409, {

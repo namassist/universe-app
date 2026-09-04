@@ -27,7 +27,7 @@ import { alias } from "drizzle-orm/pg-core";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
-import { isFleetConfigured } from "./fleet-scope";
+import { takesPartInAllocation } from "./fleet-scope";
 import { judge, shiftIn, type Readiness } from "./readiness";
 import {
   pairingRefusal,
@@ -46,13 +46,23 @@ export type BoardSlot = {
   /** Why the planned operator lost the unit, for the screen that shows it. */
   readiness: Readiness | null;
   /**
-   * Which of the board's own formations this unit sat in, by digger code.
+   * Which of the board's own groups this unit sat in.
    *
-   * The code rather than a fleet id, because the id is the thing that does not
-   * survive: `storeBoard` resolves it against the rows it has just written.
+   * The leader's code, or `SUPPORT_GROUP` for a unit that belongs to no
+   * formation. A key rather than a fleet id, because the id is the thing that
+   * does not survive: `storeBoard` resolves it against the rows it has just
+   * written.
    */
-  fleetDiggerCode: string | null;
+  groupKey: string | null;
+  /** The vehicle this unit's crew rode, copied like everything else here. */
+  transportCode: string | null;
 };
+
+/**
+ * The key the one support group is filed under, in a namespace of leader unit
+ * codes. Not a unit code — no unit may be called this — so it cannot collide.
+ */
+export const SUPPORT_GROUP = "\u0000support";
 
 /**
  * One formation as it stood when the board was built.
@@ -62,11 +72,13 @@ export type BoardSlot = {
  * happened. See `fleet_actual_fleets` for the full reasoning.
  */
 export type BoardFleet = {
-  /** The live formation it was copied from — a breadcrumb, not a dependency. */
-  sourceFleetId: string;
-  diggerCode: string;
-  workArea: string;
-  busCode: string | null;
+  kind: "fleet" | "support";
+  /** Null on the support group, which was copied from no formation. */
+  sourceFleetId: string | null;
+  /** Null on the support group, which has no leader. */
+  leaderCode: string | null;
+  /** Null on the support group, whose units work in different places. */
+  workArea: string | null;
 };
 
 export type Board = {
@@ -194,9 +206,9 @@ async function skillsByEmployee(
 
 /* -------------------------------------------------------------- the board */
 
-/** The two units a formation is named and served by, joined per unit row. */
-const fleetDigger = alias(schema.units, "fleet_digger");
-const fleetBus = alias(schema.units, "fleet_bus");
+/** The unit a formation is named by, and the vehicle a unit's crew rides. */
+const fleetLeader = alias(schema.units, "fleet_leader");
+const transport = alias(schema.units, "unit_transport");
 
 /**
  * Build one shift's board. Pure of side effects — `storeBoard` writes it.
@@ -245,9 +257,12 @@ export async function buildBoard(
        * than a null.
        */
       fleetId: schema.fleets.id,
-      fleetDiggerCode: fleetDigger.code,
-      fleetWorkArea: schema.fleets.workArea,
-      fleetBusCode: fleetBus.code,
+      fleetLeaderCode: fleetLeader.code,
+      /* On the unit, not on the fleet. A support unit has one too, and a
+         formation's area is simply its leader's — the members are held to the
+         same value on write. */
+      workArea: schema.units.workArea,
+      transportCode: transport.code,
     })
     .from(schema.units)
     .leftJoin(
@@ -269,12 +284,12 @@ export async function buildBoard(
     .leftJoin(
       schema.fleets,
       or(
-        eq(schema.fleets.diggerUnitId, schema.units.id),
+        eq(schema.fleets.leaderUnitId, schema.units.id),
         eq(schema.fleets.id, schema.fleetUnits.fleetId)
       )
     )
-    .leftJoin(fleetDigger, eq(fleetDigger.id, schema.fleets.diggerUnitId))
-    .leftJoin(fleetBus, eq(fleetBus.id, schema.fleets.busUnitId))
+    .leftJoin(fleetLeader, eq(fleetLeader.id, schema.fleets.leaderUnitId))
+    .leftJoin(transport, eq(transport.id, schema.units.transportUnitId))
     .where(
       and(
         eq(schema.units.active, true),
@@ -293,12 +308,15 @@ export async function buildBoard(
          * 251 empty slots on the last board, and an idle card that is always
          * there is one nobody reads.
          *
-         * The cost is real and was accepted deliberately: a unit configured
-         * nowhere is not allocated and not reported as idle either. Fleet
-         * Setting's no-fleet entry is where a machine with no formation is
-         * put back in.
+         * Since 2026-09-04 that also admits **support units** — a dozer, a
+         * water truck, a spare digger. They work without a formation and still
+         * need an operator; what changed is that Fleet Setting now names them
+         * a work area and a ride, so "in no formation" stopped being a
+         * reliable stand-in for "not our business". The cost of the original
+         * rule remains for everything else: a unit configured nowhere is not
+         * allocated and not reported as idle either.
          */
-        isFleetConfigured(schema.units.id)
+        takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
       )
     )
     .orderBy(asc(schema.units.code));
@@ -346,24 +364,40 @@ export async function buildBoard(
   }
 
   /*
-   * The formations this board is about, copied as they stand right now.
+   * The groups this board is about, copied as they stand right now.
    *
    * Gathered from the same rows the slots are, so the board cannot end up
-   * naming a formation none of its units is in. Keyed by digger code because
+   * naming a formation none of its units is in. Keyed by leader code because
    * that is what a slot carries and what the yard calls the formation; the
    * fleet id rides along only as a breadcrumb back to Fleet Setting.
+   *
+   * Plus at most one support group, added only when a support unit is actually
+   * on the board — an empty "Support" heading on a wall says nothing.
    */
   const fleets = new Map<string, BoardFleet>();
   for (const row of planned) {
-    if (!row.fleetId || !row.fleetDiggerCode || fleets.has(row.fleetDiggerCode))
-      continue;
-    fleets.set(row.fleetDiggerCode, {
-      sourceFleetId: row.fleetId,
-      diggerCode: row.fleetDiggerCode,
-      workArea: row.fleetWorkArea ?? "",
-      busCode: row.fleetBusCode,
-    });
+    const key =
+      row.fleetId && row.fleetLeaderCode ? row.fleetLeaderCode : SUPPORT_GROUP;
+    if (fleets.has(key)) continue;
+    fleets.set(
+      key,
+      key === SUPPORT_GROUP
+        ? {
+            kind: "support",
+            sourceFleetId: null,
+            leaderCode: null,
+            workArea: null,
+          }
+        : {
+            kind: "fleet",
+            sourceFleetId: row.fleetId,
+            leaderCode: row.fleetLeaderCode,
+            workArea: row.workArea,
+          }
+    );
   }
+  const groupOf = (row: (typeof planned)[number]) =>
+    row.fleetId && row.fleetLeaderCode ? row.fleetLeaderCode : SUPPORT_GROUP;
 
   const slots: BoardSlot[] = [];
   const taken = new Set<string>();
@@ -387,7 +421,8 @@ export async function buildBoard(
         source: "plan",
         tappedAt: readiness.tappedAt,
         readiness,
-        fleetDiggerCode: first.fleetDiggerCode,
+        groupKey: groupOf(first),
+        transportCode: first.transportCode,
       });
     } else {
       slots.push({
@@ -397,7 +432,8 @@ export async function buildBoard(
         source: null,
         tappedAt: null,
         readiness,
-        fleetDiggerCode: first.fleetDiggerCode,
+        groupKey: groupOf(first),
+        transportCode: first.transportCode,
       });
     }
   }
@@ -510,24 +546,26 @@ export async function storeBoard(board: Board): Promise<string> {
        document rather than shared between documents: two boards on the same
        day are two records of two shifts, and a formation edited between them
        must show up as the difference it was. */
-    const fleetIdByDigger = new Map<string, string>();
+    const groupIds = new Map<string, string>();
     if (board.fleets.length) {
       const rows = await tx
         .insert(schema.fleetActualFleets)
         .values(
           board.fleets.map((f) => ({
             documentId: doc!.id,
+            kind: f.kind,
             sourceFleetId: f.sourceFleetId,
-            diggerCode: f.diggerCode,
+            leaderCode: f.leaderCode,
             workArea: f.workArea,
-            busCode: f.busCode,
           }))
         )
         .returning({
           id: schema.fleetActualFleets.id,
-          diggerCode: schema.fleetActualFleets.diggerCode,
+          kind: schema.fleetActualFleets.kind,
+          leaderCode: schema.fleetActualFleets.leaderCode,
         });
-      for (const row of rows) fleetIdByDigger.set(row.diggerCode, row.id);
+      for (const row of rows)
+        groupIds.set(row.leaderCode ?? SUPPORT_GROUP, row.id);
     }
 
     if (board.slots.length)
@@ -536,9 +574,8 @@ export async function storeBoard(board: Board): Promise<string> {
           documentId: doc!.id,
           unitId: s.unitId,
           employeeId: s.employeeId,
-          boardFleetId: s.fleetDiggerCode
-            ? (fleetIdByDigger.get(s.fleetDiggerCode) ?? null)
-            : null,
+          boardFleetId: s.groupKey ? (groupIds.get(s.groupKey) ?? null) : null,
+          transportCode: s.transportCode,
           source: s.source,
           tappedAt: s.tappedAt,
         }))

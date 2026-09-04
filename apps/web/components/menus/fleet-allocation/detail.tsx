@@ -235,7 +235,7 @@ export function FleetAllocationDetail() {
             <option value="all">{t.faFleetAll}</option>
             {(boardQ.data?.fleets ?? []).map((f) => (
               <option key={f.id} value={f.id}>
-                Fleet {f.diggerCode}
+                Fleet {f.leaderCode}
               </option>
             ))}
             <option value="none">{t.faActNoFleet}</option>
@@ -317,7 +317,7 @@ export function FleetAllocationDetail() {
                   {s.requiresFtw ? <Badge variant="warning">FTW</Badge> : null}
                   {s.fleet ? (
                     <>
-                      <Badge variant="info">Fleet {s.fleet.diggerCode}</Badge>
+                      <Badge variant="info">Fleet {s.fleet.leaderCode}</Badge>
                       {s.fleet.area ? (
                         <span className="text-xs text-(--text-tertiary)">
                           {s.fleet.area}

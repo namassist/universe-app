@@ -43,6 +43,13 @@ export const actualSlotSource = pgEnum("actual_slot_source", [
   "spare",
   "manual",
 ]);
+/**
+ * What a board groups its units under: a formation, or the support units that
+ * belong to none. An enum rather than a nullable leader code alone, because
+ * "no leader" and "the support group" are different statements and a reader
+ * should not have to infer one from the other.
+ */
+export const boardGroupKind = pgEnum("board_group_kind", ["fleet", "support"]);
 export const employeeStatus = pgEnum("employee_status", EMPLOYEE_STATUSES);
 export const mcuResult = pgEnum("mcu_result", MCU_RESULTS);
 export const bloodType = pgEnum("blood_type", BLOOD_TYPES);
@@ -480,6 +487,40 @@ export const units = pgTable(
     departmentId: uuid("department_id").references(() => departments.id, {
       onDelete: "restrict",
     }),
+    /**
+     * Where this unit is working today, as somebody typed it (owner,
+     * 2026-09-04). Null for a unit that is not part of today's operation.
+     *
+     * On the unit rather than on `fleets`, because the fleet is not the only
+     * thing that works somewhere: a dozer, a water truck and a spare digger
+     * each have a location and belong to no formation. A fleet's area is its
+     * leader's, and every member is held to the same value on write — which is
+     * the rule "one fleet cannot span two areas", enforced rather than stored
+     * twice.
+     */
+    workArea: text("work_area"),
+    /**
+     * The bus or manhaul truck that brings this unit's crew to it.
+     *
+     * Per unit rather than per fleet (owner, 2026-09-04): transport is
+     * reassigned daily and two units of one formation can legitimately ride
+     * different vehicles. `restrict`, like every other unit reference here —
+     * deleting a vehicle that is somebody's ride is refused with a count.
+     */
+    transportUnitId: uuid("transport_unit_id").references(
+      (): AnyPgColumn => units.id,
+      { onDelete: "restrict" }
+    ),
+    /**
+     * A unit that works without a formation and still needs an operator.
+     *
+     * Dozers, water trucks, manhauls, spare diggers. Set by the Fleet Setting
+     * import from a row with no fleet named, and it is what puts such a unit on
+     * the board: "in no formation" used to mean "out of allocation", which was
+     * right while it meant forklifts and ambulances and wrong once the file
+     * started naming these units a work area and a ride.
+     */
+    fleetSupport: boolean("fleet_support").notNull().default(false),
     serial: text("serial").notNull().default(""),
     engineBrand: text("engine_brand").notNull().default(""),
     description: text("description").notNull().default(""),
@@ -496,6 +537,7 @@ export const units = pgTable(
     index("units_class_id_idx").on(table.classId),
     index("units_type_id_idx").on(table.typeId),
     index("units_brand_id_idx").on(table.brandId),
+    index("units_transport_unit_id_idx").on(table.transportUnitId),
   ]
 );
 
@@ -520,42 +562,33 @@ export const busSchedules = pgTable("bus_schedules", {
 /* -------------------------------------------------------------------- fleets */
 
 /**
- * A fleet is a digger and the haulers that serve it, parked at a work area.
+ * A fleet is a leader unit and the haulers that serve it.
  *
- * The digger is a reference to a unit rather than a fleet attribute, and it is
- * `unique`: a digger leads at most one fleet, and "which fleet" is a property
- * of the digger rather than a name someone maintains. The fleet has no name
+ * The leader is a reference to a unit rather than a fleet attribute, and it is
+ * `unique`: a unit leads at most one fleet, and "which fleet" is a property of
+ * the leader rather than a name someone maintains. The fleet has no name
  * column for the same reason — every screen calls it "Fleet EX8001".
  *
- * `work_area_id` is `notNull`: a fleet exists to work somewhere, and the route
- * additionally requires the area to be of type Mining. `bus_unit_id` is
- * nullable — a fleet without a crew bus is a real state, not missing data —
- * and the route requires the unit it names to be of type BUS.
+ * **Not necessarily an excavator** (owner, 2026-09-04). It usually is, and the
+ * column was called `leader_unit_id` on that assumption; a formation led by a
+ * road unit or a dump truck is legitimate, so the column says `leader` and no
+ * type is enforced.
  *
- * `onDelete: "restrict"` on every unit reference, following the rest of the
- * schema: deleting a unit that leads a fleet, rides as its bus, or hauls in it
- * is refused with a count, not silently unlinked.
+ * The fleet holds **no location and no transport of its own**. Both are facts
+ * about units — a dozer in no formation has a location and a ride too — so
+ * they live on `units`, and a fleet's area is its leader's. The rule that a
+ * formation cannot span two areas is enforced when members are written rather
+ * than by storing the area a second time here.
+ *
+ * `onDelete: "restrict"`, following the rest of the schema: deleting a unit
+ * that leads a fleet is refused with a count, not silently unlinked.
  */
 export const fleets = pgTable("fleets", {
   id: uuid("id").primaryKey().defaultRandom(),
-  diggerUnitId: uuid("digger_unit_id")
+  leaderUnitId: uuid("leader_unit_id")
     .notNull()
     .unique()
     .references(() => units.id, { onDelete: "restrict" }),
-  /**
-   * Where the fleet is working, as somebody typed it (owner, 2026-09-03).
-   *
-   * Text rather than a reference to a catalogue: a panel is opened, worked and
-   * abandoned within days, so a master list of them would grow without bound
-   * and be mostly dead rows. Two things are given up knowingly — nothing keeps
-   * the spelling uniform, and nothing remembers where a fleet worked
-   * yesterday. This column holds today's answer, and every screen that shows a
-   * location shows today's.
-   */
-  workArea: text("work_area").notNull(),
-  busUnitId: uuid("bus_unit_id").references(() => units.id, {
-    onDelete: "restrict",
-  }),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -1056,14 +1089,20 @@ export const fleetActualDocuments = pgTable(
  * TV entirely, and a digger reused in a new formation silently relabelled an
  * old board with today's work area — a board that reads as correct and is not.
  *
- * So the digger code, the work area and the bus code are stored here as text,
- * the same way `fleet_actual_slots` already stores the tap it decided by.
- * `source_fleet_id` is a breadcrumb only — `set null` on delete, because the
- * live formation going away must not take the record of the shift with it.
+ * So the leader code and the work area are stored here as text, the same way
+ * `fleet_actual_slots` already stores the tap it decided by. `source_fleet_id`
+ * is a breadcrumb only — `set null` on delete, because the live formation
+ * going away must not take the record of the shift with it.
  *
- * Unique on (`document_id`, `digger_code`): a digger leads at most one fleet,
- * so its code names the formation within a board without depending on an id
- * that may no longer exist.
+ * A board also carries **one support group**, holding the units that work
+ * without a formation. It is a row here like any other so the board groups and
+ * stores them the same way, distinguished by `kind`: `leader_code` is null on
+ * it, because a support group has no leader and no single area.
+ *
+ * Unique on (`document_id`, `leader_code`): a unit leads at most one fleet, so
+ * its code names the formation within a board without depending on an id that
+ * may no longer exist. Null sorts outside a unique index in Postgres, which is
+ * what lets the one support row coexist with it.
  */
 export const fleetActualFleets = pgTable(
   "fleet_actual_fleets",
@@ -1076,15 +1115,16 @@ export const fleetActualFleets = pgTable(
     sourceFleetId: uuid("source_fleet_id").references(() => fleets.id, {
       onDelete: "set null",
     }),
-    diggerCode: text("digger_code").notNull(),
-    workArea: text("work_area").notNull(),
-    /** Null for a formation with no crew bus — a real state, not missing data. */
-    busCode: text("bus_code"),
+    kind: boardGroupKind("kind").notNull().default("fleet"),
+    /** Null on the support group, which has no leader. */
+    leaderCode: text("leader_code"),
+    /** Null on the support group, whose units work in different places. */
+    workArea: text("work_area"),
   },
   (table) => [
-    uniqueIndex("fleet_actual_fleets_document_digger_idx").on(
+    uniqueIndex("fleet_actual_fleets_document_leader_idx").on(
       table.documentId,
-      table.diggerCode
+      table.leaderCode
     ),
     index("fleet_actual_fleets_document_id_idx").on(table.documentId),
   ]
@@ -1126,6 +1166,14 @@ export const fleetActualSlots = pgTable(
       () => fleetActualFleets.id,
       { onDelete: "cascade" }
     ),
+    /**
+     * The bus or manhaul this unit's crew rode, as it stood at generate time.
+     *
+     * On the slot rather than on the group because transport is a fact about a
+     * unit, and two units of one formation may ride different vehicles. Text,
+     * and copied, for the same reason the formation above is.
+     */
+    transportCode: text("transport_code"),
     source: actualSlotSource("source"),
     /** "HH:MM:SS", site-local — the tap, not an instant on our clock. */
     tappedAt: time("tapped_at"),

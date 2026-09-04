@@ -138,7 +138,7 @@ export function FleetImport() {
     const needle = qPrev.trim().toLowerCase();
     return (
       !needle ||
-      r.digger.toLowerCase().includes(needle) ||
+      r.leader.toLowerCase().includes(needle) ||
       r.units.some((u) => u.toLowerCase().includes(needle))
     );
   });
@@ -172,6 +172,20 @@ export function FleetImport() {
           color: "var(--badge-warning-text)",
         },
         {
+          n: preview.supportCount,
+          label: t.flImpSupport,
+          bg: "var(--badge-info-fill)",
+          border: "var(--badge-info-border)",
+          color: "var(--badge-info-text)",
+        },
+        {
+          n: preview.breakdownCount,
+          label: t.flImpBreakdown,
+          bg: "var(--badge-neutral-fill)",
+          border: "var(--badge-neutral-border)",
+          color: "var(--badge-neutral-text)",
+        },
+        {
           n: preview.errorCount,
           label: t.umImpErr,
           bg: "var(--badge-danger-fill)",
@@ -180,6 +194,18 @@ export function FleetImport() {
         },
       ]
     : [];
+
+  /* What the commit would take away, spelled out before it does.
+     The file is the whole yard for one day, so a formation it never names is
+     one the yard has disbanded — but a wrong file says the same thing, and the
+     difference is only visible to the person holding it. */
+  const removals =
+    preview && (preview.disband.length || preview.released.length)
+      ? [
+          { label: t.flImpDisband, codes: preview.disband },
+          { label: t.flImpReleased, codes: preview.released },
+        ].filter((g) => g.codes.length)
+      : [];
 
   /* Presentation only — the API refuses every import endpoint without
      `manage` on the fleet-setting menu regardless of what this renders. */
@@ -288,6 +314,34 @@ export function FleetImport() {
               ))}
             </div>
 
+            {/* Read before pressing commit, not discovered after it. */}
+            {removals.length ? (
+              <div className="mb-5 rounded-card border border-(--badge-danger-border) bg-(--badge-danger-fill) p-4">
+                <div className="mb-2 text-sm font-semibold text-(--color-danger-text)">
+                  {t.flImpRemoveT}
+                </div>
+                <p className="mb-3 max-w-[70ch] text-xs text-(--color-danger-text)">
+                  {t.flImpRemoveB}
+                </p>
+                <div className="flex flex-col gap-3">
+                  {removals.map((g) => (
+                    <div key={g.label}>
+                      <div className="mb-1 text-xs font-semibold text-(--color-danger-text)">
+                        {g.label} ({g.codes.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {g.codes.map((c) => (
+                          <Badge key={c} variant="danger">
+                            {c}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <Table>
               <TableHeader>
                 <tr>
@@ -306,17 +360,29 @@ export function FleetImport() {
                     <TableCell className="font-mono">{r.row}</TableCell>
                     <TableCell>
                       <Badge
-                        variant={r.kind === "new" ? "success" : "warning"}
+                        variant={
+                          r.kind === "new"
+                            ? "success"
+                            : r.kind === "updated"
+                              ? "warning"
+                              : "neutral"
+                        }
                         dot
                       >
-                        {r.kind === "new" ? t.umImpNew : t.umImpUpd}
+                        {r.kind === "new"
+                          ? t.umImpNew
+                          : r.kind === "updated"
+                            ? t.umImpUpd
+                            : t.umImpSame}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono font-semibold">
-                      {r.digger}
+                      {r.leader}
                     </TableCell>
                     <TableCell>{r.area}</TableCell>
-                    <TableCell className="font-mono">{r.bus ?? "—"}</TableCell>
+                    <TableCell className="font-mono">
+                      {r.transports.length ? r.transports.join(", ") : "—"}
+                    </TableCell>
                     <TableCell>
                       <div className="flex max-w-[320px] flex-wrap gap-1">
                         {r.units.map((u) => (

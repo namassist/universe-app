@@ -1372,9 +1372,9 @@ async function seedFleets(): Promise<void> {
   const unitByCode = new Map(units.map((u) => [u.code, u.id]));
 
   for (const fleet of SAMPLE_FLEETS) {
-    const diggerId = unitByCode.get(fleet.digger);
+    const leaderId = unitByCode.get(fleet.digger);
     const memberIds = fleet.units.map((c) => unitByCode.get(c));
-    if (!diggerId || memberIds.some((id) => !id)) {
+    if (!leaderId || memberIds.some((id) => !id)) {
       console.log(
         `  fleets — sample units for Fleet ${fleet.digger} not present, skipped`
       );
@@ -1382,7 +1382,7 @@ async function seedFleets(): Promise<void> {
     }
     const [row] = await db
       .insert(schema.fleets)
-      .values({ diggerUnitId: diggerId, workArea: fleet.area })
+      .values({ leaderUnitId: leaderId })
       .returning({ id: schema.fleets.id });
     await db.insert(schema.fleetUnits).values(
       (memberIds as string[]).map((unitId) => ({
@@ -1390,6 +1390,12 @@ async function seedFleets(): Promise<void> {
         unitId,
       }))
     );
+    /* The area is the unit's, and every member of a formation carries the same
+       one — which is how "one formation, one area" is enforced now. */
+    await db
+      .update(schema.units)
+      .set({ workArea: fleet.area })
+      .where(inArray(schema.units.id, [leaderId, ...(memberIds as string[])]));
     console.log(
       `  fleets — Fleet ${fleet.digger} created with ${fleet.units.length} units`
     );

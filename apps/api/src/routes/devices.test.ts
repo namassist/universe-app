@@ -82,7 +82,7 @@ async function makeFleets(count: number): Promise<string[]> {
     made.units.push(unit!.id);
     const [fleet] = await db
       .insert(schema.fleets)
-      .values({ diggerUnitId: unit!.id, workArea: `${tag} Pit` })
+      .values({ leaderUnitId: unit!.id })
       .returning({ id: schema.fleets.id });
     made.fleets.push(fleet!.id);
     ids.push(fleet!.id);

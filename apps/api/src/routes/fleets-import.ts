@@ -1,11 +1,17 @@
 /**
- * Bulk fleet composition by spreadsheet — one fleet per row, keyed by its
- * digger.
+ * Bulk fleet setting by spreadsheet — **one row per unit**.
+ *
+ * The file is the whole yard for one day: every machine, where it works, what
+ * formation it belongs to, and which vehicle brings its crew. Roles are read
+ * from the `fleet` cell alone — filled means "hauls for that formation", blank
+ * means "leads a formation" when some other row named it, and blank-and-unnamed
+ * means a support unit that is crewed without belonging to one.
  *
  * This module parses and checks what a file can prove about itself: the
- * columns, the codes it names, and its own internal consistency (a digger
- * leading twice, a hauler claimed by two rows). What it cannot prove — the
- * exclusivity rules against fleets *outside* the file — the route checks with
+ * columns, the codes it names, and its own internal consistency — a unit listed
+ * twice, a leader that is also somebody's hauler, a formation whose members
+ * disagree about where they are working. What it cannot prove — exclusivity
+ * against formations *outside* the file — the route checks with
  * `refuseComposition`, the same function the form goes through, so the import
  * can never be the laxer path.
  */
@@ -16,9 +22,12 @@ import {
   FLEET_MAX_UNITS,
   FLEET_MIN_UNITS,
   FLEET_TRANSPORT_TYPES_TEXT,
+  isBreakdownArea,
   isFleetTransportType,
   type FleetImportChange,
+  type FleetImportColumn,
   type FleetImportPreviewRow,
+  type FleetImportSupportRow,
   type ImportErrorRow,
 } from "@universe/contracts";
 
@@ -31,47 +40,87 @@ import {
 
 const HEADER_ROW = 1;
 
+/**
+ * What the yard's own file calls the columns.
+ *
+ * The transport column is headed "NO BUS" there — "nomor bus" — and refusing a
+ * file over the word the people who maintain it already use would be asking
+ * them to retype the header on every upload.
+ */
+const HEADER_ALIASES: Record<string, FleetImportColumn | undefined> = {
+  "no bus": "bus",
+  "no. bus": "bus",
+  nobus: "bus",
+  unit: "unit",
+  area: "area",
+  fleet: "fleet",
+  bus: "bus",
+};
+
 export type ImportUnit = { id: string; code: string; typeName: string };
 
 export type ExistingFleet = {
   id: string;
+  leaderUnitId: string;
   area: string;
-  busCode: string | null;
   memberCodes: string[];
+  /** Distinct transport codes across the formation, for the change summary. */
+  transportCodes: string[];
 };
 
 export type FleetCatalogues = {
   /** Keyed lowercase code. */
   unitsByCode: Map<string, ImportUnit>;
-  /** Keyed lowercase digger code. */
-  fleetsByDigger: Map<string, ExistingFleet>;
+  /** Keyed lowercase leader code. */
+  fleetsByLeader: Map<string, ExistingFleet>;
+  /**
+   * Every unit currently in today's operation, by lowercase code — a formation
+   * member, a leader, or a support unit. What the file does not name again is
+   * released, and the preview says so before the commit does it.
+   */
+  inOperation: Map<string, string>;
 };
 
-/** A row the file itself could not refute, ready for the database checks. */
+/** One formation the file describes, ready for the database checks. */
 export type ParsedFleetRow = {
   preview: FleetImportPreviewRow;
-  diggerUnitId: string;
+  leaderUnitId: string;
   workArea: string;
-  busUnitId: string | null;
   unitIds: string[];
-  /** The fleet this digger already leads, when the row is an update. */
+  /** unit id → the vehicle it rides, for every unit in this formation. */
+  transports: Record<string, string | null>;
+  /** The fleet this leader already leads, when the row is an update. */
   selfId: string | null;
+};
+
+/** One crewed unit outside every formation. */
+export type ParsedSupportUnit = {
+  preview: FleetImportSupportRow;
+  unitId: string;
+  workArea: string | null;
+  transportUnitId: string | null;
+  breakdown: boolean;
 };
 
 export type FleetParseResult = {
   rows: ParsedFleetRow[];
+  support: ParsedSupportUnit[];
+  /** Leader codes of formations the file never mentions. */
+  disband: { id: string; leaderCode: string }[];
+  /** Codes of units in operation the file no longer names. */
+  released: string[];
   errors: ImportErrorRow[];
 };
 
 function danger(
   row: number,
-  digger: string,
+  unit: string,
   detail: string,
   issue: string
 ): ImportErrorRow {
   return {
     row: String(row),
-    nik: digger,
+    nik: unit,
     emp: detail,
     issue,
     badgeVariant: "danger",
@@ -86,28 +135,48 @@ export async function buildTemplate(): Promise<Buffer> {
   ws.columns = FLEET_IMPORT_COLUMNS.map((key) => ({
     header: key,
     key,
-    width: key === "units" ? 48 : key === "area" ? 32 : 18,
+    width: key === "area" ? 32 : 18,
   }));
   ws.getRow(HEADER_ROW).font = { bold: true };
-  // One example row, so the expected shape is obvious without a manual.
-  ws.addRow({
-    digger: "EX8001",
-    area: "Panel East Puncak Utara",
-    bus: "BUS3244",
-    units: "RD5001, RD5002, RD4001",
-  });
+  /* Four example rows rather than one, because the shape of this file is the
+     part that needs explaining: a leader leaves `fleet` blank, its haulers
+     name it, a support unit leaves it blank and nobody names it, and a broken
+     unit says so where its area would go. */
+  ws.addRows([
+    { unit: "EX8001", area: "KASTURI TENGAH UTARA", fleet: "", bus: "UD-BU09" },
+    {
+      unit: "RD5024",
+      area: "KASTURI TENGAH UTARA",
+      fleet: "EX8001",
+      bus: "UD-BU09",
+    },
+    { unit: "DZ6002", area: "DISPOSAL T4", fleet: "", bus: "UD-BU08" },
+    { unit: "EX7005", area: "BREAKDOWN", fleet: "", bus: "" },
+  ]);
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
 }
 
-/** The member cell: codes separated by comma, semicolon, or newline. */
-const splitUnits = (cell: string) =>
-  cell
-    .split(/[,;\n]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+/**
+ * Vehicle codes are matched with spaces and dashes removed.
+ *
+ * The file writes the same bus as "UDBU 09", "UDBU09" and "UD-BU09" — three
+ * spellings of one vehicle, from three people typing. Master holds `UD-BU09`.
+ * Refusing the other two would be reading the punctuation instead of the code;
+ * a genuinely unknown vehicle is still refused, by name and by row.
+ */
+const transportKey = (code: string) =>
+  code.replace(/[\s-]+/g, "").toLowerCase();
 
 const joinCodes = (codes: string[]) => [...codes].sort().join(", ");
+
+type RawRow = {
+  n: number;
+  unit: string;
+  area: string;
+  fleet: string;
+  bus: string;
+};
 
 /**
  * Validate an uploaded workbook against the catalogues and the file itself.
@@ -134,7 +203,10 @@ export async function validateFleetWorkbook(
 
   const headers = (ws.getRow(HEADER_ROW).values as ExcelJS.CellValue[])
     .slice(1)
-    .map((v) => cellText(v).toLowerCase())
+    .map((v): string => {
+      const raw = cellText(v).toLowerCase();
+      return HEADER_ALIASES[raw] ?? raw;
+    })
     .filter((h) => h.length > 0);
 
   const unknown = headers.filter(
@@ -151,191 +223,336 @@ export async function validateFleetWorkbook(
 
   const index = (name: string) => headers.indexOf(name) + 1;
   const col = {
-    digger: index("digger"),
+    unit: index("unit"),
     area: index("area"),
+    fleet: index("fleet"),
     bus: index("bus"),
-    units: index("units"),
   };
 
-  const rows: ParsedFleetRow[] = [];
   const errors: ImportErrorRow[] = [];
-  // Every digger and member the file has already spoken for, by unit code —
-  // one fleet per digger and one fleet per hauler must hold *inside* the file
-  // too, and the refusal names the row that got there first.
-  const claimed = new Map<string, number>();
 
+  /* ---- pass 1: read the sheet, and refuse a unit that appears twice ------ */
+
+  const raw: RawRow[] = [];
+  const seen = new Map<string, number>();
   for (let n = HEADER_ROW + 1; n <= ws.rowCount; n++) {
-    const raw = ws.getRow(n);
-    const diggerCell = cellText(raw.getCell(col.digger).value);
-    const areaCell = cellText(raw.getCell(col.area).value);
-    const busCell = col.bus > 0 ? cellText(raw.getCell(col.bus).value) : "";
-    const unitsCell = cellText(raw.getCell(col.units).value);
-
-    if (!diggerCell && !areaCell && !busCell && !unitsCell) continue;
-
-    if (!diggerCell) {
-      errors.push(danger(n, "—", unitsCell || "—", "Kolom digger kosong"));
+    const r = ws.getRow(n);
+    const row: RawRow = {
+      n,
+      unit: cellText(r.getCell(col.unit).value),
+      area: cellText(r.getCell(col.area).value),
+      fleet: cellText(r.getCell(col.fleet).value),
+      bus: col.bus > 0 ? cellText(r.getCell(col.bus).value) : "",
+    };
+    if (!row.unit && !row.area && !row.fleet && !row.bus) continue;
+    if (!row.unit) {
+      errors.push(danger(n, "—", row.area || "—", "Kolom unit kosong"));
       continue;
     }
-    if (!areaCell) {
-      errors.push(danger(n, diggerCell, "—", "Kolom area kosong"));
-      continue;
-    }
-    if (!unitsCell) {
-      errors.push(danger(n, diggerCell, "—", "Kolom units kosong"));
-      continue;
-    }
-
-    const digger = catalogues.unitsByCode.get(diggerCell.toLowerCase());
-    if (!digger) {
+    const key = row.unit.toLowerCase();
+    const first = seen.get(key);
+    if (first !== undefined) {
+      /* One unit, one row. The file carries DT4601–DT4606 twice, once under
+         their own formation and once under EX5004, and either reading changes
+         who works where — so neither is guessed at. */
       errors.push(
         danger(
           n,
-          diggerCell,
+          row.unit,
+          row.fleet || "—",
+          `Unit ini sudah ada di baris ${first} — satu unit hanya boleh muncul sekali`
+        )
+      );
+      continue;
+    }
+    seen.set(key, n);
+    raw.push(row);
+  }
+
+  /* ---- pass 2: resolve every code, and settle each row's role ------------ */
+
+  const referenced = new Set(
+    raw.map((r) => r.fleet.toLowerCase()).filter((f) => f.length > 0)
+  );
+
+  /** Vehicles by their punctuation-free key, so three spellings find one unit. */
+  const transportByKey = new Map<string, ImportUnit>();
+  for (const unit of catalogues.unitsByCode.values())
+    if (isFleetTransportType(unit.typeName))
+      transportByKey.set(transportKey(unit.code), unit);
+
+  type Resolved = RawRow & {
+    unitRow: ImportUnit;
+    transportId: string | null;
+    transportCode: string | null;
+    breakdown: boolean;
+    /**
+     * This row already has an error of its own.
+     *
+     * It stays in the list anyway, so the formation it belongs to can still be
+     * *recognised* — dropping it made one mistyped vehicle code report itself
+     * three times over: once as the bad code, once as a formation with no
+     * leader row, and once as a formation with no members.
+     */
+    bad: boolean;
+  };
+  const resolved: Resolved[] = [];
+
+  for (const row of raw) {
+    const unitRow = catalogues.unitsByCode.get(row.unit.toLowerCase());
+    if (!unitRow) {
+      errors.push(
+        danger(row.n, row.unit, "—", `Unit "${row.unit}" tidak ada di master`)
+      );
+      continue;
+    }
+
+    const breakdown = isBreakdownArea(row.area);
+    if (!row.area) {
+      errors.push(danger(row.n, row.unit, "—", "Kolom area kosong"));
+      continue;
+    }
+    if (breakdown && row.fleet) {
+      /* A broken machine is not hauling for anyone. Saying both is a mistake
+         worth naming rather than resolving in one direction. */
+      errors.push(
+        danger(
+          row.n,
+          row.unit,
+          row.fleet,
+          "Unit breakdown tidak bisa sekaligus menjadi anggota fleet"
+        )
+      );
+      continue;
+    }
+
+    let transportId: string | null = null;
+    let transportCode: string | null = null;
+    let bad = false;
+    if (row.bus) {
+      const vehicle = transportByKey.get(transportKey(row.bus));
+      if (!vehicle) {
+        const known = catalogues.unitsByCode.get(row.bus.toLowerCase());
+        errors.push(
+          danger(
+            row.n,
+            row.unit,
+            row.bus,
+            known
+              ? `Unit ${known.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`
+              : `Transport "${row.bus}" tidak ada di master`
+          )
+        );
+        bad = true;
+      } else {
+        transportId = vehicle.id;
+        transportCode = vehicle.code;
+      }
+    }
+
+    resolved.push({
+      ...row,
+      unitRow,
+      transportId,
+      transportCode,
+      breakdown,
+      bad,
+    });
+  }
+
+  const byCode = new Map(resolved.map((r) => [r.unit.toLowerCase(), r]));
+
+  /* ---- pass 3: gather the formations ------------------------------------ */
+
+  type Group = { leader: Resolved; members: Resolved[] };
+  const groups = new Map<string, Group>();
+
+  for (const key of referenced) {
+    const leader = byCode.get(key);
+    if (!leader) {
+      /* Named as a formation but with no row of its own. The file cannot say
+         where that formation works or what its leader rides, and inventing
+         either would put a machine somewhere nobody wrote down. */
+      const row = resolved.find((r) => r.fleet.toLowerCase() === key);
+      errors.push(
+        danger(
+          row?.n ?? HEADER_ROW,
+          row?.fleet ?? key,
           "—",
-          `Digger "${diggerCell}" tidak ada di master unit`
+          `Fleet "${row?.fleet ?? key}" tidak punya barisnya sendiri di file ini`
         )
       );
       continue;
     }
-
-    // Taken as typed. There is no catalogue of pits to check it against any
-    // more, so the only thing the file can get wrong here is leaving it blank,
-    // which the empty-cell check above already caught.
-    const area = areaCell;
-
-    let busUnit: ImportUnit | null = null;
-    if (busCell) {
-      busUnit = catalogues.unitsByCode.get(busCell.toLowerCase()) ?? null;
-      if (!busUnit) {
-        errors.push(
-          danger(
-            n,
-            digger.code,
-            busCell,
-            `Bus "${busCell}" tidak ada di master unit`
-          )
-        );
-        continue;
-      }
-      if (!isFleetTransportType(busUnit.typeName)) {
-        errors.push(
-          danger(
-            n,
-            digger.code,
-            busUnit.code,
-            `Unit ${busUnit.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`
-          )
-        );
-        continue;
-      }
-    }
-
-    // A doubled code in one cell is not two haulers.
-    const memberCodes = [
-      ...new Map(splitUnits(unitsCell).map((c) => [c.toLowerCase(), c])),
-    ].map(([, original]) => original);
-
-    const unknownMembers = memberCodes.filter(
-      (c) => !catalogues.unitsByCode.has(c.toLowerCase())
-    );
-    if (unknownMembers.length) {
+    if (leader.fleet) {
+      /* Leading one formation and hauling for another at once. Both are in the
+         file, so neither can be treated as the stale one. */
       errors.push(
         danger(
-          n,
-          digger.code,
-          unknownMembers.join(", "),
-          `Unit ${unknownMembers.join(", ")} tidak ada di master unit`
+          leader.n,
+          leader.unit,
+          leader.fleet,
+          `Unit ini memimpin sebuah fleet dan sekaligus terdaftar sebagai anggota fleet ${leader.fleet}`
         )
       );
       continue;
     }
+    groups.set(key, { leader, members: [] });
+  }
 
-    const members = memberCodes.map((c) =>
-      catalogues.unitsByCode.get(c.toLowerCase())!
-    );
+  for (const row of resolved) {
+    if (!row.fleet) continue;
+    const group = groups.get(row.fleet.toLowerCase());
+    // Its leader was already refused above; the member's own row says nothing
+    // new, so it is dropped rather than reported a second time.
+    if (group) group.members.push(row);
+  }
 
-    if (members.some((m) => m.id === digger.id)) {
-      errors.push(
-        danger(
-          n,
-          digger.code,
-          digger.code,
-          "Digger tidak bisa sekaligus menjadi anggota fleet-nya sendiri"
-        )
-      );
-      continue;
-    }
+  /* ---- pass 4: build the preview ---------------------------------------- */
+
+  const rows: ParsedFleetRow[] = [];
+  const claimedLeaders = new Set<string>();
+
+  for (const [key, group] of groups) {
+    const { leader, members } = group;
+
+    /* Somebody in it already has an error naming the row and the cell. Saying
+       anything further about the formation would be describing the damage
+       rather than the mistake. */
+    if (leader.bad || members.some((m) => m.bad)) continue;
+
     if (members.length < FLEET_MIN_UNITS) {
       errors.push(
-        danger(n, digger.code, "—", "Fleet butuh minimal satu unit anggota")
+        danger(leader.n, leader.unit, "—", "Fleet butuh minimal satu anggota")
       );
       continue;
     }
     if (members.length > FLEET_MAX_UNITS) {
       errors.push(
         danger(
-          n,
-          digger.code,
+          leader.n,
+          leader.unit,
           String(members.length),
-          `Fleet paling banyak memuat ${FLEET_MAX_UNITS} unit anggota`
+          `Fleet ini punya ${members.length} anggota, batasnya ${FLEET_MAX_UNITS}`
         )
       );
       continue;
     }
 
-    const conflicts = [digger, ...members]
-      .map((u) => ({ unit: u, at: claimed.get(u.code.toLowerCase()) }))
-      .filter((c): c is { unit: ImportUnit; at: number } => c.at !== undefined);
-    if (conflicts.length) {
-      const first = conflicts[0]!;
+    /* One formation cannot span two areas (owner). Enforced here rather than
+       stored on the fleet, because the area is a fact about each unit. */
+    const areas = [...new Set([leader, ...members].map((r) => r.area))];
+    if (areas.length > 1) {
+      const odd = members.find((m) => m.area !== leader.area)!;
       errors.push(
         danger(
-          n,
-          digger.code,
-          first.unit.code,
-          `Unit ${first.unit.code} sudah dipakai baris ${first.at} file ini`
+          odd.n,
+          odd.unit,
+          odd.area,
+          `Area berbeda dari fleet ${leader.unit} ("${leader.area}") — satu fleet tidak bisa berada di dua area`
         )
       );
       continue;
     }
-    for (const u of [digger, ...members]) claimed.set(u.code.toLowerCase(), n);
-
-    const existing =
-      catalogues.fleetsByDigger.get(digger.code.toLowerCase()) ?? null;
-    const changes: FleetImportChange[] = [];
-    if (existing) {
-      if (existing.area.toLowerCase() !== area.toLowerCase())
-        changes.push({ field: "area", from: existing.area, to: area });
-      if ((existing.busCode ?? "") !== (busUnit?.code ?? ""))
-        changes.push({
-          field: "bus",
-          from: existing.busCode,
-          to: busUnit?.code ?? null,
-        });
-      const fromUnits = joinCodes(existing.memberCodes);
-      const toUnits = joinCodes(members.map((m) => m.code));
-      if (fromUnits.toLowerCase() !== toUnits.toLowerCase())
-        changes.push({ field: "units", from: fromUnits, to: toUnits });
+    const broken = [leader, ...members].find((r) => r.breakdown);
+    if (broken) {
+      errors.push(
+        danger(
+          broken.n,
+          broken.unit,
+          "BREAKDOWN",
+          "Unit breakdown tidak bisa berada di dalam fleet"
+        )
+      );
+      continue;
     }
 
+    const existing = catalogues.fleetsByLeader.get(key);
+    const memberCodes = members.map((m) => m.unit);
+    const transportCodes = [
+      ...new Set(
+        [leader, ...members]
+          .map((r) => r.transportCode)
+          .filter((c): c is string => c !== null)
+      ),
+    ].sort();
+
+    const changes: FleetImportChange[] = [];
+    if (existing) {
+      if (existing.area !== leader.area)
+        changes.push({ field: "area", from: existing.area, to: leader.area });
+      if (joinCodes(existing.memberCodes) !== joinCodes(memberCodes))
+        changes.push({
+          field: "units",
+          from: joinCodes(existing.memberCodes),
+          to: joinCodes(memberCodes),
+        });
+      if (joinCodes(existing.transportCodes) !== joinCodes(transportCodes))
+        changes.push({
+          field: "transport",
+          from: joinCodes(existing.transportCodes) || null,
+          to: joinCodes(transportCodes) || null,
+        });
+    }
+
+    claimedLeaders.add(key);
     rows.push({
       preview: {
-        row: n,
-        kind: existing ? "updated" : "new",
-        digger: digger.code,
-        area,
-        bus: busUnit?.code ?? null,
-        units: members.map((m) => m.code),
+        row: leader.n,
+        kind: !existing ? "new" : changes.length ? "updated" : "unchanged",
+        leader: leader.unit,
+        area: leader.area,
+        units: memberCodes,
+        transports: transportCodes,
         changes,
       },
-      diggerUnitId: digger.id,
-      workArea: area,
-      busUnitId: busUnit?.id ?? null,
-      unitIds: members.map((m) => m.id),
+      leaderUnitId: leader.unitRow.id,
+      workArea: leader.area,
+      unitIds: members.map((m) => m.unitRow.id),
+      transports: Object.fromEntries(
+        [leader, ...members].map((r) => [r.unitRow.id, r.transportId])
+      ),
       selfId: existing?.id ?? null,
     });
   }
 
-  return { rows, errors };
+  /* ---- pass 5: the support units ---------------------------------------- */
+
+  const support: ParsedSupportUnit[] = [];
+  for (const row of resolved) {
+    if (row.fleet || row.bad) continue;
+    if (referenced.has(row.unit.toLowerCase())) continue; // a leader
+    support.push({
+      preview: {
+        row: row.n,
+        unit: row.unit,
+        // "BREAKDOWN" is a status, not a place, so it is not kept as one.
+        area: row.breakdown ? null : row.area,
+        transport: row.transportCode,
+        breakdown: row.breakdown,
+      },
+      unitId: row.unitRow.id,
+      workArea: row.breakdown ? null : row.area,
+      transportUnitId: row.breakdown ? null : row.transportId,
+      breakdown: row.breakdown,
+    });
+  }
+
+  /* ---- pass 6: what the file leaves out --------------------------------- */
+
+  const disband = [...catalogues.fleetsByLeader.entries()]
+    .filter(([key]) => !claimedLeaders.has(key))
+    .map(([key, fleet]) => ({
+      id: fleet.id,
+      leaderCode: catalogues.unitsByCode.get(key)?.code ?? key,
+    }));
+
+  const named = new Set(resolved.map((r) => r.unit.toLowerCase()));
+  const released = [...catalogues.inOperation.entries()]
+    .filter(([key]) => !named.has(key))
+    .map(([, code]) => code)
+    .sort();
+
+  errors.sort((a, b) => Number(a.row) - Number(b.row));
+  return { rows, support, disband, released, errors };
 }

@@ -154,12 +154,18 @@ beforeAll(async () => {
 
   const [fleet] = await db
     .insert(schema.fleets)
-    .values({ diggerUnitId: digger.id, workArea: `${tag} PIT` })
+    .values({ leaderUnitId: digger.id })
     .returning({ id: schema.fleets.id });
   made.fleets.push(fleet!.id);
   await db
     .insert(schema.fleetUnits)
     .values([{ fleetId: fleet!.id, unitId: hauler.id }]);
+  /* The area is the unit's own since 2026-09-04, and a formation's members all
+     carry the same one — which is what this screen reads back. */
+  await db
+    .update(schema.units)
+    .set({ workArea: `${tag} PIT` })
+    .where(inArray(schema.units.id, [digger.id, hauler.id]));
 });
 
 afterAll(async () => {
@@ -186,12 +192,12 @@ afterAll(async () => {
 
 /* ------------------------------------------------------------- the reading */
 
-describe("the list derives status and resolves location through the fleet", () => {
-  test("a fresh unit is ready, never changed, and located by its fleet", async () => {
+describe("the list derives status and reads each unit own location", () => {
+  test("a fresh unit is ready, never changed, and carries its own location", async () => {
     const rows = await listRows();
 
-    // Location reaches the digger and the hauler through the same fleet; a
-    // unit no fleet holds has none.
+    // Both units of the formation carry the same area, because that is the
+    // rule the write enforces; a unit nobody put anywhere has none.
     expect(rowOf(rows, digger)).toMatchObject({
       status: "ready",
       location: `${tag} PIT`,

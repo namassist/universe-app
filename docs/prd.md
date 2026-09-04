@@ -15,22 +15,60 @@ fill the gap from the spare pool.
 
 ### Fleet composition (Fleet Settings) — shipped
 
-- A fleet is one **digger** (leader), 1–13 **member units** (haulers/support),
-  a **work location**, and optionally a **crew bus** (a unit of type BUS or
-  MANHAUL TRUCK).
+- A fleet is one **leader unit** and 1–13 **member units**.
   Bounds live in `@universe/contracts` (`FLEET_MIN_UNITS`/`FLEET_MAX_UNITS`).
-- The work location is **free text on the fleet**, not a catalogue (owner,
-  2026-09-03). Pits open and close within days, so a master list of them would
-  grow without bound and be mostly dead rows. Two consequences are accepted
-  knowingly: nothing keeps the spelling uniform, and nothing records where a
-  fleet worked yesterday — the column holds today's answer, and every screen
-  that shows a location shows today's.
-- A digger leads at most one fleet; a unit hauls for at most one fleet; a
-  fleet leader never hauls for another fleet. All held by unique indexes, with
-  route prechecks that name the offending unit in the refusal.
-- "Digger-ness" (type EXCAVATOR / digger classes) is a UI heuristic, not an
-  API rule — the catalogues carry no fleet-leader flag.
+- **Any unit may lead** (owner, 2026-09-04). It is usually an excavator, and
+  the screen used to offer only those from a private class heuristic; the yard
+  runs formations led by a road unit and by a dump truck, and the API never
+  enforced the heuristic anyway. The column says `leader_unit_id`.
+- **Location and transport are facts about a unit, not about a fleet** (owner,
+  2026-09-04). Every unit in today's operation carries its own `work_area` and
+  its own transport, because a dozer, a water truck or a spare digger has both
+  while belonging to no formation.
+- **One formation cannot span two areas.** A fleet's area is its leader's, and
+  writing a formation writes that value to every member — the rule is enforced
+  on write rather than by storing an area on the fleet as well. Support units
+  are not one formation, so they may each work somewhere different.
+- **Transport is per unit and changes daily.** Two units of one formation may
+  legitimately ride different vehicles. The dialog edits one value for a whole
+  formation; when its units already differ it opens on "leave as they are" and
+  submits no transport at all, so an edit about something else cannot flatten
+  them. Type is route-enforced: BUS or MANHAUL TRUCK.
+- The work location is **free text**, not a catalogue (owner, 2026-09-03).
+  Pits open and close within days, so a master list of them would grow without
+  bound and be mostly dead rows. Two consequences are accepted knowingly:
+  nothing keeps the spelling uniform, and nothing records where a unit worked
+  yesterday — the column holds today's answer. What a _board_ showed is kept,
+  because a board copies it (see the Actual tab).
+- A unit leads at most one fleet; a unit hauls for at most one fleet; a fleet
+  leader never hauls for another fleet. All held by unique indexes, with route
+  prechecks that name the offending unit in the refusal.
 - Deleting a fleet releases its members; the units themselves are untouched.
+
+### Fleet setting import — shipped
+
+- **One row per unit**: `unit | area | fleet | bus` (owner, 2026-09-04). The
+  file is the whole yard for one day — 318 machines in the first real one.
+  The previous shape was one fleet per row with its members in a comma list,
+  and it could not say that a location and a ride belong to a unit, nor that a
+  unit can work without a formation.
+- A row's role comes from the `fleet` cell alone: filled means it hauls for
+  that formation; blank means it **leads** the formation named after it when
+  some other row named it; blank and unnamed means a **support unit**.
+- `area` doubles as the status marker: BREAKDOWN (either spelling) records the
+  unit as broken down. The word is not kept as a location, because it is not
+  one, and a broken unit is not put in a formation.
+- Vehicle codes are matched with spaces and dashes removed — the same bus is
+  written "UDBU 09", "UDBU09" and "UD-BU09" by three different people, and
+  master holds `UD-BU09`. A genuinely unknown vehicle is still refused, by name
+  and by row.
+- **The file takes things away, and says so first** (owner, 2026-09-04). A
+  formation it never names is disbanded; a unit it never names drops out of
+  today's operation. Both lists are shown in the preview before the commit, so
+  a wrong file is visible rather than only its consequences.
+- Refused by row, with the row named: a unit listed twice, a leader with no row
+  of its own, a unit that both leads and hauls, and members of one formation
+  that disagree about their area.
 
 ### Unit status — shipped
 
@@ -40,8 +78,9 @@ fill the gap from the spare pool.
 - Changing status requires a reason; every change appends to a per-unit
   history timeline (`unit_status_history`), written in the same transaction
   as the flags. The list reports only active units.
-- A unit's displayed location is its fleet's work location — whether it leads
-  the fleet or hauls in it; a unit in no fleet shows none.
+- A unit's displayed location is **its own** `work_area`. Members of a
+  formation all carry their leader's, so the reading is unchanged for them —
+  what changed is that a unit outside every formation now has one too.
 
 ### Fleet allocation — Plan tab shipped, Actual deferred
 
@@ -338,19 +377,28 @@ fill the gap from the spare pool.
   read-only: an editing endpoint could only ever disagree with the formations
   it is computed from. It stays pinned above the formations in Fleet Setting,
   and "cannot be deleted" remains a property of having no record behind it.
-- **A unit is configured in exactly one place.** `fleets.digger_unit_id` is
+- **A unit is configured in exactly one place.** `fleets.leader_unit_id` is
   unique and `fleet_units.unit_id` is unique across the table, so joining on
   either can never double a card.
 - **A fleet's bus is deliberately not in scope by being a bus.** It is crew
   transport rather than a machine the pool crews — across every board generated
   so far, all 52 bus slots were empty — and two buses serve more than one
   formation, so a bus has no single fleet to be filed under.
-- **The cost, accepted knowingly.** An active unit in no formation is not
-  allocated and is not reported idle either — it goes quiet rather than loudly
-  empty. This is the failure `allocation.ts` was rewritten to escape once
-  before, when a PLAN-driven board hid nine of fifteen units. What answers it
-  now is the no-fleet entry itself: the units are listed, in Fleet Setting,
-  where someone deciding formations is already looking.
+- **Support units are in scope, and grouped apart** (owner, 2026-09-04). A
+  dozer, a water truck or a spare digger is crewed like anything else; what it
+  lacks is a formation, not an operator. `units.fleet_support` — set by the
+  import from a row that names no fleet — is what puts them on the board, and
+  they arrive as one **Support** group that sorts after every formation, on the
+  Actual board and on the TV alike. Never mixed into a pit somebody is standing
+  in front of.
+- **The flag is set, not derived.** A unit falling into scope because a text
+  column stopped being empty is exactly the accident it exists to prevent.
+- **The cost that remains, accepted knowingly.** An active unit the import
+  never names is not allocated and is not reported idle either — it goes quiet
+  rather than loudly empty. This is the failure `allocation.ts` was rewritten
+  to escape once before, when a PLAN-driven board hid nine of fifteen units.
+  What answers it is the no-fleet entry: the units are listed, in Fleet
+  Setting, where someone deciding formations is already looking.
 
 ### Spares are offered in two tiers — shipped
 

@@ -1,7 +1,11 @@
 /**
- * The fleet spreadsheet import: same rules as the form, plus the checks only
- * a file can need — duplicates inside itself, and units traded between two
- * fleets the same upload replaces.
+ * The fleet spreadsheet import: **one row per unit**, and the rules only a file
+ * of that shape can break — a leader with no row of its own, members that
+ * disagree about where they are working, and a unit listed twice.
+ *
+ * The file is the whole yard for one day, so it also takes things away: a
+ * formation it never names is disbanded and a unit it never names drops out of
+ * operation. Both are asserted here, because both are destructive.
  *
  * Needs the dev Postgres and Redis:
  *   bun --env-file=.env test src/routes/fleets-import.test.ts
@@ -106,7 +110,7 @@ const postForm = (path: string, cookie: string, form: FormData) =>
 
 async function file(
   rows: (string | null)[][],
-  headers = ["digger", "area", "bus", "units"]
+  headers = ["unit", "area", "fleet", "bus"]
 ): Promise<File> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Fleet");
@@ -216,7 +220,7 @@ afterAll(async () => {
     .from(schema.fleets)
     .where(
       inArray(
-        schema.fleets.diggerUnitId,
+        schema.fleets.leaderUnitId,
         made.units.length
           ? made.units
           : ["00000000-0000-0000-0000-000000000000"]
@@ -259,7 +263,7 @@ describe("the template names its columns", () => {
     const headers = (wb.worksheets[0]!.getRow(1).values as string[])
       .slice(1)
       .map((v) => String(v).toLowerCase());
-    expect(headers).toEqual(["digger", "area", "bus", "units"]);
+    expect(headers).toEqual(["unit", "area", "fleet", "bus"]);
   });
 
   test("view may not even fetch the template", async () => {
@@ -275,7 +279,7 @@ describe("a file with the wrong columns is refused whole", () => {
     const unknown = await postForm(
       "/fleets/import/validate",
       admin.cookie,
-      form(await file([], ["digger", "area", "bus", "units", "warna"]))
+      form(await file([], ["unit", "area", "fleet", "bus", "warna"]))
     );
     expect(unknown.status).toBe(422);
     expect(await unknown.json()).toMatchObject({ code: "unknown_columns" });
@@ -283,106 +287,208 @@ describe("a file with the wrong columns is refused whole", () => {
     const missing = await postForm(
       "/fleets/import/validate",
       admin.cookie,
-      form(await file([], ["digger", "bus"]))
+      form(await file([], ["unit", "bus"]))
     );
     expect(missing.status).toBe(422);
     expect(await missing.json()).toMatchObject({ code: "missing_columns" });
   });
 });
 
-/* ------------------------------------------------------------- validate */
+/* ------------------------------------------------------------- roles */
 
-describe("validation previews without writing", () => {
-  test("a sound new fleet previews as new, members parsed from the cell", async () => {
-    const preview = await validate([
-      [
+/** The rows one sound formation is spelled out as, leader first. */
+const fleetRows = (
+  leader: string,
+  members: string[],
+  area = miningName,
+  bus: string | null = null
+) => [[leader, area, null, bus], ...members.map((m) => [m, area, leader, bus])];
+
+describe("a row's role comes from the fleet cell alone", () => {
+  test("a leader leaves it blank and its haulers name it", async () => {
+    const preview = await validate(
+      fleetRows(
         digger1.code,
+        [hauler1.code, hauler2.code],
         miningName,
-        busUnit.code,
-        `${hauler1.code}, ${hauler2.code}`,
-      ],
-    ]);
+        busUnit.code
+      )
+    );
     expect(preview.errorCount).toBe(0);
     expect(preview.newCount).toBe(1);
     expect(preview.rows[0]).toMatchObject({
       kind: "new",
-      digger: digger1.code,
-      bus: busUnit.code,
+      leader: digger1.code,
+      area: miningName,
     });
     expect(preview.rows[0]!.units.sort()).toEqual(
       [hauler1.code, hauler2.code].sort()
     );
+    expect(preview.rows[0]!.transports).toEqual([busUnit.code]);
 
     // Nothing written: validation is a reading.
     const fleets = await db
       .select()
       .from(schema.fleets)
-      .where(eq(schema.fleets.diggerUnitId, digger1.id));
+      .where(eq(schema.fleets.leaderUnitId, digger1.id));
     expect(fleets).toEqual([]);
   });
 
-  test("the composition rules refuse by row, and name what is wrong", async () => {
+  test("blank and unnamed is a support unit, not an orphan", async () => {
     const preview = await validate([
-      // Unknown digger code.
-      ["ZZNOPE99", miningName, null, hauler1.code],
-      // Unknown member code.
-      [digger1.code, miningName, null, "ZZNOPE98"],
-      // Blank area — the only thing the column can still get wrong.
-      [digger2.code, "", null, hauler1.code],
-      // Bus that is not a BUS.
-      [digger3.code, miningName, hauler2.code, hauler1.code],
-    ]);
-    expect(preview.rows).toEqual([]);
-    expect(preview.errorCount).toBe(4);
-    const issues = preview.errors.map((e) => e.issue).join(" | ");
-    expect(issues).toContain("ZZNOPE99");
-    expect(issues).toContain("ZZNOPE98");
-    expect(issues).toContain("area");
-    expect(issues).toContain("BUS");
-  });
-
-  test("a manhaul truck is transport too, not only a bus", async () => {
-    const preview = await validate([
-      [digger1.code, miningName, manhaulUnit.code, hauler1.code],
+      ...fleetRows(digger1.code, [hauler1.code]),
+      [hauler3.code, `${tag} DISPOSAL`, null, busUnit.code],
     ]);
     expect(preview.errorCount).toBe(0);
-    expect(preview.rows[0]).toMatchObject({ bus: manhaulUnit.code });
+    expect(preview.supportCount).toBe(1);
+    expect(preview.support[0]).toMatchObject({
+      unit: hauler3.code,
+      area: `${tag} DISPOSAL`,
+      transport: busUnit.code,
+      breakdown: false,
+    });
   });
 
-  test("a digger cannot haul — for itself, or in another row", async () => {
+  test("a leader with no row of its own is refused", async () => {
+    // The file cannot say where that formation works or what it rides, and
+    // inventing either would put a machine somewhere nobody wrote down.
     const preview = await validate([
-      [digger1.code, miningName, null, digger1.code],
-      [digger2.code, miningName, null, `${hauler1.code}, ${digger3.code}`],
-      [digger3.code, miningName, null, hauler2.code],
+      [hauler1.code, miningName, digger3.code, null],
     ]);
-    // Row 2: self-haul. Rows 3 and 4: digger3 cannot lead one row and haul in
-    // another, whichever way the conflict is reported.
-    expect(preview.errorCount).toBeGreaterThanOrEqual(2);
-    const issues = preview.errors.map((e) => e.issue).join(" | ");
-    expect(issues).toContain(digger3.code);
+    expect(preview.errorCount).toBe(1);
+    expect(preview.errors[0]!.issue).toContain("tidak punya barisnya sendiri");
   });
 
-  test("duplicates inside the file are refused where they repeat", async () => {
+  test("a unit cannot lead one formation and haul for another", async () => {
     const preview = await validate([
-      [digger1.code, miningName, null, hauler1.code],
-      [digger1.code, miningName, null, hauler2.code],
-      [digger2.code, miningName, null, hauler1.code],
+      ...fleetRows(digger1.code, [hauler1.code]),
+      // digger2 leads, and is also listed as one of digger1's haulers.
+      [digger2.code, miningName, digger1.code, null],
+      [hauler2.code, miningName, digger2.code, null],
     ]);
-    expect(preview.errorCount).toBe(2);
-    expect(preview.newCount).toBe(1);
-    const issues = preview.errors.map((e) => e.issue).join(" | ");
-    expect(issues).toContain("baris");
+    expect(preview.errorCount).toBeGreaterThan(0);
+    expect(preview.errors.some((e) => e.nik === digger2.code)).toBe(true);
+  });
+
+  test("a unit listed twice is refused where it repeats", async () => {
+    const preview = await validate([
+      ...fleetRows(digger1.code, [hauler1.code]),
+      [hauler1.code, miningName, digger1.code, null],
+    ]);
+    expect(preview.errorCount).toBe(1);
+    expect(preview.errors[0]!.issue).toContain("hanya boleh muncul sekali");
   });
 });
 
-/* ---------------------------------------------------------------- commit */
+/* ------------------------------------------------------------- area */
 
-describe("the commit is all-or-nothing and mirrors the form", () => {
+describe("one formation cannot span two areas", () => {
+  test("a member in a different area is named, with both areas", async () => {
+    const preview = await validate([
+      [digger1.code, miningName, null, null],
+      [hauler1.code, miningName, digger1.code, null],
+      [hauler2.code, `${tag} LAIN`, digger1.code, null],
+    ]);
+    expect(preview.errorCount).toBe(1);
+    expect(preview.errors[0]!.nik).toBe(hauler2.code);
+    expect(preview.errors[0]!.issue).toContain(miningName);
+  });
+
+  test("support units may each work somewhere different", async () => {
+    // They are not one formation — which is exactly why the rule above does
+    // not reach them.
+    const preview = await validate([
+      [hauler1.code, `${tag} A`, null, null],
+      [hauler2.code, `${tag} B`, null, null],
+    ]);
+    expect(preview.errorCount).toBe(0);
+    expect(preview.supportCount).toBe(2);
+  });
+});
+
+/* ------------------------------------------------------------- breakdown */
+
+describe("BREAKDOWN in the area cell is a status", () => {
+  test("both spellings are read, and the word is not kept as a place", async () => {
+    const preview = await validate([
+      [hauler1.code, "BREAKDOWN", null, null],
+      [hauler2.code, "BREAK DOWN", null, null],
+    ]);
+    expect(preview.errorCount).toBe(0);
+    expect(preview.breakdownCount).toBe(2);
+    for (const row of preview.support) {
+      expect(row.breakdown).toBe(true);
+      // "BREAKDOWN" is not a location, so it is not recorded as one.
+      expect(row.area).toBeNull();
+    }
+  });
+
+  test("a broken unit cannot also be hauling for someone", async () => {
+    const preview = await validate([
+      ...fleetRows(digger1.code, [hauler1.code]),
+      [hauler2.code, "BREAKDOWN", digger1.code, null],
+    ]);
+    expect(preview.errorCount).toBeGreaterThan(0);
+    expect(preview.errors.some((e) => e.nik === hauler2.code)).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------- transport */
+
+describe("the transport cell", () => {
+  test("finds one vehicle through three spellings", async () => {
+    /* The file writes the same bus as "UDBU 09", "UDBU09" and "UD-BU09".
+       Refusing two of the three would be reading the punctuation. */
+    const spaced = busUnit.code.replace(/^(.{3})/, "$1 ");
+    const preview = await validate(
+      fleetRows(digger1.code, [hauler1.code], miningName, spaced)
+    );
+    expect(preview.errorCount).toBe(0);
+    expect(preview.rows[0]!.transports).toEqual([busUnit.code]);
+  });
+
+  test("a manhaul truck is transport too, not only a bus", async () => {
+    const preview = await validate(
+      fleetRows(digger1.code, [hauler1.code], miningName, manhaulUnit.code)
+    );
+    expect(preview.errorCount).toBe(0);
+    expect(preview.rows[0]!.transports).toEqual([manhaulUnit.code]);
+  });
+
+  test("an unknown vehicle and a non-vehicle each refuse by row", async () => {
+    const preview = await validate([
+      [digger1.code, miningName, null, "ZZNOBUS9"],
+      [hauler1.code, miningName, digger1.code, hauler2.code],
+    ]);
+    /* The leader's row failing takes its formation with it, so there is a
+       third error about the formation having no leader row — the two the test
+       is about are named rather than counted. */
+    expect(
+      preview.errors.some((e) => e.issue.includes("tidak ada di master"))
+    ).toBe(true);
+    expect(preview.errors.some((e) => e.issue.includes("bukan"))).toBe(true);
+  });
+
+  test("two units of one formation may ride different vehicles", async () => {
+    const preview = await validate([
+      [digger1.code, miningName, null, busUnit.code],
+      [hauler1.code, miningName, digger1.code, manhaulUnit.code],
+    ]);
+    expect(preview.errorCount).toBe(0);
+    expect(preview.rows[0]!.transports.sort()).toEqual(
+      [busUnit.code, manhaulUnit.code].sort()
+    );
+  });
+});
+
+/* ------------------------------------------------------------- commit */
+
+describe("the commit writes the unit facts, not just the formation", () => {
   test("view may not import", async () => {
     const response = await postForm(
       "/fleets/import/commit",
       viewer.cookie,
-      form(await file([[digger1.code, miningName, null, hauler1.code]]))
+      form(await file(fleetRows(digger1.code, [hauler1.code])))
     );
     expect(response.status).toBe(403);
   });
@@ -393,8 +499,8 @@ describe("the commit is all-or-nothing and mirrors the form", () => {
       admin.cookie,
       form(
         await file([
-          [digger1.code, miningName, null, hauler1.code],
-          ["ZZNOPE97", miningName, null, hauler2.code],
+          ...fleetRows(digger1.code, [hauler1.code]),
+          ["ZZNOPE99", miningName, null, null],
         ])
       )
     );
@@ -402,98 +508,182 @@ describe("the commit is all-or-nothing and mirrors the form", () => {
     const fleets = await db
       .select()
       .from(schema.fleets)
-      .where(eq(schema.fleets.diggerUnitId, digger1.id));
+      .where(eq(schema.fleets.leaderUnitId, digger1.id));
     expect(fleets).toEqual([]);
   });
 
-  test("a clean file creates, and a re-upload updates in place", async () => {
+  test("area and transport land on every unit, support included", async () => {
+    const response = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file([
+          ...fleetRows(
+            digger1.code,
+            [hauler1.code, hauler2.code],
+            miningName,
+            busUnit.code
+          ),
+          [hauler3.code, `${tag} DISPOSAL`, null, manhaulUnit.code],
+          [hauler4.code, "BREAKDOWN", null, null],
+        ])
+      )
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ created: 1, support: 1 });
+
+    const rows = await db
+      .select({
+        code: schema.units.code,
+        workArea: schema.units.workArea,
+        transportUnitId: schema.units.transportUnitId,
+        fleetSupport: schema.units.fleetSupport,
+        breakdown: schema.units.breakdown,
+      })
+      .from(schema.units)
+      .where(
+        inArray(schema.units.id, [
+          digger1.id,
+          hauler1.id,
+          hauler3.id,
+          hauler4.id,
+        ])
+      );
+    const by = new Map(rows.map((r) => [r.code, r]));
+
+    // The formation: its leader's area, on every member, with its ride.
+    expect(by.get(digger1.code)).toMatchObject({
+      workArea: miningName,
+      transportUnitId: busUnit.id,
+      fleetSupport: false,
+    });
+    expect(by.get(hauler1.code)).toMatchObject({
+      workArea: miningName,
+      transportUnitId: busUnit.id,
+    });
+    // The support unit: crewed, in no formation.
+    expect(by.get(hauler3.code)).toMatchObject({
+      workArea: `${tag} DISPOSAL`,
+      transportUnitId: manhaulUnit.id,
+      fleetSupport: true,
+    });
+    // The broken one: not crewed, and "BREAKDOWN" kept as a status only.
+    expect(by.get(hauler4.code)).toMatchObject({
+      breakdown: true,
+      workArea: null,
+      fleetSupport: false,
+    });
+  });
+
+  test("a re-upload updates in place and moves a hauler between formations", async () => {
     const first = await postForm(
       "/fleets/import/commit",
       admin.cookie,
       form(
         await file([
-          [
-            digger1.code,
-            miningName,
-            busUnit.code,
-            `${hauler1.code}, ${hauler2.code}`,
-          ],
-          [digger2.code, miningName, null, hauler3.code],
+          ...fleetRows(digger1.code, [hauler1.code, hauler2.code]),
+          ...fleetRows(digger2.code, [hauler3.code]),
         ])
       )
     );
     expect(first.status).toBe(200);
-    expect(await first.json()).toMatchObject({ created: 2, updated: 0 });
 
-    // The re-upload previews as updates, naming what changes.
-    const preview = await validate([
-      [digger1.code, miningName, null, `${hauler1.code}, ${hauler4.code}`],
-      [digger2.code, miningName, null, hauler3.code],
-    ]);
-    expect(preview.errorCount).toBe(0);
-    expect(preview.updatedCount).toBe(2);
-    const changed = preview.rows.find((r) => r.digger === digger1.code);
-    expect(changed!.changes.length).toBeGreaterThan(0);
-
+    // hauler2 moves from digger1 to digger2 — two formations trading a unit
+    // inside one upload, which the unique index would refuse mid-write.
     const second = await postForm(
       "/fleets/import/commit",
       admin.cookie,
       form(
         await file([
-          [digger1.code, miningName, null, `${hauler1.code}, ${hauler4.code}`],
-          [digger2.code, miningName, null, hauler3.code],
+          ...fleetRows(digger1.code, [hauler1.code]),
+          ...fleetRows(digger2.code, [hauler3.code, hauler2.code]),
         ])
       )
     );
     expect(second.status).toBe(200);
     expect(await second.json()).toMatchObject({ created: 0, updated: 2 });
 
-    const [fleet] = await db
-      .select({ id: schema.fleets.id, busUnitId: schema.fleets.busUnitId })
-      .from(schema.fleets)
-      .where(eq(schema.fleets.diggerUnitId, digger1.id));
-    made.fleets.push(fleet!.id);
-    expect(fleet!.busUnitId).toBeNull();
-    const members = await db
-      .select({ unitId: schema.fleetUnits.unitId })
+    const [moved] = await db
+      .select({ fleetId: schema.fleetUnits.fleetId })
       .from(schema.fleetUnits)
-      .where(eq(schema.fleetUnits.fleetId, fleet!.id));
-    expect(members.map((m) => m.unitId).sort()).toEqual(
-      [hauler1.id, hauler4.id].sort()
-    );
+      .where(eq(schema.fleetUnits.unitId, hauler2.id));
+    const [target] = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .where(eq(schema.fleets.leaderUnitId, digger2.id));
+    expect(moved?.fleetId).toBe(target!.id);
   });
 
-  test("two fleets in one file may trade a hauler", async () => {
-    // hauler1 currently hauls for digger1's fleet; the file hands it to
-    // digger2 and gives digger1 hauler3 back. Neither row may be refused for
-    // membership the same file dissolves.
-    const preview = await validate([
-      [digger1.code, miningName, null, `${hauler4.code}, ${hauler3.code}`],
-      [digger2.code, miningName, null, hauler1.code],
-    ]);
-    expect(preview.errors).toEqual([]);
-
-    const response = await postForm(
+  test("a formation the file never names is disbanded, and listed first", async () => {
+    await postForm(
       "/fleets/import/commit",
       admin.cookie,
       form(
         await file([
-          [digger1.code, miningName, null, `${hauler4.code}, ${hauler3.code}`],
-          [digger2.code, miningName, null, hauler1.code],
+          ...fleetRows(digger1.code, [hauler1.code]),
+          ...fleetRows(digger2.code, [hauler2.code]),
         ])
       )
     );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ created: 0, updated: 2 });
+
+    // The next file drops digger2 entirely.
+    const next = await file(fleetRows(digger1.code, [hauler1.code]));
+    const preview = (await (
+      await postForm("/fleets/import/validate", admin.cookie, form(next))
+    ).json()) as FleetImportPreview;
+    /* Named before it happens, which is the whole bargain: the file is the
+       yard for one day, so absent does mean gone — and a wrong file says the
+       same thing. */
+    expect(preview.disband).toContain(digger2.code);
+    expect(preview.released).toContain(hauler2.code);
+
+    const commit = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(await file(fleetRows(digger1.code, [hauler1.code])))
+    );
+    expect(commit.status).toBe(200);
+
+    const gone = await db
+      .select()
+      .from(schema.fleets)
+      .where(eq(schema.fleets.leaderUnitId, digger2.id));
+    expect(gone).toEqual([]);
+
+    // And the hauler it held stops taking part rather than lingering.
+    const [released] = await db
+      .select({
+        workArea: schema.units.workArea,
+        fleetSupport: schema.units.fleetSupport,
+      })
+      .from(schema.units)
+      .where(eq(schema.units.id, hauler2.id));
+    expect(released).toMatchObject({ workArea: null, fleetSupport: false });
   });
 
-  test("membership held outside the file still refuses", async () => {
-    // digger3 tries to take hauler1, which digger2's fleet (not in this
-    // file) holds after the trade above.
-    const preview = await validate([
-      [digger3.code, miningName, null, hauler1.code],
-    ]);
-    expect(preview.errorCount).toBe(1);
-    expect(preview.errors[0]!.issue).toContain(hauler1.code);
+  test("nothing outside the file can conflict with it any more", async () => {
+    /*
+     * Worth pinning because it used to be the opposite. When a file described
+     * a few formations, a hauler held by one it did not mention was a genuine
+     * conflict and the import refused it. The file is now the whole yard for
+     * one day, so every existing formation is either rewritten by it or
+     * disbanded by it — there is no "outside" left to conflict with, and a
+     * hauler may move anywhere the file says.
+     */
+    const [outsider] = await db
+      .insert(schema.fleets)
+      .values({ leaderUnitId: digger3.id })
+      .returning({ id: schema.fleets.id });
+    made.fleets.push(outsider!.id);
+    await db
+      .insert(schema.fleetUnits)
+      .values({ fleetId: outsider!.id, unitId: hauler4.id });
+
+    const preview = await validate(
+      fleetRows(digger1.code, [hauler1.code, hauler4.code])
+    );
+    expect(preview.errorCount).toBe(0);
+    // The formation that held it is named as disbanded instead of refusing.
+    expect(preview.disband).toContain(digger3.code);
   });
 });

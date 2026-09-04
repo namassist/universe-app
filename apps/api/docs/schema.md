@@ -31,12 +31,21 @@ the definition — when they disagree, the code wins. Change flow: edit
 **Fleet**
 
 - `units` — the machines; keyed by unit code, classed and typed via the
-  catalogues. PLAN pairing of operators to units.
+  catalogues. Since 2026-09-04 a unit also carries **where it is working
+  today**: `work_area` (free text, null when it is not part of today's
+  operation), `transport_unit_id` (the bus or manhaul that brings its crew,
+  route-enforced type BUS or MANHAUL TRUCK), and `fleet_support` — the flag
+  that puts a unit on the board without a formation. All three are facts about
+  a unit rather than a fleet, because a dozer or a water truck has a location
+  and a ride while belonging to no formation.
 - `bus_schedules` — crew transport schedule.
-- `fleets` — a digger and its work location; the digger reference is unique (a
-  digger leads at most one fleet) and _is_ the fleet's identity — no name
-  column. Optional `bus_unit_id` (route-enforced type BUS or MANHAUL TRUCK);
-  `work_area` is free text, with no catalogue behind it.
+- `fleets` — a leader unit and nothing else. `leader_unit_id` is unique (a unit
+  leads at most one fleet) and _is_ the fleet's identity — no name column, and
+  **no type check**: a formation led by a road unit or a dump truck is
+  legitimate (owner, 2026-09-04), which is why the column no longer says
+  `digger`. The area and the transport it used to hold moved to `units`; a
+  fleet's area is its leader's, and "one formation cannot span two areas" is
+  enforced when members are written rather than by storing it twice.
 - `fleet_units` — the fleet's haulers; `unit_id` unique across the table, so
   a unit hauls for at most one fleet. Rows cascade with their fleet.
 - `unit_status_history` — append-only trail of status changes with mandatory
@@ -74,11 +83,15 @@ the definition — when they disagree, the code wins. Change flow: edit
   distinguishable from "a supervisor did"; `tapped_at` is the fingerprint moment
   the FCFS order was decided by, so a placement can be explained later rather
   than only asserted. The board is never frozen and keeps no history (owner).
-- `fleet_actual_fleets` — the formations of one board, **copied** from Fleet
-  Setting when it was generated: `digger_code`, `work_area`, `bus_code` as
-  text, plus `source_fleet_id` as a breadcrumb (`set null` on delete, so a
-  disbanded formation cannot take the record of the shift with it). Unique on
-  (`document_id`, `digger_code`). `fleet_actual_slots.board_fleet_id` points
+- `fleet_actual_fleets` — the groups of one board, **copied** from Fleet
+  Setting when it was generated: `leader_code` and `work_area` as text, plus
+  `source_fleet_id` as a breadcrumb (`set null` on delete, so a disbanded
+  formation cannot take the record of the shift with it). `kind` separates a
+  formation from the one **support group**, which holds the crewed units that
+  belong to none and carries neither leader nor area. Transport is per unit, so
+  it rides on `fleet_actual_slots.transport_code` instead. Unique on
+  (`document_id`, `leader_code`) — null sorts outside it, which is what lets
+  the support row coexist. `fleet_actual_slots.board_fleet_id` points
   here, and every reader of a board — the Actual menu, its audit table, the
   fleet TV — groups by this table rather than by `fleets`. Copied rather than
   referenced because Fleet Setting describes _today_ and is rewritten between

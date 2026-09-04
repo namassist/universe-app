@@ -55,7 +55,9 @@ async function unitRows() {
       brandName: schema.unitBrands.name,
       standby: schema.units.standby,
       breakdown: schema.units.breakdown,
-      location: schema.fleets.workArea,
+      /* The unit's own, not its formation's: a dozer in no fleet works
+         somewhere too, and since 2026-09-04 the column says so. */
+      location: schema.units.workArea,
     })
     .from(schema.units)
     .innerJoin(
@@ -70,7 +72,7 @@ async function unitRows() {
     .leftJoin(
       schema.fleets,
       or(
-        eq(schema.fleets.diggerUnitId, schema.units.id),
+        eq(schema.fleets.leaderUnitId, schema.units.id),
         eq(schema.fleets.id, schema.fleetUnits.fleetId)
       )
     )
