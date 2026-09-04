@@ -742,6 +742,10 @@ export const id = {
   flSupAddB:
     "Unit yang dipilih akan diawaki tanpa masuk formasi. Isi lokasi kerjanya dan angkutan yang membawa krunya.",
   flSupPick: "Pilih unit",
+  flSupEach: "Lokasi kerja dan angkutan",
+  flSupEachHint:
+    "Diisi per unit — unit support boleh bekerja di lokasi berbeda",
+  flSupErrArea: "Setiap unit yang dipilih harus punya lokasi kerja",
   flSupNone: "Tidak ada unit lepas yang bisa ditambahkan",
   flSupOut: "Keluarkan dari support",
   flSupOutAll: "Kosongkan semua",

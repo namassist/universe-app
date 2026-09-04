@@ -952,11 +952,16 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
   .post(
     "/support",
     async ({ body, status }) => {
-      const unitIds = [...new Set(body.unitIds)];
-      const transports: Record<string, string | null> = body.transports ?? {};
+      /* One entry per unit, last write wins on a repeat — the client sends a
+         list it built from a selection, and a doubled id is a slip rather than
+         two different answers. */
+      const rows = [...new Map(body.units.map((u) => [u.unitId, u])).values()];
+      const unitIds = rows.map((u) => u.unitId);
       const vehicleIds = [
         ...new Set(
-          Object.values(transports).filter((id): id is string => id !== null)
+          rows
+            .map((u) => u.transportUnitId ?? null)
+            .filter((id): id is string => id !== null)
         ),
       ];
 
@@ -1013,46 +1018,59 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
           )
         );
 
-      /* Grouped by ride rather than one statement per unit: a support group is
-         usually on one vehicle, so this is almost always a single update and
-         never more than a handful. */
-      const byVehicle = new Map<string | null, string[]>();
-      for (const id of unitIds) {
-        const ride = transports[id] ?? null;
-        byVehicle.set(ride, [...(byVehicle.get(ride) ?? []), id]);
+      /* Grouped by the pair rather than one statement per unit: a support
+         group is usually on one panel and one vehicle, so this is almost
+         always a single update and never more than a handful. */
+      const groups = new Map<
+        string,
+        { workArea: string; transportUnitId: string | null; ids: string[] }
+      >();
+      for (const row of rows) {
+        const workArea = row.workArea.trim();
+        const transportUnitId = row.transportUnitId ?? null;
+        const key = `${workArea}\u0000${transportUnitId ?? ""}`;
+        const group = groups.get(key) ?? { workArea, transportUnitId, ids: [] };
+        group.ids.push(row.unitId);
+        groups.set(key, group);
       }
       await db.transaction(async (tx) => {
-        for (const [transportUnitId, ids] of byVehicle)
+        for (const group of groups.values())
           await tx
             .update(schema.units)
             .set({
               fleetSupport: true,
-              workArea: body.workArea.trim(),
-              transportUnitId,
+              workArea: group.workArea,
+              transportUnitId: group.transportUnitId,
             })
-            .where(inArray(schema.units.id, ids));
+            .where(inArray(schema.units.id, group.ids));
       });
       return { changed: unitIds.length };
     },
     {
       auth: { menu: "fleet-setting", mode: "manage" },
       body: t.Object({
-        unitIds: t.Array(t.String({ format: "uuid" }), {
-          minItems: 1,
-          maxItems: 500,
-        }),
-        workArea: t.String({ minLength: 1, maxLength: 120 }),
         /**
-         * Which vehicle carries each unit's crew, keyed by unit id.
+         * One entry per unit, carrying everything about it.
          *
-         * Per unit, like a formation's — a support group is not one machine,
-         * and two dozers on one panel can legitimately be brought by different
-         * buses. A unit absent from the map gets **none**: this route states
-         * what these units are rather than patching them, so silence about a
-         * ride means there is no ride.
+         * A list rather than an id array beside a shared area and a map of
+         * rides, because **none of it is shared**: support units are not one
+         * formation, so two of them may work on different panels and be
+         * brought by different buses. A formation is the case where the area
+         * has to be one value, and that rule lives on the formation routes.
+         *
+         * A missing `transportUnitId` means **none**: this route states what
+         * these units are rather than patching them, so silence about a ride
+         * is an answer.
          */
-        transports: t.Optional(
-          t.Record(t.String(), t.Nullable(t.String({ format: "uuid" })))
+        units: t.Array(
+          t.Object({
+            unitId: t.String({ format: "uuid" }),
+            workArea: t.String({ minLength: 1, maxLength: 120 }),
+            transportUnitId: t.Optional(
+              t.Nullable(t.String({ format: "uuid" }))
+            ),
+          }),
+          { minItems: 1, maxItems: 500 }
         ),
       }),
       response: {

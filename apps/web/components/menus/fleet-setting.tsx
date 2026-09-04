@@ -203,7 +203,8 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   const [supSel, setSupSel] = React.useState<ReadonlySet<string>>(
     () => new Set()
   );
-  const [supArea, setSupArea] = React.useState("");
+  /** Where each selected unit works, by unit id. Not one value: see the route. */
+  const [supArea, setSupArea] = React.useState<Record<string, string>>({});
   /** The vehicle each selected unit rides, by unit id — see the fleet dialog. */
   const [supBus, setSupBus] = React.useState<Record<string, string>>({});
   const [supErr, setSupErr] = React.useState(false);
@@ -229,12 +230,14 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
    * panel at ten in the morning, without waiting for tomorrow's file.
    */
   const saveSupport = useMutation({
-    mutationFn: async (input: {
-      unitIds: string[];
-      workArea: string;
-      transports: Record<string, string | null>;
-    }) => {
-      const result = await api.v1.fleets.support.post(input);
+    mutationFn: async (
+      units: {
+        unitId: string;
+        workArea: string;
+        transportUnitId: string | null;
+      }[]
+    ) => {
+      const result = await api.v1.fleets.support.post({ units });
       if (result.error) throw result.error;
       return result.data;
     },
@@ -456,7 +459,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
   function openSupportAdd() {
     setSupSel(new Set());
     setSupQ("");
-    setSupArea("");
+    setSupArea({});
     setSupBus({});
     setSupErr(false);
     setSupOpen(true);
@@ -464,19 +467,19 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
 
   function submitSupport(e: React.FormEvent) {
     e.preventDefault();
-    const workArea = supArea.trim();
-    setSupErr(!workArea);
-    if (!workArea || !supSel.size) return;
-    saveSupport.mutate({
-      unitIds: [...supSel],
-      workArea,
-      transports: Object.fromEntries(
-        [...supSel].map((id) => [
-          id,
-          supBus[id] ? (unitIdByCode.get(supBus[id]!) ?? null) : null,
-        ])
-      ),
-    });
+    const rows = [...supSel].map((id) => ({
+      unitId: id,
+      workArea: (supArea[id] ?? "").trim(),
+      transportUnitId: supBus[id]
+        ? (unitIdByCode.get(supBus[id]!) ?? null)
+        : null,
+    }));
+    // Every unit needs its own, so the check is over the list rather than a
+    // single field — one blank row is enough to stop the whole write.
+    const blank = rows.some((r) => !r.workArea);
+    setSupErr(blank);
+    if (blank || !rows.length) return;
+    saveSupport.mutate(rows);
   }
 
   /** The ordinary case: one vehicle for the whole formation, in one click. */
@@ -1148,23 +1151,6 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
           <DialogBody>{t.flSupAddB}</DialogBody>
 
           <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
-            <Field
-              label={t.flLoc}
-              htmlFor="sup-loc"
-              required
-              error={supErr}
-              errorMessage={t.flErrLoc}
-            >
-              <Input
-                id="sup-loc"
-                value={supArea}
-                onChange={(e) => setSupArea(e.target.value)}
-                placeholder={t.flLocPh}
-                maxLength={120}
-                autoComplete="off"
-              />
-            </Field>
-
             <Field label={`${t.flSupPick} (${supSel.size} ${t.flSupSelected})`}>
               <div className="flex flex-col gap-2">
                 <SearchInput
@@ -1212,12 +1198,22 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 group is not one machine, so two dozers on one panel can be
                 brought by different buses. Only what is actually selected —
                 an empty list here would be a field about nothing. */}
+            {/* Both columns are per unit, and both for the same reason: these
+                machines are not one formation. Two dozers can be on different
+                panels and brought by different buses, and the entry has to be
+                able to say so. The button copies the first row down, which is
+                the case where they *are* alike. */}
             {supSel.size ? (
-              <Field label={t.flBus}>
+              <Field
+                label={t.flSupEach}
+                required
+                error={supErr}
+                errorMessage={t.flSupErrArea}
+              >
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs text-(--text-tertiary)">
-                      {t.flBusPerUnit}
+                      {t.flSupEachHint}
                     </span>
                     <Button
                       type="button"
@@ -1225,11 +1221,14 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                       className="h-8 px-3 text-xs"
                       onClick={() => {
                         const first = [...supSel][0]!;
+                        const area = supArea[first] ?? "";
                         const ride = supBus[first] ?? "";
+                        const ids = [...supSel];
+                        setSupArea(
+                          Object.fromEntries(ids.map((id) => [id, area]))
+                        );
                         setSupBus(
-                          Object.fromEntries(
-                            [...supSel].map((id) => [id, ride])
-                          )
+                          Object.fromEntries(ids.map((id) => [id, ride]))
                         );
                       }}
                     >
@@ -1243,17 +1242,28 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                       .map((u) => (
                         <div
                           key={u.id}
-                          className="flex items-center gap-3 px-2 py-1.5"
+                          className="flex items-center gap-2 px-2 py-1.5"
                         >
-                          <span className="w-[120px] shrink-0 font-mono text-sm font-semibold">
+                          <span className="w-[110px] shrink-0 font-mono text-sm font-semibold">
                             {u.code}
                           </span>
-                          <span className="min-w-0 flex-1 truncate text-xs text-(--text-tertiary)">
-                            {unitTypeOf.get(u.code) ?? "—"}
-                          </span>
+                          <Input
+                            aria-label={`${t.flLoc} — ${u.code}`}
+                            className="h-9 min-w-0 flex-1"
+                            value={supArea[u.id] ?? ""}
+                            onChange={(e) =>
+                              setSupArea({
+                                ...supArea,
+                                [u.id]: e.target.value,
+                              })
+                            }
+                            placeholder={t.flLocPh}
+                            maxLength={120}
+                            autoComplete="off"
+                          />
                           <Select
                             aria-label={`${t.flBus} — ${u.code}`}
-                            wrapperClassName="w-[220px] shrink-0"
+                            wrapperClassName="w-[200px] shrink-0"
                             className="h-9"
                             value={supBus[u.id] ?? ""}
                             onChange={(e) =>

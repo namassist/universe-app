@@ -449,17 +449,20 @@ describe("fleet support is written by hand as well as by the file", () => {
 
   test("view may not write it", async () => {
     const response = await send("POST", "/fleets/support", viewer.cookie, {
-      unitIds: [spare2.id],
-      workArea: `${tag} DISPOSAL`,
+      units: [{ unitId: spare2.id, workArea: `${tag} DISPOSAL` }],
     });
     expect(response.status).toBe(403);
   });
 
   test("marking a unit records where it works and what carries its crew", async () => {
     const response = await send("POST", "/fleets/support", admin.cookie, {
-      unitIds: [spare2.id],
-      workArea: `${tag} DISPOSAL`,
-      transports: { [spare2.id]: busUnit.id },
+      units: [
+        {
+          unitId: spare2.id,
+          workArea: `${tag} DISPOSAL`,
+          transportUnitId: busUnit.id,
+        },
+      ],
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ changed: 1 });
@@ -474,9 +477,13 @@ describe("fleet support is written by hand as well as by the file", () => {
     // Stated, not appended: the route says what these units are, so an
     // operator pressing save twice cannot end up with a different answer.
     await send("POST", "/fleets/support", admin.cookie, {
-      unitIds: [spare2.id],
-      workArea: `${tag} DISPOSAL`,
-      transports: { [spare2.id]: busUnit.id },
+      units: [
+        {
+          unitId: spare2.id,
+          workArea: `${tag} DISPOSAL`,
+          transportUnitId: busUnit.id,
+        },
+      ],
     });
     expect(await supportOf(spare2.id)).toMatchObject({
       workArea: `${tag} DISPOSAL`,
@@ -485,9 +492,13 @@ describe("fleet support is written by hand as well as by the file", () => {
 
   test("transport must be a bus or a manhaul truck here too", async () => {
     const response = await send("POST", "/fleets/support", admin.cookie, {
-      unitIds: [spare2.id],
-      workArea: `${tag} DISPOSAL`,
-      transports: { [spare2.id]: hauler3.id },
+      units: [
+        {
+          unitId: spare2.id,
+          workArea: `${tag} DISPOSAL`,
+          transportUnitId: hauler3.id,
+        },
+      ],
     });
     expect(response.status).toBe(422);
     const body = (await response.json()) as { message: string };
@@ -498,27 +509,38 @@ describe("fleet support is written by hand as well as by the file", () => {
     // It is crewed through its fleet; admitting it here would put the same
     // machine in two places on the one screen.
     const response = await send("POST", "/fleets/support", admin.cookie, {
-      unitIds: [hauler2.id],
-      workArea: `${tag} DISPOSAL`,
+      units: [{ unitId: hauler2.id, workArea: `${tag} DISPOSAL` }],
     });
     expect(response.status).toBe(422);
     const body = (await response.json()) as { message: string };
     expect(body.message).toContain(hauler2.code);
   });
 
-  test("two support units may ride different vehicles", async () => {
+  test("two support units may work apart and ride different vehicles", async () => {
     /* A support group is not one machine. Two dozers on the same panel can be
        brought by different buses, and the entry has to be able to say so. */
     const response = await send("POST", "/fleets/support", admin.cookie, {
-      unitIds: [spare1.id, spare2.id],
-      workArea: `${tag} DISPOSAL`,
-      transports: { [spare1.id]: busUnit.id, [spare2.id]: busUnit2.id },
+      units: [
+        {
+          unitId: spare1.id,
+          workArea: `${tag} PANEL A`,
+          transportUnitId: busUnit.id,
+        },
+        {
+          unitId: spare2.id,
+          workArea: `${tag} PANEL B`,
+          transportUnitId: busUnit2.id,
+        },
+      ],
     });
     expect(response.status).toBe(200);
+    // Both halves differ, and both are meant to: these are not one formation.
     expect(await supportOf(spare1.id)).toMatchObject({
+      workArea: `${tag} PANEL A`,
       transportUnitId: busUnit.id,
     });
     expect(await supportOf(spare2.id)).toMatchObject({
+      workArea: `${tag} PANEL B`,
       transportUnitId: busUnit2.id,
     });
 
@@ -532,8 +554,7 @@ describe("fleet support is written by hand as well as by the file", () => {
     // The route states what these units are rather than patching them, so
     // silence about a vehicle means there is none — not "leave the old one".
     await send("POST", "/fleets/support", admin.cookie, {
-      unitIds: [spare2.id],
-      workArea: `${tag} DISPOSAL`,
+      units: [{ unitId: spare2.id, workArea: `${tag} DISPOSAL` }],
     });
     expect(await supportOf(spare2.id)).toMatchObject({
       transportUnitId: null,
@@ -559,8 +580,7 @@ describe("fleet support is written by hand as well as by the file", () => {
 
   test("joining a formation ends support", async () => {
     await send("POST", "/fleets/support", admin.cookie, {
-      unitIds: [spare2.id],
-      workArea: `${tag} DISPOSAL`,
+      units: [{ unitId: spare2.id, workArea: `${tag} DISPOSAL` }],
     });
     const fleet = await createFleet({
       leaderUnitId: spare1.id,

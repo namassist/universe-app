@@ -57,10 +57,11 @@ fill the gap from the spare pool.
   appending to a list, so pressing save twice changes nothing — and silence
   about a unit's vehicle means it has none, rather than keeping the old one.
   Releasing clears the same three columns the import's sweep does.
-- **Transport is per unit there too.** A support group is not one machine: two
-  dozers on the same panel can be brought by different buses, and the dialog
-  offers a row per selected unit with the same "samakan semua" shortcut the
-  formation dialog has.
+- **Work area and transport are both per unit there.** A support group is not a
+  formation: two dozers may work on different panels and be brought by
+  different buses, so the dialog offers a row per selected unit carrying both,
+  with a "samakan semua" shortcut for the case where they are alike. The rule
+  that an area must be one value belongs to formations, and stays there.
 - **Joining a formation ends support**, or the entry would keep claiming a
   machine listed under its fleet.
 

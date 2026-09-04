@@ -745,6 +745,9 @@ export const en: Dict = {
   flSupAddB:
     "The selected units will be crewed without joining a formation. Give them a work area and the vehicle that brings their crew.",
   flSupPick: "Pick units",
+  flSupEach: "Work area and transport",
+  flSupEachHint: "Set per unit — support units may work in different places",
+  flSupErrArea: "Every selected unit needs a work area",
   flSupNone: "No unattached units left to add",
   flSupOut: "Take out of support",
   flSupOutAll: "Clear all",
