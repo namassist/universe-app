@@ -161,6 +161,8 @@ export const en: Dict = {
   empSub: "Employee master data — profiles, departments, and competencies.",
   filter: "Filter",
   clearSearch: "Clear search",
+  navSearch: "Search menu…",
+  navNoMatch: "No menu matches.",
   empAdd: "Add Employee",
   thNameNik: "Name — NIK",
   thPos: "Position",

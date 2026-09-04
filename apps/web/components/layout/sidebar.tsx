@@ -6,10 +6,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { useI18n } from "@/lib/i18n";
 import { NAV, type NavEntry } from "@/lib/nav";
 import { openDisplay } from "@/lib/open-display";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
+import { SearchInput } from "@/components/ui/search-input";
 
 import { useShell } from "./shell-context";
 
@@ -38,11 +40,23 @@ function groupOfPath(pathname: string): string | null {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { t } = useI18n();
   const { access } = useRole();
   const { collapsed, setCollapsed, sideOpen, setSideOpen } = useShell();
   const settingEntry = NAV.find(
     (e) => e.kind === "item" && e.slug === "setting"
   );
+  /* The tree is twenty-odd menus deep once Master is open, and the group a
+     menu lives in is not always the one somebody expects it in. Searching
+     asks the only question they actually have — "where is X" — so a match
+     inside a collapsed group is shown without their having to open it. */
+  const [menuQ, setMenuQ] = React.useState("");
+  const menuNeedle = menuQ.trim().toLowerCase();
+  const searching = menuNeedle.length > 0;
+  const hits = (label: string) => label.toLowerCase().includes(menuNeedle);
+  /* Taking a result ends the search: the tree the next click reads should be
+     the whole tree, not the last query's remains. */
+  const clearSearch = () => setMenuQ("");
 
   const currentGroup = groupOfPath(pathname);
   const [openGroup, setOpenGroup] = React.useState<string | null>(currentGroup);
@@ -67,11 +81,13 @@ export function Sidebar() {
   function renderTop(entry: NavEntry) {
     if (entry.kind === "item") {
       if (!access(entry.slug)) return null;
+      if (searching && !hits(entry.label)) return null;
       const Icon = entry.icon;
       return (
         <Link
           key={entry.slug}
           href={hrefOf(entry.slug)}
+          onClick={clearSearch}
           className={cn(
             navBtnClass,
             isActive(entry.slug) && activeClass,
@@ -92,7 +108,13 @@ export function Sidebar() {
       );
     }
 
-    const kids = entry.children.filter((c) => access(c.slug));
+    const visible = entry.children.filter((c) => access(c.slug));
+    /* A group whose own name matches keeps all of its menus — someone typing
+       "master" is asking for the section, not for a menu called Master. */
+    const kids =
+      searching && !hits(entry.label)
+        ? visible.filter((c) => hits(c.label))
+        : visible;
     if (!kids.length) return null;
     /* Only sections a *visible* child opens: one whose every menu this role
        cannot see leaves no orphaned label behind. */
@@ -100,12 +122,16 @@ export function Sidebar() {
       (c, i) => c.section && c.section !== kids[i - 1]?.section
     ).length;
     const Icon = entry.icon;
-    const expanded = openGroup === entry.key;
+    /* While searching the group stands open: its matching menus are the whole
+       reason it is still on screen. */
+    const expanded = searching || openGroup === entry.key;
     return (
       <React.Fragment key={entry.key}>
         <button
           aria-expanded={expanded}
-          onClick={() => setOpenGroup(expanded ? null : entry.key)}
+          onClick={() =>
+            setOpenGroup(openGroup === entry.key ? null : entry.key)
+          }
           className={cn(
             navBtnClass,
             collapsed && "justify-center px-0 max-xl:justify-start max-xl:px-3"
@@ -160,7 +186,10 @@ export function Sidebar() {
             /* kiosk screen: button opens a fullscreen new tab, no in-shell route */
             const body = c.displayUrl ? (
               <button
-                onClick={() => openDisplay(c.displayUrl!)}
+                onClick={() => {
+                  clearSearch();
+                  openDisplay(c.displayUrl!);
+                }}
                 className={cn(kidClass, "cursor-pointer")}
               >
                 {c.label}
@@ -168,6 +197,7 @@ export function Sidebar() {
             ) : (
               <Link
                 href={hrefOf(c.slug)}
+                onClick={clearSearch}
                 className={cn(kidClass, isActive(c.slug) && activeClass)}
               >
                 {c.label}
@@ -196,6 +226,14 @@ export function Sidebar() {
       </React.Fragment>
     );
   }
+
+  const topRendered = NAV.filter(
+    (e) => !(e.kind === "item" && e.slug === "setting")
+  ).map(renderTop);
+  /* Rendered up front so the divider above it can be dropped when a search
+     leaves nothing behind it. */
+  const settingNode =
+    settingEntry && access("setting") ? renderTop(settingEntry) : null;
 
   return (
     <>
@@ -257,16 +295,38 @@ export function Sidebar() {
         >
           <ChevronRight className="size-3.5 text-(--text-secondary)" />
         </button>
+        {/* Above the tree rather than in the header: it acts on what is
+            below it, and the header is about the product. Hidden while the
+            rail is collapsed — there is no room for a field, and the icons it
+            would filter carry no visible label to match. */}
+        <div className={cn("mb-2 px-0.5", collapsed && "hidden max-xl:block")}>
+          <SearchInput
+            className="h-9 w-full"
+            inputClassName="text-[13px]"
+            placeholder={t.navSearch}
+            aria-label={t.navSearch}
+            value={menuQ}
+            onChange={(e) => setMenuQ(e.target.value)}
+            onClear={() => setMenuQ("")}
+            clearLabel={t.clearSearch}
+          />
+        </div>
         <nav className="scrollbar-none flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto">
-          {NAV.filter((e) => !(e.kind === "item" && e.slug === "setting")).map(
-            renderTop
+          {searching &&
+          topRendered.every((node) => node === null) &&
+          !settingNode ? (
+            <p className="px-3 py-2 text-[13px] text-(--text-tertiary)">
+              {t.navNoMatch}
+            </p>
+          ) : (
+            topRendered
           )}
         </nav>
         {/* Setting selalu terlihat di dasar sidebar — di luar area scroll */}
-        {settingEntry && access("setting") ? (
+        {settingNode ? (
           <>
             <div className="mx-2 my-4 border-t border-(--divider)" />
-            {renderTop(settingEntry)}
+            {settingNode}
           </>
         ) : null}
       </aside>

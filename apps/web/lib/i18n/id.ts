@@ -159,6 +159,8 @@ export const id = {
   empSub: "Data induk karyawan — profil, departemen, dan kompetensi.",
   filter: "Filter",
   clearSearch: "Bersihkan pencarian",
+  navSearch: "Cari menu…",
+  navNoMatch: "Menu tidak ditemukan.",
   empAdd: "Tambah Karyawan",
   thNameNik: "Nama — NIK",
   thPos: "Posisi",
