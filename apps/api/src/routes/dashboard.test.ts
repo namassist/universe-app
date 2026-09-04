@@ -12,19 +12,87 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { MenuSlug, Scope } from "@universe/contracts";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
+import { localDate } from "../scheduler";
 import { dashboardRoutes } from "./dashboard";
 
 const app = new Elysia().use(dashboardRoutes);
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Dash ${uid()}`;
 
-const made = { users: [] as string[], roles: [] as string[] };
+const made = {
+  users: [] as string[],
+  roles: [] as string[],
+  rosterDocs: [] as string[],
+};
+
+/**
+ * Employees this file may hand an account, with a roster row for today.
+ *
+ * Both halves matter and neither can be borrowed from the site. `users.nik` is
+ * unique, so an employee the seed already gave an account to cannot be given a
+ * second one — and the figures these tests compare count *today's* roster,
+ * which a freshly seeded database has none of. Reading whatever the site
+ * happened to hold is why these two passed on a database with a roster loaded
+ * and failed on a clean one.
+ */
+async function rosteredWithoutAccount(count: number) {
+  const rows = await db
+    .select({ id: schema.employees.id, nik: schema.employees.nik })
+    .from(schema.employees)
+    .where(
+      and(
+        eq(schema.employees.status, "aktif"),
+        sql`not exists (select 1 from users u where u.nik = ${schema.employees.nik})`
+      )
+    )
+    .orderBy(asc(schema.employees.nik))
+    .limit(count);
+  if (rows.length < count)
+    throw new Error("fixture: not enough employees without an account");
+  await ensureRosterDoc();
+
+  await db.insert(schema.rosterDays).values(
+    rows.map((r) => ({
+      documentId: rosterDocId!,
+      employeeId: r.id,
+      date: localDate(new Date()),
+      code: "D" as const,
+    }))
+  );
+  return rows;
+}
+
+/**
+ * One document for the whole file.
+ *
+ * `roster_documents` is unique on (department, month) while active, so a helper
+ * that filed its own each time collided with itself the second time it ran.
+ */
+let rosterDocId: string | null = null;
+async function ensureRosterDoc(): Promise<void> {
+  if (rosterDocId) return;
+  const [department] = await db
+    .select({ id: schema.departments.id })
+    .from(schema.departments)
+    .limit(1);
+  const [doc] = await db
+    .insert(schema.rosterDocuments)
+    .values({
+      departmentId: department!.id,
+      month: `${localDate(new Date()).slice(0, 7)}-01`,
+      fileName: `${tag}.xlsx`,
+      uploadedBy: made.users[0]!,
+    })
+    .returning({ id: schema.rosterDocuments.id });
+  rosterDocId = doc!.id;
+  made.rosterDocs.push(doc!.id);
+}
 
 /** An account with exactly these grants and this scope, and nothing else. */
 async function account(
@@ -73,6 +141,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Roster days cascade with their document; the document references the
+  // uploader, so it goes before the accounts.
+  if (made.rosterDocs.length)
+    await db
+      .delete(schema.rosterDocuments)
+      .where(inArray(schema.rosterDocuments.id, made.rosterDocs));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
@@ -122,15 +196,12 @@ describe("how far scope reaches", () => {
     /* The reason this endpoint applies scope at all: without it an operator's
        dashboard would report the whole site's attendance — a number that is
        both useless to them and none of their business. */
-    const [employee] = await db
-      .select({ nik: schema.employees.nik })
-      .from(schema.employees)
-      .limit(1);
+    const [employee] = await rosteredWithoutAccount(1);
     const body = await read(
       await account("self", ["dashboard", "attendance"], employee!.nik)
     );
     const attendance = body.attendance as { scheduled: number };
-    expect(attendance.scheduled).toBeLessThanOrEqual(1);
+    expect(attendance.scheduled).toBe(1);
   });
 
   test("an account with no NIK reports on nobody, rather than everybody", async () => {
@@ -142,12 +213,9 @@ describe("how far scope reaches", () => {
   });
 
   test("an all-scope account sees more than a self one", async () => {
-    // A second employee, because `users.nik` is unique — the account in the
-    // test above already holds the first one.
-    const employees = await db
-      .select({ nik: schema.employees.nik })
-      .from(schema.employees)
-      .limit(2);
+    // Two of its own, rostered today: one for the `self` account to be, and a
+    // second so the site-wide figure has something more to count.
+    const employees = await rosteredWithoutAccount(2);
     const wide = await read(await account("all", ["dashboard", "attendance"]));
     const narrow = await read(
       await account("self", ["dashboard", "attendance"], employees[1]!.nik)

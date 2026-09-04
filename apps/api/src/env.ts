@@ -7,6 +7,23 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+/**
+ * The test run's own store, when there is one.
+ *
+ * `bun test` sets `NODE_ENV=test`, and `.env` has carried `TEST_DATABASE_URL`
+ * and `TEST_REDIS_URL` all along — but nothing read them, so every suite ran
+ * against the **dev** database and left its fixtures there. Twenty units named
+ * `ZZ…` were sitting in the owner's Fleet Setting on 2026-09-04, from runs that
+ * failed part-way and could not clean up after themselves.
+ *
+ * Falls through to the ordinary var when the test one is absent, so a machine
+ * that has not set one keeps working exactly as before.
+ */
+function store(name: string): string {
+  const test = process.env.NODE_ENV === "test" && process.env[`TEST_${name}`];
+  return test || required(name);
+}
+
 function number(name: string, fallback: string): number {
   const raw = required(name, fallback);
   const value = Number(raw);
@@ -33,9 +50,12 @@ export const env = {
 
   /** No fallback on purpose — a default here would silently point at the wrong
    *  database. Postgres and Redis are shared dev containers, so a typo would
-   *  land in another project's data rather than failing. */
-  DATABASE_URL: required("DATABASE_URL"),
-  REDIS_URL: required("REDIS_URL"),
+   *  land in another project's data rather than failing.
+   *
+   *  Under `bun test` these resolve to `TEST_DATABASE_URL` / `TEST_REDIS_URL`
+   *  when set; see `store`. */
+  DATABASE_URL: store("DATABASE_URL"),
+  REDIS_URL: store("REDIS_URL"),
 
   /** Bootstrap superadmin. Read by the seed only; losing it locks everyone out,
    *  so the seed is idempotent and re-runnable. */
