@@ -3,7 +3,16 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, Pencil, Plus, Trash2, Truck, Upload, X } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  Pencil,
+  Plus,
+  Trash2,
+  Truck,
+  Upload,
+  X,
+} from "lucide-react";
 
 import {
   FLEET_MAX_UNITS,
@@ -131,7 +140,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       ) as Record<string, string>,
     [units]
   );
-  const OHT_POOL = React.useMemo(() => Object.keys(UNIT_TYPE), [UNIT_TYPE]);
+  const MEMBER_POOL = React.useMemo(() => Object.keys(UNIT_TYPE), [UNIT_TYPE]);
   /* Angkutan fleet: bus, dan manhaul truck yang mengantar ke lokasi juga.
      Dikelompokkan per jenis — MH1001 di antara UD-BU07 dan UD-BU08 terlihat
      seperti kesalahan data sampai jenisnya ikut tertulis. */
@@ -397,7 +406,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
         !fleets.some((f) => f.leaderCode === code && f.id !== editId)
     )
     .sort();
-  const unitOpts = OHT_POOL.filter((c) => !usedElsewhere.has(c)).sort();
+  const unitOpts = MEMBER_POOL.filter((c) => !usedElsewhere.has(c)).sort();
   const unitOptsFiltered = unitOpts.filter((c) =>
     c.toUpperCase().includes(unitQ.trim().toUpperCase())
   );
@@ -811,7 +820,10 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
       <Dialog
         open={dlgOpen}
         onClose={() => setDlgOpen(false)}
-        className="w-[min(560px,100%)]"
+        /* Wider than the two viewers beside it: the transport list is a row
+           per unit — code, type and a vehicle select — and at 560px it needed
+           sideways scrolling to reach the select. */
+        className="w-[min(760px,100%)]"
         labelledBy="fl-t"
       >
         <DialogIcon variant="info">
@@ -824,7 +836,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
         <form onSubmit={submit} noValidate>
           <FormGrid className="mt-4">
             <Field
-              label="Digger (fleet leader)"
+              label={t.flLeader}
               htmlFor="fl-digger"
               required
               error={errLeader}
@@ -845,67 +857,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                 ))}
               </Select>
             </Field>
-            <Field label={t.flBus}>
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-(--text-tertiary)">
-                    {t.flBusPerUnit}
-                  </span>
-                  {/* The ordinary case, in one click: most formations ride one
-                      vehicle, and typing it once per unit would be the price of
-                      supporting the case where they do not. */}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => applyBusToAll(fBus[fLeader] ?? "")}
-                  >
-                    {t.flBusSameAll}
-                  </Button>
-                </div>
-                <div className="max-h-44 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
-                  {[fLeader, ...fUnits].filter(Boolean).map((code) => (
-                    <div
-                      key={code}
-                      className="flex items-center gap-2 px-1 py-1"
-                    >
-                      <span className="w-[110px] shrink-0 font-mono text-xs font-semibold">
-                        {code}
-                      </span>
-                      {code === fLeader ? (
-                        <Badge variant="info">{t.flLeaderTag}</Badge>
-                      ) : null}
-                      <Select
-                        aria-label={`${t.flBus} — ${code}`}
-                        wrapperClassName="ml-auto w-[190px]"
-                        className="h-8"
-                        value={fBus[code] ?? ""}
-                        onChange={(e) =>
-                          setFBus({ ...fBus, [code]: e.target.value })
-                        }
-                      >
-                        <option value="">
-                          {BUS_OPTS.length
-                            ? "— tanpa angkutan —"
-                            : "— belum ada bus/manhaul —"}
-                        </option>
-                        {BUS_GROUPS.map((g) => (
-                          <optgroup key={g.name} label={g.name}>
-                            {g.codes.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </Select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Field>
             <Field
-              className="col-span-full"
               label={t.flLoc}
               htmlFor="fl-loc"
               required
@@ -926,7 +878,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
             </Field>
             <Field
               className="col-span-full"
-              label={`${t.flUnits} (OHT) — ${fUnits.length}/${FLEET_MAX_UNITS}`}
+              label={`${t.flUnits} — ${fUnits.length}/${FLEET_MAX_UNITS}`}
               htmlFor="fl-unit-search"
               helper={t.flUnitsHelp}
               error={!!errUnits}
@@ -979,6 +931,70 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                       {t.noResTitle}
                     </p>
                   )}
+                </div>
+              </div>
+            </Field>
+            <Field className="col-span-full" label={t.flBus}>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-(--text-tertiary)">
+                    {t.flBusPerUnit}
+                  </span>
+                  {/* The ordinary case, in one click: most formations ride one
+                      vehicle, and setting it once per unit would be the price
+                      of supporting the case where they do not. */}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-8 px-3 text-xs"
+                    disabled={!fLeader}
+                    onClick={() => applyBusToAll(fBus[fLeader] ?? "")}
+                  >
+                    <Copy />
+                    {t.flBusSameAll}
+                  </Button>
+                </div>
+                <div className="max-h-56 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-subtle) p-1.5">
+                  {[fLeader, ...fUnits].filter(Boolean).map((code) => (
+                    <div
+                      key={code}
+                      className="flex items-center gap-3 px-2 py-1.5"
+                    >
+                      <span className="w-[120px] shrink-0 font-mono text-sm font-semibold">
+                        {code}
+                      </span>
+                      {code === fLeader ? (
+                        <Badge variant="info">{t.flLeaderTag}</Badge>
+                      ) : null}
+                      <span className="min-w-0 flex-1 truncate text-xs text-(--text-tertiary)">
+                        {UNIT_TYPE[code] ?? "—"}
+                      </span>
+                      <Select
+                        aria-label={`${t.flBus} — ${code}`}
+                        wrapperClassName="w-[220px] shrink-0"
+                        className="h-9"
+                        value={fBus[code] ?? ""}
+                        onChange={(e) =>
+                          setFBus({ ...fBus, [code]: e.target.value })
+                        }
+                      >
+                        <option value="">
+                          {BUS_OPTS.length
+                            ? "— tanpa angkutan —"
+                            : "— belum ada bus/manhaul —"}
+                        </option>
+                        {BUS_GROUPS.map((g) => (
+                          <optgroup key={g.name} label={g.name}>
+                            {g.codes.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </Select>
+                    </div>
+                  ))}
                 </div>
               </div>
             </Field>

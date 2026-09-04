@@ -711,11 +711,13 @@ export const id = {
   flSaveAdd: "Simpan fleet",
   flLoc: "Lokasi kerja",
   flLocPh: "mis. Panel East Puncak Utara",
-  flBus: "Angkutan default",
-  flBusPerUnit: "Angkutan diatur per unit",
+  flBus: "Angkutan per unit",
+  flLeader: "Unit pemimpin",
+  flBusPerUnit:
+    "Satu baris per unit — anggota fleet boleh naik angkutan berbeda",
   flBusSameAll: "Samakan semua",
   flLeaderTag: "Pemimpin",
-  flUnits: "Unit dalam fleet",
+  flUnits: "Unit anggota",
   flUnitsHelp:
     "Pilih dari Database Unit — unit yang sudah dipakai fleet lain tidak muncul.",
   flUnitSearchPh: "Cari kode unit…",

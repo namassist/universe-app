@@ -714,11 +714,13 @@ export const en: Dict = {
   flSaveAdd: "Save fleet",
   flLoc: "Work location",
   flLocPh: "e.g. Panel East Puncak Utara",
-  flBus: "Default transport",
-  flBusPerUnit: "Transport is set per unit",
+  flBus: "Transport per unit",
+  flLeader: "Leader unit",
+  flBusPerUnit:
+    "One row per unit — members of a fleet may ride different vehicles",
   flBusSameAll: "Same for all",
   flLeaderTag: "Leader",
-  flUnits: "Units in fleet",
+  flUnits: "Member units",
   flUnitsHelp:
     "Pick from the Unit Database — units already used by another fleet are hidden.",
   flUnitSearchPh: "Search unit code…",
