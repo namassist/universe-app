@@ -16,8 +16,10 @@ import {
 import {
   MONITOR_FLEETS_PER_PAGE,
   SHIFT_KIND_LABELS,
+  SLIDE_COLS,
+  SLIDE_ROWS,
+  SLIDE_SIZE,
   SUPPORT_DEVICE_NAME,
-  SUPPORT_SLIDE_SIZE,
 } from "@universe/contracts";
 
 import { isStatus } from "@/lib/api";
@@ -32,6 +34,18 @@ import { initialsOf } from "@/components/ui/avatar";
 
 import { DisplayShell } from "../_components/display-shell";
 import { DisplayBadge, type DisplayTone } from "../_components/display-table";
+
+/**
+ * The same twelve cells as a slide, in the shape a half-screen panel wants.
+ *
+ * Four by three rather than the slide's six by two, and the reason is that a
+ * portrait card is sized by whichever of its cell's dimensions runs out first.
+ * A panel is about half as wide as the screen and nearly as tall, so six
+ * columns would starve the cards of width while leaving height unused; four
+ * columns spend the panel's shape instead of fighting it.
+ */
+const MONITOR_COLS = 4;
+const MONITOR_ROWS = SLIDE_SIZE / MONITOR_COLS;
 
 /**
  * Display Fleet — the Actual board of the shift now running, one formation at
@@ -112,31 +126,29 @@ function fingerBadge(unit: FleetDisplayUnit): {
     : { tone: "neutral", label: "Belum finger" };
 }
 
-/**
- * Cards per page, and the shape of the grid holding them.
+/*
+ * The slide's shape no longer depends on what is standing in it.
  *
- * Columns come from the count rather than a breakpoint, so a formation of five
- * is five wide cards on one row instead of five cells and a hole. Seven across
- * is ~250 px a card on the 1920 canvas — enough for a unit code and a full
- * name without truncating either.
+ * It used to: the columns were computed from the unit count, so a formation of
+ * five got five wide cards and a formation of fourteen got seven narrow ones.
+ * That made a card a different size on every turn of the rotation, and the
+ * crew watching for their own unit had to re-read the whole wall each time.
+ *
+ * Now every slide is `SLIDE_COLS` x `SLIDE_ROWS` — formations and support
+ * alike — and one short of units fills the rest with blanks (owner,
+ * 2026-09-04). A card is therefore one size for the life of the screen.
  */
-const MAX_COLS = 7;
-const MAX_ROWS = 3;
-const PAGE_SIZE = MAX_COLS * MAX_ROWS;
 
-function gridOf(
-  count: number,
-  support = false
-): { cols: number; rows: number } {
-  if (count <= 0) return { cols: 1, rows: 1 };
-  /* The support wall is one row of six (owner, 2026-09-04). Each of its cards
-     carries two badges a formation card does not — where the unit is working
-     and what brings its crew — and those are the whole reason somebody walks
-     up to this screen, so they get the width. */
-  if (support) return { cols: Math.min(SUPPORT_SLIDE_SIZE, count), rows: 1 };
-  const rows = Math.min(MAX_ROWS, Math.ceil(count / MAX_COLS));
-  return { cols: Math.min(MAX_COLS, Math.ceil(count / rows)), rows };
-}
+/**
+ * A card is portrait, because the photograph in it is.
+ *
+ * 3:4, and sized to whichever of the cell's two dimensions runs out first —
+ * `min(100cqw, 75cqh)` — so the card is as large as its cell allows and never
+ * spills out of it. Letting the grid stretch the card instead gave a different
+ * aspect on every screen, and the operator's face, which is the part of this
+ * wall that reads from six metres, was the thing being stretched.
+ */
+const PORTRAIT_CARD = "aspect-[3/4] w-[min(100cqw,75cqh)]";
 
 /** What a group is called on screen. Support has no leader to be named after. */
 const fleetTitle = (fleet: { kind: string; leaderCode: string | null }) =>
@@ -156,22 +168,28 @@ const fleetTitle = (fleet: { kind: string; leaderCode: string | null }) =>
 type Page = {
   key: string;
   fleet: FleetDisplayFleet;
-  units: FleetDisplayUnit[];
+  /** Exactly one entry per cell of the grid; `null` is a cell held open. */
+  cells: (FleetDisplayUnit | null)[];
   part: number;
   parts: number;
 };
 
 function paginate(fleets: FleetDisplayFleet[]): Page[] {
   return fleets.flatMap((fleet) => {
-    const size = fleet.kind === "support" ? SUPPORT_SLIDE_SIZE : PAGE_SIZE;
-    const parts = Math.max(1, Math.ceil(fleet.units.length / size));
-    return Array.from({ length: parts }, (_, i) => ({
-      key: `${fleet.id ?? "none"}-${i}`,
-      fleet,
-      units: fleet.units.slice(i * size, i * size + size),
-      part: i + 1,
-      parts,
-    }));
+    const parts = Math.max(1, Math.ceil(fleet.units.length / SLIDE_SIZE));
+    return Array.from({ length: parts }, (_, i) => {
+      const units = fleet.units.slice(i * SLIDE_SIZE, (i + 1) * SLIDE_SIZE);
+      return {
+        key: `${fleet.id ?? "none"}-${i}`,
+        fleet,
+        /* Padded to a full grid rather than cut short: the empty cells are
+           what keep the eleventh card in the same place whether the formation
+           has eleven units or five. */
+        cells: Array.from({ length: SLIDE_SIZE }, (_, j) => units[j] ?? null),
+        part: i + 1,
+        parts,
+      };
+    });
   });
 }
 
@@ -249,17 +267,20 @@ function UnitCard({
    * the case where they do not.
    */
   showArea = false,
+  className,
 }: {
   unit: FleetDisplayUnit;
   provisional: boolean;
   compact?: boolean;
   showArea?: boolean;
+  className?: string;
 }) {
   const { tone, label } = toneOf(unit);
   return (
     <div
       className={cn(
         "relative min-w-0 overflow-hidden rounded-card border border-(--glass-2-border)",
+        className,
         tone === "danger" &&
           !provisional &&
           "border-[rgba(252,60,59,.55)] shadow-[0_0_28px_rgba(252,60,59,.25)]",
@@ -409,19 +430,21 @@ function UnitCard({
  * One formation on a monitor wall: its own header, its own badges, its own
  * cards.
  *
- * Always two rows of cards; the column count follows the size of the
- * formation. That keeps card *height* fixed across quadrants — a five-unit
- * fleet gets wider cards rather than leaving half its quadrant empty, and a
- * fourteen-unit fleet narrows instead of spilling. Two rows also means the
- * grid always holds `2 * ceil(n / 2) >= n`, so nothing is ever cut and the
- * wall keeps its promise that an idle unit is never summarised away.
+ * The same twelve cells a slide holds, in four columns instead of six, with
+ * the ones no unit reaches held open. That is what keeps a card the same size
+ * in every panel and on every turn — the column count used to follow the size
+ * of the formation, so a five-unit fleet and a fourteen-unit one drew cards of
+ * two different widths side by side.
  *
- * Cards here are far smaller than on a single-fleet wall (~115-278 x 134 px
- * against 241x312). What decides legibility is not the pixel count but the
- * physical size of the panel: on an 80-inch TV, 1920 px spans 177 cm, so
- * 1 px is 0.92 mm — a 115 px card is ~10.6 cm wide and a 15 px name ~1.4 cm
- * tall. The operator's photograph is the part that survives shrinking best,
- * because a face is recognised rather than read.
+ * A group larger than twelve widens the grid rather than losing its tail: a
+ * panel shows one formation whole and has no second page to spill onto, and
+ * the wall's promise is that an idle unit is never summarised away.
+ *
+ * Cards here are smaller than on a single-fleet wall. What decides legibility
+ * is not the pixel count but the physical size of the panel: on an 80-inch TV,
+ * 1920 px spans 177 cm, so 1 px is 0.92 mm — a 180 px card is ~16.5 cm wide
+ * and a 15 px name ~1.4 cm tall. The operator's photograph is the part that
+ * survives shrinking best, because a face is recognised rather than read.
  */
 function FleetQuadrant({
   fleet,
@@ -434,7 +457,17 @@ function FleetQuadrant({
   className?: string;
   style?: React.CSSProperties;
 }) {
-  const cols = Math.max(3, Math.ceil(fleet.units.length / 2));
+  /* A panel does not paginate — it is one formation, whole — so a group larger
+     than the grid widens the grid rather than losing its tail. Only the
+     support group ever gets there; a formation holds at most eleven, and its
+     twelfth cell is held open like a slide's. */
+  const overflowing = fleet.units.length > SLIDE_SIZE;
+  const cols = overflowing
+    ? Math.ceil(fleet.units.length / MONITOR_ROWS)
+    : MONITOR_COLS;
+  const cells: (FleetDisplayUnit | null)[] = overflowing
+    ? fleet.units
+    : Array.from({ length: SLIDE_SIZE }, (_, i) => fleet.units[i] ?? null);
 
   return (
     <div
@@ -487,14 +520,52 @@ function FleetQuadrant({
       </div>
 
       <div
-        className="grid min-h-0 flex-1 grid-rows-2 gap-2"
-        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+        className="grid min-h-0 flex-1 gap-2"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${MONITOR_ROWS}, minmax(0, 1fr))`,
+        }}
       >
-        {fleet.units.map((u) => (
-          <UnitCard key={u.unitId} unit={u} provisional={provisional} compact />
+        {cells.map((u, i) => (
+          <div
+            key={u?.unitId ?? `kosong-${i}`}
+            className="[container-type:size] grid min-h-0 min-w-0 place-items-center"
+          >
+            {u ? (
+              <UnitCard
+                unit={u}
+                provisional={provisional}
+                compact
+                className={PORTRAIT_CARD}
+              />
+            ) : (
+              <BlankCard className={PORTRAIT_CARD} />
+            )}
+          </div>
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * A cell of the grid with no unit behind it.
+ *
+ * Not the same thing as an idle unit, and it must not look like one: an empty
+ * seat is red and alarming because it costs money by the hour, while this is
+ * simply a formation smaller than the grid. So it says nothing at all — no
+ * code, no icon, no word — and is drawn faintly enough that the eye passes
+ * over it while the grid keeps its shape.
+ */
+function BlankCard({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "rounded-card border border-dashed border-(--divider) bg-[rgba(255,255,255,.015)]",
+        className
+      )}
+    />
   );
 }
 
@@ -527,7 +598,7 @@ function EmptyQuadrant({ style }: { style?: React.CSSProperties }) {
  */
 const FLIP_OUT_MS = 360;
 const FLIP_IN_MS = 440;
-/** Between quadrants — four panels, so the sweep finishes after three steps. */
+/** Between panels, so the turn sweeps across them instead of snapping. */
 const STAGGER_MS = 70;
 const CLOSE_TOTAL = FLIP_OUT_MS + STAGGER_MS * (MONITOR_FLEETS_PER_PAGE - 1);
 const OPEN_TOTAL = FLIP_IN_MS + STAGGER_MS * (MONITOR_FLEETS_PER_PAGE - 1);
@@ -635,7 +706,6 @@ export default function DisplayFleetPage() {
      empty before showing the right thing. */
   const pos = turns ? idx % turns : 0;
   const page = pages[pos];
-  const grid = gridOf(page?.units.length ?? 0, page?.fleet.kind === "support");
 
   /* Always MONITOR_FLEETS_PER_PAGE slots. The blanks on the last page are
      rendered rather than dropped so that a formation keeps its position from
@@ -807,7 +877,7 @@ export default function DisplayFleetPage() {
                 the old nodes and the quadrants merely appear. */}
             <div
               key={pos}
-              className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-6 perspective-[2200px]"
+              className="grid min-h-0 flex-1 grid-cols-2 grid-rows-1 gap-6 perspective-[2200px]"
             >
               {slots.map((f, i) =>
                 f ? (
@@ -868,17 +938,30 @@ export default function DisplayFleetPage() {
           key={page.key}
           className="kswipe-in grid min-h-0 flex-1 gap-5"
           style={{
-            gridTemplateColumns: `repeat(${grid.cols}, minmax(0,1fr))`,
-            gridTemplateRows: `repeat(${grid.rows}, minmax(0,1fr))`,
+            gridTemplateColumns: `repeat(${SLIDE_COLS}, minmax(0,1fr))`,
+            gridTemplateRows: `repeat(${SLIDE_ROWS}, minmax(0,1fr))`,
           }}
         >
-          {page.units.map((u) => (
-            <UnitCard
-              key={u.unitId}
-              unit={u}
-              provisional={data?.provisional ?? false}
-              showArea={page?.fleet.kind === "support"}
-            />
+          {/* Each cell is its own size container, and the card inside is sized
+              against it rather than stretched to fill it — that is what keeps
+              the card portrait whatever shape the cell turns out to be. The
+              card is centred in the slack that leaves. */}
+          {page.cells.map((u, i) => (
+            <div
+              key={u?.unitId ?? `kosong-${i}`}
+              className="[container-type:size] grid min-h-0 min-w-0 place-items-center"
+            >
+              {u ? (
+                <UnitCard
+                  unit={u}
+                  provisional={data?.provisional ?? false}
+                  showArea={page.fleet.kind === "support"}
+                  className={PORTRAIT_CARD}
+                />
+              ) : (
+                <BlankCard className={PORTRAIT_CARD} />
+              )}
+            </div>
           ))}
         </div>
       ) : (

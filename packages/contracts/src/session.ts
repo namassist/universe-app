@@ -53,8 +53,8 @@ export const DEVICE_ID_PREFIX: Record<DeviceKind, string> = {
  * from the far side of a workshop.
  *
  * `monitor` trades that size for breadth: `MONITOR_FLEETS_PER_PAGE` formations
- * stand side by side, so a control room takes in four pits at a glance instead
- * of waiting out a cycle for the one it cares about. Neither layout caps how
+ * stand side by side, so a control room takes in more than one pit at a glance
+ * instead of waiting out a cycle for the one it cares about. Neither layout caps how
  * many formations a screen may be given — a monitor holding more than one
  * page's worth rotates between pages exactly as a slideshow rotates between
  * fleets, and at the same dwell.
@@ -65,15 +65,17 @@ export type DisplayLayout = (typeof DISPLAY_LAYOUTS)[number];
 /**
  * How many formations a `monitor` screen shows at once.
  *
- * Four, because the grid it implies is 2x2: on the 1920x1080 canvas the walls
- * actually run at, that is ~950x480 a quadrant, which still fits a unit code
- * and a full name at a size worth mounting a television for. Six would fit
- * geometrically and be unreadable in the yard.
+ * Two, side by side (owner, 2026-09-04). It was four in a 2x2, which on the
+ * 1920x1080 canvas the walls actually run at gave each formation ~950x480 —
+ * wide enough for a unit code and a name, but only half the height a card
+ * needs once cards are portrait. Two panels keep the same width and get the
+ * whole height, so the operator's photograph — the part of this wall that
+ * reads from across a control room — is twice the size it was.
  *
- * A page size, not a ceiling. A screen given nine formations shows three
- * pages of four, four, and one.
+ * A page size, not a ceiling. A screen given nine formations shows five
+ * pages, the last of them holding one.
  */
-export const MONITOR_FLEETS_PER_PAGE = 4;
+export const MONITOR_FLEETS_PER_PAGE = 2;
 
 /**
  * The one screen that shows the support units, and nothing else.
@@ -99,15 +101,25 @@ export const SUPPORT_DEVICE_ID = "fleet-support";
 export const SUPPORT_DEVICE_NAME = "Fleet Support";
 
 /**
- * How many support units one slide carries.
+ * The shape of one slide on the fleet wall: six across, two down.
  *
- * Six across in a single row (owner, 2026-09-04) — half the count of a
- * formation slide's widest row, because each of these cards carries two badges
- * a formation card does not: where the unit is working, and which vehicle
- * brings its crew. A support unit is scattered, so those two are the whole
- * reason somebody walks up to this screen.
+ * Fixed rather than fitted to what is standing in it (owner, 2026-09-04). A
+ * fleet holds at most eleven units, so twelve cells hold any of them, and a
+ * grid that never changes shape is what lets a card keep one size from slide
+ * to slide — the crew watching for their own unit stops re-reading the wall
+ * every turn. A slide short of units fills the rest with blanks; on a
+ * formation the twelfth cell is therefore always blank, which is the price of
+ * a grid that does not move.
+ *
+ * Support uses the same twelve, not a single row of six as it did when it
+ * first shipped (owner, 2026-09-04). One row of portrait cards left a third of
+ * the screen empty above and below them, and there is no reason for the
+ * support wall to be a shape of its own — it carries two badges a formation
+ * card does not, but a portrait card has the height for them.
  */
-export const SUPPORT_SLIDE_SIZE = 6;
+export const SLIDE_COLS = 6;
+export const SLIDE_ROWS = 2;
+export const SLIDE_SIZE = SLIDE_COLS * SLIDE_ROWS;
 
 /** Which transport a login wants its session delivered over. */
 export const SESSION_TRANSPORTS = ["cookie", "bearer"] as const;
