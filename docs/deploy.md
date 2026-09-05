@@ -156,6 +156,34 @@ docker compose up -d
 `migrate` runs again automatically and applies anything new. If the release
 changed `PUBLIC_ORIGIN`, the web image must be rebuilt — see the next section.
 
+### Uploading employee photos in bulk
+
+The employee page uploads one photo at a time, which is right for a correction
+and wrong for a new site arriving with a thousand portraits. `photos:upload`
+sends a whole folder through the same endpoint the form uses, so the same rules
+apply — scope, 5 MB ceiling, `.jpg` / `.jpeg` / `.png` / `.webp` only.
+
+Each file is matched to a person by its own name: `504264267.jpg` is that NIK's
+photo. Check the folder first, which sends nothing:
+
+```sh
+cd apps/api
+API_URL=http://192.168.151.23:8081 bun run photos:upload -- /path/foto --dry-run
+```
+
+Then, with an account that can manage employees:
+
+```sh
+API_URL=http://192.168.151.23:8081 \
+API_IDENTIFIER=superadmin@example.com API_PASSWORD='...' \
+  bun run photos:upload -- /path/foto
+```
+
+The password comes from the environment because an argument would land in the
+shell history and in `ps` for everyone else on the box. Failures are listed per
+NIK at the end and re-running is safe: an upload replaces whatever the person
+had, so fix the names and send only the folder that failed.
+
 ### Changing the address
 
 `NEXT_PUBLIC_API_URL` is read at **build** time and baked into the browser
