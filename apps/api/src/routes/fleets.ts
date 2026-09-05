@@ -273,6 +273,16 @@ async function applyUnitFacts(
            formation", and leaving it set on a unit that now has one would keep
            the support entry claiming a machine listed under its fleet. */
         fleetSupport: false,
+        /* And it ends the breakdown. A machine seated in a formation is
+           being worked today, so the two readings cannot both stand.
+
+           Until 2026-09-05 the flag was written only for support rows, which
+           left a repaired unit rejoining a fleet marked broken for as long as
+           no file ever listed it outside one again — and allocation excludes
+           broken machines (`allocation.ts`), so it silently got no operator
+           while Fleet Setting listed it under its fleet. Nothing reported
+           that: it was simply absent from the board. */
+        breakdown: false,
       })
       .where(inArray(schema.units.id, input.unitIds));
 

@@ -575,6 +575,53 @@ describe("the commit writes the unit facts, not just the formation", () => {
     });
   });
 
+  test("a repaired unit rejoining a formation stops being broken down", async () => {
+    // Morning: the machine is down, so the file reports a status where a place
+    // would go and it takes no part in the shift.
+    const morning = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file([
+          ...fleetRows(digger1.code, [hauler1.code]),
+          [hauler4.code, "BREAKDOWN", null, null],
+        ])
+      )
+    );
+    expect(morning.status).toBe(200);
+
+    const [down] = await db
+      .select({ breakdown: schema.units.breakdown })
+      .from(schema.units)
+      .where(eq(schema.units.id, hauler4.id));
+    expect(down!.breakdown).toBe(true);
+
+    // Night: it is fixed and the file seats it in a formation. The flag has to
+    // come down with it — the file names a place now, and until 2026-09-05 only
+    // support rows could clear it, which left the unit listed under its fleet
+    // and excluded from the board, because allocation drops broken machines.
+    const night = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(await file(fleetRows(digger1.code, [hauler1.code, hauler4.code])))
+    );
+    expect(night.status).toBe(200);
+
+    const [back] = await db
+      .select({
+        breakdown: schema.units.breakdown,
+        workArea: schema.units.workArea,
+        fleetSupport: schema.units.fleetSupport,
+      })
+      .from(schema.units)
+      .where(eq(schema.units.id, hauler4.id));
+    expect(back).toMatchObject({
+      breakdown: false,
+      workArea: miningName,
+      fleetSupport: false,
+    });
+  });
+
   test("a re-upload updates in place and moves a hauler between formations", async () => {
     const first = await postForm(
       "/fleets/import/commit",
