@@ -406,11 +406,38 @@ export async function buildBoard(
   for (const [unitId, rows] of byUnit) {
     const first = rows[0]!;
     const unit = unitOf(first);
-    // At most one slot holder is rostered to this shift — PLAN refuses two on
-    // the same one — so the first match is the only match.
+    /*
+     * Which of the unit's standing operators drives it today.
+     *
+     * Normally a list of one: PLAN pairs a unit with a Day operator and a
+     * Night one. Normally, not always — the pair is checked against the roster
+     * on the day it is *made* (`routes/fleet-allocation`), and nothing rechecks
+     * it afterwards, so a shift swap, or a roster uploaded after the pairing,
+     * can put both partners on the same shift.
+     *
+     * Until 2026-09-05 the first row simply won, and "first" was whatever
+     * order the join happened to return — in practice who was paired first,
+     * possibly months ago, which is not a fact about today. The yard's answer
+     * is the tap: of two operators who both turned up, the earlier one takes
+     * the unit. Ready-and-eligible outranks the tap, so a partner who failed
+     * FTW no longer takes the unit down with them while the other stands
+     * there able to drive it.
+     */
+    const tap = (c: Candidate) =>
+      // Nulls last: somebody who never tapped must not win a tie-break
+      // against somebody who did.
+      c.readiness.tappedAt ?? "\uffff";
+    const fit = (c: Candidate) =>
+      Number(readyFor(first.requiresFtw, c).passed && eligible(unit, c));
     const holder = rows
       .map((r) => (r.employeeId ? pool.get(r.employeeId) : undefined))
-      .find((c): c is Candidate => c !== undefined);
+      .filter((c): c is Candidate => c !== undefined)
+      .sort(
+        (a, b) =>
+          fit(b) - fit(a) ||
+          tap(a).localeCompare(tap(b)) ||
+          a.person.nik.localeCompare(b.person.nik)
+      )[0];
     const readiness = holder ? readyFor(first.requiresFtw, holder) : null;
 
     if (holder && readiness?.passed && eligible(unit, holder)) {
@@ -443,17 +470,26 @@ export async function buildBoard(
 
   /* --- 2. the spares, first come first served ----------------------------- */
 
-  const slotHolders = new Set(
-    planned.map((r) => r.employeeId).filter((id): id is string => id !== null)
-  );
+  /*
+   * Who is already on a unit — `taken`, which at this point holds exactly the
+   * standing operators step 1 seated, and nobody else.
+   *
+   * It used to be every operator PLAN *named*, seated or not. That was the
+   * same conflation as above and it cost more: when two partners shared a
+   * shift, the one who lost the unit was struck out of the spare pool too,
+   * so a man who had passed FTW and tapped in could not be sent to any other
+   * vacancy. He was not on the board and nothing said why — only the audit
+   * table showed him, as "tidak kebagian" (2026-09-05).
+   */
 
   /**
    * Everyone in the pool who holds a standing unit *somewhere*.
    *
-   * Not the same as `slotHolders`, which is about this board: an operator
-   * whose unit is broken down, on standby, or in no formation holds a unit in
-   * PLAN and no seat here, so they arrive in the spare pool alongside people
-   * who hold nothing at all. This set is what tells the two apart.
+   * Not the same as `taken`, which is about this board: an operator whose unit
+   * is broken down, on standby, in no formation — or taken by their own shift
+   * partner — holds a unit in PLAN and no seat here, so they arrive in the
+   * spare pool alongside people who hold nothing at all. This set is what
+   * tells the two apart.
    */
   const standing = new Set<string>();
   if (pool.size) {
@@ -465,7 +501,7 @@ export async function buildBoard(
   }
 
   const spares = [...pool.values()]
-    .filter((c) => !slotHolders.has(c.person.id))
+    .filter((c) => !taken.has(c.person.id))
     .filter((c) => c.readiness.finger === "pass")
     .sort((a, b) => {
       /*

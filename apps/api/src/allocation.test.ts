@@ -42,8 +42,14 @@ const DEADLINE = "05:15:00";
  * here is a date, because a date is what the engine keys on.
  */
 const dates: string[] = [];
+/** One unused day per test, counted forward from a date no real data uses. */
+const DAY_ONE = Date.UTC(1999, 2, 1);
 function nextDate(): string {
-  const date = `1999-03-${String(dates.length + 1).padStart(2, "0")}`;
+  // Counted rather than formatted by hand: the suite outgrew March, and
+  // "1999-03-32" reaches Postgres as a date error, not as a clear failure.
+  const date = new Date(DAY_ONE + dates.length * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   dates.push(date);
   return date;
 }
@@ -438,6 +444,84 @@ describe("the planned operator", () => {
 
     const slot = (await mine(date, "day")).find((s) => s.unitId === unit);
     expect(slot?.employeeId).toBeNull();
+  });
+});
+
+/*
+ * PLAN pairs a unit with one Day operator and one Night one, and checks that
+ * against the roster on the day the pair is *made*. Nothing rechecks it, so a
+ * shift swap or a late roster upload can put both partners on one shift. The
+ * plan rows are inserted partner-first in these tests precisely because the
+ * join used to hand back that order and the board took the first row it saw.
+ */
+describe("two standing operators on one shift", () => {
+  test("the unit goes to whichever of them tapped first", async () => {
+    const date = nextDate();
+    const lateNik = newNik();
+    const earlyNik = newNik();
+    const late = await addEmployee({ nik: lateNik });
+    const early = await addEmployee({ nik: earlyNik });
+    const unit = await addUnit({ code: `${tag}-P1` });
+    await roster(date, late, "D");
+    await roster(date, early, "D");
+    // Paired first, so the old code seated this one on insertion order alone.
+    await plan(unit, late);
+    await plan(unit, early);
+    await tapAt(date, lateNik, "05:01:00");
+    await tapAt(date, earlyNik, "05:00:00");
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(early);
+    expect(slot?.source).toBe("plan");
+    expect(slot?.tappedAt).toBe("05:00:00");
+  });
+
+  test("the other one is a spare, not a man written off the board", async () => {
+    const date = nextDate();
+    const lateNik = newNik();
+    const earlyNik = newNik();
+    const late = await addEmployee({ nik: lateNik });
+    const early = await addEmployee({ nik: earlyNik });
+    const shared = await addUnit({ code: `${tag}-P2` });
+    const vacant = await addUnit({ code: `${tag}-P3` });
+    await roster(date, late, "D");
+    await roster(date, early, "D");
+    await plan(shared, late);
+    await plan(shared, early);
+    await tapAt(date, lateNik, "05:01:00");
+    await tapAt(date, earlyNik, "05:00:00");
+
+    const slots = await mine(date);
+    expect(slots.find((s) => s.unitId === shared)?.employeeId).toBe(early);
+    /* He passed and he tapped in; losing the race for his own unit is no
+       reason to keep him off every other one. Until 2026-09-05 he was struck
+       from the spare pool because PLAN named him, and this vacancy stood
+       empty beside him. */
+    const filled = slots.find((s) => s.unitId === vacant);
+    expect(filled?.employeeId).toBe(late);
+    expect(filled?.source).toBe("spare");
+  });
+
+  test("a partner who failed does not take the unit down with them", async () => {
+    const date = nextDate();
+    const failedNik = newNik();
+    const readyNik = newNik();
+    const failed = await addEmployee({ nik: failedNik });
+    const ready = await addEmployee({ nik: readyNik });
+    const unit = await addUnit({ code: `${tag}-P4`, ftw: true });
+    await roster(date, failed, "D");
+    await roster(date, ready, "D");
+    // First in, and the earlier tap of the two — but no FTW reading, which
+    // this unit asks for. Being early is not the same as being able to drive.
+    await plan(unit, failed);
+    await plan(unit, ready);
+    await tapAt(date, failedNik, "05:00:00");
+    await tapAt(date, readyNik, "05:05:00");
+    await ftwOk(date, readyNik);
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(ready);
+    expect(slot?.source).toBe("plan");
   });
 });
 
