@@ -91,6 +91,14 @@ databases. Both are opened strictly read-only — every session sets
 `default_transaction_read_only` — but they still belong in `.env` and nowhere
 else. `.env` is git-ignored; keep it that way.
 
+`ROSTER_SOURCE_URL` and `ROSTER_SOURCE_SC` are the third source, unggul_att,
+reached over HTTP. The API **refuses to start** without them, deliberately: a
+default would point the roster at another site's schedule, and a wrong roster
+raises no error — its symptom is an operator who is never picked. Ask the
+unggul_att administrators for the key, and do not copy it out of an API
+collection into the repository. Only the standing key goes in `.env`; the JWT
+it buys lives an hour and is fetched per run.
+
 ## 3. Build and start
 
 ```sh
@@ -155,6 +163,24 @@ docker compose up -d
 
 `migrate` runs again automatically and applies anything new. If the release
 changed `PUBLIC_ORIGIN`, the web image must be rebuilt — see the next section.
+
+**A release can add a required variable, and the API will not start without
+it.** `migrate` carries only `DATABASE_URL`, so migrations still run and the
+failure surfaces one service later, as an API that restarts in a loop. Check
+`docs/deploy.md` and `deploy/.env.example` against your own `.env` before
+building — `git diff HEAD@{1} -- deploy/.env.example` names anything the
+release added.
+
+Two more things a release can ask for that a build does not supply:
+
+- **Timeline stages.** A new scheduled action is code; the row that fires it is
+  data. `roster-ingest` needs one stage per shift, added in the Timeline menu.
+  Without them the roster mirrors only when somebody presses Sync.
+- **The first roster pull's timing.** A month is taken over by the mirror only
+  when the pull covers the whole of it, which is true for the current month
+  only in its first eight days. Deploy later than that and the current month
+  stays with whatever spreadsheet holds it; the mirror starts with the next
+  one. Raising `ROSTER_SYNC_DAYS_BACK` for a single pull is the way round it.
 
 ### Uploading employee photos in bulk
 
