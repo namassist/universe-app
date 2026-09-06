@@ -163,7 +163,6 @@ describe("what a grant lets through", () => {
       "attendance",
       "ftw",
       "units",
-      "revisions",
       "devices",
       "fleetConfig",
       "allocation",

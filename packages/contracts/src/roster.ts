@@ -229,6 +229,21 @@ export function isRosterDocumentStatus(
   return (ROSTER_DOCUMENT_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * Where a document's days came from.
+ *
+ * `unggul` is a document the roster ingest mirrors from unggul_att, which is
+ * the source of truth for the schedule; `upload` is the historical spreadsheet
+ * import, kept because the documents it produced are still readable history.
+ *
+ * The distinction is load-bearing rather than descriptive: the ingest
+ * reconciles — it deletes local days the source no longer has — and this is
+ * what bounds that deletion to the documents it owns. An uploaded document is
+ * never touched by a pull, whatever dates it covers.
+ */
+export const ROSTER_DOCUMENT_SOURCES = ["upload", "unggul"] as const;
+export type RosterDocumentSource = (typeof ROSTER_DOCUMENT_SOURCES)[number];
+
 /* ------------------------------------------------------------ revision status */
 
 /**

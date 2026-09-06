@@ -82,12 +82,7 @@ export const NAV: NavEntry[] = [
     key: "roster",
     label: "Roster & Attendance",
     icon: CalendarDays,
-    children: [
-      leaf("roster-data"),
-      leaf("roster-revision"),
-      leaf("roster-approval"),
-      leaf("attendance"),
-    ],
+    children: [leaf("roster-data"), leaf("attendance")],
   },
   item("fit-to-work", Heart),
   {

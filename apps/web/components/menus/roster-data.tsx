@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { Download, Eye, Search, Upload } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, Eye, RefreshCw, Search } from "lucide-react";
 
 import type { RosterDocumentStatus } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
-import { API_URL, errorMessage, fetchBlob } from "@/lib/api";
+import { api, API_URL, errorMessage, fetchBlob, unwrap } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { masterQueryOptions } from "@/lib/queries/master";
 import {
@@ -66,8 +66,24 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const base = `/roster-data`;
   const canW = mode === "manage";
+
+  /*
+   * The escape hatch beside the scheduled pull, the same one the readiness
+   * screens have. unggul_att owns the roster; there is nothing to upload here
+   * and nothing to edit — the only action left is "fetch it again now".
+   */
+  const sync = useMutation({
+    mutationFn: () => unwrap(api.v1.roster.sync.post()),
+    onSuccess: (result) => {
+      pushToast("success", t.rdSyncT, `${result.upserted} ${t.rdSyncD}`);
+      void queryClient.invalidateQueries({ queryKey: ["roster-documents"] });
+    },
+    onError: (error) =>
+      pushToast("error", t.rdSyncErrT, errorMessage(error, t.rdLoadErr)),
+  });
 
   /* Every filter is sent to the API rather than applied to a loaded list: the
      search reaches the joined department and uploader names, which this side
@@ -118,9 +134,11 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
     <div className="flex flex-col gap-6">
       <PageTitle title={t.navRD} sub={t.rdSub}>
         {canW ? (
-          <Button onClick={() => router.push(`${base}/upload`)}>
-            <Upload />
-            {t.rdUpload}
+          <Button onClick={() => sync.mutate()} disabled={sync.isPending}>
+            <RefreshCw
+              className={sync.isPending ? "animate-spin" : undefined}
+            />
+            {t.rdSync}
           </Button>
         ) : null}
       </PageTitle>
@@ -201,7 +219,9 @@ export function RosterDataMenu({ mode }: { mode: AccessMode }) {
                   <TableCell className="max-xl:hidden">
                     <NameCell
                       name={
-                        <span className="font-medium">{r.uploadedByName}</span>
+                        <span className="font-medium">
+                          {r.uploadedByName ?? t.rdSourceMirror}
+                        </span>
                       }
                       sub={dateLabel(r.createdAt, lang)}
                     />

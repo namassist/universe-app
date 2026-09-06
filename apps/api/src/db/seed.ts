@@ -60,12 +60,12 @@ const ROLE_SEEDS: RoleSeed[] = [
       "fleet-allocation",
       "fleet-setting",
     ],
-    manage: ["employees", "roster-data", "roster-revision", "attendance"],
+    manage: ["employees", "roster-data", "attendance"],
   },
   {
     slug: "manajer",
     name: "Manajer",
-    description: "Monitoring divisi + approval revisi roster",
+    description: "Monitoring divisi",
     scope: "dept",
     locked: false,
     view: [
@@ -74,14 +74,13 @@ const ROLE_SEEDS: RoleSeed[] = [
       "display-fleet",
       "employees",
       "roster-data",
-      "roster-revision",
       "attendance",
       "fit-to-work",
       "unit-status",
       "fleet-allocation",
       "fleet-setting",
     ],
-    manage: ["roster-approval"],
+    manage: ["roster-data"],
   },
   {
     // Scope correction (design D8): `dept` truncated the fleet board — which
@@ -142,13 +141,7 @@ const ROLE_SEEDS: RoleSeed[] = [
     description: "Akses pribadi — lihat roster & lapor Fit To Work",
     scope: "self",
     locked: false,
-    view: [
-      "dashboard",
-      "employees",
-      "roster-data",
-      "roster-revision",
-      "attendance",
-    ],
+    view: ["dashboard", "employees", "roster-data", "attendance"],
     manage: ["fit-to-work"],
   },
 ];

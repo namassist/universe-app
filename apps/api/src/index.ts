@@ -33,8 +33,6 @@ import {
 import { masterRoutes } from "./routes/master";
 import { rolesRoutes } from "./routes/roles";
 import { rosterRoutes } from "./routes/roster";
-import { rosterImportRoutes } from "./routes/roster-import";
-import { rosterRevisionRoutes } from "./routes/roster-revision";
 import { timelineRoutes } from "./routes/timeline";
 import { unitStatusRoutes } from "./routes/unit-status";
 import { busSchedulesRoutes, unitsRoutes } from "./routes/units";
@@ -56,9 +54,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(displayRoutes)
   .use(masterRoutes)
   .use(employeesRoutes)
-  .use(rosterImportRoutes)
   .use(rosterRoutes)
-  .use(rosterRevisionRoutes)
   .use(unitsRoutes)
   .use(busSchedulesRoutes)
   .use(fleetsRoutes)
@@ -95,11 +91,7 @@ export const app = new Elysia()
           { name: "employees", description: "Employee register and photos" },
           {
             name: "roster",
-            description: "Monthly roster documents, their days, and imports",
-          },
-          {
-            name: "roster-revision",
-            description: "Roster revision submissions and their approval",
+            description: "Monthly roster documents mirrored from unggul_att",
           },
           { name: "units", description: "Unit registry" },
           { name: "bus", description: "Bus departure schedules" },

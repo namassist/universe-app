@@ -8,7 +8,6 @@ import {
   Clock,
   Heart,
   IdCard,
-  MessageSquareMore,
   Monitor,
   Search,
   Truck,
@@ -134,10 +133,6 @@ export function DashboardMenu() {
         belum: data?.ftw?.missing ?? 0,
       },
       units: { breakdown: data?.units?.breakdown ?? 0 },
-      rev: {
-        pending: data?.revisions?.pendingItems ?? 0,
-        pendingSids: data?.revisions?.pendingDocs ?? 0,
-      },
       simper: {
         expired: data?.simper?.expired ?? 0,
         soon: data?.simper?.soon ?? 0,
@@ -256,36 +251,6 @@ export function DashboardMenu() {
             .slice(1, 3)
             .map((u) => ` · ${u.name}`)
             .join("")}
-        </>
-      }
-    />
-  );
-  const cardApproval = () => (
-    <StatCard
-      key="apv"
-      href={link("roster-approval")}
-      icon={<MessageSquareMore />}
-      iconStyle={CARD_INFO}
-      value={String(facts.rev.pending)}
-      label={t.statApproval}
-      detail={
-        <>
-          <b>{facts.rev.pendingSids}</b> {t.dRevGroups}
-        </>
-      }
-    />
-  );
-  const cardRevPending = () => (
-    <StatCard
-      key="rev"
-      href={link("roster-revision")}
-      icon={<MessageSquareMore />}
-      iconStyle={CARD_INFO}
-      value={String(facts.rev.pending)}
-      label={t.statRevPending}
-      detail={
-        <>
-          <b>{facts.rev.pendingSids}</b> {t.dRevGroups}
         </>
       }
     />
@@ -507,11 +472,6 @@ export function DashboardMenu() {
     cards.push(cardBreakdown());
     allRows.push(...bdRows());
   }
-  if (data?.revisions) {
-    /* One queue, two readings of it: whoever decides sees "waiting on you",
-       whoever submits sees "waiting on someone else". */
-    cards.push(has("roster-approval") ? cardApproval() : cardRevPending());
-  }
   if (data?.allocation) cards.push(cardAlloc(), cardActualToday());
   if (data?.fleetConfig && data.fleetConfig.unitsWithOperatorNoFleet > 0)
     cards.push(cardFleetGap());
@@ -582,13 +542,6 @@ export function DashboardMenu() {
               value={facts.me.unitCode ?? t.meNoUnit}
               tone={facts.me.unitCode ? "success" : "neutral"}
             />
-            {facts.me.pendingRevisions > 0 ? (
-              <MeFact
-                label={t.meRevision}
-                value={String(facts.me.pendingRevisions)}
-                tone="warning"
-              />
-            ) : null}
           </div>
         </Panel>
       ) : null}

@@ -64,7 +64,8 @@ export function isBloodType(value: string): value is BloodType {
  * What a timeline stage *does* when its time arrives.
  *
  * `ftw-ingest` and `finger-ingest` pull the day's readiness data from the
- * external sources into the local snapshots. `spare-validate` names work the
+ * external sources into the local snapshots; `roster-ingest` mirrors the
+ * schedule itself from unggul_att, which owns it. `spare-validate` names work the
  * allocation engine will perform; until it exists it dispatches to a logged
  * no-op. The values are the contract — labels below are presentation and may
  * be reworded freely.
@@ -74,6 +75,7 @@ export const TIMELINE_ACTIONS = [
   "ftw-ingest",
   "finger-in",
   "finger-ingest",
+  "roster-ingest",
   "spare-validate",
   "bus-depart",
   "other",
@@ -86,6 +88,7 @@ export const TIMELINE_ACTION_LABELS: Record<TimelineAction, string> = {
   "ftw-ingest": "Ambil data FTW",
   "finger-in": "Batas finger in",
   "finger-ingest": "Ambil data finger",
+  "roster-ingest": "Ambil roster unggul_att",
   "spare-validate": "Validasi spare ke unit",
   "bus-depart": "Bus berangkat",
   other: "Lainnya",

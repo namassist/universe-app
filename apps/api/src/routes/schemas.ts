@@ -91,6 +91,7 @@ const TimelineActionUnion = t.Union([
   t.Literal("ftw-ingest"),
   t.Literal("finger-in"),
   t.Literal("finger-ingest"),
+  t.Literal("roster-ingest"),
   t.Literal("spare-validate"),
   t.Literal("bus-depart"),
   t.Literal("other"),
@@ -1244,9 +1245,12 @@ export const RosterDocumentSchema = t.Object({
   /** ISO `YYYY-MM-01` — the first of the month the document covers. */
   month: t.String(),
   fileName: t.String(),
-  uploadedById: t.String(),
-  uploadedByName: t.String(),
+  /** Null on a mirrored document: nobody uploaded it. */
+  uploadedById: t.Union([t.String(), t.Null()]),
+  uploadedByName: t.Union([t.String(), t.Null()]),
   status: RosterDocumentStatusSchema,
+  /** Where the days came from — `unggul` is mirrored and read-only. */
+  source: t.Union([t.Literal("upload"), t.Literal("unggul")]),
   /** How many distinct people the document rosters. */
   employeeCount: t.Integer(),
   /** How many daily rows it holds in total. */
@@ -1302,137 +1306,6 @@ export const RosterInForceSchema = t.Object({
   kind: RosterCodeKindSchema,
 });
 
-/* ------------------------------------------------------------- roster import */
-
-/**
- * The roster preview: the master import's shape, plus the handle its size
- * forces (design D8).
- *
- * `errors` and `warnings` come back whole — they are small, and they are the
- * part an operator actually reads. `rows` is one page of the accepted grid;
- * `token` fetches the rest, and `rowTotal` is how many there are so the pager
- * can be drawn without holding the month.
- */
-export const RosterImportPreviewSchema = t.Object({
-  fileName: t.String(),
-  newCount: t.Integer(),
-  updatedCount: t.Integer(),
-  unchangedCount: t.Integer(),
-  /** Blocking only — remarks are counted by `warnings.length`. */
-  errorCount: t.Integer(),
-  rows: t.Array(MasterImportPreviewRowSchema),
-  errors: t.Array(ImportErrorSchema),
-  warnings: t.Array(ImportErrorSchema),
-  /** Always empty: the roster's one reference is stated, never read from file. */
-  newMasters: t.Array(PendingMasterSchema),
-  /**
-   * Handle for the pages after the first. Null when the file could not be
-   * staged — the preview is still correct, it simply cannot be paged, and the
-   * commit is unaffected because it re-parses the file the client sends.
-   */
-  token: t.Nullable(t.String()),
-  rowTotal: t.Integer(),
-  page: t.Integer(),
-  pageSize: t.Integer(),
-});
-
-/** One more page of an existing preview's accepted rows. */
-export const RosterImportRowsSchema = t.Object({
-  rows: t.Array(MasterImportPreviewRowSchema),
-  rowTotal: t.Integer(),
-  page: t.Integer(),
-  pageSize: t.Integer(),
-});
-
-/**
- * What a commit did.
- *
- * The master result's three members are kept so the shared results panel reads
- * it unchanged, and four roster-specific ones are added because they are the
- * questions this import raises and no other does: which document is now in
- * force, which one it displaced, and how many pending revisions went down with
- * it (design D12).
- */
-export const RosterImportResultSchema = t.Object({
-  created: t.Integer(),
-  updated: t.Integer(),
-  mastersCreated: t.Integer(),
-  documentId: t.String(),
-  archivedDocumentId: t.Nullable(t.String()),
-  rejectedRevisions: t.Integer(),
-  employeeCount: t.Integer(),
-});
-
-/* ------------------------------------------------------------ roster revision */
-
-/**
- * One requested change, with its decision if it has one.
- *
- * `submittedBy` rides on the entry as well as the submission so a queue row
- * carries both accounts: an approver deciding its own submission is permitted
- * (design D18), and the only thing that makes it auditable is that both names
- * come back together.
- */
-export const RosterRevisionItemSchema = t.Object({
-  id: t.String(),
-  revisionId: t.String(),
-  /** The readable submission identifier — `REV-0001`. */
-  revisionCode: t.String(),
-  documentId: t.String(),
-  employeeId: t.String(),
-  nik: t.String(),
-  employeeName: t.String(),
-  departmentId: t.String(),
-  departmentName: t.String(),
-  date: t.String(),
-  fromCode: RosterCodeSchema,
-  toCode: RosterCodeSchema,
-  /** "HH:MM", and only where the submitter asked for a partial day. */
-  startTime: t.Nullable(t.String()),
-  endTime: t.Nullable(t.String()),
-  reason: t.String(),
-  status: RosterRevisionStatusSchema,
-  submittedById: t.String(),
-  submittedByName: t.String(),
-  submittedAt: t.String(),
-  decidedById: t.Nullable(t.String()),
-  decidedByName: t.Nullable(t.String()),
-  decidedAt: t.Nullable(t.String()),
-  /** The rejection's reason, or the approval's optional note. */
-  decisionNote: t.String(),
-  /** False once the document it belongs to has been archived (design D12). */
-  decidable: t.Boolean(),
-});
-
-/** A submission and its entries. Status lives on the entries, never here. */
-export const RosterRevisionSchema = t.Object({
-  id: t.String(),
-  code: t.String(),
-  documentId: t.String(),
-  documentMonth: t.String(),
-  documentStatus: RosterDocumentStatusSchema,
-  departmentId: t.String(),
-  departmentName: t.String(),
-  submittedById: t.String(),
-  submittedByName: t.String(),
-  submittedAt: t.String(),
-  items: t.Array(RosterRevisionItemSchema),
-});
-
-/**
- * A decision refused because the day moved under the entry (design D10).
- *
- * Names both codes rather than saying "stale": the approver has to decide
- * whether the change still makes sense against what the day now says, and
- * cannot do that from the fact that it changed.
- */
-export const RosterConflictSchema = t.Object({
-  code: t.String(),
-  message: t.String(),
-  recordedCode: RosterCodeSchema,
-  currentCode: RosterCodeSchema,
-});
-
 /* ------------------------------------------------------ readiness ingest */
 
 /** One sync pass's honest accounting — skipped rows are counted, not hidden. */
@@ -1442,6 +1315,28 @@ export const IngestSyncResultSchema = t.Object({
   /** Of those, rows that were not here before — what a person pressed Sync for. */
   inserted: t.Integer(),
   skipped: t.Integer(),
+  syncedAt: t.String(),
+});
+
+/**
+ * What a roster pull did.
+ *
+ * Not `IngestSyncResultSchema`: a roster mirror answers two questions the
+ * readiness snapshots never raise. `deleted` is days the source withdrew, which
+ * only a reconciling sync can report, and `unknownCodes` names codes outside
+ * our legend — a wrong code produces no error anywhere, so counting it is the
+ * only way it is ever seen.
+ */
+export const RosterSyncResultSchema = t.Object({
+  fetched: t.Integer(),
+  upserted: t.Integer(),
+  inserted: t.Integer(),
+  deleted: t.Integer(),
+  skippedUnknownNik: t.Integer(),
+  unknownCodes: t.Record(t.String(), t.Integer()),
+  documents: t.Integer(),
+  /** `department|month` left to an upload the pull did not wholly cover. */
+  deferred: t.Array(t.String()),
   syncedAt: t.String(),
 });
 
@@ -1621,9 +1516,6 @@ export const DashboardSchema = t.Object({
       standby: t.Integer(),
     })
   ),
-  revisions: t.Nullable(
-    t.Object({ pendingItems: t.Integer(), pendingDocs: t.Integer() })
-  ),
   devices: t.Nullable(t.Object({ total: t.Integer(), offline: t.Integer() })),
   /** When the two external sources last answered; null when never. */
   ingest: t.Nullable(
@@ -1656,7 +1548,6 @@ export const DashboardSchema = t.Object({
       tappedAt: t.Nullable(t.String()),
       unitCode: t.Nullable(t.String()),
       unitSource: t.Nullable(t.UnionEnum(["plan", "spare", "manual"] as const)),
-      pendingRevisions: t.Integer(),
     })
   ),
   /**

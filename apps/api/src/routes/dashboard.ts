@@ -117,16 +117,6 @@ async function personalDay(nik: string, today: string) {
     )
     .limit(1);
 
-  const [pending] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.rosterRevisionItems)
-    .where(
-      and(
-        eq(schema.rosterRevisionItems.employeeId, employee.id),
-        eq(schema.rosterRevisionItems.status, "pending")
-      )
-    );
-
   return {
     name: employee.name,
     nik,
@@ -135,7 +125,6 @@ async function personalDay(nik: string, today: string) {
     tappedAt: finger?.firstInAt ?? finger?.firstInPmAt ?? null,
     unitCode: seat?.unitCode ?? null,
     unitSource: seat?.source ?? null,
-    pendingRevisions: pending?.count ?? 0,
   };
 }
 
@@ -239,21 +228,6 @@ export const dashboardRoutes = new Elysia({
                   where ${schema.units.active} and ${schema.units.standby})::int`,
               })
               .from(schema.units)
-          )[0]
-        : null;
-
-      /* Items, not documents: a revision is decided line by line, so the
-         number somebody has to act on is the line count. The document count
-         rides along because that is what the queue lists. */
-      const revisions = holds(permissions, "roster-revision", "roster-approval")
-        ? (
-            await db
-              .select({
-                pendingItems: sql<number>`count(*)::int`,
-                pendingDocs: sql<number>`count(distinct ${schema.rosterRevisionItems.revisionId})::int`,
-              })
-              .from(schema.rosterRevisionItems)
-              .where(eq(schema.rosterRevisionItems.status, "pending"))
           )[0]
         : null;
 
@@ -563,7 +537,6 @@ export const dashboardRoutes = new Elysia({
         attendance: attendance ?? null,
         ftw: ftw ?? null,
         units: units ?? null,
-        revisions: revisions ?? null,
         devices: devices ?? null,
         ingest,
         fleetConfig: fleetConfig ?? null,

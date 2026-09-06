@@ -18,9 +18,7 @@ import { FleetAllocationMenu } from "./fleet-allocation";
 import { FleetSettingMenu } from "./fleet-setting";
 import { MasterMenu } from "./master";
 import { MenuPlaceholder } from "./placeholder";
-import { RosterApprovalMenu } from "./roster-approval";
 import { RosterDataMenu } from "./roster-data";
-import { RosterRevisionMenu } from "./roster-revision";
 import { RunTextsMenu } from "./run-texts";
 import { SettingMenu } from "./setting";
 import { SoundsMenu } from "./sounds";
@@ -38,8 +36,6 @@ type MenuComponent = ComponentType<{ mode: AccessMode }>;
 const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   dashboard: DashboardMenu,
   "roster-data": RosterDataMenu,
-  "roster-revision": RosterRevisionMenu,
-  "roster-approval": RosterApprovalMenu,
   attendance: AttendanceMenu,
   employees: EmployeesMenu,
   "fit-to-work": FitToWorkMenu,

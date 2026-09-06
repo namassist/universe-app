@@ -123,6 +123,30 @@ export const env = {
    *  unit here. */
   FTW_SOURCE_COMPANY_ID: number("FTW_SOURCE_COMPANY_ID", "2"),
 
+  /** The roster source (unggul_att), reached over HTTP rather than SQL.
+   *
+   *  Two values, because the endpoint asks for two: `SC` is the standing key
+   *  every request carries, and it buys a JWT good for an hour. The JWT is
+   *  deliberately absent from this list — a credential with an hour's life is
+   *  fetched per run and thrown away, and one written into a file outlives its
+   *  own validity by design.
+   *
+   *  `required` with no fallback like the two above: a default here would
+   *  point the roster at another site's schedule, and a wrong roster is not a
+   *  visible error — it is an operator who is never picked. */
+  ROSTER_SOURCE_URL: required("ROSTER_SOURCE_URL"),
+  ROSTER_SOURCE_SC: required("ROSTER_SOURCE_SC"),
+
+  /** The window the roster pull covers, counted from today.
+   *
+   *  Forward-looking, unlike the readiness ingest's "today and yesterday": a
+   *  roster is a plan, and what admins revise is the days that have not
+   *  happened yet. The few days back are for a correction made after the fact,
+   *  and they bound the reconciliation — outside this window the mirror knows
+   *  nothing and must therefore delete nothing. */
+  ROSTER_SYNC_DAYS_BACK: number("ROSTER_SYNC_DAYS_BACK", "7"),
+  ROSTER_SYNC_MONTHS_AHEAD: number("ROSTER_SYNC_MONTHS_AHEAD", "1"),
+
   /** How long an ingest stage keeps re-pulling after it fires (design: the
    *  window is retry and late-arrival tolerance in one — every pass is an
    *  idempotent upsert). Bounded so everything is settled before the bus. */

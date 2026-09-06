@@ -40,7 +40,14 @@ import { requireAuth } from "../auth/macro";
 import { scopeWhere } from "../auth/scope";
 import { db, schema } from "../db";
 import { monthDays, monthToFirstDay } from "./roster-month";
-import { rosterWorkbook } from "./roster-import";
+import { rosterWorkbook } from "./roster-export";
+import { syncRoster } from "../roster-sync";
+
+/** Same wording as the readiness sync routes: one failure, one sentence. */
+const sourceUnreachable = {
+  code: "source_unreachable",
+  message: "Sumber data eksternal tidak dapat dihubungi",
+};
 import {
   ErrorSchema,
   OptionalRosterCodeSchema,
@@ -48,6 +55,7 @@ import {
   RosterDocumentSchema,
   RosterGridSchema,
   RosterInForceSchema,
+  RosterSyncResultSchema,
 } from "./schemas";
 
 const doc = schema.rosterDocuments;
@@ -99,15 +107,23 @@ const documentColumns = {
   uploadedById: doc.uploadedBy,
   uploadedByName: usr.name,
   status: doc.status,
+  source: doc.source,
   createdAt: doc.createdAt,
 };
 
+/**
+ * `leftJoin` to the uploader, not `innerJoin`.
+ *
+ * A mirrored document has no uploader, and an inner join would not render it
+ * without a name — it would drop the row entirely, so the whole ingested
+ * roster would be missing from a list that reports no error.
+ */
 function documentQuery() {
   return db
     .select(documentColumns)
     .from(doc)
     .innerJoin(dpt, eq(dpt.id, doc.departmentId))
-    .innerJoin(usr, eq(usr.id, doc.uploadedBy));
+    .leftJoin(usr, eq(usr.id, doc.uploadedBy));
 }
 
 type DocumentJoinRow = Awaited<ReturnType<typeof documentQuery>>[number];
@@ -291,9 +307,8 @@ export const rosterRoutes = new Elysia({
       if (!document) return status(404, documentNotFound);
 
       const days = monthDays(document.month);
-      // Departemen and posisi come along because the export is the same
-      // document as the template (import D7) — a file downloaded to be
-      // corrected has to be a file the import will take back.
+      // Departemen and posisi come along because the sheet is read by people:
+      // they are how a supervisor finds their own crew in it.
       const cells = await db
         .select({
           employeeId: day.employeeId,
@@ -517,9 +532,44 @@ export const rosterRoutes = new Elysia({
       },
       detail: { summary: "A page of a roster document's grid" },
     }
+  )
+
+  /*
+   * Pull the roster from unggul_att now.
+   *
+   * The scheduled `roster-ingest` stage is the normal write path; this is the
+   * escape hatch beside it, exactly as the readiness screens have one. It runs
+   * a single pass rather than a window: whoever pressed it wants "now", and can
+   * press it again.
+   *
+   * `manage` on the menu, and it writes every department. The pull is
+   * site-wide by construction — the source's department filter is accepted and
+   * ignored — so this is a grant to press, not a grant to narrow.
+   */
+  .post(
+    "/sync",
+    async ({ status }) => {
+      try {
+        const result = await syncRoster();
+        return { ...result, syncedAt: new Date().toISOString() };
+      } catch (error) {
+        console.error("[roster] manual sync failed", error);
+        return status(502, sourceUnreachable);
+      }
+    },
+    {
+      auth: { menu: "roster-data", mode: "manage" },
+      response: {
+        200: RosterSyncResultSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        502: ErrorSchema,
+      },
+      detail: { summary: "Mirror the roster from unggul_att now (one pass)" },
+    }
   );
 
-/* Shared with the importer and the revision routes so all three resolve a
-   document, its month, and its scope the same way. */
+/* Shared with the roster export so both resolve a document, its month, and
+   its scope the same way. */
 export { documentQuery, documentScope, toDocuments, documentNotFound };
 export type { DocumentJoinRow };

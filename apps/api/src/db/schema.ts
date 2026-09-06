@@ -23,6 +23,7 @@ import {
   EMPLOYEE_STATUSES,
   MCU_RESULTS,
   ROSTER_CODES,
+  ROSTER_DOCUMENT_SOURCES,
   ROSTER_DOCUMENT_STATUSES,
   ROSTER_REVISION_STATUSES,
   SCOPES,
@@ -58,6 +59,10 @@ export const rosterCode = pgEnum("roster_code", ROSTER_CODES);
 export const rosterDocumentStatus = pgEnum(
   "roster_document_status",
   ROSTER_DOCUMENT_STATUSES
+);
+export const rosterDocumentSource = pgEnum(
+  "roster_document_source",
+  ROSTER_DOCUMENT_SOURCES
 );
 export const rosterRevisionStatus = pgEnum(
   "roster_revision_status",
@@ -805,7 +810,9 @@ export const employeeSkills = pgTable(
  *
  * `uploaded_by` is `restrict` like every other reference in this schema — an
  * account that uploaded a roster is part of the document's provenance, and
- * provenance that can be deleted is provenance that cannot be trusted.
+ * provenance that can be deleted is provenance that cannot be trusted. It is
+ * nullable because `source` admits documents no account produced: the roster
+ * ingest mirrors unggul_att, and there is no person behind those rows to name.
  */
 export const rosterDocuments = pgTable(
   "roster_documents",
@@ -817,10 +824,20 @@ export const rosterDocuments = pgTable(
     /** Always the first day of the month the document covers. */
     month: date("month").notNull(),
     fileName: text("file_name").notNull(),
-    uploadedBy: uuid("uploaded_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    /**
+     * Who uploaded it — null for a mirrored document, which nobody did.
+     *
+     * Nullable rather than pointing every ingested document at a service
+     * account: "uploaded by the system" is a sentence with no provenance in
+     * it, and a null beside `source = 'unggul'` says the honest thing, which
+     * is that this document's provenance is the source, not a person.
+     */
+    uploadedBy: uuid("uploaded_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
     status: rosterDocumentStatus("status").notNull().default("aktif"),
+    /** Mirrored from unggul_att, or imported from a spreadsheet. */
+    source: rosterDocumentSource("source").notNull().default("upload"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

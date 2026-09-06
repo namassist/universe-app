@@ -4,7 +4,10 @@
  * A tick each minute reads the active stages and fires those whose time has
  * arrived. The actions themselves are hooks: `ftw-deadline`, `finger-in`,
  * `bus-depart`, and `other` are markers; `ftw-ingest` and `finger-ingest`
- * open a readiness-ingest window (`ingest.ts`); `spare-validate` names work
+ * open a readiness-ingest window (`ingest.ts`); `roster-ingest` mirrors the
+ * schedule from unggul_att (`roster-sync.ts`) in a single pass, because a
+ * roster is not a late-arriving reading and re-pulling it every minute would
+ * ask a whole month of another system for nothing; `spare-validate` names work
  * the allocation engine will do and which does not exist yet.
  *
  * Building the trigger before the work it triggers is deliberate. The
@@ -27,6 +30,7 @@ import { db, schema, type TimelineStageRow } from "./db";
 // module init.
 import { buildBoard, storeBoard } from "./allocation";
 import { runIngestWindow, type IngestKind } from "./ingest";
+import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { redis } from "./redis";
 
@@ -164,6 +168,9 @@ const HOOKS: Record<TimelineAction, Hook> = {
   other: marker,
   "ftw-ingest": ingest("ftw"),
   "finger-ingest": ingest("finger"),
+  "roster-ingest": async () => {
+    await runRosterSync();
+  },
   "spare-validate": allocate,
 };
 

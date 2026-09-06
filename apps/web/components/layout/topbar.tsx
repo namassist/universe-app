@@ -98,7 +98,6 @@ export function Topbar() {
   else if (slug === "employees" && sub) cur = t.navEmployees;
   else if (slug === "roster-data" && sub === "upload") cur = t.navR1;
   else if (slug === "roster-data" && sub === "detail") cur = t.rdDetailTitle;
-  else if (slug === "roster-revision" && sub === "new") cur = t.revNewTitle;
   else if (slug === "fit-to-work" && sub === "history") cur = t.ftwHistPage;
   else if (slug === "fleet-allocation" && sub === "detail") cur = "ACTUAL";
   else if (slug === "users" && sub === "import") cur = t.umImpTitle;

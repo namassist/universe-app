@@ -156,7 +156,8 @@ export function RosterDetail() {
             {doc ? (
               <span className="text-xs text-(--text-tertiary)">
                 {doc.employeeCount} {t.thEmpN.toLowerCase()} · {doc.dayCount}{" "}
-                {t.thRows.toLowerCase()} · {doc.uploadedByName}
+                {t.thRows.toLowerCase()} ·{" "}
+                {doc.uploadedByName ?? t.rdSourceMirror}
               </span>
             ) : null}
             {doc ? (

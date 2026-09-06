@@ -1,10 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import type {
-  RosterCode,
-  RosterDocumentStatus,
-  RosterRevisionStatus,
-} from "@universe/contracts";
+import type { RosterCode, RosterDocumentStatus } from "@universe/contracts";
 
 import { api, API_URL, unwrap } from "@/lib/api";
 
@@ -117,56 +113,6 @@ export const rosterInForceQueryOptions = (filters: InForceFilters) =>
       ),
   });
 
-/* --------------------------------------------------------------- revisions */
-
-export type RevisionFilters = {
-  q?: string;
-  status?: RosterRevisionStatus;
-  documentId?: string;
-};
-
-export const rosterRevisionsKey = (filters: RevisionFilters = {}) =>
-  ["roster-revisions", filters] as const;
-
-export const rosterRevisionsQueryOptions = (filters: RevisionFilters = {}) =>
-  queryOptions({
-    queryKey: rosterRevisionsKey(filters),
-    queryFn: () =>
-      unwrap(
-        api.v1["roster-revisions"].get({
-          query: {
-            ...(filters.q ? { q: filters.q } : {}),
-            ...(filters.status ? { status: filters.status } : {}),
-            ...(filters.documentId ? { documentId: filters.documentId } : {}),
-          },
-        })
-      ),
-  });
-
-export type ApprovalFilters = { q?: string; status?: RosterRevisionStatus };
-
-export const rosterQueueKey = (filters: ApprovalFilters = {}) =>
-  ["roster-approval-queue", filters] as const;
-
-/**
- * The approval queue — a different grant from the list above, so a different
- * key: a caller who may read revisions but not decide them gets 403 here, and
- * sharing a cache entry would hand one screen's failure to the other.
- */
-export const rosterQueueQueryOptions = (filters: ApprovalFilters = {}) =>
-  queryOptions({
-    queryKey: rosterQueueKey(filters),
-    queryFn: () =>
-      unwrap(
-        api.v1["roster-revisions"].queue.get({
-          query: {
-            ...(filters.q ? { q: filters.q } : {}),
-            ...(filters.status ? { status: filters.status } : {}),
-          },
-        })
-      ),
-  });
-
 /* ------------------------------------------------------------------- types */
 
 export type RosterDocumentRow = Awaited<
@@ -178,32 +124,5 @@ export type RosterDocumentRow = Awaited<
 export type RosterGridResult = Awaited<
   ReturnType<NonNullable<ReturnType<typeof rosterDaysQueryOptions>["queryFn"]>>
 >;
-
-export type RosterRevisionRow = Awaited<
-  ReturnType<
-    NonNullable<ReturnType<typeof rosterRevisionsQueryOptions>["queryFn"]>
-  >
->[number];
-
-export type RosterRevisionItemRow = RosterRevisionRow["items"][number];
-
-/* ------------------------------------------------------------------- files */
-
-/**
- * Where a month's template is downloaded from.
- *
- * A URL rather than an Eden call, for the reason `fetchBlob` documents: Treaty
- * decodes an unrecognised body as text, and a spreadsheet that survives that
- * round trip downloads and then refuses to open.
- *
- * `departmentId` is sent only when the caller has one to choose. A scoped
- * caller's is resolved server-side from their own record and anything sent is
- * ignored, so omitting it here is the honest call rather than a shortcut.
- */
-export const rosterTemplateUrl = (month: string, departmentId?: string) => {
-  const query = new URLSearchParams({ month });
-  if (departmentId) query.set("departmentId", departmentId);
-  return `/v1/roster/import/template?${query}`;
-};
 
 export { API_URL };
