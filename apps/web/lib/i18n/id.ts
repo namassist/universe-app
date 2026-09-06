@@ -837,7 +837,10 @@ export const id = {
   fahDetail: "Detail",
   fahEmptyT: "Belum ada riwayat",
   fahEmptyB:
-    "Belum ada ACTUAL — klik Tambah ACTUAL untuk membuat jadwal tanggal + shift (default hari ini).",
+    "Belum ada papan yang digenerate. Papan dibuat otomatis oleh tahap Validasi Spare, atau lewat tombol Generate.",
+  fahNoMatchT: "Tidak ada papan untuk filter ini",
+  fahNoMatchB:
+    "Tampilan terbuka pada hari ini. Ubah rentang tanggalnya untuk melihat papan yang lebih lama.",
   faAddExistsT: "ACTUAL sudah ada",
   faAddExistsD:
     "Tanggal + shift ini sudah pernah dibuat — buka Detail dari tabel.",

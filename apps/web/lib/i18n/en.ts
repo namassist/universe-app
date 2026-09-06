@@ -839,7 +839,10 @@ export const en: Dict = {
   fahDetail: "Details",
   fahEmptyT: "No history yet",
   fahEmptyB:
-    "No ACTUAL yet — click Add ACTUAL to create a date + shift schedule (defaults to today).",
+    "No board has been generated yet. Boards are built by the Spare Validation stage, or by the Generate button.",
+  fahNoMatchT: "No board matches this filter",
+  fahNoMatchB:
+    "The view opens on today. Widen the date range to reach older boards.",
   faAddExistsT: "ACTUAL already exists",
   faAddExistsD:
     "This date + shift has already been created — open Details from the table.",

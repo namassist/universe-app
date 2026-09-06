@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
   DNote,
   FootSum,
@@ -72,8 +73,18 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
   const rowsAll = React.useMemo(() => listQ.data ?? [], [listQ.data]);
 
   const [shiftF, setShiftF] = React.useState("");
-  const [d1, setD1] = React.useState("");
-  const [d2, setD2] = React.useState("");
+  /*
+   * Today, both ends, rather than the whole history.
+   *
+   * The list is a record that only grows, and what somebody opening this tab
+   * wants is almost always this morning — the two rows they can still do
+   * something about. Widening it is one click; finding today inside sixty rows
+   * is not. `useState` rather than an effect: the first render already has the
+   * right filter, so the table never draws the wrong month once and correct
+   * itself afterwards.
+   */
+  const [d1, setD1] = React.useState(todayISO);
+  const [d2, setD2] = React.useState(todayISO);
   const [genOpen, setGenOpen] = React.useState(false);
   const [genDate, setGenDate] = React.useState(todayISO());
   const [genShift, setGenShift] = React.useState<ShiftKind>("day");
@@ -102,12 +113,17 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
       pushToast("error", t.faGenTitle, errorMessage(error, t.loginErr)),
   });
 
-  const rows = rowsAll.filter((r) => {
-    if (shiftF && r.shift !== shiftF) return false;
-    if (d1 && r.date < d1) return false;
-    if (d2 && r.date > d2) return false;
-    return true;
-  });
+  const rows = React.useMemo(
+    () =>
+      rowsAll.filter((r) => {
+        if (shiftF && r.shift !== shiftF) return false;
+        if (d1 && r.date < d1) return false;
+        if (d2 && r.date > d2) return false;
+        return true;
+      }),
+    [rowsAll, shiftF, d1, d2]
+  );
+  const pg = usePagination(rows);
 
   return (
     <>
@@ -157,7 +173,7 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
           </ToolbarGroup>
         </Toolbar>
 
-        {rows.length ? (
+        {pg.rows.length ? (
           <div className="overflow-x-auto">
             <Table className="min-w-[1000px]">
               <TableHeader>
@@ -174,7 +190,7 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
                 </tr>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
+                {pg.rows.map((r) => (
                   <TableRow key={`${r.date}-${r.shift}`}>
                     <TableCell className="font-mono whitespace-nowrap">
                       {r.date}
@@ -238,17 +254,30 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
             </Table>
           </div>
         ) : (
+          /* Two different silences. Before the default filter existed, an
+             empty table always meant "nothing has ever been generated"; now
+             the common case is a filter set to a day whose board is not built
+             yet, and telling that reader to go find the Generate button is
+             telling them the wrong thing. */
           <StateBox
             icon={<History className="text-(--color-primary-bright)" />}
-            title={t.fahEmptyT}
-            body={t.fahEmptyB}
+            title={rowsAll.length ? t.fahNoMatchT : t.fahEmptyT}
+            body={rowsAll.length ? t.fahNoMatchB : t.fahEmptyB}
           />
         )}
 
         <PanelFoot>
           <FootSum>
-            <b>{rows.length}</b> {t.fahSumB}
+            <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b> {t.fahSumB}
           </FootSum>
+          <Pagination
+            page={pg.page}
+            pageCount={pg.pageCount}
+            onPage={pg.setPage}
+            per={pg.per}
+            perOptions={["10", "25", "50"]}
+            onPer={pg.setPer}
+          />
         </PanelFoot>
       </Panel>
 
