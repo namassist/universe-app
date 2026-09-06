@@ -167,6 +167,34 @@ const roster = (date: string, employeeId: string, code: "D" | "N") =>
     .insert(schema.rosterDays)
     .values({ documentId: rosterDoc, employeeId, date, code });
 
+/**
+ * The same day, filed under a document that is no longer in force.
+ *
+ * Its own document rather than a flag on the row: that is how the real thing
+ * looks — a re-upload, or the unggul_att mirror taking a month over, archives
+ * the old document whole and leaves every row it held exactly where it was.
+ */
+async function archivedRoster(
+  date: string,
+  employeeId: string,
+  code: "D" | "N"
+) {
+  const [doc] = await db
+    .insert(schema.rosterDocuments)
+    .values({
+      departmentId: deptA,
+      month: "1999-04-01",
+      fileName: `${tag}-arsip-${uid()}.xlsx`,
+      uploadedBy: rosterDocUser,
+      status: "arsip",
+    })
+    .returning({ id: schema.rosterDocuments.id });
+  extraDocs.push(doc!.id);
+  await db
+    .insert(schema.rosterDays)
+    .values({ documentId: doc!.id, employeeId, date, code });
+}
+
 const plan = (unitId: string, employeeId: string) =>
   db.insert(schema.fleetPlanSlots).values({ unitId, employeeId });
 
@@ -186,6 +214,8 @@ const ftwOk = (date: string, nik: string) =>
   });
 
 let rosterDoc: string;
+/** Extra documents a test makes, torn down whether or not the test passed. */
+const extraDocs: string[] = [];
 let rosterDocUser: string;
 
 beforeAll(async () => {
@@ -336,10 +366,15 @@ afterAll(async () => {
       .delete(schema.fingerReadings)
       .where(inArray(schema.fingerReadings.date, dates));
   }
-  if (rosterDoc)
+  const docs = [rosterDoc, ...extraDocs].filter(Boolean);
+  if (docs.length) {
+    await db
+      .delete(schema.rosterDays)
+      .where(inArray(schema.rosterDays.documentId, docs));
     await db
       .delete(schema.rosterDocuments)
-      .where(eq(schema.rosterDocuments.id, rosterDoc));
+      .where(inArray(schema.rosterDocuments.id, docs));
+  }
   if (rosterDocUser)
     await db.delete(schema.users).where(eq(schema.users.id, rosterDocUser));
   if (made.employees.length)
@@ -522,6 +557,49 @@ describe("two standing operators on one shift", () => {
     const slot = (await mine(date)).find((s) => s.unitId === unit);
     expect(slot?.employeeId).toBe(ready);
     expect(slot?.source).toBe("plan");
+  });
+});
+
+/*
+ * A month can hold several documents: a re-upload archives its predecessor
+ * rather than deleting it, and the unggul_att mirror stands a spreadsheet
+ * document down the same way when it takes a month over. Both keep every row
+ * they held, so a query that joins `roster_days` on a date alone reads every
+ * version of that day at once.
+ */
+describe("only the document in force is read", () => {
+  test("a day that lives only in an archived document rosters nobody", async () => {
+    const date = nextDate();
+    const nik = newNik();
+    const person = await addEmployee({ nik });
+    const unit = await addUnit({ code: `${tag}-A1` });
+    await plan(unit, person);
+    await tapAt(date, nik, "05:00:00");
+
+    await archivedRoster(date, person, "D");
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBeNull();
+  });
+
+  /* The pool is keyed by employee, so a doubled row never doubled a person —
+     it doubled every count read straight off the join instead. Asserted here
+     anyway: the day this stops being a Map, the symptom should be a red test
+     and not a board that seats one man on two units. */
+  test("the same day in two documents still seats one operator", async () => {
+    const date = nextDate();
+    const nik = newNik();
+    const person = await addEmployee({ nik });
+    const unit = await addUnit({ code: `${tag}-A2` });
+    await roster(date, person, "D");
+    await plan(unit, person);
+    await tapAt(date, nik, "05:00:00");
+
+    await archivedRoster(date, person, "D");
+
+    const seated = (await mine(date)).filter((s) => s.employeeId === person);
+    expect(seated).toHaveLength(1);
+    expect(seated[0]?.unitId).toBe(unit);
   });
 });
 

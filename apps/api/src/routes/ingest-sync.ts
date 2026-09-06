@@ -20,6 +20,7 @@ import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
+import { rosterDayInForce } from "../roster-in-force";
 import { ingestDates, syncFingerReadings, syncFtwReadings } from "../ingest";
 import { fingerInDeadline, ftwDeadline, shiftIn } from "../readiness";
 import {
@@ -405,13 +406,6 @@ async function attendanceRows(from: string, to: string) {
     })
     .from(schema.rosterDays)
     .innerJoin(
-      schema.rosterDocuments,
-      and(
-        eq(schema.rosterDocuments.id, schema.rosterDays.documentId),
-        eq(schema.rosterDocuments.status, "aktif")
-      )
-    )
-    .innerJoin(
       schema.employees,
       eq(schema.employees.id, schema.rosterDays.employeeId)
     )
@@ -428,7 +422,11 @@ async function attendanceRows(from: string, to: string) {
       eq(schema.companies.id, schema.employees.companyId)
     )
     .where(
-      and(gte(schema.rosterDays.date, from), lte(schema.rosterDays.date, to))
+      and(
+        gte(schema.rosterDays.date, from),
+        lte(schema.rosterDays.date, to),
+        rosterDayInForce
+      )
     );
 
   const rosterAt = new Map(roster.map((r) => [`${r.nik} ${r.date}`, r]));

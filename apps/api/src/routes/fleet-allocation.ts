@@ -33,6 +33,7 @@ import {
 
 import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema } from "../db";
+import { rosterDayInForce } from "../roster-in-force";
 import { localDate } from "../scheduler";
 import {
   buildPlanTemplate,
@@ -164,7 +165,8 @@ export async function shiftKinds(
     .where(
       and(
         eq(schema.rosterDays.date, date),
-        inArray(schema.rosterDays.employeeId, employeeIds)
+        inArray(schema.rosterDays.employeeId, employeeIds),
+        rosterDayInForce
       )
     );
   for (const row of rows) {

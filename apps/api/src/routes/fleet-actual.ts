@@ -25,6 +25,7 @@ import { buildBoard, candidates, storeBoard } from "../allocation";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
+import { rosterDayInForce } from "../roster-in-force";
 import { takesPartInAllocation } from "../fleet-scope";
 import {
   fingerInDeadline,
@@ -210,7 +211,11 @@ export async function planSlots(date: string, shift: ShiftKind) {
       and(
         eq(schema.rosterDays.employeeId, schema.fleetPlanSlots.employeeId),
         eq(schema.rosterDays.date, date),
-        eq(schema.rosterDays.code, shift === "day" ? "D" : "N")
+        eq(schema.rosterDays.code, shift === "day" ? "D" : "N"),
+        // In the ON clause, not the WHERE: this is a left join, and a
+        // condition on its right-hand table moved to the WHERE would quietly
+        // turn it into an inner one and drop every unplanned unit.
+        rosterDayInForce
       )
     )
     .leftJoin(schema.fleetUnits, eq(schema.fleetUnits.unitId, schema.units.id))
@@ -1323,7 +1328,8 @@ export const fleetActualRoutes = new Elysia({
           and(
             eq(schema.employees.status, "aktif"),
             eq(schema.positions.fleetAllocation, true),
-            eq(schema.rosterDays.code, params.shift === "day" ? "D" : "N")
+            eq(schema.rosterDays.code, params.shift === "day" ? "D" : "N"),
+            rosterDayInForce
           )
         )
         .orderBy(asc(schema.employees.name));

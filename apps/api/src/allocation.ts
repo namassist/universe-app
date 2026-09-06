@@ -27,6 +27,7 @@ import { alias } from "drizzle-orm/pg-core";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
+import { rosterDayInForce } from "./roster-in-force";
 import { takesPartInAllocation } from "./fleet-scope";
 import { judge, shiftIn, type Readiness } from "./readiness";
 import {
@@ -137,7 +138,8 @@ export async function candidates(
       and(
         eq(schema.employees.status, "aktif"),
         eq(schema.positions.fleetAllocation, true),
-        eq(schema.rosterDays.code, shift === "day" ? "D" : "N")
+        eq(schema.rosterDays.code, shift === "day" ? "D" : "N"),
+        rosterDayInForce
       )
     );
 

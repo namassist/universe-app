@@ -29,6 +29,7 @@ import {
 import { requireAuth } from "../auth/macro";
 import { scopeWhere } from "../auth/scope";
 import { db, schema } from "../db";
+import { rosterDayInForce } from "../roster-in-force";
 import { localDate } from "../scheduler";
 import { DashboardSchema, ErrorSchema } from "./schemas";
 
@@ -65,7 +66,8 @@ async function personalDay(nik: string, today: string) {
     .where(
       and(
         eq(schema.rosterDays.employeeId, employee.id),
-        eq(schema.rosterDays.date, today)
+        eq(schema.rosterDays.date, today),
+        rosterDayInForce
       )
     )
     .limit(1);
@@ -158,6 +160,9 @@ export const dashboardRoutes = new Elysia({
         eq(schema.employees.status, "aktif"),
         eq(schema.rosterDays.date, today),
         sql`${schema.rosterDays.code} in ('D','N')`,
+        // Every count and every attention row below reads through this, so the
+        // in-force rule belongs here rather than in each of the six.
+        rosterDayInForce,
         mine
       );
 

@@ -26,6 +26,7 @@ import type { ShiftKind } from "@universe/contracts";
 import { requireAuth } from "../auth/macro";
 import { currentShift } from "../current-shift";
 import { db, schema } from "../db";
+import { rosterDayInForce } from "../roster-in-force";
 import {
   fingerInDeadline,
   ftwDeadline,
@@ -102,13 +103,6 @@ async function shiftRoster(
     })
     .from(schema.rosterDays)
     .innerJoin(
-      schema.rosterDocuments,
-      and(
-        eq(schema.rosterDocuments.id, schema.rosterDays.documentId),
-        eq(schema.rosterDocuments.status, "aktif")
-      )
-    )
-    .innerJoin(
       schema.employees,
       eq(schema.employees.id, schema.rosterDays.employeeId)
     )
@@ -123,7 +117,8 @@ async function shiftRoster(
     .where(
       and(
         eq(schema.rosterDays.date, date),
-        eq(schema.rosterDays.code, CODE_OF_SHIFT[shift])
+        eq(schema.rosterDays.code, CODE_OF_SHIFT[shift]),
+        rosterDayInForce
       )
     );
 
