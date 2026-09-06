@@ -1,0 +1,1 @@
+ALTER TYPE "public"."timeline_action" ADD VALUE 'roster-ingest' BEFORE 'spare-validate';
