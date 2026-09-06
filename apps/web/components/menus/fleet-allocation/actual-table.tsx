@@ -25,7 +25,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
-  DNote,
   FootSum,
   Panel,
   PanelFoot,
@@ -281,7 +280,7 @@ export function ActualTable({ canManage }: { canManage: boolean }) {
         </PanelFoot>
       </Panel>
 
-      <DNote title={t.fahNoteT}>{t.fahNoteB}</DNote>
+      {/* <DNote title={t.fahNoteT}>{t.fahNoteB}</DNote> */}
 
       <Dialog
         open={genOpen}
