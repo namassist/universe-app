@@ -56,7 +56,13 @@ export const rosterDocumentQueryOptions = (id: string) =>
 
 /* -------------------------------------------------------------------- grid */
 
-export type RosterGridPage = { page: number; pageSize: number; q?: string };
+export type RosterGridPage = {
+  page: number;
+  pageSize: number;
+  q?: string;
+  /** One day of the document, `YYYY-MM-DD`. Omit for the whole month. */
+  date?: string;
+};
 
 export const rosterDaysKey = (id: string, page: RosterGridPage) =>
   ["roster-days", id, page] as const;
@@ -78,6 +84,7 @@ export const rosterDaysQueryOptions = (id: string, page: RosterGridPage) =>
             page: page.page,
             pageSize: page.pageSize,
             ...(page.q ? { q: page.q } : {}),
+            ...(page.date ? { date: page.date } : {}),
           },
         })
       ),

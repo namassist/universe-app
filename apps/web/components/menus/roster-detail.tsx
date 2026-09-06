@@ -5,13 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download, Search } from "lucide-react";
 
+import { ROSTER_CODE_KIND, type RosterCode } from "@universe/contracts";
+
 import { errorMessage, fetchBlob } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import {
   rosterDaysQueryOptions,
   rosterDocumentQueryOptions,
 } from "@/lib/queries/roster";
-import { rosterCodeColor } from "@/lib/roster-data";
+import { rosterCodeColor, rosterCodeLabel } from "@/lib/roster-data";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
@@ -25,6 +27,7 @@ import {
   ToolbarTitle,
 } from "@/components/ui/panel";
 import { SearchInput } from "@/components/ui/search-input";
+import { Select } from "@/components/ui/select";
 import { StateBox } from "@/components/ui/state-box";
 import {
   Table,
@@ -38,6 +41,50 @@ import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
 
 import { RosterLegend } from "./roster-legend";
+
+/** Every day of the month a `YYYY-MM-01` names, as `YYYY-MM-DD`. */
+function monthDays(month: string): string[] {
+  const start = new Date(`${month}T00:00:00Z`);
+  const last = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  return Array.from(
+    { length: last },
+    (_, i) => `${month.slice(0, 8)}${String(i + 1).padStart(2, "0")}`
+  );
+}
+
+/**
+ * The four figures a supervisor actually asks for, folded out of the tally.
+ *
+ * Folded here rather than sent as four more fields: `kind` is resolved from the
+ * code and never stored (contracts D2), so deriving it on the way out is the
+ * one way the grouping cannot disagree with the codes it groups. "Away" is
+ * everything that is not a shift — off, leave, sick, training, assignment —
+ * because to whoever is counting a morning, they are one thing: not here.
+ */
+function shiftTotals(summary: { code: string; count: number }[]) {
+  let day = 0;
+  let night = 0;
+  let away = 0;
+  for (const { code, count } of summary) {
+    const kind = ROSTER_CODE_KIND[code as RosterCode];
+    if (kind === "day") day += count;
+    else if (kind === "night") night += count;
+    else away += count;
+  }
+  return { day, night, away, scheduled: day + night };
+}
+
+/** One number and what it counts — the summary strip's unit. */
+function Figure({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <b className="text-lg font-bold tabular-nums">{value}</b>
+      <span className="text-xs text-(--text-secondary)">{label}</span>
+    </span>
+  );
+}
 
 /**
  * One document's grid (?p= is the document id).
@@ -56,6 +103,7 @@ export function RosterDetail() {
   const id = useSearchParams().get("p") ?? "";
 
   const [q, setQ] = React.useState("");
+  const [date, setDate] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [per, setPer] = React.useState("25");
 
@@ -70,6 +118,12 @@ export function RosterDetail() {
     setPer(next);
     setPage(1);
   };
+  /* Picking a day changes which people have a row at all, so the same reset
+     applies — page 4 of a month is rarely a page of one of its days. */
+  const pickDate = (next: string) => {
+    setDate(next);
+    setPage(1);
+  };
 
   const documentQ = useQuery({
     ...rosterDocumentQueryOptions(id),
@@ -80,6 +134,7 @@ export function RosterDetail() {
       page,
       pageSize: Number(per),
       ...(q.trim() ? { q: q.trim() } : {}),
+      ...(date ? { date } : {}),
     }),
     enabled: Boolean(id),
     placeholderData: keepPreviousData,
@@ -92,6 +147,14 @@ export function RosterDetail() {
   const range = total
     ? `${(page - 1) * Number(per) + 1}–${Math.min(total, page * Number(per))}`
     : "0";
+
+  const days = doc ? monthDays(doc.month) : [];
+  const totals = shiftTotals(grid?.summary ?? []);
+  const dayLabel = (d: string) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString(
+      lang === "en" ? "en-GB" : "id-ID",
+      { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }
+    );
 
   const monthLabel = doc
     ? new Date(`${doc.month}T00:00:00Z`).toLocaleDateString(
@@ -146,6 +209,23 @@ export function RosterDetail() {
         <Toolbar className="mb-4">
           <ToolbarTitle>{doc?.fileName ?? "—"}</ToolbarTitle>
           <ToolbarGroup>
+            {/* The document's own days, not a free date field: a month is the
+                only range this grid has, and a picker that cannot leave it is
+                a picker that cannot come back empty by accident. */}
+            <Select
+              aria-label={t.rdDay}
+              wrapperClassName="w-[190px]"
+              value={date}
+              disabled={!doc}
+              onChange={(e) => pickDate(e.target.value)}
+            >
+              <option value="">{t.rdAllDays}</option>
+              {days.map((d) => (
+                <option key={d} value={d}>
+                  {dayLabel(d)}
+                </option>
+              ))}
+            </Select>
             <SearchInput
               className="w-[240px]"
               placeholder={t.searchEmp}
@@ -171,11 +251,50 @@ export function RosterDetail() {
           </ToolbarGroup>
         </Toolbar>
 
+        {/*
+          The tally, over the whole filtered set rather than the page below it.
+          Four figures first because they are the question — how many are on
+          today, how many on each shift, how many are not coming — then the raw
+          codes, because "away" collapses seven different reasons and sometimes
+          the reason is the point.
+        */}
+        {grid && grid.summary.length ? (
+          <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-card border border-(--divider) bg-(--fill-subtle) px-4 py-3">
+            <span className="text-xs font-semibold tracking-[.05em] text-(--text-tertiary) uppercase">
+              {t.rdSumTitle}
+              {date ? ` · ${dayLabel(date)}` : ` · ${t.rdSumMonth}`}
+            </span>
+            <Figure label={t.rdSumScheduled} value={totals.scheduled} />
+            <Figure label={t.rdSumDay} value={totals.day} />
+            <Figure label={t.rdSumNight} value={totals.night} />
+            <Figure label={t.rdSumAway} value={totals.away} />
+            <div className="flex flex-wrap gap-1.5">
+              {grid.summary.map((entry) => (
+                <span
+                  key={entry.code}
+                  className="rounded-md border border-(--divider) bg-(--overlay-fill) px-2 py-1 font-mono text-[11px]"
+                  style={{ color: rosterCodeColor(entry.code) }}
+                  title={rosterCodeLabel(t, entry.code)}
+                >
+                  {entry.code}
+                  <b className="ml-1.5 font-semibold text-(--text-primary) tabular-nums">
+                    {entry.count}
+                  </b>
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {gridQ.isPending ? (
           <TableSkeleton rows={8} />
         ) : grid && grid.rows.length ? (
           <div className="overflow-x-auto pb-2">
-            <Table className="min-w-[1600px]">
+            {/* A month needs the scroller; one day does not, and a table
+                stretched to 1600px for a single column reads as broken. */}
+            <Table
+              className={grid.days.length > 3 ? "min-w-[1600px]" : undefined}
+            >
               <TableHeader>
                 <tr>
                   <TableHead className="w-[110px]">NIK</TableHead>
@@ -185,7 +304,9 @@ export function RosterDetail() {
                       key={d}
                       className="px-1.5 py-3 text-center font-mono"
                     >
-                      {d.slice(8)}
+                      {/* A month's header is a row of day numbers; a single
+                          day gets the date it actually is. */}
+                      {grid.days.length > 1 ? d.slice(8) : dayLabel(d)}
                     </TableHead>
                   ))}
                 </tr>

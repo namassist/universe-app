@@ -1289,6 +1289,19 @@ export const RosterGridSchema = t.Object({
   total: t.Integer(),
   page: t.Integer(),
   pageSize: t.Integer(),
+  /**
+   * How many people carry each code, over the whole filtered set.
+   *
+   * Whole set, not this page: "how many are on nights" is a question about the
+   * day, and an answer that changed when you turned the page would be worse
+   * than no answer. Filtered, though — a search narrows the tally with the
+   * table, because a summary of rows you cannot see is a summary of something
+   * else.
+   *
+   * Codes with no cells are absent rather than zero: the legend has 29 entries
+   * and a day uses six of them, so listing the rest would bury the six.
+   */
+  summary: t.Array(t.Object({ code: RosterCodeSchema, count: t.Integer() })),
 });
 
 /**

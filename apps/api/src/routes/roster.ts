@@ -432,6 +432,12 @@ export const rosterRoutes = new Elysia({
    * Two queries and a fold rather than one: the page is decided by *employee*,
    * so the people come first and their cells second. Fetching cells first and
    * slicing them would cut a person's month in half at the page boundary.
+   *
+   * `date` narrows the grid to one column. It is the same grid, not a second
+   * shape: the columns are still `days` and the codes are still positional, so
+   * the client renders one day through the code that renders thirty. It also
+   * changes what a *row* is — with a date, only the people rostered that day
+   * appear, which is the question being asked when someone picks one.
    */
   .get(
     "/:id/days",
@@ -443,7 +449,10 @@ export const rosterRoutes = new Elysia({
         .limit(1);
       if (!document) return status(404, documentNotFound);
 
-      const days = monthDays(document.month);
+      const onDate = query.date;
+      // A date outside the document is not an error worth a 404 — the document
+      // is real and the answer is simply that it holds nothing for that day.
+      const days = onDate ? [onDate] : monthDays(document.month);
       const page = Math.max(1, query.page ?? 1);
       const pageSize = Math.min(
         MAX_PAGE_SIZE,
@@ -453,6 +462,7 @@ export const rosterRoutes = new Elysia({
 
       const rowFilters = [
         eq(day.documentId, document.id),
+        onDate ? eq(day.date, onDate) : undefined,
         // Scoped on the rows themselves, so a `self` caller who reached the
         // document sees its own line of it and nothing else.
         await scopeWhere(principal, { dept: emp.departmentId, self: emp.nik }),
@@ -473,7 +483,28 @@ export const rosterRoutes = new Elysia({
 
       const total = people.length;
       const pageRows = people.slice((page - 1) * pageSize, page * pageSize);
-      if (!pageRows.length) return { days, rows: [], total, page, pageSize };
+
+      /*
+       * The tally, over the same rows the table is drawn from.
+       *
+       * Its own query rather than folded out of the cells above: those are one
+       * page of people, and this has to count the whole set — the point of the
+       * number is that it does not move when you turn the page.
+       */
+      const tally = await db
+        .select({ code: day.code, count: sql<number>`count(*)::int` })
+        .from(day)
+        .innerJoin(emp, eq(emp.id, day.employeeId))
+        .where(and(...rowFilters))
+        .groupBy(day.code)
+        .orderBy(desc(sql`count(*)`), asc(day.code));
+      const summary = tally.map((row) => ({
+        code: row.code as RosterCode,
+        count: row.count,
+      }));
+
+      if (!pageRows.length)
+        return { days, rows: [], total, page, pageSize, summary };
 
       const cells = await db
         .select({
@@ -485,6 +516,7 @@ export const rosterRoutes = new Elysia({
         .where(
           and(
             eq(day.documentId, document.id),
+            onDate ? eq(day.date, onDate) : undefined,
             inArray(
               day.employeeId,
               pageRows.map((p) => p.id)
@@ -514,6 +546,7 @@ export const rosterRoutes = new Elysia({
         total,
         page,
         pageSize,
+        summary,
       };
     },
     {
@@ -521,6 +554,8 @@ export const rosterRoutes = new Elysia({
       params: t.Object({ id: t.String({ format: "uuid" }) }),
       query: t.Object({
         q: t.Optional(t.String()),
+        /** One day of the document, `YYYY-MM-DD`. Omit for the whole month. */
+        date: t.Optional(t.String({ format: "date" })),
         page: t.Optional(t.Integer({ minimum: 1 })),
         pageSize: t.Optional(t.Integer({ minimum: 1, maximum: MAX_PAGE_SIZE })),
       }),
