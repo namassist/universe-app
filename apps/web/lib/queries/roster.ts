@@ -60,8 +60,9 @@ export type RosterGridPage = {
   page: number;
   pageSize: number;
   q?: string;
-  /** One day of the document, `YYYY-MM-DD`. Omit for the whole month. */
-  date?: string;
+  /** Span bounds within the document's month, `YYYY-MM-DD`, inclusive. */
+  from?: string;
+  to?: string;
 };
 
 export const rosterDaysKey = (id: string, page: RosterGridPage) =>
@@ -84,7 +85,8 @@ export const rosterDaysQueryOptions = (id: string, page: RosterGridPage) =>
             page: page.page,
             pageSize: page.pageSize,
             ...(page.q ? { q: page.q } : {}),
-            ...(page.date ? { date: page.date } : {}),
+            ...(page.from ? { from: page.from } : {}),
+            ...(page.to ? { to: page.to } : {}),
           },
         })
       ),

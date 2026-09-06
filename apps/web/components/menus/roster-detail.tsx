@@ -103,7 +103,8 @@ export function RosterDetail() {
   const id = useSearchParams().get("p") ?? "";
 
   const [q, setQ] = React.useState("");
-  const [date, setDate] = React.useState("");
+  const [from, setFrom] = React.useState("");
+  const [to, setTo] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [per, setPer] = React.useState("25");
 
@@ -118,10 +119,22 @@ export function RosterDetail() {
     setPer(next);
     setPage(1);
   };
-  /* Picking a day changes which people have a row at all, so the same reset
-     applies — page 4 of a month is rarely a page of one of its days. */
-  const pickDate = (next: string) => {
-    setDate(next);
+  /*
+   * Picking a bound changes which people have a row at all, so the same reset
+   * applies — page 4 of a month is rarely a page of one of its weeks.
+   *
+   * The other bound follows rather than being validated: dragging `from` past
+   * `to` means the reader has moved on to a later span, and answering that
+   * with an error message would be answering the wrong thing.
+   */
+  const pickFrom = (next: string) => {
+    setFrom(next);
+    if (next && to && next > to) setTo(next);
+    setPage(1);
+  };
+  const pickTo = (next: string) => {
+    setTo(next);
+    if (next && from && next < from) setFrom(next);
     setPage(1);
   };
 
@@ -134,7 +147,8 @@ export function RosterDetail() {
       page,
       pageSize: Number(per),
       ...(q.trim() ? { q: q.trim() } : {}),
-      ...(date ? { date } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
     }),
     enabled: Boolean(id),
     placeholderData: keepPreviousData,
@@ -155,6 +169,22 @@ export function RosterDetail() {
       lang === "en" ? "en-GB" : "id-ID",
       { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }
     );
+
+  /*
+   * What the tally is about, said the way the reader chose it.
+   *
+   * Read off `grid.days` rather than off the two selects: the server clamps
+   * the bounds to the month, so the columns are the truth about what was
+   * answered and the selects are only the request.
+   */
+  const shown = grid?.days ?? [];
+  const spanLabel = !shown.length
+    ? t.rdSumNone
+    : shown.length === days.length
+      ? t.rdSumMonth
+      : shown.length === 1
+        ? dayLabel(shown[0]!)
+        : `${dayLabel(shown[0]!)} – ${dayLabel(shown[shown.length - 1]!)}`;
 
   const monthLabel = doc
     ? new Date(`${doc.month}T00:00:00Z`).toLocaleDateString(
@@ -209,17 +239,33 @@ export function RosterDetail() {
         <Toolbar className="mb-4">
           <ToolbarTitle>{doc?.fileName ?? "—"}</ToolbarTitle>
           <ToolbarGroup>
-            {/* The document's own days, not a free date field: a month is the
+            {/* The document's own days, not free date fields: a month is the
                 only range this grid has, and a picker that cannot leave it is
-                a picker that cannot come back empty by accident. */}
+                a picker that cannot come back empty by accident. Both bounds
+                are optional — one alone runs to the month's edge. */}
             <Select
-              aria-label={t.rdDay}
-              wrapperClassName="w-[190px]"
-              value={date}
+              aria-label={t.rdFrom}
+              wrapperClassName="w-[175px]"
+              value={from}
               disabled={!doc}
-              onChange={(e) => pickDate(e.target.value)}
+              onChange={(e) => pickFrom(e.target.value)}
             >
-              <option value="">{t.rdAllDays}</option>
+              <option value="">{t.rdFromAny}</option>
+              {days.map((d) => (
+                <option key={d} value={d}>
+                  {dayLabel(d)}
+                </option>
+              ))}
+            </Select>
+            <span className="text-xs text-(--text-tertiary)">{t.rdToSep}</span>
+            <Select
+              aria-label={t.rdTo}
+              wrapperClassName="w-[175px]"
+              value={to}
+              disabled={!doc}
+              onChange={(e) => pickTo(e.target.value)}
+            >
+              <option value="">{t.rdToAny}</option>
               {days.map((d) => (
                 <option key={d} value={d}>
                   {dayLabel(d)}
@@ -258,11 +304,11 @@ export function RosterDetail() {
           codes, because "away" collapses seven different reasons and sometimes
           the reason is the point.
         */}
-        {grid && grid.summary.length ? (
+        {grid ? (
           <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-card border border-(--divider) bg-(--fill-subtle) px-4 py-3">
             <span className="text-xs font-semibold tracking-[.05em] text-(--text-tertiary) uppercase">
               {t.rdSumTitle}
-              {date ? ` · ${dayLabel(date)}` : ` · ${t.rdSumMonth}`}
+              {` · ${spanLabel}`}
             </span>
             <Figure label={t.rdSumScheduled} value={totals.scheduled} />
             <Figure label={t.rdSumDay} value={totals.day} />

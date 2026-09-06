@@ -23,8 +23,10 @@ import {
   desc,
   eq,
   exists,
+  gte,
   ilike,
   inArray,
+  lte,
   or,
   sql,
   type SQL,
@@ -433,11 +435,18 @@ export const rosterRoutes = new Elysia({
    * so the people come first and their cells second. Fetching cells first and
    * slicing them would cut a person's month in half at the page boundary.
    *
-   * `date` narrows the grid to one column. It is the same grid, not a second
-   * shape: the columns are still `days` and the codes are still positional, so
-   * the client renders one day through the code that renders thirty. It also
-   * changes what a *row* is — with a date, only the people rostered that day
-   * appear, which is the question being asked when someone picks one.
+   * `from` and `to` narrow the grid to a span of it. It stays the same grid,
+   * not a second shape: the columns are still `days` and the codes are still
+   * positional, so a week renders through the code that renders a month.
+   *
+   * Both bounds are optional and independent — `from` alone runs to the end of
+   * the month, `to` alone from its start — because "the rest of the week" and
+   * "everything up to the 15th" are the same question asked from two ends.
+   * Each is clamped to the document's own month: a document holds one month,
+   * and a bound outside it can only mean the edge.
+   *
+   * Narrowing also changes what a *row* is: only the people rostered inside
+   * the span appear, which is the question being asked when someone picks one.
    */
   .get(
     "/:id/days",
@@ -449,10 +458,23 @@ export const rosterRoutes = new Elysia({
         .limit(1);
       if (!document) return status(404, documentNotFound);
 
-      const onDate = query.date;
-      // A date outside the document is not an error worth a 404 — the document
-      // is real and the answer is simply that it holds nothing for that day.
-      const days = onDate ? [onDate] : monthDays(document.month);
+      /*
+       * The span, clamped to the month and never inverted.
+       *
+       * A `to` before its `from` is an empty span rather than an error: the
+       * document is real and the honest answer is that it holds nothing
+       * between those two dates. The same goes for a bound outside the month.
+       */
+      const month = monthDays(document.month);
+      const first = month[0]!;
+      const last = month[month.length - 1]!;
+      const narrowed = Boolean(query.from ?? query.to);
+      const lo = query.from && query.from > first ? query.from : first;
+      const hi = query.to && query.to < last ? query.to : last;
+      const days = narrowed ? month.filter((d) => d >= lo && d <= hi) : month;
+      const inSpan = narrowed
+        ? and(gte(day.date, lo), lte(day.date, hi))
+        : undefined;
       const page = Math.max(1, query.page ?? 1);
       const pageSize = Math.min(
         MAX_PAGE_SIZE,
@@ -462,7 +484,7 @@ export const rosterRoutes = new Elysia({
 
       const rowFilters = [
         eq(day.documentId, document.id),
-        onDate ? eq(day.date, onDate) : undefined,
+        inSpan,
         // Scoped on the rows themselves, so a `self` caller who reached the
         // document sees its own line of it and nothing else.
         await scopeWhere(principal, { dept: emp.departmentId, self: emp.nik }),
@@ -516,7 +538,7 @@ export const rosterRoutes = new Elysia({
         .where(
           and(
             eq(day.documentId, document.id),
-            onDate ? eq(day.date, onDate) : undefined,
+            inSpan,
             inArray(
               day.employeeId,
               pageRows.map((p) => p.id)
@@ -554,8 +576,9 @@ export const rosterRoutes = new Elysia({
       params: t.Object({ id: t.String({ format: "uuid" }) }),
       query: t.Object({
         q: t.Optional(t.String()),
-        /** One day of the document, `YYYY-MM-DD`. Omit for the whole month. */
-        date: t.Optional(t.String({ format: "date" })),
+        /** Span bounds, `YYYY-MM-DD`, inclusive. Omit both for the month. */
+        from: t.Optional(t.String({ format: "date" })),
+        to: t.Optional(t.String({ format: "date" })),
         page: t.Optional(t.Integer({ minimum: 1 })),
         pageSize: t.Optional(t.Integer({ minimum: 1, maximum: MAX_PAGE_SIZE })),
       }),
