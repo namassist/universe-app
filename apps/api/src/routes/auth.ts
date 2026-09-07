@@ -10,6 +10,11 @@ import {
   verifyPassword,
 } from "../auth/password";
 import {
+  DEFAULT_PASSWORD_HASH,
+  provisionableEmployee,
+  provisionUser,
+} from "../auth/provision";
+import {
   cookieAttributes,
   createSession,
   deleteSession,
@@ -57,16 +62,28 @@ export const authRoutes = new Elysia({ prefix: "/auth", tags: ["auth"] })
         )
         .limit(1);
 
-      // Verify even when there is no account, against a hash nobody can
-      // present: without it the response time answers "does this identifier
-      // exist" for free.
+      // No account yet? The employee register decides whether there should be
+      // one. Resolved before the verify rather than after, so all three cases
+      // spend the same argon2id time — see auth/provision.
+      const candidate = row ? null : await provisionableEmployee(identifier);
+
+      // Verify even when there is nothing to verify against, using a hash
+      // nobody can present: without it the response time answers "does this
+      // identifier exist" for free.
       const ok = await verifyPassword(
         body.password,
-        row?.passwordHash ?? DUMMY_HASH
+        row?.passwordHash ?? (candidate ? DEFAULT_PASSWORD_HASH : DUMMY_HASH)
       );
-      if (!row || !ok || !row.active) return status(401, LOGIN_FAILED);
+      if (!ok || (row && !row.active)) return status(401, LOGIN_FAILED);
 
-      const user = await loadUser(row.id);
+      const id = row
+        ? row.id
+        : candidate
+          ? await provisionUser(candidate)
+          : null;
+      if (!id) return status(401, LOGIN_FAILED);
+
+      const user = await loadUser(id);
       if (!user) return status(401, LOGIN_FAILED);
 
       const transport = body.transport ?? "cookie";

@@ -49,16 +49,42 @@ Uploads (sounds, photos, import files) stream via `Bun.file`. Postgres never
 stores bytes. Consequence: on ephemeral containers the storage dirs must be
 mounted volumes or uploads vanish while rows survive.
 
-## D8 — Roster corrections are revision records
+## D8 — The roster is a mirror of unggul_att, read-only here
 
-Post-approval changes go through `roster_revisions`/`roster_revision_items`,
-never in-place edits — the audit trail is the feature.
+`roster-sync.ts` pulls a rolling window from the unggul_att API and reconciles
+it: a plan that was cancelled at the source disappears here too. Consequence —
+there is no upload and no revision screen; correcting a roster means correcting
+it in unggul_att. The `roster_revisions` tables survive as the record of
+decisions taken while those screens existed, and nothing writes to them.
 
 ## D9 — In-process scheduler
 
 The morning timeline is driven by `scheduler.ts` inside the API process, with
 stages as `timeline_stages` rows (editable). No external cron, no worker
 fleet — single-site scale does not need one yet.
+
+## D10 — First login provisions the account
+
+An employee on the register logs in with their NIK and the issued default
+password; if no account exists, login creates one with the `user` role and the
+forced-password-change gate armed (`auth/provision.ts`). The register is
+already the authority on who works here, so an administrator re-typing the same
+NIK into the Users screen was work the system could do itself.
+
+Consequences, all deliberate:
+
+- **The default password is now the gate on the whole register**, not just on
+  the accounts an administrator chose to create. Anyone who knows it and a NIK
+  can obtain a `self`-scoped account. Treat `DEFAULT_USER_PASSWORD` as a
+  credential to be set per installation, not left at whatever the example file
+  carries.
+- **Deactivating an account still holds.** Provisioning only runs when _no_ row
+  exists for the identifier, so `active = false` is never undone by a login.
+- **An employee recorded `nonaktif` gets nothing** — the status list is
+  positive (`aktif`, `standby`), so a status added later is denied a login
+  until someone decides otherwise.
+- Administrators are still made by hand. Raising a role is the only account
+  work left in the Users screen.
 
 ## Known debt
 
