@@ -37,7 +37,7 @@ import {
   type FingerVerdict,
   type FtwVerdict,
 } from "../readiness";
-import { stageGates } from "../stage-time";
+import { shiftGates } from "../stage-time";
 import {
   AttendanceDisplaySchema,
   ErrorSchema,
@@ -220,7 +220,7 @@ export const attendanceDisplayRoutes = new Elysia({
         rows: [],
       };
 
-      const now = currentShift(new Date(), await stageGates("ftw-ingest"));
+      const now = currentShift(new Date(), await shiftGates());
       if (!now) return blank;
 
       // No configured gate means there is no such thing as late, and calling
@@ -345,7 +345,7 @@ export const fitWorkDisplayRoutes = new Elysia({
         rows: [],
       };
 
-      const now = currentShift(new Date(), await stageGates("ftw-ingest"));
+      const now = currentShift(new Date(), await shiftGates());
       if (!now) return blank;
 
       // Same refusal as the attendance gate: with no deadline configured there

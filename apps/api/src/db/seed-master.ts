@@ -472,6 +472,7 @@ const TIMELINE_STAGES: [
   action: TimelineAction,
   shift: ShiftKind,
 ][] = [
+  ["Awal Shift", "04:00", "shift-start", "day"],
   ["Batas Upload FTW", "04:45", "ftw-deadline", "day"],
   ["Ambil Data FTW", "04:45", "ftw-ingest", "day"],
   ["Batas Finger In", "05:15", "finger-in", "day"],
@@ -479,6 +480,7 @@ const TIMELINE_STAGES: [
   ["Validasi Spare", "05:25", "spare-validate", "day"],
   ["Bus Berangkat", "05:30", "bus-depart", "day"],
 
+  ["Awal Shift Malam", "16:00", "shift-start", "night"],
   ["Batas Upload FTW Malam", "16:45", "ftw-deadline", "night"],
   ["Ambil Data FTW Malam", "16:45", "ftw-ingest", "night"],
   ["Batas Finger In Malam", "17:15", "finger-in", "night"],

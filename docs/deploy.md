@@ -174,8 +174,13 @@ release added.
 Two more things a release can ask for that a build does not supply:
 
 - **Timeline stages.** A new scheduled action is code; the row that fires it is
-  data. `roster-ingest` needs one stage per shift, added in the Timeline menu.
-  Without them the roster mirrors only when somebody presses Sync.
+  data, and `db:seed` does not run in production — so a release that adds an
+  action leaves it unused until somebody adds the rows in the Timeline menu.
+  `roster-ingest` needs one stage per shift, or the roster mirrors only when
+  somebody presses Sync. `shift-start` needs one per shift too, but its absence
+  is harmless rather than silent: the walls go on turning over at `ftw-ingest`,
+  exactly as before the stage existed. Add it when you want the screens to
+  change over at a different moment than the FTW pull begins.
 - **The first roster pull's timing.** A month is taken over by the mirror only
   when the pull covers the whole of it, which is true for the current month
   only in its first eight days. Deploy later than that and the current month

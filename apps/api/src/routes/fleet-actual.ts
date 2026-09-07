@@ -34,7 +34,7 @@ import {
   shiftIn,
   type FtwVerdict,
 } from "../readiness";
-import { stageGates } from "../stage-time";
+import { shiftGates } from "../stage-time";
 import { photoMimeType, photoPath } from "../storage";
 import { pairingRefusal, skillNamesByEmployee } from "./fleet-allocation";
 import { localDate } from "../scheduler";
@@ -380,7 +380,7 @@ const photoNotFound = {
  * kiosk walk the register one NIK at a time.
  */
 async function onDisplayedBoard(employeeId: string): Promise<boolean> {
-  const now = currentShift(new Date(), await stageGates("ftw-ingest"));
+  const now = currentShift(new Date(), await shiftGates());
   if (!now) return false;
 
   const doc = await documentOf(now.date, now.shift);
@@ -758,10 +758,11 @@ export const fleetActualRoutes = new Elysia({
         fleets: [],
       };
 
-      // `ftw-ingest`, not `finger-in`: the wall turns over when a shift's
+      // The changeover, not `finger-in`: the wall turns over when a shift's
       // changeover begins, so the incoming crew sees its line-up on the way
-      // in rather than only once the board is final.
-      const now = currentShift(new Date(), await stageGates("ftw-ingest"));
+      // in rather than only once the board is final. Which stage says so is
+      // `shiftGates`' business, not this route's.
+      const now = currentShift(new Date(), await shiftGates());
       if (!now) return blank;
 
       const doc = await documentOf(now.date, now.shift);

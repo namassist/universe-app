@@ -63,6 +63,15 @@ The morning timeline is driven by `scheduler.ts` inside the API process, with
 stages as `timeline_stages` rows (editable). No external cron, no worker
 fleet — single-site scale does not need one yet.
 
+A stage's time can mean something to code that never fires it: `ftw-deadline`
+and `finger-in` are markers whose _hours_ are the pass rule, and `shift-start`
+is the moment the yard walls turn over. That was `ftw-ingest` until the two
+had to move apart — the walls want the changeover early so the incoming crew
+sees a provisional line-up on the way in, while the pull must sit next to the
+upload deadline or it closes before the last on-time upload arrives.
+`shiftGates()` reads `shift-start` and falls back to `ftw-ingest`, so an
+installation that has not added the stage keeps the changeover it had.
+
 ## D10 — First login provisions the account
 
 An employee on the register logs in with their NIK and the issued default

@@ -87,6 +87,7 @@ const RunTextColorUnion = t.Union([
 ]);
 
 const TimelineActionUnion = t.Union([
+  t.Literal("shift-start"),
   t.Literal("ftw-deadline"),
   t.Literal("ftw-ingest"),
   t.Literal("finger-in"),

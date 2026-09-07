@@ -69,8 +69,16 @@ export function isBloodType(value: string): value is BloodType {
  * allocation engine will perform; until it exists it dispatches to a logged
  * no-op. The values are the contract — labels below are presentation and may
  * be reworded freely.
+ *
+ * `shift-start` fires nothing at all. It exists because the yard walls have to
+ * know which shift they are showing, and that question was answered by
+ * `ftw-ingest` for want of a stage that meant it — which tied the moment the
+ * screens turn over to the moment the FTW pull begins, two decisions with no
+ * reason to move together. Naming it separately lets a wall change over at
+ * 16:00 while the pull stays where the upload deadline needs it.
  */
 export const TIMELINE_ACTIONS = [
+  "shift-start",
   "ftw-deadline",
   "ftw-ingest",
   "finger-in",
@@ -84,6 +92,7 @@ export type TimelineAction = (typeof TIMELINE_ACTIONS)[number];
 
 /** Indonesian labels, keyed by the value dispatch actually matches on. */
 export const TIMELINE_ACTION_LABELS: Record<TimelineAction, string> = {
+  "shift-start": "Awal shift (pergantian layar)",
   "ftw-deadline": "Batas upload FTW",
   "ftw-ingest": "Ambil data FTW",
   "finger-in": "Batas finger in",

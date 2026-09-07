@@ -7,14 +7,14 @@
  * board itself is built on, or the screen flips to a board that does not exist
  * yet, or keeps showing a shift that ended an hour ago.
  *
- * The boundary is therefore each shift's **first** stage, `ftw-ingest`, read
- * from the master timeline (04:45 and 16:45 as configured today). A shift
- * takes the screen when its changeover *begins* rather than when its board is
- * finished, because the people the wall is for are the ones walking to the
- * gate — they need to know their unit before the line-up is final, not after.
- * Until the board is generated the wall says so, in the plain sight of a
- * provisional line-up rather than a blank. Nothing here is a constant: move
- * the stage in the timeline and the wall moves with it.
+ * The boundary is therefore a stage on the master timeline — `shift-start`,
+ * falling back to `ftw-ingest` where no installation has named one yet (see
+ * `shiftGates`). A shift takes the screen when its changeover *begins* rather
+ * than when its board is finished, because the people the wall is for are the
+ * ones walking to the gate — they need to know their unit before the line-up
+ * is final, not after. Until the board is generated the wall says so, in the
+ * plain sight of a provisional line-up rather than a blank. Nothing here is a
+ * constant: move the stage in the timeline and the wall moves with it.
  *
  * Before the day gate the working shift is the night one that began *yesterday*
  * — a night board is filed under the date it started, so 01:00 on the 30th is

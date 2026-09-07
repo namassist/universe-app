@@ -2,8 +2,8 @@
  * The morning allocation schedule (design D9).
  *
  * A tick each minute reads the active stages and fires those whose time has
- * arrived. The actions themselves are hooks: `ftw-deadline`, `finger-in`,
- * `bus-depart`, and `other` are markers; `ftw-ingest` and `finger-ingest`
+ * arrived. The actions themselves are hooks: `shift-start`, `ftw-deadline`,
+ * `finger-in`, `bus-depart`, and `other` are markers; `ftw-ingest` and `finger-ingest`
  * open a readiness-ingest window (`ingest.ts`); `roster-ingest` mirrors the
  * schedule from unggul_att (`roster-sync.ts`) in a single pass, because a
  * roster is not a late-arriving reading and re-pulling it every minute would
@@ -162,6 +162,9 @@ const allocate: Hook = async (dispatch) => {
 };
 
 const HOOKS: Record<TimelineAction, Hook> = {
+  // Fires nothing. Its time is read by `shiftGates` for the walls; the dispatch
+  // exists so the log records that the changeover moment passed.
+  "shift-start": marker,
   "ftw-deadline": marker,
   "finger-in": marker,
   "bus-depart": marker,
