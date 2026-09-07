@@ -57,8 +57,6 @@ export const id = {
   loginDemoTitle: "Mode demo — akun contoh",
   loginDemoHint: "Password bebas, asal terisi.",
   loginCopy: "© 2026 UNIVERSE — Fleet Automation System.",
-  loginNoAcc: "Belum punya akun?",
-  loginRegLink: "Daftar di sini",
 
   /* --- register --- */
   regCreateYour: "Buat Akun Anda",
@@ -1082,9 +1080,8 @@ export const id = {
   pfPwSavedD: "gunakan password baru saat login berikutnya.",
 
   /* --- auth: identifier + forced password change --- */
-  authIdentLabel: "Email atau NIK",
-  authIdentPh: "nama@unggul.co.id atau 503220421",
-  authIdentHelp: "Staf kantor memakai email, operator lapangan memakai NIK.",
+  authIdentLabel: "NIK",
+  authIdentPh: "Masukkan NIK",
   authLoginErr:
     "Identifier atau password salah. Periksa kembali, atau hubungi admin bila akun Anda dinonaktifkan.",
   cpTitle: "Ganti password",

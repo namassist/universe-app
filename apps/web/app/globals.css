@@ -244,6 +244,168 @@
   --animate-pop-in: pop-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-rise-in: rise-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* ---- Efek kedalaman 3D halaman auth ----
+     Semua hanya menganimasikan transform/opacity (dikomposit GPU);
+     tidak ada warna baru — seluruhnya memakai token yang sudah ada. */
+  --animate-grid-flow: grid-flow 14s linear infinite;
+  --animate-mote-drift: mote-drift 18s linear infinite;
+  --animate-horizon-pulse: horizon-pulse 7s ease-in-out infinite;
+  --animate-blob-drift: blob-drift 26s ease-in-out infinite;
+  --animate-blob-drift-alt: blob-drift-alt 34s ease-in-out infinite;
+  --animate-logo-orbit: logo-orbit 16s linear infinite;
+  --animate-logo-orbit-rev: logo-orbit-rev 22s linear infinite;
+  --animate-logo-float: logo-float 6.5s ease-in-out infinite;
+  /* ---- Efek latar tambahan halaman auth (lebih hidup) ---- */
+  --animate-aurora: aurora 24s ease-in-out infinite;
+  --animate-aurora-alt: aurora-alt 31s ease-in-out infinite;
+  --animate-bloom-pulse: bloom-pulse 8s ease-in-out infinite;
+  --animate-star-shoot: star-shoot 7s linear infinite;
+
+  /* Keyframes efek auth. CATATAN PENTING: ini sempat TERHAPUS saat blok CSS
+     cuaca menimpa bagian akhir @theme inline; tokennya di atas tetap ada tapi
+     tanpa keyframes-nya animasinya diam. Dipulihkan di sini, tepat setelah
+     token-nya dan sebelum blok cuaca, supaya tidak terkena penggantian lagi. */
+  @keyframes grid-flow {
+    from {
+      transform: rotateX(76deg) translateY(0);
+    }
+    to {
+      transform: rotateX(76deg) translateY(72px);
+    }
+  }
+  @keyframes mote-drift {
+    0% {
+      transform: translate3d(0, 0, var(--mote-z, 0px));
+      opacity: 0;
+    }
+    15%,
+    85% {
+      opacity: var(--mote-o, 0.5);
+    }
+    100% {
+      transform: translate3d(var(--mote-dx, 0px), -180px, var(--mote-z, 0px));
+      opacity: 0;
+    }
+  }
+  @keyframes horizon-pulse {
+    0%,
+    100% {
+      opacity: 0.18;
+    }
+    50% {
+      opacity: 0.42;
+    }
+  }
+  @keyframes blob-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(-38px, 26px, 0);
+    }
+  }
+  @keyframes blob-drift-alt {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(32px, -30px, 0);
+    }
+  }
+  @keyframes logo-orbit {
+    from {
+      transform: rotateX(72deg) rotateZ(0deg);
+    }
+    to {
+      transform: rotateX(72deg) rotateZ(360deg);
+    }
+  }
+  @keyframes logo-orbit-rev {
+    from {
+      transform: rotateX(62deg) rotateY(26deg) rotateZ(360deg);
+    }
+    to {
+      transform: rotateX(62deg) rotateY(26deg) rotateZ(0deg);
+    }
+  }
+  @keyframes logo-float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(0, -5px, 16px);
+    }
+  }
+
+  /* Aurora: pita cahaya lebar bergeser pelan + berdenyut. Hanya
+     transform/opacity yang beranimasi; blur-nya statis. */
+  @keyframes aurora {
+    0%,
+    100% {
+      transform: translate3d(-6%, 0, 0) scale(1);
+      opacity: 0.35;
+    }
+    50% {
+      transform: translate3d(8%, 0, 0) scale(1.12);
+      opacity: 0.6;
+    }
+  }
+  @keyframes aurora-alt {
+    0%,
+    100% {
+      transform: translate3d(6%, 0, 0) scale(1.08);
+      opacity: 0.28;
+    }
+    50% {
+      transform: translate3d(-8%, 0, 0) scale(1);
+      opacity: 0.5;
+    }
+  }
+  /* Bloom horizon: cahaya lembut di garis horizon yang bernapas */
+  @keyframes bloom-pulse {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 0.3;
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(1.14);
+      opacity: 0.55;
+    }
+  }
+  /* Bintang jatuh: melintas diagonal dari -setengah ke +setengah jarak,
+     muncul lalu memudar. Arah & jarak di-set inline per bintang. */
+  @keyframes star-shoot {
+    0% {
+      transform: translate3d(
+          calc(var(--star-dx, 480px) * -0.5),
+          calc(var(--star-dy, 240px) * -0.5),
+          0
+        )
+        rotate(var(--star-rot, 27deg));
+      opacity: 0;
+    }
+    12% {
+      opacity: var(--star-o, 0.85);
+    }
+    42% {
+      opacity: var(--star-o, 0.85);
+    }
+    60%,
+    100% {
+      transform: translate3d(
+          calc(var(--star-dx, 480px) * 0.5),
+          calc(var(--star-dy, 240px) * 0.5),
+          0
+        )
+        rotate(var(--star-rot, 27deg));
+      opacity: 0;
+    }
+  }
+
   @keyframes rot {
     to {
       transform: rotate(360deg);
@@ -309,6 +471,207 @@
   box-shadow: var(--shadow-card-glow);
 }
 
+@utility auth-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 620px;
+  perspective-origin: 50% 46%;
+}
+
+/* Partikel debu cahaya — kedalaman nyata lewat translate3d Z.
+   box-shadow memakai cyan yang sudah dipakai di logo badge (0,212,255). */
+@utility auth-mote {
+  position: absolute;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.55);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* Jendela lantai grid — perspektif sendiri, dipudarkan di horizon.
+   perspective-origin di tepi atas = garis horizon berada di atas kotak ini. */
+@utility auth-grid {
+  position: absolute;
+  inset: auto 0 -2% 0;
+  height: 52%;
+  overflow: hidden;
+  perspective: 320px;
+  perspective-origin: 50% 0%;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 45%,
+    #000 100%
+  );
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 45%, #000 100%);
+}
+
+/* Bidang grid yang direbahkan ke depan.
+   `top: 0` itu penting — titik putarnya harus tepat di garis horizon;
+   kalau bidang dimulai di atas wadah, lantainya terdorong keluar layar. */
+@utility auth-grid-plane {
+  position: absolute;
+  inset: 0 -55% -120% -55%;
+  transform-origin: 50% 0%;
+  transform: rotateX(76deg);
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--color-primary) 0 1px,
+      transparent 1px 72px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--color-primary) 0 1px,
+      transparent 1px 72px
+    );
+  /* intensitas lewat opacity, bukan hue baru */
+  opacity: 0.22;
+  will-change: transform;
+}
+
+/* Garis cahaya di garis horizon grid */
+@utility auth-horizon {
+  position: absolute;
+  top: 44%;
+  left: 50%;
+  height: 1px;
+  width: 72%;
+  translate: -50% 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-primary),
+    transparent
+  );
+  filter: blur(1.5px);
+  opacity: 0.18;
+}
+
+/* Pita aurora — cahaya lebar & lembut di paruh atas layar. Blur statis;
+   hanya transform/opacity yang beranimasi (lihat @keyframes aurora). */
+@utility auth-aurora {
+  position: absolute;
+  top: -12%;
+  left: -20%;
+  width: 140%;
+  height: 55%;
+  background: radial-gradient(
+    60% 100% at 50% 0%,
+    var(--blob-cyan) 0%,
+    transparent 72%
+  );
+  filter: blur(46px);
+  opacity: 0.4;
+  will-change: transform, opacity;
+}
+
+/* Varian aurora kedua, warna biru, sedikit lebih rendah — memberi lapis */
+@utility auth-aurora-alt {
+  position: absolute;
+  top: 2%;
+  left: -25%;
+  width: 150%;
+  height: 48%;
+  background: radial-gradient(
+    55% 100% at 50% 0%,
+    var(--blob-blue) 0%,
+    transparent 70%
+  );
+  filter: blur(52px);
+  opacity: 0.32;
+  will-change: transform, opacity;
+}
+
+/* Bloom di garis horizon — bernapas, memperkuat pita horizon */
+@utility auth-bloom {
+  position: absolute;
+  top: 44%;
+  left: 50%;
+  width: 56%;
+  height: 30%;
+  background: radial-gradient(
+    50% 50% at 50% 50%,
+    var(--blob-cyan) 0%,
+    transparent 68%
+  );
+  filter: blur(34px);
+  opacity: 0.35;
+  will-change: transform, opacity;
+}
+
+/* Bintang jatuh — garis tipis dengan kepala terang di ujung kanan.
+   --star-dx/-dy/-rot/-o di-set inline per bintang. */
+@utility auth-star {
+  position: absolute;
+  width: 92px;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-primary-bright)
+  );
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* ---- Logo 3D (khusus login; komponen lain tidak terpengaruh) ---- */
+
+/* Pemberi perspektif — tidak boleh memotong isinya */
+@utility logo3d-stage {
+  perspective: 900px;
+  perspective-origin: 50% 50%;
+}
+
+/* Lapisan miring — WAJIB bebas overflow/filter/opacity agar 3D tidak rata */
+@utility logo3d-tilt {
+  position: relative;
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Pelat cahaya di belakang lencana — memberi rasa tebal */
+@utility logo3d-plate {
+  position: absolute;
+  inset: -18%;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--blob-cyan) 0%,
+    transparent 68%
+  );
+}
+
+/* Cincin orbit mengelilingi lencana */
+@utility logo3d-ring {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid var(--glass-2-border);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Kilau spekular kaca — ikut miring bersama lencana */
+@utility logo3d-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    145deg,
+    var(--inset-glow) 0%,
+    transparent 42%,
+    transparent 100%
+  );
+}
+
 @utility scrollbar-none {
   scrollbar-width: none;
   &::-webkit-scrollbar {
@@ -325,6 +688,26 @@
   .animate-pop-in,
   .animate-rise-in {
     animation: none;
+  }
+  /* The auth depth scene keeps its shape and its depth; only the movement
+     stops. Motes and shooting stars are hidden outright — motion is the whole
+     of what they are — while the aurora and the bloom stay as still light. */
+  .animate-grid-flow,
+  .animate-horizon-pulse,
+  .animate-blob-drift,
+  .animate-blob-drift-alt,
+  .animate-logo-orbit,
+  .animate-logo-orbit-rev,
+  .animate-logo-float,
+  .animate-aurora,
+  .animate-aurora-alt,
+  .animate-bloom-pulse,
+  .animate-star-shoot {
+    animation: none !important;
+  }
+  .auth-star,
+  .auth-mote {
+    display: none;
   }
 }
 

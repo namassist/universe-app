@@ -59,8 +59,6 @@ export const en: Dict = {
   loginDemoTitle: "Demo mode — sample accounts",
   loginDemoHint: "Any non-empty password works.",
   loginCopy: "© 2026 UNIVERSE — Fleet Automation System.",
-  loginNoAcc: "Don't have an account?",
-  loginRegLink: "Register here",
 
   /* --- register --- */
   regCreateYour: "Create Your Account",
@@ -1084,9 +1082,8 @@ export const en: Dict = {
   pfPwSavedD: "use the new password the next time you sign in.",
 
   /* --- auth: identifier + forced password change --- */
-  authIdentLabel: "Email or NIK",
-  authIdentPh: "name@unggul.co.id or 503220421",
-  authIdentHelp: "Office staff use an email, field operators use their NIK.",
+  authIdentLabel: "NIK",
+  authIdentPh: "503220421",
   authLoginErr:
     "Incorrect identifier or password. Check again, or contact an admin if your account has been deactivated.",
   cpTitle: "Change password",
