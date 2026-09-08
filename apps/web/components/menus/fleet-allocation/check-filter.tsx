@@ -62,10 +62,17 @@ export function CheckFilter({
           <button
             type="button"
             aria-label={t.btnClose}
-            className="fixed inset-0 z-10 cursor-default"
+            className="fixed inset-0 z-70 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-control border border-(--divider) bg-(--fill-raised) p-1.5 shadow-lg">
+          {/* The same surface every other floating panel here uses — see
+              `DropMenu`. It was `bg-(--fill-raised)`, a token this design
+              system does not define, so the panel painted no background at
+              all and the table read straight through it. An undefined custom
+              property fails silently in CSS: nothing warns, the rule is just
+              dropped. `--overlay-fill` is the one that exists, and it is
+              near-opaque in both themes. */}
+          <div className="absolute right-0 z-80 mt-1 max-h-72 w-56 overflow-y-auto rounded-icon border border-(--glass-2-border) bg-(--overlay-fill) p-1.5 shadow-(--shadow-modal)">
             {value.length ? (
               <button
                 type="button"
