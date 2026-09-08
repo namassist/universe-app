@@ -109,6 +109,7 @@ export function FleetAllocationDetail() {
 
   const [picking, setPicking] = React.useState<ActualSlot | null>(null);
   const [fleetF, setFleetF] = React.useState("all");
+  const [deptF, setDeptF] = React.useState("all");
   const [filter, setFilter] = React.useState<
     "all" | "unalloc" | "alloc" | "subbed"
   >("all");
@@ -139,13 +140,32 @@ export function FleetAllocationDetail() {
   });
 
   /*
-   * The same four controls the PLAN board carries, over the same units, so a
+   * The same controls the PLAN board carries, over the same units, so a
    * person moving between the two tabs is not learning a second screen. The
    * summary counts the whole board rather than the filtered view — narrowing
    * to one fleet must not make the site look better crewed than it is.
    */
+
+  /*
+   * The departments this board spans — the filter offers only what exists,
+   * as the spare pool's does.
+   *
+   * This is the *unit's* department, not its operator's, which is what makes
+   * the filter safe here: an unmanned unit keeps its department, so narrowing
+   * to one still shows that department's vacancies. A filter keyed on the
+   * person would have hidden exactly the rows this board exists to carry.
+   */
+  const deptOptions = React.useMemo(
+    () =>
+      [
+        ...new Set(slots.map((s) => s.departmentName).filter(Boolean)),
+      ].sort() as string[],
+    [slots]
+  );
+
   const needle = q.trim().toLowerCase();
   const shown = slots.filter((s) => {
+    if (deptF !== "all" && s.departmentName !== deptF) return false;
     if (
       fleetF === "none" ? !!s.fleet : fleetF !== "all" && s.fleet?.id !== fleetF
     )
@@ -222,6 +242,28 @@ export function FleetAllocationDetail() {
           ) : null}
         </span>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* Before the fleet, because a department is the wider question:
+              somebody who owns PSD's machines narrows to those first and then
+              looks at formations inside them, never the other way round. */}
+          {deptOptions.length ? (
+            <Select
+              aria-label={t.faDeptAll}
+              wrapperClassName="w-auto"
+              className="h-10 w-auto pr-9"
+              value={deptF}
+              onChange={(e) => {
+                setDeptF(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">{t.faDeptAll}</option>
+              {deptOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </Select>
+          ) : null}
           <Select
             aria-label={t.faFleetAll}
             wrapperClassName="w-auto"
@@ -821,14 +863,25 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
 
   const [q, setQ] = React.useState("");
   const [fleetF, setFleetF] = React.useState("");
-  const [ftwF, setFtwF] = React.useState("");
-  const [fingerF, setFingerF] = React.useState("");
+  /* Sets, not single choices. A row carries exactly one FTW verdict and one
+     tap verdict, so ticking two never contradicts itself — it asks "either of
+     these", which is the question people actually bring: "late or missing"
+     is the list of who still owes an upload, and it was two passes of the
+     screen to read before. Ticking nothing still means no restriction. */
+  const [ftwF, setFtwF] = React.useState<string[]>([]);
+  const [fingerF, setFingerF] = React.useState<string[]>([]);
   /* Who the row is, before anything the board did to them: somebody the
      roster gave a standing unit, or somebody it did not. "Spare" is a badge in
      the Unit plan column and was the one thing on the row nobody could filter
      by — and it is the whole population a short shift is read against. */
   const [opF, setOpF] = React.useState<"" | "spare" | "plan">("");
   const [skillF, setSkillF] = React.useState<string[]>([]);
+  /* What the board did with them. The badge in the last column already says
+     it, but "NO UNIT" is one word over two very different failures — nobody
+     had a seat for a ready operator, and an operator the gate turned away —
+     and hovering every red badge to tell them apart was the only way to ask
+     the question this filter answers in a click. */
+  const [decF, setDecF] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
   const [per, setPer] = React.useState("10");
   /* Null means the server's order: formation, then decision. Sorting by the
@@ -891,6 +944,17 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
         .map((code) => ({ value: code, label: code })),
     [rows]
   );
+  /* Keyed off `AUDIT_DECISION` rather than off the rows alone, so the options
+     keep the order the server sorts by — seats filled first, then the people
+     who were not seated — instead of whatever order this board happens to
+     mention them in. */
+  const decisionOptions = React.useMemo(
+    () =>
+      (Object.keys(AUDIT_DECISION) as AuditRow["decision"][])
+        .filter((v) => rows.some((r) => r.decision === v))
+        .map((v) => ({ value: v, label: t[AUDIT_DECISION[v].key] })),
+    [rows, t]
+  );
 
   const needle = q.trim().toLowerCase();
   const shown = React.useMemo(
@@ -901,14 +965,15 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
         } else if (fleetF === NO_FLEET_ROW) {
           if (r.fleetLeaderCode || r.fleetSupport) return false;
         } else if (fleetF && r.fleetLeaderCode !== fleetF) return false;
-        if (ftwF && r.ftw !== ftwF) return false;
-        if (fingerF && r.finger !== fingerF) return false;
+        if (ftwF.length && !ftwF.includes(r.ftw)) return false;
+        if (fingerF.length && !fingerF.includes(r.finger)) return false;
         if (opF === "spare" && r.planUnitCode) return false;
         if (opF === "plan" && !r.planUnitCode) return false;
         /* Any, not all: a unit asks for one code, so holding any of the ticked
            ones is what makes an operator relevant to the question. */
         if (skillF.length && !skillF.some((c) => r.skills.includes(c)))
           return false;
+        if (decF.length && !decF.includes(r.decision)) return false;
         if (!needle) return true;
         return (
           r.name.toLowerCase().includes(needle) ||
@@ -918,7 +983,7 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
           (r.fleetLeaderCode ?? "").toLowerCase().includes(needle)
         );
       }),
-    [rows, needle, fleetF, ftwF, fingerF, opF, skillF]
+    [rows, needle, fleetF, ftwF, fingerF, opF, skillF, decF]
   );
 
   const sorted = React.useMemo(() => {
@@ -954,11 +1019,11 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
         <ToolbarTitle>{t.faAuditTitle}</ToolbarTitle>
       </Toolbar>
       {/* The filters own a row of their own rather than crowding in beside the
-          title: there are five of them, and squeezed into a toolbar they each
+          title: there are six of them, and squeezed into a toolbar they each
           shrink to a width that fits nothing. The widths are proportional, so
-          the row stays full at any viewport — four filters at one share each
-          and the search at two, because a name or a unit code needs the room
-          and a dropdown does not. `min-w` is what makes them wrap on a narrow
+          the row stays full at any viewport — the filters take one share each
+          and the search two, because a name or a unit code needs the room
+          and a filter control does not. `min-w` is what makes them wrap on a narrow
           screen instead of collapsing into unreadable stubs. */}
       <div className="mb-4 flex w-full flex-wrap items-center gap-2">
         {fleetOptions.length || hasUnfleeted ? (
@@ -1007,48 +1072,29 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
             <option value="plan">{t.faAuditOpPlan}</option>
           </Select>
         ) : null}
-        {/* Single choice: a row has exactly one verdict, so "pass or fail"
-            asks for everything and the two are never usefully combined. Only
-            the SIMPER filter is a set, because an operator holds several codes
-            at once. */}
-        {ftwOptions.length ? (
-          <Select
-            aria-label={t.faAuditFtw}
-            wrapperClassName="min-w-[150px] flex-1"
-            className="h-10 w-full"
-            value={ftwF}
-            onChange={(e) => {
-              setFtwF(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">{t.faAuditFtwAll}</option>
-            {ftwOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        ) : null}
-        {fingerOptions.length ? (
-          <Select
-            aria-label={t.faAuditFinger}
-            wrapperClassName="min-w-[150px] flex-1"
-            className="h-10 w-full"
-            value={fingerF}
-            onChange={(e) => {
-              setFingerF(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">{t.faAuditFingerAll}</option>
-            {fingerOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        ) : null}
+        {/* All three are sets, and each renders nothing when this board has
+            no values for it — `CheckFilter` returns null on empty options, so
+            the guard the two dropdowns needed is gone. */}
+        <CheckFilter
+          className="min-w-[150px] flex-1"
+          label={t.faAuditFtw}
+          options={ftwOptions}
+          value={ftwF}
+          onChange={(next) => {
+            setFtwF(next);
+            setPage(1);
+          }}
+        />
+        <CheckFilter
+          className="min-w-[150px] flex-1"
+          label={t.faAuditFinger}
+          options={fingerOptions}
+          value={fingerF}
+          onChange={(next) => {
+            setFingerF(next);
+            setPage(1);
+          }}
+        />
         <CheckFilter
           className="min-w-[150px] flex-1"
           label={t.faSkillFilter}
@@ -1056,6 +1102,19 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
           value={skillF}
           onChange={(next) => {
             setSkillF(next);
+            setPage(1);
+          }}
+        />
+        {/* Last of the filters, under the last of the columns: the row reads
+            left to right towards what became of the person, and the control
+            for it sits where that answer does. */}
+        <CheckFilter
+          className="min-w-[150px] flex-1"
+          label={t.faAuditDecision}
+          options={decisionOptions}
+          value={decF}
+          onChange={(next) => {
+            setDecF(next);
             setPage(1);
           }}
         />
@@ -1081,7 +1140,13 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
         <TableSkeleton rows={6} />
       ) : !shown.length ? (
         <p className="text-sm text-(--text-tertiary)">
-          {needle || fleetF || ftwF || fingerF || opF || skillF.length
+          {needle ||
+          fleetF ||
+          opF ||
+          ftwF.length ||
+          fingerF.length ||
+          skillF.length ||
+          decF.length
             ? t.faNoMatch
             : t.faAuditEmpty}
         </p>

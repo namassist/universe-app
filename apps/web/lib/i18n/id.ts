@@ -661,6 +661,7 @@ export const id = {
   faAuditFtw: "Fit To Work",
   faAuditFinger: "Check-In",
   faAuditActual: "Unit actual",
+  faAuditDecision: "Hasil",
   faAuditSpare: "SPARE",
   faAuditOpAll: "Semua operator",
   faAuditOpSpare: "Operator spare",

@@ -664,6 +664,7 @@ export const en: Dict = {
   faAuditFtw: "FTW",
   faAuditFinger: "Check-In",
   faAuditActual: "Actual unit",
+  faAuditDecision: "Outcome",
   faAuditSpare: "SPARE",
   faAuditOpAll: "All operators",
   faAuditOpSpare: "Spare operators",
