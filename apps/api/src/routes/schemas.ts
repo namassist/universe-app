@@ -408,6 +408,13 @@ const FleetImportSupportRowSchema = t.Object({
   breakdown: t.Boolean(),
 });
 
+/** One unit the file parks because the digger it hauls for is broken. */
+const FleetImportStandbyRowSchema = t.Object({
+  row: t.Integer(),
+  unit: t.String(),
+  fleet: t.String(),
+});
+
 export const FleetImportPreviewSchema = t.Object({
   fileName: t.String(),
   newCount: t.Integer(),
@@ -415,9 +422,12 @@ export const FleetImportPreviewSchema = t.Object({
   unchangedCount: t.Integer(),
   supportCount: t.Integer(),
   breakdownCount: t.Integer(),
+  standbyCount: t.Integer(),
   errorCount: t.Integer(),
   rows: t.Array(FleetImportPreviewRowSchema),
   support: t.Array(FleetImportSupportRowSchema),
+  /** Units this file sets standby, with the broken digger behind each. */
+  standby: t.Array(FleetImportStandbyRowSchema),
   /** Leader codes of formations this file would disband. */
   disband: t.Array(t.String()),
   /** Codes of units this file drops out of today's operation. */
@@ -431,6 +441,7 @@ export const FleetImportResultSchema = t.Object({
   updated: t.Integer(),
   disbanded: t.Integer(),
   support: t.Integer(),
+  standby: t.Integer(),
   released: t.Integer(),
 });
 

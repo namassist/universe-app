@@ -433,6 +433,68 @@ describe("BREAKDOWN in the area cell is a status", () => {
   });
 });
 
+/* --------------------------------------------- an empty area is a standby */
+
+/*
+ * The one place a blank cell carries meaning, and only there: on a row that
+ * names a formation, it says the digger that formation is named after is down,
+ * so this truck has nowhere to work. The file has to prove it — a blank cell is
+ * also exactly what a half-filled file looks like.
+ */
+describe("an empty area parks a truck behind its broken digger", () => {
+  test("names the unit and the digger, and disbands nothing else", async () => {
+    const preview = await validate([
+      [digger1.code, "BREAKDOWN", null, null],
+      [hauler1.code, null, digger1.code, null],
+      [hauler2.code, null, digger1.code, null],
+    ]);
+    expect(preview.errorCount).toBe(0);
+    expect(preview.standbyCount).toBe(2);
+    expect(preview.standby).toEqual([
+      { row: 3, unit: hauler1.code, fleet: digger1.code },
+      { row: 4, unit: hauler2.code, fleet: digger1.code },
+    ]);
+    /* The digger is nobody's leader now — a formation whose only members are
+       standing by has no members — so it files as a broken machine. */
+    expect(preview.rows).toEqual([]);
+    expect(preview.breakdownCount).toBe(1);
+  });
+
+  test("the digger must actually be broken in this same file", async () => {
+    const preview = await validate([
+      [digger1.code, miningName, null, null],
+      [hauler1.code, null, digger1.code, null],
+    ]);
+    expect(preview.errorCount).toBe(1);
+    expect(preview.standbyCount).toBe(0);
+    const [error] = preview.errors;
+    expect(error!.nik).toBe(hauler1.code);
+    // The area it does claim is quoted, so the reader can see what to fix.
+    expect(error!.issue).toContain(miningName);
+  });
+
+  test("a blank area naming no formation is still a blank area", async () => {
+    /* Nothing to check it against, and "forgot the column" is the far more
+       common reading of a row that says neither where nor for whom. */
+    const preview = await validate([[hauler1.code, null, null, null]]);
+    expect(preview.errorCount).toBe(1);
+    expect(preview.errors[0]!.issue).toContain("area kosong");
+    expect(preview.standbyCount).toBe(0);
+  });
+
+  test("a broken digger may not also keep members that name an area", async () => {
+    const preview = await validate([
+      [digger1.code, "BREAKDOWN", null, null],
+      [hauler1.code, null, digger1.code, null],
+      [hauler2.code, miningName, digger1.code, null],
+    ]);
+    expect(preview.errorCount).toBeGreaterThan(0);
+    expect(preview.errors.some((e) => e.issue.includes("breakdown"))).toBe(
+      true
+    );
+  });
+});
+
 /* ------------------------------------------------------------- transport */
 
 describe("the transport cell", () => {
@@ -620,6 +682,129 @@ describe("the commit writes the unit facts, not just the formation", () => {
       workArea: miningName,
       fleetSupport: false,
     });
+  });
+
+  test("a broken digger parks its trucks and takes its formation with it", async () => {
+    // Morning: the formation works, so it exists as a formation.
+    const morning = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(await file(fleetRows(digger1.code, [hauler1.code], miningName)))
+    );
+    expect(morning.status).toBe(200);
+
+    // Night: the digger is down. Its truck says so by naming the digger and
+    // leaving the area empty.
+    const night = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file([
+          [digger1.code, "BREAKDOWN", null, null],
+          [hauler1.code, null, digger1.code, null],
+        ])
+      )
+    );
+    expect(night.status).toBe(200);
+    expect(await night.json()).toMatchObject({ standby: 1, disbanded: 1 });
+
+    const [parked] = await db
+      .select({
+        standby: schema.units.standby,
+        breakdown: schema.units.breakdown,
+        fleetSupport: schema.units.fleetSupport,
+        workArea: schema.units.workArea,
+        transportUnitId: schema.units.transportUnitId,
+      })
+      .from(schema.units)
+      .where(eq(schema.units.id, hauler1.id));
+    /* Standing by, and holding nothing that would describe a shift it is not
+       working: no area, no vehicle, no support seat. */
+    expect(parked).toMatchObject({
+      standby: true,
+      breakdown: false,
+      fleetSupport: false,
+      workArea: null,
+      transportUnitId: null,
+    });
+
+    // The digger is broken, and the formation is gone rather than left with no
+    // location and a leader marked broken.
+    const [down] = await db
+      .select({
+        breakdown: schema.units.breakdown,
+        standby: schema.units.standby,
+      })
+      .from(schema.units)
+      .where(eq(schema.units.id, digger1.id));
+    expect(down).toMatchObject({ breakdown: true, standby: false });
+
+    const held = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .where(eq(schema.fleets.leaderUnitId, digger1.id));
+    expect(held).toEqual([]);
+  });
+
+  test("a repaired digger un-parks the trucks that were waiting on it", async () => {
+    /* The flag has to come down the same way `breakdown` does. Allocation
+       skips standby units, so a truck left parked would go on being skipped
+       with nothing reporting it — the board would simply not mention it. */
+    const down = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file([
+          [digger1.code, "BREAKDOWN", null, null],
+          [hauler1.code, null, digger1.code, null],
+          [hauler2.code, null, digger1.code, null],
+        ])
+      )
+    );
+    expect(down.status).toBe(200);
+    expect(await down.json()).toMatchObject({ standby: 2 });
+
+    /* Night: the digger works again, and the file says so the ordinary way —
+       it seats the formation. Nothing in the file mentions the morning. */
+    const fixed = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file(
+          fleetRows(digger1.code, [hauler1.code, hauler2.code], miningName)
+        )
+      )
+    );
+    expect(fixed.status).toBe(200);
+
+    /* Both halves of the morning have to come undone: the trucks stop
+       standing by and the digger stops being broken. Asserted together
+       because seating a formation is one act — a file that cleared the crew
+       but left the leader broken would put the whole formation back on the
+       screen and still keep it off the board. */
+    const after = await db
+      .select({
+        id: schema.units.id,
+        standby: schema.units.standby,
+        breakdown: schema.units.breakdown,
+        workArea: schema.units.workArea,
+      })
+      .from(schema.units)
+      .where(inArray(schema.units.id, [digger1.id, hauler1.id, hauler2.id]));
+    expect(after).toHaveLength(3);
+    for (const unit of after)
+      expect(unit).toMatchObject({
+        standby: false,
+        breakdown: false,
+        workArea: miningName,
+      });
+
+    // And the formation exists again, rather than the trucks merely being free.
+    const [fleet] = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .where(eq(schema.fleets.leaderUnitId, digger1.id));
+    expect(fleet).toBeDefined();
   });
 
   test("a re-upload updates in place and moves a hauler between formations", async () => {

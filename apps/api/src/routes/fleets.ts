@@ -49,6 +49,7 @@ import {
   validateFleetWorkbook,
   type FleetCatalogues,
   type ParsedFleetRow,
+  type ParsedStandbyUnit,
   type ParsedSupportUnit,
 } from "./fleets-import";
 import { MAX_IMPORT_BYTES } from "./import-columns";
@@ -283,6 +284,12 @@ async function applyUnitFacts(
            while Fleet Setting listed it under its fleet. Nothing reported
            that: it was simply absent from the board. */
         breakdown: false,
+        /* And the standby, for the same reason and with the same teeth:
+           allocation skips standby units (`fleet-actual.ts`), so a truck
+           parked yesterday because its digger was down would go on being
+           skipped once the digger was repaired and the file seated it again.
+           Every flag this import can set, it must also be able to clear. */
+        standby: false,
       })
       .where(inArray(schema.units.id, input.unitIds));
 
@@ -436,6 +443,7 @@ type FleetImportOutcome = {
   preview: FleetImportPreview;
   rows: ParsedFleetRow[];
   support: ParsedSupportUnit[];
+  standby: ParsedStandbyUnit[];
   disband: { id: string; leaderCode: string }[];
   releasedIds: string[];
 };
@@ -505,15 +513,18 @@ async function parseFleetImport(
       unchangedCount: rows.filter((r) => r.preview.kind === "unchanged").length,
       supportCount: parsed.support.filter((u) => !u.breakdown).length,
       breakdownCount: parsed.support.filter((u) => u.breakdown).length,
+      standbyCount: parsed.standby.length,
       errorCount: errors.length,
       rows: rows.map((r) => r.preview),
       support: parsed.support.map((u) => u.preview),
+      standby: parsed.standby.map((u) => u.preview),
       disband: parsed.disband.map((d) => d.leaderCode),
       released: parsed.released,
       errors,
     },
     rows,
     support: parsed.support,
+    standby: parsed.standby,
     disband: parsed.disband,
     releasedIds: releasedRows.map((u) => u.id),
   };
@@ -694,13 +705,16 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
               .returning({ id: schema.fleets.id });
             row.selfId = fleet!.id;
           }
-          await tx
-            .insert(schema.fleetUnits)
-            .values(
-              outcome.rows.flatMap((row) =>
-                row.unitIds.map((unitId) => ({ fleetId: row.selfId!, unitId }))
-              )
-            );
+          /* Guarded: a file can legitimately leave no formation standing —
+             every digger broken, or a yard running on support units alone —
+             and an insert with no values is a syntax error rather than a
+             no-op. Unreachable until an empty area could park a formation's
+             whole crew, which is what made it reachable. */
+          const memberships = outcome.rows.flatMap((row) =>
+            row.unitIds.map((unitId) => ({ fleetId: row.selfId!, unitId }))
+          );
+          if (memberships.length)
+            await tx.insert(schema.fleetUnits).values(memberships);
 
           /* Units first stop taking part, then the file's own rows put back
              the ones it still names — ordered this way so a unit moving from
@@ -738,8 +752,29 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
                    place, so it is not kept as one. */
                 fleetSupport: !unit.breakdown,
                 breakdown: unit.breakdown,
+                /* Written every time, like the other two: the file is this
+                   unit's whole answer for the day, and a machine it puts back
+                   to work must not carry yesterday's parking. */
+                standby: false,
                 workArea: unit.workArea,
                 transportUnitId: unit.transportUnitId,
+              })
+              .where(eq(schema.units.id, unit.unitId));
+
+          /* Last, so nothing above can undo it: a truck whose digger is down
+             takes no part today. It keeps no area and no vehicle — both would
+             be describing a shift it is not working — and it belongs to no
+             formation, because the one it named was disbanded with its
+             leader. */
+          for (const unit of outcome.standby)
+            await tx
+              .update(schema.units)
+              .set({
+                standby: true,
+                breakdown: false,
+                fleetSupport: false,
+                workArea: null,
+                transportUnitId: null,
               })
               .where(eq(schema.units.id, unit.unitId));
         });
@@ -766,6 +801,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         updated: updated.length,
         disbanded: outcome.disband.length,
         support: outcome.support.filter((u) => !u.breakdown).length,
+        standby: outcome.standby.length,
         released: outcome.releasedIds.length,
       };
     },

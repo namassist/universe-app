@@ -27,6 +27,18 @@ import type { ImportErrorRow } from "./master-import";
  *
  * `area` doubles as the breakdown marker: a unit whose area reads BREAKDOWN is
  * recorded as broken down rather than parked somewhere called that.
+ *
+ * An **empty** area says something different again, and only on a row that
+ * names a formation: the digger it hauls for is down, so this truck has
+ * nowhere to work today and stands by. The file must prove it — the named
+ * leader's own row has to read BREAKDOWN — because "area left blank" is also
+ * what a half-filled file looks like, and the two must not be confused.
+ *
+ * A formation whose digger is down does not survive the day: its trucks leave
+ * it, the digger becomes a broken machine in no formation, and the formation
+ * is disbanded. Keeping it would mean a formation with no location and a
+ * leader marked broken, and both of those contradict rules this import
+ * already enforces.
  */
 export const FLEET_IMPORT_COLUMNS = ["unit", "area", "fleet", "bus"] as const;
 export type FleetImportColumn = (typeof FLEET_IMPORT_COLUMNS)[number];
@@ -83,6 +95,21 @@ export type FleetImportSupportRow = {
   breakdown: boolean;
 };
 
+/**
+ * One unit standing by because the digger it hauls for is broken down.
+ *
+ * Separate from the support list rather than folded into it: a support unit is
+ * *crewed* somewhere, and these are not crewed at all. Filing them together
+ * would put a truck nobody is driving into the count of machines that are
+ * working.
+ */
+export type FleetImportStandbyRow = {
+  row: number;
+  unit: string;
+  /** The broken digger this unit would have hauled for. */
+  fleet: string;
+};
+
 export type FleetImportPreview = {
   /** Echoed so the commit can be checked against the file just validated. */
   fileName: string;
@@ -91,9 +118,12 @@ export type FleetImportPreview = {
   unchangedCount: number;
   supportCount: number;
   breakdownCount: number;
+  standbyCount: number;
   errorCount: number;
   rows: FleetImportPreviewRow[];
   support: FleetImportSupportRow[];
+  /** Units the commit would set standby, and the broken digger behind each. */
+  standby: FleetImportStandbyRow[];
   /**
    * Formations the database holds and this file never names — the commit would
    * disband them.
@@ -113,6 +143,7 @@ export type FleetImportResult = {
   updated: number;
   disbanded: number;
   support: number;
+  standby: number;
   released: number;
 };
 

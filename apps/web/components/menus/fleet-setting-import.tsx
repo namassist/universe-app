@@ -186,6 +186,13 @@ export function FleetImport() {
           color: "var(--badge-neutral-text)",
         },
         {
+          n: preview.standbyCount,
+          label: t.flImpStandby,
+          bg: "var(--badge-neutral-fill)",
+          border: "var(--badge-neutral-border)",
+          color: "var(--badge-neutral-text)",
+        },
+        {
           n: preview.errorCount,
           label: t.umImpErr,
           bg: "var(--badge-danger-fill)",
@@ -200,9 +207,20 @@ export function FleetImport() {
      one the yard has disbanded — but a wrong file says the same thing, and the
      difference is only visible to the person holding it. */
   const removals =
-    preview && (preview.disband.length || preview.released.length)
+    preview &&
+    (preview.disband.length ||
+      preview.released.length ||
+      preview.standby.length)
       ? [
           { label: t.flImpDisband, codes: preview.disband },
+          /* Beside the two other kinds of leaving, because that is what it is
+             — a truck that will not be crewed today. Each is named with the
+             digger that parked it, so the reader can check the one fact this
+             rests on instead of taking the count on trust. */
+          {
+            label: t.flImpStandby,
+            codes: preview.standby.map((u) => `${u.unit} → ${u.fleet}`),
+          },
           { label: t.flImpReleased, codes: preview.released },
         ].filter((g) => g.codes.length)
       : [];
