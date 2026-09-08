@@ -88,7 +88,7 @@ const TIMEOUT_MS = 30_000;
 async function call(
   path: string,
   options: { auth?: string; form?: URLSearchParams } = {}
-): Promise<{ data?: unknown }> {
+): Promise<{ data?: unknown; token?: unknown }> {
   const { auth, form } = options;
   const response = await fetch(`${env.ROSTER_SOURCE_URL}${path}`, {
     method: form ? "POST" : "GET",
@@ -109,12 +109,23 @@ async function call(
  * An hour-long JWT, sent back as a bare `Authorization` header.
  *
  * Bare: the source wants the token itself, not `Bearer <token>`.
+ *
+ * Under `token`, not `data` — the two endpoints do not share an envelope.
+ * `data_roster` answers `{ message, status, data }` and this one answers
+ * `{ message, status, token }`, which is the source's own inconsistency and
+ * not something this end can normalise away.
+ *
+ * So the failure names the fields that did arrive. "Returned no token" on its
+ * own sent the last envelope change to a probe script to diagnose; the keys
+ * turn it into one line of the log.
  */
 async function token(): Promise<string> {
   const body = await call("/attendance/getToken");
-  if (typeof body.data !== "string" || !body.data)
-    throw new Error("roster source returned no token");
-  return body.data;
+  if (typeof body.token !== "string" || !body.token) {
+    const fields = Object.keys(body).join(", ") || "none";
+    throw new Error(`roster source returned no token (fields: ${fields})`);
+  }
+  return body.token;
 }
 
 export const fetchRosterRows: RosterFetcher = async (from, to) => {
