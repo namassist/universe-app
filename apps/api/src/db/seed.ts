@@ -647,11 +647,18 @@ function codeSize(name: string | null): number {
 }
 
 /**
- * A first allocation order, so nobody ranks 55 pairs from an empty screen.
+ * A first allocation order, so nobody ranks the pairs from an empty screen.
  *
  * Runs **only when the table is empty**: an order somebody has adjusted on the
- * screen is theirs, and a re-seed must not quietly put the yard back to the
- * day it was installed.
+ * screen is theirs, and a re-run must not quietly put the yard back to the day
+ * it was installed.
+ *
+ * Deliberately not called from `bootstrap`, which is what a real installation
+ * runs (owner, 2026-09-09): a site sets its own order on the Prioritas Alokasi
+ * screen, and an order arriving from a seed would be this file's guess at
+ * somebody else's yard. `CLASS_ORDER` above is one site's answer, kept because
+ * it makes a development database useful immediately — not because it is the
+ * right answer anywhere else.
  */
 async function seedAllocationPriority(): Promise<void> {
   const held = await db
