@@ -687,6 +687,8 @@ export const id = {
   faAuditEmpty: "Tidak ada operator pada roster shift ini.",
   faAuditSumB: "operator pada roster",
   faSkillFilter: "Kode simper",
+  faSkillSearch: "Cari pilihan…",
+  faSkillNoMatch: "Tidak ada pilihan yang cocok",
   faSkillClear: "Bersihkan pilihan",
   faSpareSumB: "operator spare",
   faNoFleet: "No-fleet — tanpa formasi",

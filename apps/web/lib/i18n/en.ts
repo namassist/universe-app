@@ -689,6 +689,8 @@ export const en: Dict = {
   faAuditEmpty: "No operator is on this shift's roster.",
   faAuditSumB: "operators on the roster",
   faSkillFilter: "SIMPER code",
+  faSkillSearch: "Search options…",
+  faSkillNoMatch: "No matching options",
   faSkillClear: "Clear selection",
   faSpareSumB: "spare operators",
   faNoFleet: "No-fleet — no formation",
