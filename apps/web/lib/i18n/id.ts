@@ -936,6 +936,8 @@ export const id = {
   thAct: "Aksi",
   upTemplate: "Unduh template (.xlsx)",
   upUploading: "Mengunggah…",
+  upOnlyErr: "Error",
+  upOnlyWarn: "Peringatan",
   upResults: "Hasil validasi",
   vDup: "duplikat — baris terakhir dipakai",
   thRow: "Baris",

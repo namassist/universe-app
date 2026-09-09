@@ -937,6 +937,8 @@ export const en: Dict = {
   thAct: "Action",
   upTemplate: "Download template (.xlsx)",
   upUploading: "Uploading…",
+  upOnlyErr: "Errors",
+  upOnlyWarn: "Warnings",
   upResults: "Validation results",
   vDup: "duplicates — last row used",
   thRow: "Row",

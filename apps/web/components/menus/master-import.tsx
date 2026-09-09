@@ -11,6 +11,7 @@ import {
   MENU_LABELS,
   UNIT_IMPORT_COLUMNS,
   type MasterImportPreview,
+  type MasterImportRowKind,
   type MasterKind,
   type PendingMaster,
 } from "@universe/contracts";
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/panel";
 import { Progress } from "@/components/ui/progress";
 import { SearchInput } from "@/components/ui/search-input";
+import { Segmented, SegmentedButton } from "@/components/ui/segmented";
 import {
   Table,
   TableBody,
@@ -163,6 +165,10 @@ export function MasterImport({ target }: { target: ImportTarget }) {
 
   const [qPrev, setQPrev] = React.useState("");
   const [qErr, setQErr] = React.useState("");
+  /* Both lists lead with what needs attention, so these narrow rather than
+     reorder: the ordering is the same whichever status is showing. */
+  const [prevF, setPrevF] = React.useState<"all" | MasterImportRowKind>("all");
+  const [errF, setErrF] = React.useState<"all" | "danger" | "warning">("all");
   const [confirmMasters, setConfirmMasters] = React.useState(false);
 
   /**
@@ -271,24 +277,55 @@ export function MasterImport({ target }: { target: ImportTarget }) {
     router.push(listHref);
   }
 
-  const prevRows = (preview?.rows ?? []).filter((r) => {
-    const needle = qPrev.trim().toLowerCase();
-    // Searched against the joined row, which is what the column now shows —
-    // matching only the key would leave values visible on screen unfindable.
-    return !needle || r.data.toLowerCase().includes(needle);
-  });
+  /**
+   * What the commit would overwrite, then what it would add, then what it
+   * would leave alone.
+   *
+   * File order reads like the spreadsheet, which is the wrong order for the
+   * question actually being asked here — *is there anything in this file I
+   * would rather not approve*. An update is the row that can lose work
+   * somebody typed by hand, so it goes first; a new row is only an addition;
+   * an unchanged row is there to show the file was read in full. Row number
+   * still breaks the tie, so following the spreadsheet inside one status is
+   * unchanged.
+   */
+  const PREV_ORDER: Record<MasterImportRowKind, number> = {
+    updated: 0,
+    new: 1,
+    unchanged: 2,
+  };
+
+  const prevRows = (preview?.rows ?? [])
+    .filter((r) => {
+      if (prevF !== "all" && r.kind !== prevF) return false;
+      const needle = qPrev.trim().toLowerCase();
+      // Searched against the joined row, which is what the column now shows —
+      // matching only the key would leave values visible on screen unfindable.
+      return !needle || r.data.toLowerCase().includes(needle);
+    })
+    /* Copied before sorting: `preview.rows` is the parsed answer the commit is
+       checked against, and reordering it in place would make what gets written
+       depend on how the screen happened to be filtered. */
+    .slice()
+    .sort(
+      (a, b) =>
+        PREV_ORDER[a.kind] - PREV_ORDER[b.kind] || Number(a.row) - Number(b.row)
+    );
   const pgPrev = usePagination(prevRows);
 
   /**
-   * Blocking rows and warnings in one list, in file order.
+   * Blocking rows and warnings in one list, worst first.
    *
    * Two tables would mean an operator reconciling row numbers across them to
    * answer one question — what needs looking at before I approve this. The
-   * severity is already carried per row by its badge.
+   * severity is already carried per row by its badge; it now carries the
+   * order too, because an error blocks the import and a warning does not, and
+   * file order buried the blocking rows among rows nobody has to act on.
+   * Row number still breaks the tie.
    */
   const errRows = [...(preview?.errors ?? []), ...(preview?.warnings ?? [])]
-    .sort((a, b) => Number(a.row) - Number(b.row))
     .filter((e) => {
+      if (errF !== "all" && e.badgeVariant !== errF) return false;
       const needle = qErr.trim().toLowerCase();
       return (
         !needle ||
@@ -296,7 +333,12 @@ export function MasterImport({ target }: { target: ImportTarget }) {
         e.emp.toLowerCase().includes(needle) ||
         e.issue.toLowerCase().includes(needle)
       );
-    });
+    })
+    .sort(
+      (a, b) =>
+        (a.badgeVariant === "danger" ? 0 : 1) -
+          (b.badgeVariant === "danger" ? 0 : 1) || Number(a.row) - Number(b.row)
+    );
   const pgErr = usePagination(errRows);
 
   /**
@@ -458,6 +500,27 @@ export function MasterImport({ target }: { target: ImportTarget }) {
                 {t.upPrevTitle} — {preview.fileName}
               </ToolbarTitle>
               <ToolbarGroup>
+                {/* Offered in the same order the table is sorted in, so the
+                    control reads as a way into the list rather than as a
+                    second, competing arrangement of it. */}
+                <Segmented role="group" aria-label={t.filter}>
+                  {(
+                    [
+                      ["all", t.segAll],
+                      ["updated", t.umImpUpd],
+                      ["new", t.umImpNew],
+                      ["unchanged", t.mdImpSame],
+                    ] as ["all" | MasterImportRowKind, string][]
+                  ).map(([value, label]) => (
+                    <SegmentedButton
+                      key={value}
+                      active={prevF === value}
+                      onClick={() => setPrevF(value)}
+                    >
+                      {label}
+                    </SegmentedButton>
+                  ))}
+                </Segmented>
                 <SearchInput
                   className="w-60"
                   placeholder={t.mdSearchPh}
@@ -573,6 +636,23 @@ export function MasterImport({ target }: { target: ImportTarget }) {
             <Toolbar className="mb-4">
               <ToolbarTitle>{t.upResults}</ToolbarTitle>
               <ToolbarGroup>
+                <Segmented role="group" aria-label={t.filter}>
+                  {(
+                    [
+                      ["all", t.segAll],
+                      ["danger", t.upOnlyErr],
+                      ["warning", t.upOnlyWarn],
+                    ] as ["all" | "danger" | "warning", string][]
+                  ).map(([value, label]) => (
+                    <SegmentedButton
+                      key={value}
+                      active={errF === value}
+                      onClick={() => setErrF(value)}
+                    >
+                      {label}
+                    </SegmentedButton>
+                  ))}
+                </Segmented>
                 <SearchInput
                   className="w-60"
                   placeholder={t.mdSearchPh}

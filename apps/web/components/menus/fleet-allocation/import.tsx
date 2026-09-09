@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/panel";
 import { Progress } from "@/components/ui/progress";
 import { SearchInput } from "@/components/ui/search-input";
+import { Segmented, SegmentedButton } from "@/components/ui/segmented";
 import {
   Table,
   TableBody,
@@ -53,6 +54,23 @@ const KIND_BADGE = {
  * assignment dialog goes through, and a re-upload that reassigns an operator
  * previews as a *move* naming the unit they leave.
  */
+/**
+ * The row kinds, in the order the preview leads with them.
+ *
+ * Not file order: the question this table answers is *is there anything here I
+ * would rather not approve*, and a move takes an operator off another unit and opens a vacancy there.
+ * What only adds comes next, and rows that change nothing come last — they are
+ * there to prove the file was read in full. Row number still breaks the tie,
+ * so following the spreadsheet inside one status is unchanged.
+ */
+type PrevKind = "moved" | "new" | "unchanged";
+
+const PREV_ORDER: Record<PrevKind, number> = {
+  moved: 0,
+  new: 1,
+  unchanged: 2,
+};
+
 export function PlanImport() {
   const { t } = useI18n();
   const { pushToast } = useToast();
@@ -71,6 +89,7 @@ export function PlanImport() {
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   const [qPrev, setQPrev] = React.useState("");
+  const [prevF, setPrevF] = React.useState<PrevKind | "all">("all");
   const [qErr, setQErr] = React.useState("");
 
   const plan = api.v1["fleet-allocation"].plan;
@@ -141,15 +160,25 @@ export function PlanImport() {
     router.push(LIST_HREF);
   }
 
-  const prevRows = (preview?.rows ?? []).filter((r) => {
-    const needle = qPrev.trim().toLowerCase();
-    return (
-      !needle ||
-      r.unit.toLowerCase().includes(needle) ||
-      r.nik.toLowerCase().includes(needle) ||
-      r.name.toLowerCase().includes(needle)
+  const prevRows = (preview?.rows ?? [])
+    .filter((r) => {
+      if (prevF !== "all" && r.kind !== prevF) return false;
+      const needle = qPrev.trim().toLowerCase();
+      return (
+        !needle ||
+        r.unit.toLowerCase().includes(needle) ||
+        r.nik.toLowerCase().includes(needle) ||
+        r.name.toLowerCase().includes(needle)
+      );
+    })
+    /* Copied before sorting: `preview.rows` is the parsed answer the commit is
+       checked against, and reordering it in place would make what gets written
+       depend on how the screen happened to be filtered. */
+    .slice()
+    .sort(
+      (a, b) =>
+        PREV_ORDER[a.kind] - PREV_ORDER[b.kind] || Number(a.row) - Number(b.row)
     );
-  });
   const pgPrev = usePagination(prevRows);
 
   const errRows = (preview?.errors ?? []).filter((e) => {
@@ -278,6 +307,27 @@ export function PlanImport() {
                 {t.upPrevTitle} — {preview.fileName}
               </ToolbarTitle>
               <ToolbarGroup>
+                {/* Offered in the same order the table is sorted in, so the
+                    control reads as a way into the list rather than as a
+                    second, competing arrangement of it. */}
+                <Segmented role="group" aria-label={t.filter}>
+                  {(
+                    [
+                      ["all", t.segAll],
+                      ["moved", t.faImpMoved],
+                      ["new", t.umImpNew],
+                      ["unchanged", t.mdImpSame],
+                    ] as [PrevKind | "all", string][]
+                  ).map(([value, label]) => (
+                    <SegmentedButton
+                      key={value}
+                      active={prevF === value}
+                      onClick={() => setPrevF(value)}
+                    >
+                      {label}
+                    </SegmentedButton>
+                  ))}
+                </Segmented>
                 <SearchInput
                   className="w-[240px]"
                   placeholder={t.searchOp}

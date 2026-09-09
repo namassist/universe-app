@@ -50,6 +50,14 @@ export type MasterImportChange = {
   to: string | null;
 };
 
+/**
+ * What the commit would do with one row — and, read in this order, how much
+ * attention it wants: an update can overwrite something typed by hand, a new
+ * row only adds, an unchanged row is there to prove the file was read.
+ */
+export const MASTER_IMPORT_ROW_KINDS = ["updated", "new", "unchanged"] as const;
+export type MasterImportRowKind = (typeof MASTER_IMPORT_ROW_KINDS)[number];
+
 export type MasterImportPreviewRow = {
   /** 1-based spreadsheet row, as the operator sees it. */
   row: number;
@@ -61,7 +69,7 @@ export type MasterImportPreviewRow = {
    * an empty table, which is indistinguishable from a file that was not read at
    * all. Showing them is how an operator confirms the upload landed.
    */
-  kind: "new" | "updated" | "unchanged";
+  kind: MasterImportRowKind;
   /** The catalogue name or unit code the row is keyed on. */
   key: string;
   /** A second column worth showing beside the key — description, model, type. */
