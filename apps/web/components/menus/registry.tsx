@@ -47,7 +47,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "unit-status": UnitStatusMenu,
   "fleet-allocation": FleetAllocationMenu,
   "fleet-setting": FleetSettingMenu,
-  "prioritas-alokasi": AllocationPriorityMenu,
+  "allocation-priority": AllocationPriorityMenu,
   "database-unit": DatabaseUnitMenu,
   "jenis-unit": (p) => <MasterMenu {...p} cat="jenis-unit" />,
   "model-unit": (p) => <MasterMenu {...p} cat="model-unit" />,

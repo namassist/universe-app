@@ -53,7 +53,7 @@ async function makeUser(mode: "view" | "manage") {
   made.roles.push(role!.id);
   await db
     .insert(schema.rolePermissions)
-    .values({ roleId: role!.id, menuSlug: "prioritas-alokasi", mode });
+    .values({ roleId: role!.id, menuSlug: "allocation-priority", mode });
   const [user] = await db
     .insert(schema.users)
     .values({

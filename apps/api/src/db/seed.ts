@@ -100,7 +100,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "unit-status",
       "fleet-allocation",
       "fleet-setting",
-      "prioritas-alokasi",
+      "allocation-priority",
       // semua master data
       "database-unit",
       "jenis-unit",
@@ -171,7 +171,7 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
     /* Manpower configures the fleet, and the order vacancies are filled in is
        part of configuring it. Nobody else gains it: the two `dept`-scoped
        roles read the fleet screens but do not set the yard's own rules. */
-    { slug: "prioritas-alokasi", mode: "manage", roles: ["manpower"] },
+    { slug: "allocation-priority", mode: "manage", roles: ["manpower"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */

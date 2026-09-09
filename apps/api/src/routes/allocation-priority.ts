@@ -101,7 +101,7 @@ export const allocationPriorityRoutes = new Elysia({
   .use(requireAuth)
 
   .get("/", async () => priorityRows(), {
-    auth: { menu: "prioritas-alokasi", mode: "view" },
+    auth: { menu: "allocation-priority", mode: "view" },
     response: {
       200: t.Array(AllocationPrioritySchema),
       401: ErrorSchema,
@@ -145,7 +145,7 @@ export const allocationPriorityRoutes = new Elysia({
       return { ranked: body.order.length };
     },
     {
-      auth: { menu: "prioritas-alokasi", mode: "manage" },
+      auth: { menu: "allocation-priority", mode: "manage" },
       body: t.Object({
         order: t.Array(
           t.Object({

@@ -94,7 +94,7 @@ export const NAV: NavEntry[] = [
       leaf("unit-status"),
       leaf("fleet-allocation"),
       leaf("fleet-setting"),
-      leaf("prioritas-alokasi"),
+      leaf("allocation-priority"),
     ],
   },
   {
