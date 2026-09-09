@@ -21,6 +21,7 @@ import type { EffectivePermissions, PendingMaster } from "@universe/contracts";
 import { requireAuth } from "../auth/macro";
 import {
   db,
+  foreignKeyConstraint,
   isForeignKeyViolation,
   isUniqueViolation,
   schema,
@@ -357,6 +358,61 @@ const unitNotFound = {
   code: "unit_not_found",
   message: "Unit tidak ditemukan",
 };
+
+/**
+ * Why a unit cannot be deleted, by the constraint that refused it.
+ *
+ * Seven things reference a unit, and until now every one of them was reported
+ * as "still has a bus schedule" — the comment that said so was written when a
+ * schedule really was the only referrer, and it aged badly. A water truck with
+ * two PLAN pairings and two stored board slots sent its owner to the Bus menu
+ * to look for something that was never there.
+ *
+ * Each entry says what holds the unit *and* what to do, because the two are
+ * not the same question. The last two cannot be undone at all: a stored board
+ * is the record of a shift that has already happened, and status history is
+ * append-only by design — for those, deactivating is not a fallback, it is the
+ * answer.
+ */
+const DELETE_BLOCKED: Record<string, { short: string; full: string }> = {
+  bus_schedules_unit_id_units_id_fk: {
+    short: "Masih punya jadwal bus",
+    full: "Unit masih punya jadwal bus — hapus jadwalnya dulu di menu Bus, atau nonaktifkan unitnya",
+  },
+  fleets_leader_unit_id_units_id_fk: {
+    short: "Masih memimpin fleet",
+    full: "Unit ini memimpin sebuah fleet — bubarkan fleetnya dulu di Setting Fleet, atau nonaktifkan unitnya",
+  },
+  fleet_units_unit_id_units_id_fk: {
+    short: "Masih anggota fleet",
+    full: "Unit masih terdaftar sebagai anggota fleet — keluarkan dari fleetnya dulu di Setting Fleet, atau nonaktifkan unitnya",
+  },
+  fleet_plan_slots_unit_id_units_id_fk: {
+    short: "Masih punya operator tetap di PLAN",
+    full: "Unit masih dipasangkan dengan operator tetap di PLAN — lepaskan pasangannya dulu, atau nonaktifkan unitnya",
+  },
+  units_transport_unit_id_units_id_fk: {
+    short: "Dipakai mengangkut unit lain",
+    full: "Unit ini dipakai sebagai kendaraan pengangkut unit lain — ganti pengangkutnya dulu di Setting Fleet, atau nonaktifkan unitnya",
+  },
+  fleet_actual_slots_unit_id_units_id_fk: {
+    short: "Sudah tercatat di papan ACTUAL",
+    full: "Unit sudah tercatat di papan ACTUAL yang tersimpan, dan papan itu catatan shift yang sudah lewat — nonaktifkan unitnya, jangan dihapus",
+  },
+  unit_status_history_unit_id_units_id_fk: {
+    short: "Punya riwayat status",
+    full: "Unit punya riwayat perubahan status, dan riwayat itu tidak dihapus — nonaktifkan unitnya, jangan dihapus",
+  },
+};
+
+/** A referrer added later and not named above still refuses, honestly. */
+const DELETE_BLOCKED_UNKNOWN = {
+  short: "Masih dipakai data lain",
+  full: "Unit masih dipakai oleh data lain — nonaktifkan unitnya",
+};
+
+const deleteBlockedBy = (error: unknown) =>
+  DELETE_BLOCKED[foreignKeyConstraint(error) ?? ""] ?? DELETE_BLOCKED_UNKNOWN;
 
 export const unitsRoutes = new Elysia({ prefix: "/units", tags: ["units"] })
   .use(requireAuth)
@@ -826,10 +882,9 @@ export const unitsRoutes = new Elysia({ prefix: "/units", tags: ["units"] })
           if (!isForeignKeyViolation(error)) throw error;
           blocked.push({
             code,
-            // The only referrer today is a bus schedule (design D6), and the
-            // schedule is one delete away — so the message says which, not
-            // "this is referenced by something".
-            reason: "Masih punya jadwal bus",
+            // Named from the constraint Postgres refused on, so a list of
+            // twenty says which of them is held by what.
+            reason: deleteBlockedBy(error).short,
           });
         }
       }
@@ -866,12 +921,9 @@ export const unitsRoutes = new Elysia({ prefix: "/units", tags: ["units"] })
         return { ok: true };
       } catch (error) {
         if (!isForeignKeyViolation(error)) throw error;
-        // Today the only referrer is a bus schedule; the message says so rather
-        // than guessing, and the schedule is one delete away.
         return status(409, {
           code: "unit_in_use",
-          message:
-            "Unit masih punya jadwal bus — hapus jadwalnya dulu, atau nonaktifkan unitnya",
+          message: deleteBlockedBy(error).full,
         });
       }
     },

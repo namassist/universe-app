@@ -101,6 +101,20 @@ export function isForeignKeyViolation(error: unknown): boolean {
   return driverError(error)?.code === FOREIGN_KEY_VIOLATION;
 }
 
+/**
+ * Which constraint refused it, so the refusal can name the real referrer.
+ *
+ * Postgres already knows — it is in the error — and asking it beats a table of
+ * counted `SELECT`s that would each have to be kept in step with the schema.
+ * Null when the error is not a foreign-key violation, which the caller has
+ * usually established already.
+ */
+export function foreignKeyConstraint(error: unknown): string | null {
+  const cause = driverError(error);
+  if (cause?.code !== FOREIGN_KEY_VIOLATION) return null;
+  return cause.constraint_name ?? null;
+}
+
 /** Used by /health. Cheap enough to run per request. */
 export async function pingDb(): Promise<boolean> {
   try {
