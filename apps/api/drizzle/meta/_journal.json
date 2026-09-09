@@ -218,6 +218,13 @@
       "when": 1788753149809,
       "tag": "0030_fearless_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788914701497,
+      "tag": "0031_nifty_prowler",
+      "breakpoints": true
     }
   ]
 }

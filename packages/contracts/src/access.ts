@@ -19,6 +19,7 @@ export const MENU_SLUGS = [
   "unit-status",
   "fleet-allocation",
   "fleet-setting",
+  "prioritas-alokasi",
   "database-unit",
   "jenis-unit",
   "model-unit",
@@ -59,6 +60,7 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   // "Unit No-Operator".
   "fleet-allocation": "Unit No-Operator",
   "fleet-setting": "Setting Fleet",
+  "prioritas-alokasi": "Prioritas Alokasi",
   "database-unit": "Database Unit",
   "jenis-unit": "Jenis Unit",
   "model-unit": "Model Unit",

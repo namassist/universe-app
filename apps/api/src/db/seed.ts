@@ -100,6 +100,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "unit-status",
       "fleet-allocation",
       "fleet-setting",
+      "prioritas-alokasi",
       // semua master data
       "database-unit",
       "jenis-unit",
@@ -167,6 +168,10 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
     { slug: "perusahaan", mode: "manage", roles: ["manpower"] },
     { slug: "jabatan", mode: "manage", roles: ["manpower"] },
     { slug: "mesin-fingerprint", mode: "manage", roles: ["manpower"] },
+    /* Manpower configures the fleet, and the order vacancies are filled in is
+       part of configuring it. Nobody else gains it: the two `dept`-scoped
+       roles read the fleet screens but do not set the yard's own rules. */
+    { slug: "prioritas-alokasi", mode: "manage", roles: ["manpower"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */
@@ -555,6 +560,160 @@ export async function bootstrap(): Promise<Map<string, string>> {
   return roleIds;
 }
 
+/**
+ * A first allocation order, so nobody has to rank 55 pairs from an empty
+ * screen before the engine does anything useful.
+ *
+ * **Computed from the register, not written out by hand.** A hardcoded list
+ * would miss on spelling alone — this site carries both `FUEL TRUCK 20KL` and
+ * `FUELTRUCK20KL` — and would say nothing at all about a class somebody adds
+ * next month. Reading the pairs and sorting them means any register gets an
+ * order, and a class nobody anticipated still lands somewhere defensible.
+ *
+ * It is a **starting point, not an answer**. The order between types is a
+ * judgement about this kind of mine (a digger with no operator stops the fleet
+ * it feeds, so digging outranks hauling, and hauling outranks everything that
+ * supports it); the order inside a type is read off the names, which carry
+ * size well enough — tonnes for trucks, feet for graders, kilolitres for
+ * tankers, words for diggers. Both are meant to be corrected on the screen.
+ */
+/**
+ * The site's own order of allocation, class by class (owner, 2026-09-09).
+ *
+ * Written out rather than derived, because it is a decision and not a
+ * measurement. It also cannot be derived: the owner interleaves types —
+ * REARDUMP100T, DUMPTRUCK100T, REARDUMP60T, DUMPTRUCK60T — so no rule that
+ * sorts types and then sizes could ever produce it. That interleaving is also
+ * the plainest evidence the ordering has to be one list rather than one per
+ * type.
+ *
+ * The class names are matched exactly as the register spells them, duplicates
+ * included: `FUELTRUCK20KL` and `FUEL TRUCK 20KL` are one machine written two
+ * ways, and both are here because both hold units. Tidying the register is a
+ * separate job from recording the order it is worked in.
+ *
+ * A class absent from this list is not an error — 16 of the register's 48
+ * carry no active unit, and one that gains a unit later simply arrives
+ * unranked on the screen, which is the honest reading of a machine nobody has
+ * placed yet.
+ */
+const CLASS_ORDER = [
+  "BIGDIGGER",
+  "MEDIUMDIGGER",
+  "SMALLDIGGER",
+  "WHEELDIGGER",
+  "REARDUMP100T",
+  "DUMPTRUCK100T",
+  "REARDUMP60T",
+  "DUMPTRUCK60T",
+  "DUMPTRUCK40T",
+  "DUMPTRUCK30T",
+  "BULLDOZER60T",
+  "BULLDOZER38T",
+  "BULLDOZER20T",
+  "GRADER16FT",
+  "GRADER14FT",
+  "ROTARYBLASTHOLEDRILL",
+  "FORKLIFT 30T DP30ND",
+  "LOWBOY RENAULT KR500 - CAP 120 TON",
+  "LOWBOY FAW - CAP 80 TON",
+  "SERVICETRUCK",
+  "FUELTRUCK20KL",
+  "FUEL TRUCK 20KL",
+  "FUEL TRUCK 32KL",
+  "WATERTRUCK20KL",
+  "WATER TRUCK 16 KL HINO 500 FM260TI",
+  "WATER TRUCK 50KL KOMATSU HD465-7R",
+  "CRANETRUCK10T",
+  "MANHAUL 42 SEATS RENAULT K460 6X6",
+  "MANHAUL 45 SEATS SHACMAN F3000",
+  "AMBULANCE TRITON 2.5L SC HDX-L (4X4) M/T",
+  "BUS MITSUBISHI / CANTER F84G BC N MT",
+  "MITSUBISHICOLTDIESELFE71LONGBC(4X4)M/TBUS",
+];
+
+/**
+ * Within one class, the SIMPER code decides — and its name carries the size.
+ *
+ * `EXC CAT 6020` over `EXC 1200`, `PC 2000` over `PC 1250`. Only ever compared
+ * inside a class, where the codes name variants of one kind of machine, so the
+ * fact that a dump truck code reads 130 and a digger code reads 6020 never
+ * matters.
+ */
+function codeSize(name: string | null): number {
+  if (!name) return -1;
+  const found = name.match(/\d+/);
+  return found ? Number(found[0]) : -1;
+}
+
+/**
+ * A first allocation order, so nobody ranks 55 pairs from an empty screen.
+ *
+ * Runs **only when the table is empty**: an order somebody has adjusted on the
+ * screen is theirs, and a re-seed must not quietly put the yard back to the
+ * day it was installed.
+ */
+async function seedAllocationPriority(): Promise<void> {
+  const held = await db
+    .select({ id: schema.allocationPriorities.id })
+    .from(schema.allocationPriorities)
+    .limit(1);
+  if (held.length) {
+    console.log("  prioritas alokasi — sudah diatur, dilewati");
+    return;
+  }
+
+  const pairs = await db
+    .selectDistinct({
+      classId: schema.units.classId,
+      className: schema.unitClasses.name,
+      simperCodeId: schema.units.simperCodeId,
+      simperCodeName: schema.simperCodes.name,
+    })
+    .from(schema.units)
+    .innerJoin(
+      schema.unitClasses,
+      eq(schema.unitClasses.id, schema.units.classId)
+    )
+    .leftJoin(
+      schema.simperCodes,
+      eq(schema.simperCodes.id, schema.units.simperCodeId)
+    )
+    .where(eq(schema.units.active, true));
+
+  if (!pairs.length) {
+    console.log("  prioritas alokasi — belum ada unit aktif");
+    return;
+  }
+
+  /* A class nobody listed sorts after every listed one rather than first: a
+     machine this file has never heard of is not the site's first priority. */
+  const classRank = (name: string) => {
+    const at = CLASS_ORDER.indexOf(name);
+    return at === -1 ? CLASS_ORDER.length : at;
+  };
+
+  const ordered = pairs.sort(
+    (a, b) =>
+      classRank(a.className) - classRank(b.className) ||
+      /* Unlisted classes among themselves, so two runs cannot disagree. */
+      a.className.localeCompare(b.className) ||
+      codeSize(b.simperCodeName) - codeSize(a.simperCodeName) ||
+      /* Named before unnamed, then alphabetical — anything to keep two runs of
+         the seed from producing two different orders. */
+      (a.simperCodeName ?? "\uffff").localeCompare(b.simperCodeName ?? "\uffff")
+  );
+
+  await db.insert(schema.allocationPriorities).values(
+    ordered.map((pair, index) => ({
+      classId: pair.classId,
+      simperCodeId: pair.simperCodeId,
+      rank: index + 1,
+    }))
+  );
+  console.log(`  prioritas alokasi — ${ordered.length} pasangan diurutkan`);
+}
+
 export async function seed(): Promise<void> {
   if (process.env.SEED_FRESH === "1") {
     // Checked before the wipe rather than inside bootstrap(): refusing to
@@ -572,6 +731,9 @@ export async function seed(): Promise<void> {
   const roleIds = await bootstrap();
 
   await seedMasterData();
+
+  console.log("[seed] prioritas alokasi");
+  await seedAllocationPriority();
 
   console.log("[seed] accounts");
   await seedAccounts(roleIds);

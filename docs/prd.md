@@ -116,6 +116,59 @@ fill the gap from the spare pool.
   leaves behind. Disbanding also clears its own units now, so the two paths
   agree; the sweep is what catches everything already stranded.
 
+### Allocation priority (Prioritas Alokasi) — shipped
+
+- **The problem** (owner, 2026-09-09). The engine filled vacancies in unit-code
+  order, which is not a decision about which machine matters — it is an
+  accident of naming, and here a systematically unlucky one. Excavator codes
+  run smallest-first (EX2xxx SMALLDIGGER through EX7xxx BIGDIGGER), so the
+  biggest diggers were reliably crewed last. The yard's rule is the opposite:
+  biggest first.
+- **The orderable row is a (unit class, SIMPER code) pair**, because neither
+  half is enough alone. A class is too coarse — SMALLDIGGER spans a 20-tonne
+  ZX200 and a 47-tonne ZX470, and the EX4011 that prompted this is a
+  SMALLDIGGER. A code is too coarse the other way: `K460 6x6` covers a crane
+  truck, a fuel truck, a service truck and a water truck. 55 pairs cover 450
+  active units.
+- **One ordering across every type, not one per type.** 342 operators hold both
+  DUMP TRUCK and REAR DUMP TRUCK codes, so the commonest tie of all is between
+  two types; a per-type list would leave it undefined and fall back to the very
+  unit-code order this replaces. The screen groups by type only to be readable.
+- **`rank` is a priority, not a size.** Nobody has to decide whether a 60t dozer
+  is "bigger" than a 100t dump truck; they decide which to crew first when
+  operators are short, and that is a judgement rather than a measurement — which
+  is why it is admin input and not derived from the class name. The names could
+  not carry it anyway: tonnes for trucks, words for diggers, feet for graders,
+  kilolitres for fuel trucks.
+- **The list is generated, only the ranks are stored.** Rows come from the
+  distinct pairs among active units, so a pair introduced by a new model turns
+  up on its own, marked unranked, and a pair whose last unit is retired stops
+  being offered with nothing to clean up. **Unranked sorts last**, never first —
+  a model imported this morning must not take a seat from a machine somebody
+  deliberately placed.
+- **It only breaks ties between vacancies.** Step 1 of the engine seats each
+  unit's own planned operator with no competition; the order matters only in
+  step 2, where a spare is offered the first vacancy they fit. Ties inside a
+  rank fall back to the database's own `asc(code)` — carried as each slot's
+  index rather than re-compared here, because Postgres and `localeCompare` do
+  not order these strings alike and re-deriving it reshuffled boards that had
+  no priorities set at all.
+- The 18 active units carrying no SIMPER code are a pair of their own rather
+  than a missing row: they are still machines somebody has to crew.
+- **The seed lays down a first order**, so nobody ranks the pairs from an empty
+  screen. The class order is the owner's own (2026-09-09) and is written out
+  rather than derived, because it is a decision and not a measurement — and
+  because no rule could produce it: it interleaves types (REARDUMP100T,
+  DUMPTRUCK100T, REARDUMP60T, DUMPTRUCK60T), which is also the plainest
+  evidence the ordering has to be one list rather than one per type. Names are
+  matched exactly as the register spells them, duplicates included
+  (`FUELTRUCK20KL` beside `FUEL TRUCK 20KL`) — tidying the register is a
+  separate job from recording the order it is worked in. Within a class the
+  SIMPER code's own number decides, `EXC CAT 6020` over `EXC 1200`. A class the
+  list does not name arrives unranked rather than first. **It runs only when
+  the table is empty**, so an order somebody has adjusted is never overwritten
+  by a re-seed.
+
 ### Unit status — shipped
 
 - A unit's status is **derived**: `breakdown` > `standby` > `ready`, from the

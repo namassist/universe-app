@@ -51,3 +51,50 @@ export const FLEET_TRANSPORT_TYPES_TEXT =
  */
 export const UNIT_STATUSES = ["breakdown", "standby", "ready"] as const;
 export type UnitStatus = (typeof UNIT_STATUSES)[number];
+
+/* --------------------------------------------------- allocation priority */
+
+/**
+ * One orderable line of the allocation priority screen.
+ *
+ * The row is a **(class, SIMPER code) pair**, which is the granularity the
+ * yard actually distinguishes. Neither half works alone: a class is too coarse
+ * — SMALLDIGGER spans a 20-tonne ZX200 and a 47-tonne ZX470 — and a code is
+ * too coarse the other way, since one chassis code like `K460 6x6` covers a
+ * crane truck, a fuel truck, a service truck and a water truck.
+ *
+ * `typeName` groups the screen and nothing else. The ordering itself is one
+ * list across every type, because the commonest tie of all is between two
+ * types: 342 operators hold both DUMP TRUCK and REAR DUMP TRUCK codes, and a
+ * per-type list could not answer which of those to crew first.
+ */
+export type AllocationPriorityRow = {
+  classId: string;
+  className: string;
+  /** Null for the units that carry no SIMPER code — 18 of them, still real. */
+  simperCodeId: string | null;
+  simperCodeName: string | null;
+  /** The grouping heading, not part of the key. */
+  typeName: string;
+  /** How many active units this pair covers, so a rank can be weighed. */
+  units: number;
+  /**
+   * The machines themselves, in register order.
+   *
+   * Sent whole rather than trimmed server-side: 460 short codes across the
+   * site, and which of them a reader wants to see depends on the row they are
+   * looking at. The screen shows the first few and says how many follow.
+   */
+  unitCodes: string[];
+  /**
+   * 1 is crewed first. Null means nobody has ordered this pair yet — it sorts
+   * last and says so, rather than inheriting a number it was never given.
+   */
+  rank: number | null;
+};
+
+/** One entry of a reorder: the pair, in its new position. */
+export type AllocationPriorityInput = {
+  classId: string;
+  simperCodeId: string | null;
+};

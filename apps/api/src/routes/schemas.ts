@@ -408,6 +408,18 @@ const FleetImportSupportRowSchema = t.Object({
   breakdown: t.Boolean(),
 });
 
+/** One orderable line of the allocation priority screen. */
+export const AllocationPrioritySchema = t.Object({
+  classId: t.String(),
+  className: t.String(),
+  simperCodeId: t.Nullable(t.String()),
+  simperCodeName: t.Nullable(t.String()),
+  typeName: t.String(),
+  units: t.Integer(),
+  unitCodes: t.Array(t.String()),
+  rank: t.Nullable(t.Integer()),
+});
+
 /** One unit the file parks because the digger it hauls for is broken. */
 const FleetImportStandbyRowSchema = t.Object({
   row: t.Integer(),

@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import type { AccessMode, MenuSlug } from "@/lib/access";
 import { useRole } from "@/components/providers/role-context";
 
+import { AllocationPriorityMenu } from "./allocation-priority";
 import { AttendanceMenu } from "./attendance";
 import { BusMenu } from "./bus";
 import { DashboardMenu } from "./dashboard";
@@ -46,6 +47,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "unit-status": UnitStatusMenu,
   "fleet-allocation": FleetAllocationMenu,
   "fleet-setting": FleetSettingMenu,
+  "prioritas-alokasi": AllocationPriorityMenu,
   "database-unit": DatabaseUnitMenu,
   "jenis-unit": (p) => <MasterMenu {...p} cat="jenis-unit" />,
   "model-unit": (p) => <MasterMenu {...p} cat="model-unit" />,

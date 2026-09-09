@@ -825,6 +825,85 @@ describe("the spare pool", () => {
     );
   });
 
+  test("of two units a spare could take, the higher priority one gets them", async () => {
+    /*
+     * The whole point of Prioritas Alokasi. Both units are vacant, both are
+     * within this spare's competence, and only one can have them.
+     *
+     * `-U31` sorts before `-U32` by code, which is what the engine used to go
+     * by — and at this site that order is systematically wrong, because
+     * excavator codes run smallest-first. So the test ranks the *later* code
+     * first: if priority is ignored, `-U31` wins and this fails.
+     */
+    const date = nextDate();
+
+    const [second] = await db
+      .insert(schema.simperCodes)
+      .values({ name: `${tag} B2C` })
+      .returning({ id: schema.simperCodes.id });
+    const codeB = second!.id;
+    made.simperCodes.push(codeB);
+
+    const small = await addUnit({ code: `${tag}-U31`, simperCodeId: codeA });
+    const big = await addUnit({ code: `${tag}-U32`, simperCodeId: codeB });
+
+    await db.insert(schema.allocationPriorities).values([
+      { classId: cls, simperCodeId: codeB, rank: 1 },
+      { classId: cls, simperCodeId: codeA, rank: 2 },
+    ]);
+
+    const nik = newNik();
+    const spare = await addEmployee({ nik });
+    await db.insert(schema.employeeSkills).values([
+      { employeeId: spare, simperCodeId: codeA },
+      { employeeId: spare, simperCodeId: codeB },
+    ]);
+    await roster(date, spare, "D");
+    await tapAt(date, nik, "04:20:00");
+
+    const slots = await mine(date);
+    expect(slots.find((s) => s.unitId === big)?.employeeId).toBe(spare);
+    expect(slots.find((s) => s.unitId === small)?.employeeId).toBeNull();
+
+    await db.delete(schema.allocationPriorities);
+  });
+
+  test("an unranked pair waits behind every ranked one", async () => {
+    /* A model imported this morning must not take a seat from a machine
+       somebody deliberately placed. Only `-U33` is ranked; `-U34` sorts later
+       by code *and* is unranked, so nothing here can pass by accident. */
+    const date = nextDate();
+
+    const [second] = await db
+      .insert(schema.simperCodes)
+      .values({ name: `${tag} C2D` })
+      .returning({ id: schema.simperCodes.id });
+    const codeB = second!.id;
+    made.simperCodes.push(codeB);
+
+    const ranked = await addUnit({ code: `${tag}-U34`, simperCodeId: codeA });
+    const unranked = await addUnit({ code: `${tag}-U33`, simperCodeId: codeB });
+
+    await db
+      .insert(schema.allocationPriorities)
+      .values({ classId: cls, simperCodeId: codeA, rank: 1 });
+
+    const nik = newNik();
+    const spare = await addEmployee({ nik });
+    await db.insert(schema.employeeSkills).values([
+      { employeeId: spare, simperCodeId: codeA },
+      { employeeId: spare, simperCodeId: codeB },
+    ]);
+    await roster(date, spare, "D");
+    await tapAt(date, nik, "04:20:00");
+
+    const slots = await mine(date);
+    expect(slots.find((s) => s.unitId === ranked)?.employeeId).toBe(spare);
+    expect(slots.find((s) => s.unitId === unranked)?.employeeId).toBeNull();
+
+    await db.delete(schema.allocationPriorities);
+  });
+
   test("a spare from another department cannot take a departmental unit", async () => {
     const date = nextDate();
     const absentNik = newNik();

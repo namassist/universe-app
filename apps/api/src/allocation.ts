@@ -22,7 +22,7 @@
  * by the ingest stages; nothing here opens a socket to an external source.
  */
 
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { ShiftKind } from "@universe/contracts";
 
@@ -248,6 +248,14 @@ export async function buildBoard(
       departmentName: schema.departments.name,
       simperCodeId: schema.units.simperCodeId,
       simperCodeName: schema.simperCodes.name,
+      /*
+       * Where this machine sits in the yard's own order of importance, from
+       * the Prioritas Alokasi screen. Null when nobody has ranked its (class,
+       * SIMPER code) pair — such a unit is crewed after every ranked one
+       * rather than before, so a model imported this morning cannot take a
+       * seat from a machine somebody deliberately put first.
+       */
+      priority: schema.allocationPriorities.rank,
       requiresFtw: schema.units.ftw,
       /** Null for a unit the plan says nothing about. */
       employeeId: schema.fleetPlanSlots.employeeId,
@@ -279,6 +287,16 @@ export async function buildBoard(
     .leftJoin(
       schema.simperCodes,
       eq(schema.simperCodes.id, schema.units.simperCodeId)
+    )
+    /* `is not distinct from`, not `=`: the 18 active units with no SIMPER code
+       are a real pair on that screen, and an equality join would drop their
+       rank on every board without saying so. */
+    .leftJoin(
+      schema.allocationPriorities,
+      and(
+        eq(schema.allocationPriorities.classId, schema.units.classId),
+        sql`${schema.allocationPriorities.simperCodeId} is not distinct from ${schema.units.simperCodeId}`
+      )
     )
     /* A unit belongs to a formation by either route — leading it or hauling
        for it — so the condition is an `or` rather than one foreign key. Both
@@ -540,7 +558,40 @@ export async function buildBoard(
       );
     });
 
-  for (const slot of slots) {
+  /*
+   * Vacancies in the yard's order of importance, not the register's.
+   *
+   * The loop below hands each spare to the first vacancy they fit, so the
+   * order of this list *is* the priority. It used to be `slots` itself —
+   * unit-code order — which is an accident of naming rather than a decision,
+   * and here a systematically wrong one: excavator codes run smallest-first,
+   * so the biggest diggers were crewed last (owner, 2026-09-09).
+   *
+   * Unranked pairs sort after every ranked one, so introducing a model cannot
+   * quietly outrank a machine somebody placed on purpose.
+   *
+   * Ties fall back to each slot's own position, which is the database's
+   * `asc(code)` — not to comparing the codes again here. Postgres and
+   * `localeCompare` do not order these strings alike (punctuation and spaces
+   * weigh differently), so re-deriving the order silently reshuffled boards
+   * that had no priorities set at all. Carrying the index cannot drift.
+   *
+   * A copy: `slots` is the board's own order — how the wall and the detail
+   * screen read it — and reordering that to suit the fill would change what
+   * everybody sees to solve a problem only this loop has. The slots are the
+   * same objects, so seating one here seats it there.
+   */
+  const given = new Map(slots.map((slot, index) => [slot.unitId, index]));
+  const vacancies = [...slots].sort((a, b) => {
+    const pa = byUnit.get(a.unitId)![0]!.priority;
+    const pb = byUnit.get(b.unitId)![0]!.priority;
+    return (
+      (pa ?? Number.MAX_SAFE_INTEGER) - (pb ?? Number.MAX_SAFE_INTEGER) ||
+      given.get(a.unitId)! - given.get(b.unitId)!
+    );
+  });
+
+  for (const slot of vacancies) {
     if (slot.employeeId) continue;
     const row = byUnit.get(slot.unitId)![0]!;
     const unit = unitOf(row);
