@@ -416,6 +416,7 @@ export const AllocationPrioritySchema = t.Object({
   simperCodeName: t.Nullable(t.String()),
   typeName: t.String(),
   units: t.Integer(),
+  brandNames: t.Array(t.String()),
   unitCodes: t.Array(t.String()),
   rank: t.Nullable(t.Integer()),
 });

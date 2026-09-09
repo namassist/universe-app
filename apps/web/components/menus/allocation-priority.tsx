@@ -289,6 +289,17 @@ export function AllocationPriorityMenu({ mode }: { mode: AccessMode }) {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">
                       {row.className}
+                      {/* Beside the class rather than on the line below: it
+                          says what kind of machine this is, which is the same
+                          question the class answers. Two makes on one line is
+                          the honest reading of a pair that holds both — it is
+                          not a choice between them, since the ranking does not
+                          separate makes. */}
+                      {row.brandNames.length ? (
+                        <span className="ml-2 font-normal text-(--text-tertiary)">
+                          {row.brandNames.join(", ")}
+                        </span>
+                      ) : null}
                     </span>
                     {/* The machines this line actually moves, so a rank is set
                         against real units rather than against a category. Only

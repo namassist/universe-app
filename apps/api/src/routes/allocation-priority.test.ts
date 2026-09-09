@@ -106,6 +106,7 @@ const mine = async (cookie: string) => {
     simperCodeId: string | null;
     simperCodeName: string | null;
     units: number;
+    brandNames: string[];
     unitCodes: string[];
     rank: number | null;
   }[];
@@ -198,6 +199,11 @@ describe("the list is generated from the units", () => {
     expect(rows.find((r) => r.simperCodeId === codeA)?.unitCodes).toEqual([
       `${tag}-1`,
       `${tag}-2`,
+    ]);
+    /* The make is shown, not ranked — one entry here because the fixture's
+       units share a brand, and duplicates must not pile up per unit. */
+    expect(rows.find((r) => r.simperCodeId === codeA)?.brandNames).toEqual([
+      `${tag} Merk`,
     ]);
     for (const row of rows) expect(row.rank).toBeNull();
   });

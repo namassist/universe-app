@@ -79,6 +79,15 @@ export type AllocationPriorityRow = {
   /** How many active units this pair covers, so a rank can be weighed. */
   units: number;
   /**
+   * The makes this pair covers, alphabetically.
+   *
+   * Shown, never ranked: 45 of the 52 pairs here carry one make and the other
+   * seven carry two, and nobody has said a Hitachi should be crewed before a
+   * Sany of the same class and licence. Carrying it into the key would split
+   * those seven rows and ask a question nobody is answering.
+   */
+  brandNames: string[];
+  /**
    * The machines themselves, in register order.
    *
    * Sent whole rather than trimmed server-side: 460 short codes across the

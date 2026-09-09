@@ -44,6 +44,9 @@ export async function priorityRows() {
       simperCodeName: schema.simperCodes.name,
       typeName: schema.unitTypes.name,
       units: sql<number>`count(*)::int`,
+      /* Distinct and alphabetical: a pair usually has one make, and the seven
+         that have two must read the same way on every load. */
+      brandNames: sql<string[]>`array_agg(distinct ${schema.unitBrands.name})`,
       /* Ordered here rather than in the browser: the register's own order is
          what every other unit screen shows, and a list that read differently
          on this one would look like a different set of machines. */
@@ -58,6 +61,10 @@ export async function priorityRows() {
       eq(schema.unitClasses.id, schema.units.classId)
     )
     .innerJoin(schema.unitTypes, eq(schema.unitTypes.id, schema.units.typeId))
+    .innerJoin(
+      schema.unitBrands,
+      eq(schema.unitBrands.id, schema.units.brandId)
+    )
     .leftJoin(
       schema.simperCodes,
       eq(schema.simperCodes.id, schema.units.simperCodeId)
