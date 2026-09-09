@@ -100,9 +100,14 @@ function PositionInput({
   );
 }
 
-/** The pair, as one string — the list's identity, and the wire's. */
-const keyOf = (row: { classId: string; simperCodeId: string | null }) =>
-  `${row.classId}:${row.simperCodeId ?? ""}`;
+/**
+ * The row's identity, and the wire's.
+ *
+ * The description itself — it is the key. Blank is a real one: `description`
+ * is `notNull` with an empty default, so a machine nobody described still has
+ * to be rankable, and it gets a line that says so rather than none.
+ */
+const keyOf = (row: { description: string }) => row.description;
 
 /**
  * The order the allocation engine fills vacancies in.
@@ -151,10 +156,7 @@ export function AllocationPriorityMenu({ mode }: { mode: AccessMode }) {
   const save = useMutation({
     mutationFn: async (next: PriorityRow[]) => {
       const result = await api.v1["allocation-priority"].put({
-        order: next.map((r) => ({
-          classId: r.classId,
-          simperCodeId: r.simperCodeId,
-        })),
+        order: next.map((r) => ({ description: r.description })),
       });
       if (result.error) throw result.error;
       return result.data;
@@ -288,7 +290,7 @@ export function AllocationPriorityMenu({ mode }: { mode: AccessMode }) {
 
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">
-                      {row.className}
+                      {row.description || t.apNoDescription}
                       {/* Beside the class rather than on the line below: it
                           says what kind of machine this is, which is the same
                           question the class answers. Two makes on one line is
@@ -322,12 +324,16 @@ export function AllocationPriorityMenu({ mode }: { mode: AccessMode }) {
                     </span>
                   </span>
 
-                  {/* The code is what actually gates who may drive this, so it
-                      reads as a badge rather than as more grey text. */}
-                  {row.simperCodeName ? (
-                    <Badge variant="info" className="font-mono">
-                      {row.simperCodeName}
-                    </Badge>
+                  {/* The codes are what actually gate who may drive these, so
+                      they read as badges rather than as more grey text. A
+                      description may cover several — four sit under
+                      EXCAVATOR200T — and they are listed, not ranked apart. */}
+                  {row.simperCodeNames.length ? (
+                    row.simperCodeNames.map((code) => (
+                      <Badge key={code} variant="info" className="font-mono">
+                        {code}
+                      </Badge>
+                    ))
                   ) : (
                     <Badge variant="neutral">{t.apNoCode}</Badge>
                   )}

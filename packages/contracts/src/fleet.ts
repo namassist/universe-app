@@ -57,53 +57,46 @@ export type UnitStatus = (typeof UNIT_STATUSES)[number];
 /**
  * One orderable line of the allocation priority screen.
  *
- * The row is a **(class, SIMPER code) pair**, which is the granularity the
- * yard actually distinguishes. Neither half works alone: a class is too coarse
- * — SMALLDIGGER spans a 20-tonne ZX200 and a 47-tonne ZX470 — and a code is
- * too coarse the other way, since one chassis code like `K460 6x6` covers a
- * crane truck, a fuel truck, a service truck and a water truck.
+ * The row is a **unit description** — `EXCAVATOR200T`, `REARDUMP60T` — which
+ * is the register's own statement of how big a machine is. It replaced a
+ * (class, SIMPER code) pair that existed only because the class was too
+ * coarse: `SMALLDIGGER` covered both a 20-tonne excavator and a 47-tonne one,
+ * so the licence had to stand in for a size the class would not give.
  *
- * `typeName` groups the screen and nothing else. The ordering itself is one
- * list across every type, because the commonest tie of all is between two
- * types: 342 operators hold both DUMP TRUCK and REAR DUMP TRUCK codes, and a
- * per-type list could not answer which of those to crew first.
+ * Everything else here is context for setting a rank, never part of it. A
+ * description covers one unit type but may cover several licences and makes,
+ * and naming them is what lets somebody rank a line against real machines
+ * instead of against a word.
  */
 export type AllocationPriorityRow = {
-  classId: string;
-  className: string;
-  /** Null for the units that carry no SIMPER code — 18 of them, still real. */
-  simperCodeId: string | null;
-  simperCodeName: string | null;
-  /** The grouping heading, not part of the key. */
+  /** The key. Exactly as the register spells it. */
+  description: string;
+  /** The grouping heading. One per description — checked, not assumed. */
   typeName: string;
-  /** How many active units this pair covers, so a rank can be weighed. */
+  /** How many active units this description covers, so a rank can be weighed. */
   units: number;
   /**
-   * The makes this pair covers, alphabetically.
+   * The licences these machines ask for.
    *
-   * Shown, never ranked: 45 of the 52 pairs here carry one make and the other
-   * seven carry two, and nobody has said a Hitachi should be crewed before a
-   * Sany of the same class and licence. Carrying it into the key would split
-   * those seven rows and ask a question nobody is answering.
+   * Shown because they are what decides who may drive them, and a description
+   * can span several — four sit under `EXCAVATOR200T`. They no longer split
+   * the row: all four are ~200-tonne excavators, and which of them a given
+   * operator may take is settled by eligibility, not by this order.
    */
+  simperCodeNames: string[];
+  /** The makes, alphabetically. Shown, never ranked. */
   brandNames: string[];
-  /**
-   * The machines themselves, in register order.
-   *
-   * Sent whole rather than trimmed server-side: 460 short codes across the
-   * site, and which of them a reader wants to see depends on the row they are
-   * looking at. The screen shows the first few and says how many follow.
-   */
+  /** The machines themselves, in register order. */
   unitCodes: string[];
   /**
-   * 1 is crewed first. Null means nobody has ordered this pair yet — it sorts
-   * last and says so, rather than inheriting a number it was never given.
+   * 1 is crewed first. Null means nobody has ordered this description yet — it
+   * sorts last and says so, rather than inheriting a number it was never
+   * given.
    */
   rank: number | null;
 };
 
-/** One entry of a reorder: the pair, in its new position. */
+/** One entry of a reorder: the description, in its new position. */
 export type AllocationPriorityInput = {
-  classId: string;
-  simperCodeId: string | null;
+  description: string;
 };

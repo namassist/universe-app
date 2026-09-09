@@ -697,42 +697,43 @@ export const unitStatusHistory = pgTable(
  *
  * The engine fills vacancies in unit-code order, which is not a decision about
  * which machine matters — it is an accident of naming, and at this site a
- * systematically unlucky one: excavator codes run smallest-first (EX2xxx
- * SMALLDIGGER through EX7xxx BIGDIGGER), so the biggest diggers were reliably
- * crewed last. The yard's own rule is the opposite (owner, 2026-09-09).
+ * systematically unlucky one: excavator codes run smallest-first, so the
+ * biggest diggers were reliably crewed last. The yard's rule is the opposite.
  *
- * **The row is a (class, SIMPER code) pair**, because neither half is enough
- * on its own. A class is too coarse — SMALLDIGGER spans a 20-tonne ZX200 and
- * a 47-tonne ZX470 — and a code is too coarse the other way, since `K460 6x6`
- * covers a crane truck, a fuel truck, a service truck and a water truck. The
- * pair is what the yard actually distinguishes.
+ * **The row is a unit description.** It was a (class, SIMPER code) pair, which
+ * existed only because the class was too coarse — `SMALLDIGGER` spanned a
+ * 20-tonne machine and a 47-tonne one, so the licence had to stand in for a
+ * size the class would not give. The register's `deskripsi` column carries the
+ * size directly (`EXCAVATOR200T`, `REARDUMP60T`), so the workaround can go: 35
+ * rows instead of 52, and each one is a size rather than a size-and-licence.
+ *
+ * Machines that share a description share a rank, licences included. Four
+ * codes sit under `EXCAVATOR200T`, and they are all ~200-tonne excavators —
+ * ranking them equal is the honest reading, and which of them a given operator
+ * may drive is settled by eligibility, not by this order.
  *
  * **`rank` is a priority, not a size.** Nobody has to decide whether a 60t
  * dozer is "bigger" than a 100t dump truck; they decide which to crew first
- * when operators are short, and that is a judgement rather than a measurement.
- * One ordering across every type, not one per type: 342 operators here hold
- * both DUMP TRUCK and REAR DUMP TRUCK codes, so a per-type list would leave
- * the commonest comparison of all undefined.
+ * when operators are short. One ordering across every type, not one per type:
+ * 342 operators here hold both DUMP TRUCK and REAR DUMP TRUCK codes, so a
+ * per-type list would leave the commonest comparison of all undefined.
  *
- * `simperCodeId` is nullable because 18 active units carry no code, and they
- * are still machines somebody has to crew. The unique index is
- * `nulls not distinct` so that "this class, no code" is one row rather than
- * as many as somebody presses save.
+ * Matched exactly, not case-folded. `description` is free text on the unit
+ * rather than a catalogue, so nothing guarantees two spellings mean one thing
+ * — and a description whose spelling changes in an import turns up on the
+ * screen unranked, which is visible, rather than quietly matching something it
+ * should not.
  *
- * Absence means unranked, never rank zero: a pair nobody has ordered yet sorts
- * last and is shown as such, so a newly imported model cannot inherit top
- * priority by accident.
+ * Absence means unranked, never rank zero: a description nobody has ordered
+ * yet sorts last and is shown as such, so a newly imported machine cannot
+ * inherit top priority by accident.
  */
 export const allocationPriorities = pgTable(
   "allocation_priorities",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    classId: uuid("class_id")
-      .notNull()
-      .references(() => unitClasses.id, { onDelete: "cascade" }),
-    simperCodeId: uuid("simper_code_id").references(() => simperCodes.id, {
-      onDelete: "cascade",
-    }),
+    /** Exactly as `units.description` spells it. */
+    description: text("description").notNull(),
     /** 1 is crewed first. Contiguous by convention; the reorder rewrites all. */
     rank: integer("rank").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -740,16 +741,9 @@ export const allocationPriorities = pgTable(
       .defaultNow(),
   },
   (table) => [
-    /* Two partial indexes rather than one `nulls not distinct`: Postgres
-       treats nulls as distinct, so the plain unique index would let "this
-       class, no code" be saved as many times as somebody pressed the button.
-       Split this way it holds on any server and any drizzle version. */
-    uniqueIndex("allocation_priorities_pair_unique")
-      .on(table.classId, table.simperCodeId)
-      .where(sql`simper_code_id is not null`),
-    uniqueIndex("allocation_priorities_classonly_unique")
-      .on(table.classId)
-      .where(sql`simper_code_id is null`),
+    uniqueIndex("allocation_priorities_description_unique").on(
+      table.description
+    ),
     index("allocation_priorities_rank_idx").on(table.rank),
   ]
 );

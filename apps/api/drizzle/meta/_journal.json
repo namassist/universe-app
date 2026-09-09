@@ -225,6 +225,13 @@
       "when": 1788914701497,
       "tag": "0031_nifty_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788937401320,
+      "tag": "0032_tearful_fenris",
+      "breakpoints": true
     }
   ]
 }

@@ -670,6 +670,7 @@ export const id = {
   apReset: "Batalkan",
   apDirty: "ada perubahan yang belum disimpan",
   apUnranked: "Belum diatur",
+  apNoDescription: "(tanpa deskripsi)",
   apNoCode: "Tanpa kode",
   apUnits: "unit",
   apPairs: "pasangan kelas & kode simper",

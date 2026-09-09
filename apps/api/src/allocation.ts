@@ -22,7 +22,7 @@
  * by the ingest stages; nothing here opens a socket to an external source.
  */
 
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { ShiftKind } from "@universe/contracts";
 
@@ -250,10 +250,10 @@ export async function buildBoard(
       simperCodeName: schema.simperCodes.name,
       /*
        * Where this machine sits in the yard's own order of importance, from
-       * the Prioritas Alokasi screen. Null when nobody has ranked its (class,
-       * SIMPER code) pair — such a unit is crewed after every ranked one
-       * rather than before, so a model imported this morning cannot take a
-       * seat from a machine somebody deliberately put first.
+       * the Prioritas Alokasi screen. Null when nobody has ranked its
+       * description — such a unit is crewed after every ranked one rather than
+       * before, so a machine imported this morning cannot take a seat from one
+       * somebody deliberately put first.
        */
       priority: schema.allocationPriorities.rank,
       requiresFtw: schema.units.ftw,
@@ -288,15 +288,13 @@ export async function buildBoard(
       schema.simperCodes,
       eq(schema.simperCodes.id, schema.units.simperCodeId)
     )
-    /* `is not distinct from`, not `=`: the 18 active units with no SIMPER code
-       are a real pair on that screen, and an equality join would drop their
-       rank on every board without saying so. */
+    /* Plain equality: `description` is `notNull` on both sides, so a unit with
+       no description written joins on the empty string like any other value —
+       and that empty description is a real line on the screen rather than a
+       row that quietly loses its rank. */
     .leftJoin(
       schema.allocationPriorities,
-      and(
-        eq(schema.allocationPriorities.classId, schema.units.classId),
-        sql`${schema.allocationPriorities.simperCodeId} is not distinct from ${schema.units.simperCodeId}`
-      )
+      eq(schema.allocationPriorities.description, schema.units.description)
     )
     /* A unit belongs to a formation by either route — leading it or hauling
        for it — so the condition is an `or` rather than one foreign key. Both

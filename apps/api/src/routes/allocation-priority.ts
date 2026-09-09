@@ -8,12 +8,12 @@
  * crewed last, the exact reverse of the yard's own rule.
  *
  * **The screen is generated, the ranks are stored.** Rows come from the units
- * that actually exist — every distinct (class, SIMPER code) pair among active
- * units — and `allocation_priorities` only supplies each pair's number. So a
- * pair that appears when a new model is imported turns up here on its own,
+ * that actually exist — every distinct description among active units — and
+ * `allocation_priorities` only supplies each one's number. So a description
+ * that appears when a new machine is imported turns up here on its own,
  * unranked and shown as such, rather than being invisible until somebody
- * remembers to add it. A pair whose last unit is retired stops being offered
- * without anything having to clean up after it.
+ * remembers to add it. A description whose last unit is retired stops being
+ * offered without anything having to clean up after it.
  *
  * One list across every type, not one per type. The commonest tie of all is
  * between two types — 342 operators here hold both DUMP TRUCK and REAR DUMP
@@ -21,7 +21,7 @@
  * unanswered and fall back to the very unit-code order this replaces.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
@@ -38,28 +38,22 @@ import { ErrorSchema, AllocationPrioritySchema } from "./schemas";
 export async function priorityRows() {
   const rows = await db
     .select({
-      classId: schema.units.classId,
-      className: schema.unitClasses.name,
-      simperCodeId: schema.units.simperCodeId,
-      simperCodeName: schema.simperCodes.name,
+      description: schema.units.description,
       typeName: schema.unitTypes.name,
       units: sql<number>`count(*)::int`,
-      /* Distinct and alphabetical: a pair usually has one make, and the seven
-         that have two must read the same way on every load. */
+      /* Distinct and alphabetical throughout: these three describe a group of
+         machines, and a value must not repeat once per unit or reorder itself
+         between loads. */
+      simperCodeNames: sql<
+        string[]
+      >`coalesce(array_agg(distinct ${schema.simperCodes.name}) filter (where ${schema.simperCodes.name} is not null), '{}')`,
       brandNames: sql<string[]>`array_agg(distinct ${schema.unitBrands.name})`,
-      /* Ordered here rather than in the browser: the register's own order is
-         what every other unit screen shows, and a list that read differently
-         on this one would look like a different set of machines. */
       unitCodes: sql<
         string[]
       >`array_agg(${schema.units.code} order by ${schema.units.code})`,
       rank: sql<number | null>`max(${schema.allocationPriorities.rank})`,
     })
     .from(schema.units)
-    .innerJoin(
-      schema.unitClasses,
-      eq(schema.unitClasses.id, schema.units.classId)
-    )
     .innerJoin(schema.unitTypes, eq(schema.unitTypes.id, schema.units.typeId))
     .innerJoin(
       schema.unitBrands,
@@ -69,35 +63,27 @@ export async function priorityRows() {
       schema.simperCodes,
       eq(schema.simperCodes.id, schema.units.simperCodeId)
     )
-    /* `is not distinct from` rather than `=`: the pair whose code is null is a
-       real pair — 18 active units carry no code — and an equality join would
-       silently drop its rank on every read. */
     .leftJoin(
       schema.allocationPriorities,
-      and(
-        eq(schema.allocationPriorities.classId, schema.units.classId),
-        sql`${schema.allocationPriorities.simperCodeId} is not distinct from ${schema.units.simperCodeId}`
-      )
+      eq(schema.allocationPriorities.description, schema.units.description)
     )
     .where(eq(schema.units.active, true))
-    .groupBy(
-      schema.units.classId,
-      schema.unitClasses.name,
-      schema.units.simperCodeId,
-      schema.simperCodes.name,
-      schema.unitTypes.name
-    );
+    /* By description *and* type, though the type is not part of the key: no
+       description here spans two types, and grouping by both lets the heading
+       be selected without a second query. A file that ever broke that would
+       split the row rather than pick a type at random, which is the failure
+       worth having. */
+    .groupBy(schema.units.description, schema.unitTypes.name);
 
   /* Ranked first in their given order, then everything nobody has placed —
-     grouped by type and named, so an unranked pair reads as a decision waiting
-     to be made rather than as one made badly. */
+     named, so an unranked line reads as a decision waiting to be made rather
+     than as one made badly. */
   return rows.sort(
     (a, b) =>
       (a.rank ?? Number.MAX_SAFE_INTEGER) -
         (b.rank ?? Number.MAX_SAFE_INTEGER) ||
       a.typeName.localeCompare(b.typeName) ||
-      a.className.localeCompare(b.className) ||
-      (a.simperCodeName ?? "").localeCompare(b.simperCodeName ?? "")
+      a.description.localeCompare(b.description)
   );
 }
 
@@ -124,14 +110,13 @@ export const allocationPriorityRoutes = new Elysia({
          everything below it, so sending the order itself is both smaller than
          a diff and impossible to apply half-way. */
       const seen = new Set<string>();
-      for (const pair of body.order) {
-        const key = `${pair.classId}:${pair.simperCodeId ?? ""}`;
-        if (seen.has(key))
+      for (const entry of body.order) {
+        if (seen.has(entry.description))
           return status(422, {
-            code: "duplicate_pair",
-            message: "Satu pasangan kelas dan kode simper disebut dua kali",
+            code: "duplicate_description",
+            message: "Satu deskripsi unit disebut dua kali",
           });
-        seen.add(key);
+        seen.add(entry.description);
       }
 
       await db.transaction(async (tx) => {
@@ -141,9 +126,8 @@ export const allocationPriorityRoutes = new Elysia({
         await tx.delete(schema.allocationPriorities);
         if (body.order.length)
           await tx.insert(schema.allocationPriorities).values(
-            body.order.map((pair, index) => ({
-              classId: pair.classId,
-              simperCodeId: pair.simperCodeId,
+            body.order.map((entry, index) => ({
+              description: entry.description,
               rank: index + 1,
             }))
           );
@@ -154,12 +138,7 @@ export const allocationPriorityRoutes = new Elysia({
     {
       auth: { menu: "allocation-priority", mode: "manage" },
       body: t.Object({
-        order: t.Array(
-          t.Object({
-            classId: t.String({ format: "uuid" }),
-            simperCodeId: t.Nullable(t.String({ format: "uuid" })),
-          })
-        ),
+        order: t.Array(t.Object({ description: t.String() })),
       }),
       response: {
         200: t.Object({ ranked: t.Integer() }),

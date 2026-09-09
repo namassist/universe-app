@@ -578,30 +578,38 @@ export async function bootstrap(): Promise<Map<string, string>> {
  * tankers, words for diggers. Both are meant to be corrected on the screen.
  */
 /**
- * The site's own order of allocation, class by class (owner, 2026-09-09).
+ * One site's order of allocation, description by description.
+ *
+ * **Development only** (owner, 2026-09-09). A site sets its own order on the
+ * Prioritas Alokasi screen; this list makes a development database useful
+ * immediately, and is not called from `bootstrap`, which is what a real
+ * installation runs.
  *
  * Written out rather than derived, because it is a decision and not a
- * measurement. It also cannot be derived: the owner interleaves types —
- * REARDUMP100T, DUMPTRUCK100T, REARDUMP60T, DUMPTRUCK60T — so no rule that
- * sorts types and then sizes could ever produce it. That interleaving is also
- * the plainest evidence the ordering has to be one list rather than one per
- * type.
+ * measurement — and because no rule could produce it. It interleaves types:
+ * REARDUMP100T, DUMPTRUCK100T, REARDUMP60T, DUMPTRUCK60T. That interleaving is
+ * also the plainest evidence the ordering has to be one list rather than one
+ * per type.
  *
- * The class names are matched exactly as the register spells them, duplicates
- * included: `FUELTRUCK20KL` and `FUEL TRUCK 20KL` are one machine written two
- * ways, and both are here because both hold units. Tidying the register is a
- * separate job from recording the order it is worked in.
+ * The excavators are where the description earns its place: the class said
+ * BIGDIGGER / MEDIUMDIGGER / SMALLDIGGER, and the description says the tonnage
+ * those three were hiding.
  *
- * A class absent from this list is not an error — 16 of the register's 48
- * carry no active unit, and one that gains a unit later simply arrives
- * unranked on the screen, which is the honest reading of a machine nobody has
- * placed yet.
+ * `"0"` is in the list on purpose, and where the owner put it — it is the
+ * register's way of saying a machine's details are not filled in, and such a
+ * machine is worth crewing after everything the yard can name but before the
+ * vehicles that move people. Leaving it out would have sorted it last by
+ * accident rather than by decision.
  */
-const CLASS_ORDER = [
-  "BIGDIGGER",
-  "MEDIUMDIGGER",
-  "SMALLDIGGER",
-  "WHEELDIGGER",
+const DESCRIPTION_ORDER = [
+  "EXCAVATOR250T",
+  "EXCAVATOR200T",
+  "EXCAVATOR120T",
+  "EXCAVATOR80T",
+  "EXCAVATOR40T",
+  "EXCAVATOR30T",
+  "EXCAVATOR20T",
+  "WHEELEXCAVATOR20T",
   "REARDUMP100T",
   "DUMPTRUCK100T",
   "REARDUMP60T",
@@ -614,51 +622,30 @@ const CLASS_ORDER = [
   "GRADER16FT",
   "GRADER14FT",
   "ROTARYBLASTHOLEDRILL",
+  "0",
   "FORKLIFT 30T DP30ND",
   "LOWBOY RENAULT KR500 - CAP 120 TON",
   "LOWBOY FAW - CAP 80 TON",
-  "SERVICETRUCK",
+  "SERVICE/LUBETRUCK",
   "FUELTRUCK20KL",
-  "FUEL TRUCK 20KL",
-  "FUEL TRUCK 32KL",
   "WATERTRUCK20KL",
-  "WATER TRUCK 16 KL HINO 500 FM260TI",
-  "WATER TRUCK 50KL KOMATSU HD465-7R",
+  "WATER TRUCK16KL",
+  "WATER TRUCK50KL",
   "CRANETRUCK10T",
-  "MANHAUL 42 SEATS RENAULT K460 6X6",
-  "MANHAUL 45 SEATS SHACMAN F3000",
+  "MANHAUL 42 SEATS",
+  "MANHAUL 45 SEATS",
   "AMBULANCE TRITON 2.5L SC HDX-L (4X4) M/T",
   "BUS MITSUBISHI / CANTER F84G BC N MT",
   "MITSUBISHICOLTDIESELFE71LONGBC(4X4)M/TBUS",
 ];
 
 /**
- * Within one class, the SIMPER code decides — and its name carries the size.
- *
- * `EXC CAT 6020` over `EXC 1200`, `PC 2000` over `PC 1250`. Only ever compared
- * inside a class, where the codes name variants of one kind of machine, so the
- * fact that a dump truck code reads 130 and a digger code reads 6020 never
- * matters.
- */
-function codeSize(name: string | null): number {
-  if (!name) return -1;
-  const found = name.match(/\d+/);
-  return found ? Number(found[0]) : -1;
-}
-
-/**
- * A first allocation order, so nobody ranks the pairs from an empty screen.
+ * A first allocation order, so nobody ranks the descriptions from an empty
+ * screen.
  *
  * Runs **only when the table is empty**: an order somebody has adjusted on the
  * screen is theirs, and a re-run must not quietly put the yard back to the day
  * it was installed.
- *
- * Deliberately not called from `bootstrap`, which is what a real installation
- * runs (owner, 2026-09-09): a site sets its own order on the Prioritas Alokasi
- * screen, and an order arriving from a seed would be this file's guess at
- * somebody else's yard. `CLASS_ORDER` above is one site's answer, kept because
- * it makes a development database useful immediately — not because it is the
- * right answer anywhere else.
  */
 async function seedAllocationPriority(): Promise<void> {
   const held = await db
@@ -670,55 +657,38 @@ async function seedAllocationPriority(): Promise<void> {
     return;
   }
 
-  const pairs = await db
-    .selectDistinct({
-      classId: schema.units.classId,
-      className: schema.unitClasses.name,
-      simperCodeId: schema.units.simperCodeId,
-      simperCodeName: schema.simperCodes.name,
-    })
+  const rows = await db
+    .selectDistinct({ description: schema.units.description })
     .from(schema.units)
-    .innerJoin(
-      schema.unitClasses,
-      eq(schema.unitClasses.id, schema.units.classId)
-    )
-    .leftJoin(
-      schema.simperCodes,
-      eq(schema.simperCodes.id, schema.units.simperCodeId)
-    )
     .where(eq(schema.units.active, true));
 
-  if (!pairs.length) {
+  if (!rows.length) {
     console.log("  prioritas alokasi — belum ada unit aktif");
     return;
   }
 
-  /* A class nobody listed sorts after every listed one rather than first: a
-     machine this file has never heard of is not the site's first priority. */
-  const classRank = (name: string) => {
-    const at = CLASS_ORDER.indexOf(name);
-    return at === -1 ? CLASS_ORDER.length : at;
+  /* A description nobody listed sorts after every listed one rather than
+     first: a machine this file has never heard of is not the site's first
+     priority, and an empty description least of all. */
+  const rank = (description: string) => {
+    const at = DESCRIPTION_ORDER.indexOf(description);
+    return at === -1 ? DESCRIPTION_ORDER.length : at;
   };
 
-  const ordered = pairs.sort(
+  const ordered = rows.sort(
     (a, b) =>
-      classRank(a.className) - classRank(b.className) ||
-      /* Unlisted classes among themselves, so two runs cannot disagree. */
-      a.className.localeCompare(b.className) ||
-      codeSize(b.simperCodeName) - codeSize(a.simperCodeName) ||
-      /* Named before unnamed, then alphabetical — anything to keep two runs of
-         the seed from producing two different orders. */
-      (a.simperCodeName ?? "\uffff").localeCompare(b.simperCodeName ?? "\uffff")
+      rank(a.description) - rank(b.description) ||
+      /* Unlisted descriptions among themselves, so two runs cannot disagree. */
+      a.description.localeCompare(b.description)
   );
 
   await db.insert(schema.allocationPriorities).values(
-    ordered.map((pair, index) => ({
-      classId: pair.classId,
-      simperCodeId: pair.simperCodeId,
+    ordered.map((row, index) => ({
+      description: row.description,
       rank: index + 1,
     }))
   );
-  console.log(`  prioritas alokasi — ${ordered.length} pasangan diurutkan`);
+  console.log(`  prioritas alokasi — ${ordered.length} deskripsi diurutkan`);
 }
 
 export async function seed(): Promise<void> {

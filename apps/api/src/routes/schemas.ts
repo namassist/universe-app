@@ -410,12 +410,10 @@ const FleetImportSupportRowSchema = t.Object({
 
 /** One orderable line of the allocation priority screen. */
 export const AllocationPrioritySchema = t.Object({
-  classId: t.String(),
-  className: t.String(),
-  simperCodeId: t.Nullable(t.String()),
-  simperCodeName: t.Nullable(t.String()),
+  description: t.String(),
   typeName: t.String(),
   units: t.Integer(),
+  simperCodeNames: t.Array(t.String()),
   brandNames: t.Array(t.String()),
   unitCodes: t.Array(t.String()),
   rank: t.Nullable(t.Integer()),

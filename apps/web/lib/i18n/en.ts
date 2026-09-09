@@ -673,6 +673,7 @@ export const en: Dict = {
   apReset: "Discard",
   apDirty: "unsaved changes",
   apUnranked: "Unranked",
+  apNoDescription: "(no description)",
   apNoCode: "No code",
   apUnits: "units",
   apPairs: "class & SIMPER code pairs",

@@ -13,7 +13,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
@@ -69,7 +69,11 @@ async function makeUser(mode: "view" | "manage") {
   return `${SESSION_COOKIE}=${session.id}`;
 }
 
-async function addUnit(code: string, simperCodeId: string | null) {
+async function addUnit(
+  code: string,
+  description: string,
+  simperCodeId: string | null = null
+) {
   const [row] = await db
     .insert(schema.units)
     .values({
@@ -78,6 +82,7 @@ async function addUnit(code: string, simperCodeId: string | null) {
       typeId: typ,
       modelId: mdl,
       brandId: brd,
+      description,
       simperCodeId,
     })
     .returning({ id: schema.units.id });
@@ -102,15 +107,15 @@ const put = (cookie: string, order: unknown) =>
 /** Only the rows this suite made — the register holds plenty of others. */
 const mine = async (cookie: string) => {
   const body = (await (await get(cookie)).json()) as {
-    classId: string;
-    simperCodeId: string | null;
-    simperCodeName: string | null;
+    description: string;
+    typeName: string;
     units: number;
+    simperCodeNames: string[];
     brandNames: string[];
     unitCodes: string[];
     rank: number | null;
   }[];
-  return body.filter((r) => r.classId === cls);
+  return body.filter((r) => r.description.startsWith(tag));
 };
 
 beforeAll(async () => {
@@ -160,7 +165,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db
     .delete(schema.allocationPriorities)
-    .where(eq(schema.allocationPriorities.classId, cls));
+    .where(like(schema.allocationPriorities.description, `${tag}%`));
   if (made.units.length)
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
   if (made.simperCodes.length)
@@ -183,67 +188,55 @@ afterAll(async () => {
 });
 
 describe("the list is generated from the units", () => {
-  test("a pair appears once, however many units share it, and starts unranked", async () => {
-    await addUnit(`${tag}-1`, codeA);
-    await addUnit(`${tag}-2`, codeA);
-    await addUnit(`${tag}-3`, codeB);
+  test("a description appears once, however many units share it, and starts unranked", async () => {
+    await addUnit(`${tag}-1`, `${tag} BESAR`, codeA);
+    await addUnit(`${tag}-2`, `${tag} BESAR`, codeB);
+    await addUnit(`${tag}-3`, `${tag} KECIL`, codeA);
 
     const rows = await mine(admin);
     expect(rows).toHaveLength(2);
+    const big = rows.find((r) => r.description === `${tag} BESAR`)!;
+
     /* The count is what lets somebody weigh a rank instead of guessing at it,
        so it is asserted rather than assumed. */
-    expect(rows.find((r) => r.simperCodeId === codeA)?.units).toBe(2);
-    expect(rows.find((r) => r.simperCodeId === codeB)?.units).toBe(1);
-    /* And the machines themselves, in the register's own order — a rank is
-       set against real units, not against a category. */
-    expect(rows.find((r) => r.simperCodeId === codeA)?.unitCodes).toEqual([
-      `${tag}-1`,
-      `${tag}-2`,
-    ]);
-    /* The make is shown, not ranked — one entry here because the fixture's
-       units share a brand, and duplicates must not pile up per unit. */
-    expect(rows.find((r) => r.simperCodeId === codeA)?.brandNames).toEqual([
-      `${tag} Merk`,
-    ]);
+    expect(big.units).toBe(2);
+    /* And the machines themselves, in the register's own order — a rank is set
+       against real units, not against a word. */
+    expect(big.unitCodes).toEqual([`${tag}-1`, `${tag}-2`]);
+    /* Both licences under one description, which is the whole change: they no
+       longer split the row, they are listed on it. */
+    expect(big.simperCodeNames.sort()).toEqual([`${tag} A`, `${tag} B`]);
+    /* The make is shown, not ranked — one entry, not one per unit. */
+    expect(big.brandNames).toEqual([`${tag} Merk`]);
     for (const row of rows) expect(row.rank).toBeNull();
   });
 
-  test("a unit with no SIMPER code is a pair of its own, not a missing row", async () => {
-    /* 18 active units on this site carry no code. They are still machines
-       somebody has to crew, so they get a line rather than vanishing. */
-    await addUnit(`${tag}-4`, null);
+  test("a unit with no description is a line of its own, not a missing row", async () => {
+    /* `description` is `notNull` with an empty default, so a machine nobody
+       described still has to be crewed and still has to be rankable. */
+    await addUnit(`${tag}-4`, "", codeA);
 
-    const rows = await mine(admin);
-    const bare = rows.find((r) => r.simperCodeId === null);
-    expect(bare).toBeDefined();
-    expect(bare!.simperCodeName).toBeNull();
+    const body = (await (await get(admin)).json()) as { description: string }[];
+    expect(body.some((r) => r.description === "")).toBe(true);
   });
 });
 
 describe("saving an order", () => {
-  test("numbers the pairs in the order given, ranked before unranked", async () => {
-    const before = await mine(admin);
-    const response = await put(
-      admin,
-      before
-        .filter((r) => r.simperCodeId !== null)
-        .map((r) => ({ classId: r.classId, simperCodeId: r.simperCodeId }))
-        .reverse()
-    );
+  test("numbers the descriptions in the order given, ranked before unranked", async () => {
+    const response = await put(admin, [
+      { description: `${tag} KECIL` },
+      { description: `${tag} BESAR` },
+    ]);
     expect(response.status).toBe(200);
 
     const after = await mine(admin);
-    /* Ranked pairs first, in their given order; whatever was left out sorts
-       last and still says it is unranked. */
-    expect(after[0]!.rank).toBe(1);
-    expect(after[1]!.rank).toBe(2);
-    expect(after.at(-1)!.rank).toBeNull();
-    expect(after.at(-1)!.simperCodeId).toBeNull();
+    expect(after[0]).toMatchObject({ description: `${tag} KECIL`, rank: 1 });
+    expect(after[1]).toMatchObject({ description: `${tag} BESAR`, rank: 2 });
   });
 
-  test("the same pair twice is refused rather than half-applied", async () => {
-    const pair = { classId: cls, simperCodeId: codeA };
-    const response = await put(admin, [pair, pair]);
+  test("the same description twice is refused rather than half-applied", async () => {
+    const entry = { description: `${tag} BESAR` };
+    const response = await put(admin, [entry, entry]);
     expect(response.status).toBe(422);
   });
 
@@ -254,26 +247,19 @@ describe("saving an order", () => {
 });
 
 describe("the ranks follow the units, not the other way round", () => {
-  test("retiring the last unit of a pair drops its line", async () => {
-    const gone = await addUnit(`${tag}-9`, codeB);
+  test("retiring the last unit of a description drops its line", async () => {
+    const gone = await addUnit(`${tag}-9`, `${tag} SEKALI`, codeA);
+    expect(
+      (await mine(admin)).some((r) => r.description === `${tag} SEKALI`)
+    ).toBe(true);
+
     await db.delete(schema.units).where(eq(schema.units.id, gone));
     made.units = made.units.filter((id) => id !== gone);
 
-    /* `-3` still carries codeB, so the pair survives this deletion — the
-       point is that the *list* is read from units, so removing every unit of
-       a pair is what removes it. */
-    const rows = await mine(admin);
-    expect(rows.some((r) => r.simperCodeId === codeB)).toBe(true);
-
-    const [last] = await db
-      .select({ id: schema.units.id })
-      .from(schema.units)
-      .where(eq(schema.units.simperCodeId, codeB));
-    await db.delete(schema.units).where(eq(schema.units.id, last!.id));
-    made.units = made.units.filter((id) => id !== last!.id);
-
-    expect((await mine(admin)).some((r) => r.simperCodeId === codeB)).toBe(
-      false
-    );
+    /* No cleanup of the ranks anywhere: the screen is read from the units, so
+       removing the last unit is what removes the line. */
+    expect(
+      (await mine(admin)).some((r) => r.description === `${tag} SEKALI`)
+    ).toBe(false);
   });
 });
