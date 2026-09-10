@@ -241,6 +241,50 @@ describe("runIngestWindow", () => {
     expect(rows).toHaveLength(1); // every pass amended the same row
   });
 
+  test("closes at the time it was given, not after a fixed span", async () => {
+    let calls = 0;
+    const result = await runIngestWindow("finger", {
+      dates: TEST_DATES,
+      // No `windowMs` at all: the deadline is the only thing ending this.
+      endsAt: new Date(Date.now() + 400),
+      passDelayMs: 25,
+      fingerFetch: async () => {
+        calls += 1;
+        return [fingerRow()];
+      },
+    });
+
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(result.passes).toBe(calls);
+  });
+
+  /*
+   * A stage that fires after its own deadline — the scheduler ticks by the
+   * minute and a restart can land it late — must still pull once. Deciding
+   * there is no time left and pulling nothing would lose the whole shift's
+   * readings to a rounding error.
+   */
+  test("a deadline already past still pulls once", async () => {
+    let calls = 0;
+    const result = await runIngestWindow("ftw", {
+      dates: TEST_DATES,
+      endsAt: new Date(Date.now() - 60_000),
+      passDelayMs: 25,
+      ftwFetch: async () => {
+        calls += 1;
+        return [ftwRow()];
+      },
+    });
+
+    expect(calls).toBe(1);
+    expect(result.passes).toBe(1);
+    const rows = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(rows).toHaveLength(1); // the one pass still landed its data
+  });
+
   test("a failing pass logs and the window continues", async () => {
     let calls = 0;
     const result = await runIngestWindow("ftw", {

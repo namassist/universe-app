@@ -25,6 +25,7 @@ import { eq } from "drizzle-orm";
 import type { TimelineAction } from "@universe/contracts";
 
 import { db, schema, type TimelineStageRow } from "./db";
+import { env } from "./env";
 // Circular on paper (ingest uses localDate from here) — harmless in practice:
 // both sides only reach through the binding inside function bodies, never at
 // module init.
@@ -32,6 +33,7 @@ import { buildBoard, storeBoard } from "./allocation";
 import { runIngestWindow, type IngestKind } from "./ingest";
 import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
+import { pullClosesAt } from "./stage-time";
 import { redis } from "./redis";
 
 /** One tick per minute: the schedule is specified to the minute. */
@@ -99,17 +101,48 @@ const marker: Hook = async (dispatch) => {
 /**
  * The two ingest stages: fire once here, then `runIngestWindow` keeps
  * re-pulling until the window closes (each pass an idempotent upsert — see
- * `ingest.ts`). The window runs detached: a stage that spends five minutes
- * pulling must not hold this tick's loop hostage, and the window logs its own
- * passes and failures, so awaiting it here would add nothing but delay for
- * whatever stage is due in the same minute.
+ * `ingest.ts`). The window runs detached: a stage that spends an hour pulling
+ * must not hold this tick's loop hostage, and the window logs its own passes
+ * and failures, so awaiting it here would add nothing but delay for whatever
+ * stage is due in the same minute.
+ *
+ * **The window ends at its own deadline** — `ftw-ingest` pulls until
+ * `ftw-deadline`, `finger-ingest` until `finger-in` — so that opening the
+ * muster wider is a decision made on the Timeline screen rather than in a
+ * constant here. Before this, both ran a fixed five minutes and the readings
+ * tables stood still for the rest of the morning; the wall's two badges could
+ * not move because there was nothing new to move them.
+ *
+ * A deadline the timeline cannot name falls back to that fixed span rather
+ * than refusing. `allocate` below refuses on a missing stage and is right to —
+ * a board built on a guess is worse than no board. This is the opposite case:
+ * pulling nothing empties the readings tables, and every screen and the board
+ * itself go down with them. The old five minutes is a safe floor, and the
+ * dispatch line says which of the two happened.
  */
 const ingest =
   (kind: IngestKind): Hook =>
   async (dispatch) => {
-    record(dispatch, `ingest window opened (${kind})`);
-    void runIngestWindow(kind);
+    const endsAt = await pullClosesAt(
+      dispatch.stage.action,
+      dispatch.stage.shift
+    );
+    record(
+      dispatch,
+      endsAt
+        ? `ingest window opened (${kind}), pulling until ${timeOfDay(endsAt)}`
+        : `ingest window opened (${kind}), no deadline stage to pull until — ` +
+            `falling back to ${env.INGEST_WINDOW_MINUTES} minutes`
+    );
+    void runIngestWindow(kind, endsAt ? { endsAt } : {});
   };
+
+/** "HH:MM" of a moment, for a log line that reads like the timeline screen. */
+function timeOfDay(at: Date): string {
+  return `${String(at.getHours()).padStart(2, "0")}:${String(
+    at.getMinutes()
+  ).padStart(2, "0")}`;
+}
 
 /**
  * ── The allocation engine. ────────────────────────────────────────────────

@@ -34,6 +34,52 @@ export async function stageTimeOf(
   return row?.at ?? null;
 }
 
+/**
+ * The gate each pull runs until.
+ *
+ * A pull window is not a duration somebody chose; it is the span between a
+ * source becoming worth asking and the moment its answer stops mattering.
+ * That second moment is already on the timeline — it is the deadline the
+ * readings are judged against — so the window is read from it rather than
+ * configured beside it. Move a deadline on the Timeline screen and its pull
+ * follows; there is no second number left behind to be forgotten.
+ */
+const CLOSED_BY: Partial<Record<TimelineAction, TimelineAction>> = {
+  "ftw-ingest": "ftw-deadline",
+  "finger-ingest": "finger-in",
+};
+
+/**
+ * When a pull window should stop, as a moment on `now`'s own day.
+ *
+ * `null` for anything this cannot answer — an action that closes no window, a
+ * stage carrying no shift, a deadline missing or switched off. Unlike the rest
+ * of this module, the caller is expected to *fall back* on a null rather than
+ * refuse: a window that declined to open would leave the readings tables empty
+ * and take the shift's board down with them, which is a far worse answer than
+ * the fixed span it replaced.
+ *
+ * Same day throughout, because every stage a shift owns sits inside one: the
+ * night gates run 16:00 to 17:30, not across midnight. A timeline configured
+ * to straddle it would yield an end already past, which pulls once — a
+ * degradation, and a visible one, rather than a wrong answer.
+ */
+export async function pullClosesAt(
+  action: TimelineAction,
+  shift: ShiftKind | null,
+  now = new Date()
+): Promise<Date | null> {
+  const closes = CLOSED_BY[action];
+  if (!closes || !shift) return null;
+  const at = await stageTimeOf(closes, shift);
+  if (!at) return null;
+
+  const [hours = "0", minutes = "0", seconds = "0"] = at.split(":");
+  const end = new Date(now);
+  end.setHours(Number(hours), Number(minutes), Number(seconds), 0);
+  return end;
+}
+
 /** Both shifts' times for one stage — what the wall needs to place `now`. */
 export async function stageGates(
   action: TimelineAction

@@ -192,6 +192,12 @@ export type WindowResult = {
 
 type WindowOptions = {
   dates?: string[];
+  /**
+   * When this window stops — the deadline its readings are judged against,
+   * read off the timeline by the caller. Takes precedence over `windowMs`.
+   */
+  endsAt?: Date;
+  /** The fallback span, for a caller whose deadline the timeline cannot name. */
   windowMs?: number;
   passDelayMs?: number;
   ftwFetch?: FtwFetcher;
@@ -199,6 +205,9 @@ type WindowOptions = {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** How long since `at`, for the log line. */
+const took = (at: number) => `${((Date.now() - at) / 1000).toFixed(1)}s`;
 
 /** Today and yesterday, site-local — the pull window every ingest uses. */
 export function ingestDates(now = new Date()): string[] {
@@ -211,6 +220,12 @@ export function ingestDates(now = new Date()): string[] {
  * until the window closes. A pass that throws is counted and logged — the
  * next pass is the retry, and the manual sync route is the recovery for a
  * window that failed outright.
+ *
+ * The close is a *moment*, not a span: `endsAt` when the caller could name the
+ * deadline, `windowMs` from now when it could not. One pass always runs before
+ * the clock is consulted at all, so a stage firing after its own deadline
+ * still pulls rather than concluding there is no time left — the whole shift's
+ * readings are not worth losing to a minute of rounding.
  */
 export async function runIngestWindow(
   kind: IngestKind,
@@ -220,6 +235,7 @@ export async function runIngestWindow(
   const passDelayMs = options.passDelayMs ?? 60_000;
   const dates = options.dates ?? ingestDates();
   const startedAt = Date.now();
+  const closesAt = options.endsAt?.getTime() ?? startedAt + windowMs;
 
   let passes = 0;
   let failures = 0;
@@ -227,6 +243,11 @@ export async function runIngestWindow(
 
   for (;;) {
     passes += 1;
+    /* How long the source took, on the line it already prints. Whether a
+       cadence is affordable is a question about *their* system, and this is
+       the only place that can answer it — subtracting log timestamps works
+       but silently folds in the sleep between passes. */
+    const at = Date.now();
     try {
       last =
         kind === "ftw"
@@ -235,14 +256,18 @@ export async function runIngestWindow(
       console.log(
         `[ingest] ${kind} pass ${passes}: ` +
           `${last.upserted} upserted, ${last.skipped} skipped ` +
-          `(of ${last.fetched} fetched for ${dates.join(", ")})`
+          `(of ${last.fetched} fetched for ${dates.join(", ")}) ` +
+          `— ${took(at)}`
       );
     } catch (error) {
       failures += 1;
-      console.error(`[ingest] ${kind} pass ${passes} failed`, error);
+      console.error(
+        `[ingest] ${kind} pass ${passes} failed after ${took(at)}`,
+        error
+      );
     }
 
-    if (Date.now() - startedAt + passDelayMs > windowMs) break;
+    if (Date.now() + passDelayMs > closesAt) break;
     await sleep(passDelayMs);
   }
 

@@ -22,7 +22,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { ShiftKind, TimelineAction } from "@universe/contracts";
 
 import { db, schema } from "./db";
-import { shiftGates, stageGates } from "./stage-time";
+import { pullClosesAt, shiftGates, stageGates } from "./stage-time";
 
 /** Rows this file created, removed after each test whatever it asserted. */
 let created: string[] = [];
@@ -132,5 +132,56 @@ describe("shiftGates", () => {
 
   test("refuses nothing on its own — an unconfigured timeline yields nulls", async () => {
     expect(await shiftGates()).toEqual({ day: null, night: null });
+  });
+});
+
+describe("pullClosesAt", () => {
+  /** A fixed afternoon, so a suite running at 23:59 cannot roll the date. */
+  const NOON = new Date("2026-09-10T12:00:00");
+
+  test("an FTW pull runs until the upload deadline", async () => {
+    await addStage("ftw-deadline", "day", "05:22:00");
+
+    const end = await pullClosesAt("ftw-ingest", "day", NOON);
+
+    expect(end).not.toBeNull();
+    expect(end!.getHours()).toBe(5);
+    expect(end!.getMinutes()).toBe(22);
+    expect(end!.getDate()).toBe(NOON.getDate());
+  });
+
+  test("a finger pull runs until the tap deadline", async () => {
+    await addStage("finger-in", "night", "17:25:00");
+
+    const end = await pullClosesAt("finger-ingest", "night", NOON);
+
+    expect(end!.getHours()).toBe(17);
+    expect(end!.getMinutes()).toBe(25);
+  });
+
+  /* The two below are what makes the caller fall back rather than pull
+     nothing. A window that refused here would take the day's board with it. */
+
+  test("no deadline stage — no answer to give", async () => {
+    expect(await pullClosesAt("ftw-ingest", "day", NOON)).toBeNull();
+  });
+
+  test("a switched-off deadline does not count", async () => {
+    await addStage("ftw-deadline", "day", "05:22:00", false);
+
+    expect(await pullClosesAt("ftw-ingest", "day", NOON)).toBeNull();
+  });
+
+  test("a stage carrying no shift cannot say which deadline is its own", async () => {
+    await addStage("ftw-deadline", "day", "05:22:00");
+    await addStage("ftw-deadline", "night", "17:22:00");
+
+    expect(await pullClosesAt("ftw-ingest", null, NOON)).toBeNull();
+  });
+
+  test("an action that closes no pull window has no deadline", async () => {
+    await addStage("finger-in", "day", "05:25:00");
+
+    expect(await pullClosesAt("roster-ingest", "day", NOON)).toBeNull();
   });
 });

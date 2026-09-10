@@ -147,9 +147,11 @@ export const env = {
   ROSTER_SYNC_DAYS_BACK: number("ROSTER_SYNC_DAYS_BACK", "7"),
   ROSTER_SYNC_MONTHS_AHEAD: number("ROSTER_SYNC_MONTHS_AHEAD", "1"),
 
-  /** How long an ingest stage keeps re-pulling after it fires (design: the
-   *  window is retry and late-arrival tolerance in one — every pass is an
-   *  idempotent upsert). Bounded so everything is settled before the bus. */
+  /** How long an ingest stage keeps re-pulling **when the timeline cannot say
+   *  otherwise**. A pull normally runs until its own deadline stage — see
+   *  `pullClosesAt` — so this is the floor for a timeline missing that stage,
+   *  not the rule. Every pass is an idempotent upsert, so the window is retry
+   *  and late-arrival tolerance in one. */
   INGEST_WINDOW_MINUTES: number("INGEST_WINDOW_MINUTES", "5"),
 
   /* ---- fingerprint machine probing ---- */
