@@ -22,7 +22,7 @@
  */
 
 import { eq } from "drizzle-orm";
-import type { TimelineAction } from "@universe/contracts";
+import type { AllocationFailure, TimelineAction } from "@universe/contracts";
 
 import { db, schema, type TimelineStageRow } from "./db";
 import { env } from "./env";
@@ -31,6 +31,7 @@ import { env } from "./env";
 // module init.
 import { buildBoard, storeBoard } from "./allocation";
 import { runIngestWindow, type IngestKind } from "./ingest";
+import { notify } from "./notify";
 import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { pullClosesAt } from "./stage-time";
@@ -159,17 +160,40 @@ function timeOfDay(at: Date): string {
  * notice.
  */
 const allocate: Hook = async (dispatch) => {
+  /**
+   * Say so on the notifications page as well as in the log.
+   *
+   * The log is read by whoever has the server; this is read by whoever runs
+   * the muster, which is a different and larger set of people. A board that
+   * failed used to be discoverable only by noticing the wall had not changed —
+   * and by then the bus has gone.
+   *
+   * The reason is a code from a closed list, never the thrown error's own
+   * text: that text routinely carries a connection string, and this row
+   * persists and is read again later by anyone with the menu. What it costs is
+   * detail; what it buys is that the detail cannot leak somewhere it should
+   * not. The full error stays in the log line beside it.
+   */
+  const failed = async (reason: AllocationFailure, note: string) => {
+    record(dispatch, note);
+    await notify("allocation-failed", "danger", {
+      date: dispatch.date,
+      shift: dispatch.stage.shift,
+      reason,
+    });
+  };
+
   const shift = dispatch.stage.shift;
   if (!shift)
-    return record(
-      dispatch,
+    return failed(
+      "no-shift",
       "stage carries no shift — cannot tell which board to build; set it on the timeline"
     );
 
   const deadline = await fingerInDeadline(shift);
   if (!deadline)
-    return record(
-      dispatch,
+    return failed(
+      "no-finger-deadline",
       `no active finger-in stage for the ${shift} shift — no deadline, so no pass rule`
     );
 
@@ -179,19 +203,48 @@ const allocate: Hook = async (dispatch) => {
   // morning's board.
   const uploadClose = await ftwDeadline(shift);
   if (!uploadClose)
-    return record(
-      dispatch,
+    return failed(
+      "no-ftw-deadline",
       `no active ftw-deadline stage for the ${shift} shift — nothing says when an upload is late`
     );
 
-  const board = await buildBoard(dispatch.date, shift, deadline, uploadClose);
-  await storeBoard(board);
-  const filled = board.slots.filter((s) => s.employeeId).length;
-  record(
-    dispatch,
-    `${shift} board: ${filled} of ${board.slots.length} units crewed ` +
-      `(${board.slots.filter((s) => s.source === "spare").length} from the spare pool)`
-  );
+  /*
+   * Wrapped from here on because everything past this point talks to the
+   * database, and a throw would otherwise reach the tick loop as an unhandled
+   * rejection — logged by the runtime, mentioned to nobody, on the one stage
+   * whose silence is hardest to notice.
+   */
+  try {
+    const board = await buildBoard(dispatch.date, shift, deadline, uploadClose);
+    await storeBoard(board);
+    const crewed = board.slots.filter((s) => s.employeeId).length;
+    const spares = board.slots.filter((s) => s.source === "spare").length;
+    record(
+      dispatch,
+      `${shift} board: ${crewed} of ${board.slots.length} units crewed ` +
+        `(${spares} from the spare pool)`
+    );
+    await notify(
+      "allocation-generated",
+      /* Amber when a unit is left without an operator. Not a failure — the
+         board is correct and the yard is short — but the one number on it a
+         supervisor may still be able to do something about. */
+      crewed < board.slots.length ? "warning" : "success",
+      {
+        date: dispatch.date,
+        shift,
+        crewed,
+        units: board.slots.length,
+        spares,
+      }
+    );
+  } catch (error) {
+    console.error(`[scheduler] ${shift} board failed to generate`, error);
+    await failed(
+      "unexpected",
+      `${shift} board failed to generate — see the error above`
+    );
+  }
 };
 
 const HOOKS: Record<TimelineAction, Hook> = {

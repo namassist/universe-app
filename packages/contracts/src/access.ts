@@ -39,6 +39,7 @@ export const MENU_SLUGS = [
   "users",
   "roles",
   "setting",
+  "notifications",
 ] as const;
 export type MenuSlug = (typeof MENU_SLUGS)[number];
 
@@ -83,6 +84,7 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   users: "User",
   roles: "Role",
   setting: "Setting",
+  notifications: "Notifikasi",
 };
 
 /**

@@ -20,9 +20,10 @@ import { MENU_LABELS, type MenuSlug } from "@/lib/access";
 import { api } from "@/lib/api";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { NAV } from "@/lib/nav";
-import { notifStore, notifToneDot, useNotifs } from "@/lib/notifications-data";
+import { notifText, notifTime, notifToneDot } from "@/lib/notifications-data";
 import { sessionKey } from "@/lib/queries/session";
 import { cn } from "@/lib/utils";
+import { useNotifs } from "@/components/providers/notifications";
 import { useRole } from "@/components/providers/role-context";
 import {
   useTheme,
@@ -60,9 +61,14 @@ export function Topbar() {
   const { setSideOpen } = useShell();
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
-  const notifs = useNotifs();
+  const {
+    canSee: canSeeNotifs,
+    notifs,
+    unread,
+    markRead,
+    markAllRead,
+  } = useNotifs();
   const [openDrop, setOpenDrop] = React.useState<string | null>(null);
-  const unread = notifs.filter((n) => !n.read).length;
 
   /* Identity comes from the session, not from a table of sample accounts.
      An account is credentialed by email or NIK, so whichever it carries is
@@ -196,81 +202,85 @@ export function Topbar() {
           </DropMenu>
         </DropMenuWrap>
 
-        {/* notifikasi */}
-        <DropMenuWrap open={openDrop === "notif"} onClose={close}>
-          <button
-            onClick={() => toggle("notif")}
-            aria-expanded={openDrop === "notif"}
-            aria-haspopup="menu"
-            aria-label={t.notifTitle}
-            className={hbtnClass}
-          >
-            <Bell />
-            {unread > 0 ? (
-              <span className="absolute top-[5px] right-[5px] grid h-[15px] min-w-[15px] place-items-center rounded-lg bg-(--color-danger) px-1 text-[9px] font-bold text-white shadow-[0_0_0_2px_var(--scrim)]">
-                {unread}
-              </span>
-            ) : null}
-          </button>
-          <DropMenu open={openDrop === "notif"} className="w-[340px]">
-            <div className="flex items-center justify-between pr-2">
-              <DropMenuHeading>{t.notifTitle}</DropMenuHeading>
+        {/* notifikasi — hidden outright without the grant. A bell that is
+            always empty because the reader may not see anything reads as
+            "nothing is happening", which is the wrong thing to imply. */}
+        {canSeeNotifs ? (
+          <DropMenuWrap open={openDrop === "notif"} onClose={close}>
+            <button
+              onClick={() => toggle("notif")}
+              aria-expanded={openDrop === "notif"}
+              aria-haspopup="menu"
+              aria-label={t.notifTitle}
+              className={hbtnClass}
+            >
+              <Bell />
               {unread > 0 ? (
-                <span className="rounded-chip border border-[rgba(0,212,255,.4)] bg-[rgba(0,212,255,.12)] px-2 py-0.5 text-[11px] font-semibold text-primary-bright">
-                  {unread} {t.ntfFUnread.toLowerCase()}
+                <span className="absolute top-[5px] right-[5px] grid h-[15px] min-w-[15px] place-items-center rounded-lg bg-(--color-danger) px-1 text-[9px] font-bold text-white shadow-[0_0_0_2px_var(--scrim)]">
+                  {unread}
                 </span>
               ) : null}
-            </div>
-            {notifs.slice(0, 5).map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                onClick={() => notifStore.read(n.id)}
-                className="flex w-full cursor-pointer gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] leading-normal hover:bg-(--fill-hover)"
-              >
-                <span
-                  className={cn(
-                    "mt-1.5 size-[7px] flex-none rounded-full",
-                    n.read ? "bg-(--text-disabled)" : notifToneDot[n.tone]
-                  )}
-                />
-                <span className="min-w-0 flex-1">
+            </button>
+            <DropMenu open={openDrop === "notif"} className="w-[340px]">
+              <div className="flex items-center justify-between pr-2">
+                <DropMenuHeading>{t.notifTitle}</DropMenuHeading>
+                {unread > 0 ? (
+                  <span className="rounded-chip border border-[rgba(0,212,255,.4)] bg-[rgba(0,212,255,.12)] px-2 py-0.5 text-[11px] font-semibold text-primary-bright">
+                    {unread} {t.ntfFUnread.toLowerCase()}
+                  </span>
+                ) : null}
+              </div>
+              {notifs.slice(0, 5).map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => markRead(n.id)}
+                  className="flex w-full cursor-pointer gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] leading-normal hover:bg-(--fill-hover)"
+                >
                   <span
                     className={cn(
-                      "block",
-                      n.read
-                        ? "text-(--text-secondary)"
-                        : "font-semibold text-(--text-primary)"
+                      "mt-1.5 size-[7px] flex-none rounded-full",
+                      n.read ? "bg-(--text-disabled)" : notifToneDot[n.tone]
                     )}
-                  >
-                    {lang === "id" ? n.textId : n.textEn}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={cn(
+                        "block",
+                        n.read
+                          ? "text-(--text-secondary)"
+                          : "font-semibold text-(--text-primary)"
+                      )}
+                    >
+                      {notifText(n, lang)}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-(--text-tertiary)">
+                      {notifTime(n.createdAt, lang)}
+                    </span>
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-(--text-tertiary)">
-                    {lang === "id" ? n.timeId : n.timeEn}
-                  </span>
-                </span>
-              </button>
-            ))}
-            <div className="mt-1 flex items-center justify-between gap-1 border-t border-(--divider) pt-1.5">
-              <button
-                onClick={() => notifStore.readAll()}
-                disabled={unread === 0}
-                className="flex h-9 cursor-pointer items-center rounded-lg px-3 text-[13px] font-medium whitespace-nowrap text-(--text-secondary) hover:bg-(--fill-hover) hover:text-(--text-primary) disabled:cursor-default disabled:text-(--text-disabled)"
-              >
-                {t.markRead}
-              </button>
-              <button
-                onClick={() => {
-                  close();
-                  router.push("/notifications");
-                }}
-                className="flex h-9 cursor-pointer items-center rounded-lg px-3 text-[13px] font-medium whitespace-nowrap text-(--color-primary-bright) hover:bg-(--fill-hover)"
-              >
-                {t.ntfViewAll}
-              </button>
-            </div>
-          </DropMenu>
-        </DropMenuWrap>
+                </button>
+              ))}
+              <div className="mt-1 flex items-center justify-between gap-1 border-t border-(--divider) pt-1.5">
+                <button
+                  onClick={() => markAllRead()}
+                  disabled={unread === 0}
+                  className="flex h-9 cursor-pointer items-center rounded-lg px-3 text-[13px] font-medium whitespace-nowrap text-(--text-secondary) hover:bg-(--fill-hover) hover:text-(--text-primary) disabled:cursor-default disabled:text-(--text-disabled)"
+                >
+                  {t.markRead}
+                </button>
+                <button
+                  onClick={() => {
+                    close();
+                    router.push("/notifications");
+                  }}
+                  className="flex h-9 cursor-pointer items-center rounded-lg px-3 text-[13px] font-medium whitespace-nowrap text-(--color-primary-bright) hover:bg-(--fill-hover)"
+                >
+                  {t.ntfViewAll}
+                </button>
+              </div>
+            </DropMenu>
+          </DropMenuWrap>
+        ) : null}
 
         {/* menu user */}
         <DropMenuWrap open={openDrop === "user"} onClose={close}>

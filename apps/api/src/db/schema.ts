@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -22,6 +23,8 @@ import {
   DISPLAY_LAYOUTS,
   EMPLOYEE_STATUSES,
   MCU_RESULTS,
+  NOTIFICATION_KINDS,
+  NOTIFICATION_TONES,
   ROSTER_CODES,
   ROSTER_DOCUMENT_SOURCES,
   ROSTER_DOCUMENT_STATUSES,
@@ -38,6 +41,8 @@ export const accessMode = pgEnum("access_mode", ACCESS_MODES);
 export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const displayLayout = pgEnum("display_layout", DISPLAY_LAYOUTS);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
+export const notificationKind = pgEnum("notification_kind", NOTIFICATION_KINDS);
+export const notificationTone = pgEnum("notification_tone", NOTIFICATION_TONES);
 export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
 export const actualSlotSource = pgEnum("actual_slot_source", [
   "plan",
@@ -1405,3 +1410,60 @@ export type RosterDocumentRow = typeof rosterDocuments.$inferSelect;
 export type RosterDayRow = typeof rosterDays.$inferSelect;
 export type RosterRevisionRow = typeof rosterRevisions.$inferSelect;
 export type RosterRevisionItemRow = typeof rosterRevisionItems.$inferSelect;
+
+/**
+ * What the application has told the people who run it.
+ *
+ * Site-wide facts, not per-person messages: a board that failed to generate is
+ * one event whoever can see it should see, so the row is written once and read
+ * by everyone with access. Being *read* is the only part that belongs to a
+ * person, and that lives next door in `notification_reads`.
+ *
+ * `params` is the kind's own facts and nothing else — a shift, a date, some
+ * counts, a failure reason from a closed list. No error text, ever: a driver's
+ * message routinely carries a connection string, and this table persists and
+ * is read again later. The detail stays in the server log, where reading it
+ * already requires access to the server.
+ *
+ * Nothing here is a queue. There is no delivery, no retry and no per-recipient
+ * state, because the only reader is a page somebody opens. If notifications
+ * ever have to *reach* somebody who is not looking, that is a different table.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: notificationKind("kind").notNull(),
+    tone: notificationTone("tone").notNull(),
+    params: jsonb("params").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("notifications_created_at_idx").on(table.createdAt)]
+);
+
+/**
+ * Which of them a given person has already seen.
+ *
+ * A row's presence is the whole meaning — there is no `read: false` to store,
+ * because not having looked at something is the absence of an event rather
+ * than an event. Cascades from both sides: a notification swept out by
+ * retention takes its read marks with it, and so does a deleted account.
+ */
+export const notificationReads = pgTable(
+  "notification_reads",
+  {
+    notificationId: uuid("notification_id")
+      .notNull()
+      .references(() => notifications.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.notificationId, table.userId] }),
+    index("notification_reads_user_id_idx").on(table.userId),
+  ]
+);

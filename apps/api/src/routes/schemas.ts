@@ -29,6 +29,8 @@ import {
   SHIFT_KINDS,
   RUNTEXT_COLORS,
   SCOPES,
+  NOTIFICATION_KINDS,
+  NOTIFICATION_TONES,
   TIMELINE_ACTIONS,
   UNIT_STATUSES,
   type MenuSlug,
@@ -97,6 +99,18 @@ const TimelineActionUnion = t.Union([
   t.Literal("finger-second"),
   t.Literal("bus-depart"),
   t.Literal("other"),
+]);
+
+const NotificationKindUnion = t.Union([
+  t.Literal("allocation-generated"),
+  t.Literal("allocation-failed"),
+]);
+
+const NotificationToneUnion = t.Union([
+  t.Literal("info"),
+  t.Literal("success"),
+  t.Literal("warning"),
+  t.Literal("danger"),
 ]);
 
 const ShiftKindUnion = t.Union([t.Literal("day"), t.Literal("night")]);
@@ -189,6 +203,18 @@ type _TimelineActionInSync = Assert<
   IsExact<
     (typeof TimelineActionUnion)["static"],
     (typeof TIMELINE_ACTIONS)[number]
+  >
+>;
+type _NotificationKindInSync = Assert<
+  IsExact<
+    (typeof NotificationKindUnion)["static"],
+    (typeof NOTIFICATION_KINDS)[number]
+  >
+>;
+type _NotificationToneInSync = Assert<
+  IsExact<
+    (typeof NotificationToneUnion)["static"],
+    (typeof NOTIFICATION_TONES)[number]
   >
 >;
 type _ShiftKindInSync = Assert<
@@ -418,6 +444,23 @@ export const AllocationPrioritySchema = t.Object({
   brandNames: t.Array(t.String()),
   unitCodes: t.Array(t.String()),
   rank: t.Nullable(t.Integer()),
+});
+
+/**
+ * One notification, as the client renders it.
+ *
+ * `params` arrives loose on purpose: its shape belongs to `kind`, and pinning
+ * every kind's fields in the response schema would make adding a kind a change
+ * in four places. The client narrows on `kind` and ignores what it does not
+ * recognise — which is also what an older browser does against a newer API.
+ */
+export const NotificationSchema = t.Object({
+  id: t.String(),
+  kind: NotificationKindUnion,
+  tone: NotificationToneUnion,
+  params: t.Record(t.String(), t.Unknown()),
+  createdAt: t.String(),
+  read: t.Boolean(),
 });
 
 /** One unit the file parks because the digger it hauls for is broken. */

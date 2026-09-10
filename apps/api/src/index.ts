@@ -22,6 +22,7 @@ import { fingerprintMachineRoutes } from "./routes/fingerprint-machines";
 import { fleetActualRoutes } from "./routes/fleet-actual";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { allocationPriorityRoutes } from "./routes/allocation-priority";
+import { notificationRoutes } from "./routes/notifications";
 import { fleetsRoutes } from "./routes/fleets";
 import {
   attendanceSyncRoutes,
@@ -60,6 +61,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(busSchedulesRoutes)
   .use(fleetsRoutes)
   .use(allocationPriorityRoutes)
+  .use(notificationRoutes)
   .use(unitStatusRoutes)
   .use(fleetAllocationRoutes)
   .use(fleetActualRoutes)

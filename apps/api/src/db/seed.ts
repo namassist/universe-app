@@ -172,6 +172,9 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
        part of configuring it. Nobody else gains it: the two `dept`-scoped
        roles read the fleet screens but do not set the yard's own rules. */
     { slug: "allocation-priority", mode: "manage", roles: ["manpower"] },
+    /* Manpower runs the muster and is who a failed board is addressed to.
+     Superadmin needs no row — its grants are reconciled to every slug. */
+    { slug: "notifications", mode: "manage", roles: ["manpower"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */

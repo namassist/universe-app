@@ -5,12 +5,13 @@ import { BellOff, CheckCheck } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import {
-  notifStore,
+  notifText,
+  notifTime,
   notifToneDot,
-  useNotifs,
   type Notif,
 } from "@/lib/notifications-data";
 import { cn } from "@/lib/utils";
+import { useNotifs } from "@/components/providers/notifications";
 import { Button } from "@/components/ui/button";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
@@ -32,29 +33,31 @@ type ReadFilter = "" | "unread" | "read";
 export function NotificationsPage() {
   const { t, lang } = useI18n();
   const { pushToast } = useToast();
-  const notifs = useNotifs();
+  const { notifs, unread, markRead, markAllRead } = useNotifs();
   const [q, setQ] = React.useState("");
   const [fRead, setFRead] = React.useState<ReadFilter>("");
 
-  const unread = notifs.filter((n) => !n.read).length;
   const filtered = notifs.filter((n) => {
     if (fRead === "unread" && n.read) return false;
     if (fRead === "read" && !n.read) return false;
     const s = q.trim().toLowerCase();
     if (!s) return true;
+    /* Searched in both languages whichever is on screen: the words somebody
+       remembers are the ones they read, and the toggle may have moved since. */
     return (
-      n.textId.toLowerCase().includes(s) || n.textEn.toLowerCase().includes(s)
+      notifText(n, "id").toLowerCase().includes(s) ||
+      notifText(n, "en").toLowerCase().includes(s)
     );
   });
   const pg = usePagination(filtered, "10");
 
   function markAll() {
-    notifStore.readAll();
+    markAllRead();
     pushToast("success", t.ntfMarkedT);
   }
   function markOne(n: Notif) {
     if (n.read) return;
-    notifStore.read(n.id);
+    markRead(n.id);
   }
 
   const readFilters: { key: ReadFilter; label: string }[] = [
@@ -131,10 +134,10 @@ export function NotificationsPage() {
                         : "font-semibold text-(--text-primary)"
                     )}
                   >
-                    {lang === "id" ? n.textId : n.textEn}
+                    {notifText(n, lang)}
                   </span>
                   <span className="mt-0.5 block text-xs text-(--text-tertiary)">
-                    {lang === "id" ? n.timeId : n.timeEn}
+                    {notifTime(n.createdAt, lang)}
                   </span>
                 </span>
                 {!n.read ? (
