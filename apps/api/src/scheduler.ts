@@ -200,6 +200,10 @@ const HOOKS: Record<TimelineAction, Hook> = {
   "shift-start": marker,
   "ftw-deadline": marker,
   "finger-in": marker,
+  /* Nothing attached yet: it names the tap that collects a printed ticket, and
+     the printing is a later phase. On the timeline now so the schedule the
+     application runs matches the one the yard works to. */
+  "finger-second": marker,
   "bus-depart": marker,
   other: marker,
   "ftw-ingest": ingest("ftw"),

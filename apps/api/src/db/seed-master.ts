@@ -465,6 +465,18 @@ const FLEET_COMPANY = "UDU";
  * Nothing in `scheduler.ts` changes to support this. Stages are claimed per
  * row (`stage:${id}:${date}`), so a second row carrying the same action fires
  * on its own, and both ingest hooks are idempotent upserts.
+ *
+ * The times are the site's own flowchart (owner, 2026-09-10), and two of them
+ * mean something they did not before. **A pull stage is now when pulling
+ * begins**, not when it happens: each window runs until the deadline its
+ * readings are judged against, so `ftw-ingest` at 04:00 feeds the wall for the
+ * whole muster instead of for five minutes at the end of it. That is why the
+ * two pulls no longer sit on top of the two deadlines — they used to be the
+ * same minute because there was nothing in between.
+ *
+ * `spare-validate` sits one minute after `finger-in` rather than on it. The
+ * scheduler ticks by the minute with no order within a tick, so sharing the
+ * minute would let the board be built before the last pull of tap data landed.
  */
 const TIMELINE_STAGES: [
   name: string,
@@ -473,19 +485,21 @@ const TIMELINE_STAGES: [
   shift: ShiftKind,
 ][] = [
   ["Awal Shift", "04:00", "shift-start", "day"],
-  ["Batas Upload FTW", "04:45", "ftw-deadline", "day"],
-  ["Ambil Data FTW", "04:45", "ftw-ingest", "day"],
-  ["Batas Finger In", "05:15", "finger-in", "day"],
-  ["Ambil Data Finger", "05:15", "finger-ingest", "day"],
-  ["Validasi Spare", "05:25", "spare-validate", "day"],
+  ["Ambil Data FTW", "04:00", "ftw-ingest", "day"],
+  ["Ambil Data Finger", "04:30", "finger-ingest", "day"],
+  ["Batas Upload FTW", "05:22", "ftw-deadline", "day"],
+  ["Batas Finger In", "05:25", "finger-in", "day"],
+  ["Validasi Spare", "05:26", "spare-validate", "day"],
+  ["Finger In Kedua", "05:28", "finger-second", "day"],
   ["Bus Berangkat", "05:30", "bus-depart", "day"],
 
   ["Awal Shift Malam", "16:00", "shift-start", "night"],
-  ["Batas Upload FTW Malam", "16:45", "ftw-deadline", "night"],
-  ["Ambil Data FTW Malam", "16:45", "ftw-ingest", "night"],
-  ["Batas Finger In Malam", "17:15", "finger-in", "night"],
-  ["Ambil Data Finger Malam", "17:15", "finger-ingest", "night"],
-  ["Validasi Spare Malam", "17:25", "spare-validate", "night"],
+  ["Ambil Data FTW Malam", "16:00", "ftw-ingest", "night"],
+  ["Ambil Data Finger Malam", "16:30", "finger-ingest", "night"],
+  ["Batas Upload FTW Malam", "17:22", "ftw-deadline", "night"],
+  ["Batas Finger In Malam", "17:25", "finger-in", "night"],
+  ["Validasi Spare Malam", "17:26", "spare-validate", "night"],
+  ["Finger In Kedua Malam", "17:28", "finger-second", "night"],
   ["Bus Berangkat Malam", "17:30", "bus-depart", "night"],
 ];
 

@@ -232,6 +232,13 @@
       "when": 1788937401320,
       "tag": "0032_tearful_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789039526160,
+      "tag": "0033_flat_namora",
+      "breakpoints": true
     }
   ]
 }

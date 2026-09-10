@@ -94,6 +94,7 @@ const TimelineActionUnion = t.Union([
   t.Literal("finger-ingest"),
   t.Literal("roster-ingest"),
   t.Literal("spare-validate"),
+  t.Literal("finger-second"),
   t.Literal("bus-depart"),
   t.Literal("other"),
 ]);

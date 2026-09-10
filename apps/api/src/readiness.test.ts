@@ -412,19 +412,19 @@ describe("whether a gate has already closed", () => {
 
 describe("the deadline comes from the master timeline", () => {
   test("reads the seeded day and night deadlines", async () => {
-    expect(await fingerInDeadline("day")).toBe("05:15:00");
-    expect(await fingerInDeadline("night")).toBe("17:15:00");
+    expect(await fingerInDeadline("day")).toBe("05:25:00");
+    expect(await fingerInDeadline("night")).toBe("17:25:00");
   });
 
   test("ignores a deactivated stage", async () => {
-    // The inactive 09:09 row above must not win over the real 05:15 one.
-    expect(await fingerInDeadline("day")).toBe("05:15:00");
+    // The inactive 09:09 row above must not win over the real 05:25 one.
+    expect(await fingerInDeadline("day")).toBe("05:25:00");
   });
 
   test("reads the upload deadline from its own stage", async () => {
     // `ftw-deadline` was a no-op marker until it became the rule for `late`.
     // It is a different stage from `finger-in` and must be read as one.
-    expect(await ftwDeadline("day")).toBe("04:45:00");
-    expect(await ftwDeadline("night")).toBe("16:45:00");
+    expect(await ftwDeadline("day")).toBe("05:22:00");
+    expect(await ftwDeadline("night")).toBe("17:22:00");
   });
 });

@@ -76,6 +76,13 @@ export function isBloodType(value: string): value is BloodType {
  * screens turn over to the moment the FTW pull begins, two decisions with no
  * reason to move together. Naming it separately lets a wall change over at
  * 16:00 while the pull stays where the upload deadline needs it.
+ *
+ * `finger-second` fires nothing either, yet. It is the muster's fourth gate on
+ * the site's own flowchart — the tap a spare makes *after* the board exists,
+ * to collect the unit it gave them — and it is on the timeline now so that the
+ * schedule the application runs is the schedule the yard works to, and so that
+ * the ticket printing that will fire from it has a time to fire at. Until then
+ * it is a marker, and its being on the wall screen is most of its value.
  */
 export const TIMELINE_ACTIONS = [
   "shift-start",
@@ -85,6 +92,7 @@ export const TIMELINE_ACTIONS = [
   "finger-ingest",
   "roster-ingest",
   "spare-validate",
+  "finger-second",
   "bus-depart",
   "other",
 ] as const;
@@ -99,6 +107,7 @@ export const TIMELINE_ACTION_LABELS: Record<TimelineAction, string> = {
   "finger-ingest": "Ambil data finger",
   "roster-ingest": "Ambil roster unggul_att",
   "spare-validate": "Validasi spare ke unit",
+  "finger-second": "Finger in kedua (ambil tiket unit)",
   "bus-depart": "Bus berangkat",
   other: "Lainnya",
 };
