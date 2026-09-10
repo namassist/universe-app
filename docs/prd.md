@@ -225,13 +225,33 @@ fill the gap from the spare pool.
   first IN / first OUT per person per day with device IPs — deliberately not
   Nakula's interpreted view (30 s a query vs milliseconds). Raw as recorded;
   shift-aware interpretation belongs to the consumer.
-- **Timeline-driven, deadline-final:** the `ftw-ingest` (04:45) and
-  `finger-ingest` (05:15) stages fire once and re-pull each minute for a
-  bounded window (`INGEST_WINDOW_MINUTES`, default 5) — retry and
-  late-arrival tolerance in one, everything settled before the 05:30 bus.
-  A post-deadline upload does not count: the snapshot is final by rule, not
-  stale. Manual sync routes (manage mode) cover pulls outside the timeline
+- **Timeline-driven, deadline-final:** the `ftw-ingest` and `finger-ingest`
+  stages fire once and re-pull each minute — retry and late-arrival tolerance
+  in one. A post-deadline upload does not count: the snapshot is final by rule,
+  not stale. Manual sync routes (manage mode) cover pulls outside the timeline
   and recovery.
+- **A pull runs until the deadline its readings are judged against**
+  (2026-09-10) — `ftw-ingest` until `ftw-deadline`, `finger-ingest` until
+  `finger-in`. A pull window is not a duration somebody chose; it is the span
+  between a source becoming worth asking and the moment its answer stops
+  mattering, and that second moment is already on the timeline. So a pull
+  _stage_ is now **when pulling begins**, and widening the muster is a decision
+  made on the Timeline screen rather than in a constant.
+  - It replaced a fixed five minutes, which left the readings tables standing
+    still for the rest of the morning — and with them the wall's two badges,
+    which are computed from those tables on every request. The first honest
+    picture of a shift arrived minutes before the bus left.
+  - A deadline the timeline cannot name **falls back** to
+    `INGEST_WINDOW_MINUTES` rather than refusing, and says which happened.
+    Elsewhere a missing stage is a refusal; here pulling nothing empties the
+    readings tables and takes every screen down with them, so the old five
+    minutes is the floor.
+  - One pass always runs before the clock is consulted, so a stage firing after
+    its own deadline still pulls rather than concluding there is no time left.
+  - Each pass logs how long the source took. Whether a cadence is affordable is
+    a question about someone else's system; measured on production 2026-09-09
+    at **~0.5 s for FTW and ~0.2 s for finger**, which is what settled the
+    one-minute cadence.
 - NIKs normalize digits-only / no leading zeros (savera's production-proven
   recipe) — the cross-system join key.
 
@@ -243,6 +263,27 @@ fill the gap from the spare pool.
   17:30 bus). Without an afternoon ingest a night worker's 15:00 FTW upload and
   17:00 tap are not pulled until the _next_ morning's run — about fourteen
   hours after a night board would need them.
+- **The schedule is the yard's own, and the timeline now matches it**
+  (owner, 2026-09-10). The site works to a flowchart with four gates — FTW
+  upload, first tap, second tap, departure — and the application ran a
+  different morning. The seeded times move to the flowchart's, in both shifts,
+  twelve hours apart: shift start and FTW pulling at 04:00, finger pulling at
+  04:30, FTW upload closing 05:22, first tap closing 05:25, the board at 05:26,
+  the second tap at 05:28, departure at 05:30.
+  - **`finger-second` is a new stage.** It is the tap a spare makes _after_ the
+    board exists, to collect the unit it gave them, and the timeline had no
+    vocabulary for it at all — so the one stage where a spare learns their unit
+    existed on paper and nowhere else. It fires nothing yet; the printing that
+    will hang off it is a later phase, and until then its value is that the
+    screen people plan the morning on shows the morning they run.
+  - **The board is built one minute after the tap deadline, not on it.** The
+    scheduler ticks by the minute and nothing orders two stages within a tick,
+    so sharing the minute would let a board be built before the last pull of
+    tap data landed — a race that surfaces as a handful of operators
+    mysteriously missing from a board they had tapped in for.
+  - **Only new installations take the seeded times.** The seed inserts a stage
+    it cannot find by name and never rewrites one, so a running site's schedule
+    stays the operator's — which is the whole reason it is a table.
 - **The shift lives on the stage, not in the action.** `timeline_stages.shift`
   (`day | night`, nullable) is what tells two rows carrying the same action
   apart. A night-suffixed action per stage would have grown the vocabulary once
@@ -727,7 +768,8 @@ fill the gap from the spare pool.
   formation at a time. The static mock it replaced showed nothing real.
 - **Nobody picks the date or the shift.** A TV in the yard has no operator, so
   the API answers from the clock, and from the master timeline: a shift takes
-  the screen at its **first** stage, `ftw-ingest` (04:45 and 16:45 today) —
+  the screen at `shift-start`, or its **first** stage, `ftw-ingest`, where no
+  `shift-start` is configured —
   when its changeover _begins_, not when its board is finished. The people the
   wall is for are walking to the gate; they need their unit before the line-up
   is final. Before the morning gate the running shift is the night one that
@@ -765,6 +807,31 @@ fill the gap from the spare pool.
 - **Idle units keep a full-size card, in red, in their own formation.** They
   are never summarised into a count or paged off the end; a unit standing idle
   is the only thing here that costs money by the hour.
+- **The two readiness badges say "not yet" or "not at all", and the clock
+  decides which** (owner, 2026-09-10). Before a gate closes a missing reading
+  is grey and reads _Belum FTW_ / _Belum Absen_; after it closes the same
+  missing reading is red and reads _Tidak FTW_ / _Tidak Absen_.
+  - One empty reading, two things worth saying. At ten past four an operator
+    with no FTW row has simply not got to it, and grey is a to-do list. At six
+    the same empty row is somebody who never filed one and whose unit the board
+    has already handed on — and a screen still saying "Belum" describes a wait
+    that ended an hour ago. Before this the wall was grey at every hour and
+    never turned red at all.
+  - Only the empty case moves. A refusal, a late upload, an unreadable one and
+    a tap that happened are facts about the morning whenever they are read, and
+    they keep the colours they had — including a late tap, which stays green.
+  - **The verdicts stay free of the clock.** `judge` answers what the readings
+    say and never asks the time, so one morning always describes itself the
+    same way and the audit table can depend on that. Whether a gate has _shut_
+    is a different question, only a screen asks it, and it is answered beside
+    the verdict rather than inside it.
+  - The gates are anchored to **the shift's own date**, not today's. A night
+    shift outlives the calendar day it began in, so comparing bare clock times
+    would call a gate that shut at 17:22 still open at 01:00 and spend four
+    hours telling a finished shift it had time left.
+  - The wall says "absen"; the audit table says "tap". A deliberate split — one
+    is read by people standing in the yard, the other afterwards by someone
+    asking a different question.
 - Breakdown and standby units do not appear: the board excludes them by
   design, and the wall shows the board.
 - Readable by a paired `fleet` device or by a signed-in holder of
@@ -882,6 +949,58 @@ fill the gap from the spare pool.
   fingerprint only (`units.ftw` flag).
 - The scheduler's `spare-validate` hook (05:25) stays no-op until this engine
   lands.
+
+## Notifications
+
+### What the application tells the people who run it — shipped
+
+- **A board that fails to generate says so where the muster can see it**
+  (owner, 2026-09-10). It always said so in the log, but the log is read by
+  whoever has the server, which is not who runs the muster. In practice a
+  failed board was discovered by noticing the wall had not changed — by which
+  time the bus has gone. `spare-validate` now writes what it crewed on success
+  and why it could not on failure.
+- **A failure names a reason from a closed list, never the thrown error's own
+  text.** That text routinely carries a connection string, and a notification
+  persists and is read again later by anyone with the menu. What it costs is
+  detail; what it buys is that the detail cannot leak somewhere it should not.
+  The full error stays in the log beside it, where reading it already requires
+  access to the server. Four reasons: no shift on the stage, no `finger-in`
+  stage, no `ftw-deadline` stage, and everything else — which says where to
+  look rather than what happened.
+- **Everything past `buildBoard` is wrapped.** A throw there used to reach the
+  tick loop as an unhandled rejection: logged by the runtime, mentioned to
+  nobody, on the one stage whose silence is hardest to notice.
+- **Rows store a kind and its facts, not a sentence.** Wording is the client's,
+  in the language that client is set to — writing English copy into the API to
+  satisfy a language toggle puts presentation in the wrong layer — and "5 menit
+  lalu" is computed from the timestamp, because a stored one is a lie by the
+  time the second person reads it.
+- **One shared row, per-person read marks.** A board that failed is one event,
+  not one message each; only having seen it belongs to an individual. A read
+  mark's presence is its whole meaning — there is no `read: false` to store,
+  because not having looked at something is the absence of an event.
+- **Behind a menu grant: superadmin and manpower**, and the topbar bell is
+  behind the same one. A bell that is permanently empty because the reader may
+  not see anything reads as "nothing is happening", which is the wrong thing to
+  imply.
+- **Ninety days, swept on write.** Two rows a day, so this is not about volume:
+  it is about a page that would otherwise bury this week's under years of
+  routine success. Writes are rare and the sweep is one indexed delete, so a
+  stage that existed only to run it would be more machinery than the problem.
+- Not a queue. No delivery, no retry, no per-recipient state, because the only
+  reader is a page somebody opens. Notifications that must _reach_ somebody who
+  is not looking would be a different table.
+
+### Deferred
+
+- **A failed source pull does not notify yet**, and is the most wanted next
+  candidate. One broken morning would write eighty-odd identical rows, so it
+  needs repeat-collapsing first — one row with a count rather than a bell
+  showing the same sentence seventeen times.
+- **A board generated with units left uncrewed** is announced only as a count
+  in the success notification. Naming the units would be actionable; it is also
+  a longer message than a bell can hold.
 
 ## Kiosk access
 
