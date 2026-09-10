@@ -28,6 +28,7 @@ import { db, schema } from "../db";
 import { rosterDayInForce } from "../roster-in-force";
 import { takesPartInAllocation } from "../fleet-scope";
 import {
+  deadlinePassed,
   fingerInDeadline,
   ftwDeadline,
   judge,
@@ -752,6 +753,8 @@ export const fleetActualRoutes = new Elysia({
         shift: null as ShiftKind | null,
         generatedAt: null as string | null,
         provisional: false,
+        ftwClosed: false,
+        fingerClosed: false,
         rotateSeconds: rotate,
         layout,
         deviceName,
@@ -806,12 +809,24 @@ export const fleetActualRoutes = new Elysia({
             .map(normalizeNik)
         ),
       ]);
+      /* Read once for the whole wall rather than per card: every operator on
+         screen is in the same shift, so they are all held to the same two
+         gates, and asking the timeline per row would be the same answer many
+         times over. */
+      const at = new Date();
+      const [ftwGate, fingerGate] = await Promise.all([
+        ftwDeadline(now.shift),
+        fingerInDeadline(now.shift),
+      ]);
+
       return {
-        servedAt: new Date().toISOString(),
+        servedAt: at.toISOString(),
         date: now.date,
         shift: now.shift,
         generatedAt: doc?.generatedAt.toISOString() ?? null,
         provisional,
+        ftwClosed: deadlinePassed(ftwGate, now.date, at),
+        fingerClosed: deadlinePassed(fingerGate, now.date, at),
         rotateSeconds: rotate,
         layout,
         deviceName,

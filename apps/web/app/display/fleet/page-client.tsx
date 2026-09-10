@@ -108,22 +108,61 @@ const FTW_BADGE: Record<
 };
 
 /**
- * The tap, as a time or its absence — green once it exists, neutral until then
- * (owner, 2026-09-02).
+ * Which of the shift's two gates have already shut, served with the board.
  *
- * The pair reads as one sentence with the FTW badge beside it: neutral is what
- * is still owed, green is what is done. Green here means "tapped", not "tapped
- * in time" — the wall holds the moment, not the verdict — and the deliberate
- * consequence is that a late arrival shows a green time. That is the operator's
- * own clock to read; the board is where lateness is actually decided.
+ * The two badges below are the only things on this wall that mean different
+ * things at different hours, and this is what tells them which hour it is.
  */
-function fingerBadge(unit: FleetDisplayUnit): {
+type Gates = { ftw: boolean; finger: boolean };
+
+/**
+ * "Belum" while there is still time, "Tidak" once there is not.
+ *
+ * One missing reading, two things worth saying. At 04:10 an operator with no
+ * FTW row simply has not got to it, and grey is a to-do list. At 06:00 the
+ * same empty row is a person who never filed one and whose unit the board has
+ * already handed to somebody else — and a screen still saying "Belum" there is
+ * quietly wrong, because it describes a wait that ended an hour ago.
+ *
+ * Only the empty case moves. A refusal, a late upload and an unreadable one
+ * are facts about the morning whatever time it is read, and they keep the
+ * colours they had.
+ */
+function ftwBadge(
+  unit: FleetDisplayUnit,
+  gates: Gates
+): { tone: DisplayTone; label: string } | null {
+  if (!unit.ftw) return null;
+  if (unit.ftw === "missing" && gates.ftw)
+    return { tone: "danger", label: "Tidak FTW" };
+  return FTW_BADGE[unit.ftw];
+}
+
+/**
+ * The tap, as a time or its absence — green once it exists (owner,
+ * 2026-09-02), and grey or red before that on the same rule as FTW above.
+ *
+ * The pair reads as one sentence: green is what is done, grey is what is still
+ * owed, red is what is no longer coming. Green means "tapped", not "tapped in
+ * time" — the wall holds the moment, not the verdict — and the deliberate
+ * consequence is that a late arrival shows a green time. That is the
+ * operator's own clock to read; the board is where lateness is decided.
+ *
+ * "Absen" rather than "tap", which is the word on the audit screen: this one
+ * is read by people standing in the yard, and it should use theirs.
+ */
+function fingerBadge(
+  unit: FleetDisplayUnit,
+  gates: Gates
+): {
   tone: DisplayTone;
   label: string;
 } {
-  return unit.tappedAt
-    ? { tone: "success", label: unit.tappedAt.slice(0, 5) }
-    : { tone: "neutral", label: "Belum finger" };
+  if (unit.tappedAt)
+    return { tone: "success", label: unit.tappedAt.slice(0, 5) };
+  return gates.finger
+    ? { tone: "danger", label: "Tidak Absen" }
+    : { tone: "neutral", label: "Belum Absen" };
 }
 
 /*
@@ -246,6 +285,7 @@ function OperatorFace({
 function UnitCard({
   unit,
   provisional,
+  gates,
   /**
    * A quadrant on a monitor wall, not the whole screen. Everything shrinks
    * together — the code, the name, the padding — because a card that kept its
@@ -271,6 +311,7 @@ function UnitCard({
 }: {
   unit: FleetDisplayUnit;
   provisional: boolean;
+  gates: Gates;
   compact?: boolean;
   showArea?: boolean;
   className?: string;
@@ -376,7 +417,8 @@ function UnitCard({
               The badges matter most before the board exists. Between a shift's
               changeover and `spare-validate` the wall shows the standing plan,
               and for the operator walking to the gate "Belum FTW" and "Belum
-              finger" are the whole of what they still owe. */}
+              Absen" are the whole of what they still owe. Once the gates shut
+              they turn red and reword themselves — see `ftwBadge`. */}
           <div
             className={cn(
               "mt-1 flex min-w-0 flex-wrap items-center font-mono text-(--text-secondary) tabular-nums",
@@ -401,7 +443,7 @@ function UnitCard({
             {/* Only where there is somebody they are about: an idle unit is
                 already saying the one thing it has to say. */}
             {unit.employeeName
-              ? [unit.ftw ? FTW_BADGE[unit.ftw] : null, fingerBadge(unit)]
+              ? [ftwBadge(unit, gates), fingerBadge(unit, gates)]
                   .filter(
                     (badge): badge is { tone: DisplayTone; label: string } =>
                       !!badge
@@ -449,11 +491,13 @@ function UnitCard({
 function FleetQuadrant({
   fleet,
   provisional,
+  gates,
   className,
   style,
 }: {
   fleet: FleetDisplayFleet;
   provisional: boolean;
+  gates: Gates;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -535,6 +579,7 @@ function FleetQuadrant({
               <UnitCard
                 unit={u}
                 provisional={provisional}
+                gates={gates}
                 compact
                 className={PORTRAIT_CARD}
               />
@@ -623,6 +668,13 @@ export default function DisplayFleetPage() {
   /* The screen's own type, delivered with the board. A browser previewing the
      site-wide wall is told `slideshow`, which is what it has always been. */
   const isMonitor = data?.layout === "monitor";
+  /* Both false until the first response lands, which is the same thing the
+     badges say when the timeline cannot name a gate: nothing has closed yet,
+     so nothing is written off yet. */
+  const gates: Gates = {
+    ftw: data?.ftwClosed ?? false,
+    finger: data?.fingerClosed ?? false,
+  };
 
   const pages = React.useMemo(
     () => paginate(data?.fleets ?? []),
@@ -885,6 +937,7 @@ export default function DisplayFleetPage() {
                     key={f.id}
                     fleet={f}
                     provisional={data?.provisional ?? false}
+                    gates={gates}
                     className={flipClass}
                     style={{ animationDelay: `${i * STAGGER_MS}ms` }}
                   />
@@ -955,6 +1008,7 @@ export default function DisplayFleetPage() {
                 <UnitCard
                   unit={u}
                   provisional={data?.provisional ?? false}
+                  gates={gates}
                   showArea={page.fleet.kind === "support"}
                   className={PORTRAIT_CARD}
                 />

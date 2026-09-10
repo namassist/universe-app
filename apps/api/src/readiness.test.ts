@@ -18,7 +18,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { fingerInDeadline, ftwDeadline, judge, shiftIn } from "./readiness";
+import {
+  deadlinePassed,
+  fingerInDeadline,
+  ftwDeadline,
+  judge,
+  shiftIn,
+} from "./readiness";
 
 /** Uploaded before the 04:45 gate, so lateness never confuses another test. */
 const PUNCTUAL = "2026-08-29 04:20:00";
@@ -361,6 +367,47 @@ afterAll(async () => {
     await db
       .delete(schema.timelineStages)
       .where(inArray(schema.timelineStages.id, made));
+});
+
+describe("whether a gate has already closed", () => {
+  const SHIFT = "2026-09-10";
+  /** A moment on the shift's own day, local like everything else here. */
+  const at = (hhmmss: string, date = SHIFT) => new Date(`${date}T${hhmmss}`);
+
+  test("before the gate, it is still open", () => {
+    expect(deadlinePassed("05:25:00", SHIFT, at("04:10:00"))).toBe(false);
+  });
+
+  test("after the gate, it is closed", () => {
+    expect(deadlinePassed("05:25:00", SHIFT, at("06:00:00"))).toBe(true);
+  });
+
+  /* The same edge `judgeFinger` takes: the deadline is the moment the gate
+     closes, not the last moment through it. Disagreeing here would show
+     "Belum" beside a board that had already written the person off. */
+  test("on the stroke of the gate, it is closed", () => {
+    expect(deadlinePassed("05:25:00", SHIFT, at("05:25:00"))).toBe(true);
+  });
+
+  /*
+   * The case bare clock strings get wrong, and the reason the shift's date is
+   * a parameter at all. `currentShift` reports the small hours as *yesterday's*
+   * night shift, so at 01:00 the wall is still showing gates that shut at
+   * 17:22 the evening before. Comparing "01:00:00" against "17:22:00" would
+   * call them open and spend four hours telling a finished shift it has time.
+   */
+  test("past midnight, last evening's gates are shut", () => {
+    expect(
+      deadlinePassed("17:22:00", SHIFT, at("01:00:00", "2026-09-11"))
+    ).toBe(true);
+  });
+
+  /* A timeline that cannot say when a gate closes cannot say it has closed
+     either. The wall drops its badges entirely in that state, so this is a
+     floor rather than a case anyone should meet. */
+  test("an unconfigured gate has not closed", () => {
+    expect(deadlinePassed(null, SHIFT, at("23:59:00"))).toBe(false);
+  });
 });
 
 describe("the deadline comes from the master timeline", () => {

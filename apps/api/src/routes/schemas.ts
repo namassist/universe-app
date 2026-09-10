@@ -1178,6 +1178,21 @@ export const FleetDisplaySchema = t.Object({
    * renders it visibly unfinished — nobody has checked FTW or the tap yet.
    */
   provisional: t.Boolean(),
+  /**
+   * Whether each gate has already closed, at the moment this was served.
+   *
+   * The badges need it to tell *not yet* from *not at all*. A missing FTW row
+   * at 04:10 is somebody who has not got to it; the same missing row at 06:00
+   * is somebody who never will, and the screen should not keep saying "Belum"
+   * about a person the board has already written off. The verdicts themselves
+   * stay free of the clock — see `deadlinePassed` — so this is the one place
+   * the time of day enters, and it enters as a fact rather than a judgement.
+   *
+   * False when the timeline cannot name a gate, which is also when the wall
+   * shows no badges at all.
+   */
+  ftwClosed: t.Boolean(),
+  fingerClosed: t.Boolean(),
   /** Seconds one formation stays on screen — the screen's own setting. */
   rotateSeconds: t.Integer(),
   /**

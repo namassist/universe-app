@@ -209,6 +209,48 @@ export function judge(input: JudgeInput): Readiness {
 }
 
 /**
+ * Whether a configured gate has already closed, right now.
+ *
+ * Not a verdict — `judge` above answers those, and deliberately answers them
+ * without consulting the clock, so that the same readings always describe the
+ * same morning. This is the other question, and only a screen asks it: *may
+ * this still change?* An operator with no FTW row at 04:10 has simply not got
+ * to it yet; the same operator at 06:00 is not going to. One reading, two
+ * things worth saying, and the difference is the time of day rather than
+ * anything about them.
+ *
+ * The edge follows `judgeFinger`: the deadline is the moment the gate closes,
+ * not the last moment through it. Disagreeing here would put "Belum" on a
+ * screen beside a board that had already written the person off.
+ *
+ * A gate the timeline cannot name has not closed. The wall drops its badges
+ * entirely in that state (see `wallReadings`), so this is a floor rather than
+ * a case anyone should meet.
+ */
+export function deadlinePassed(
+  at: string | null,
+  /**
+   * The shift's own local date, as `currentShift` reports it — **not today's**.
+   *
+   * A night shift outlives the calendar day it started in: between midnight
+   * and the morning changeover the wall is still showing it, dated yesterday.
+   * Comparing bare clock strings breaks exactly there — at 01:00 a gate that
+   * shut at 17:22 reads as still open, and the wall spends four hours telling
+   * a finished shift it has time left. Anchoring the gate to the day it
+   * belongs to is what closes that.
+   */
+  shiftDate: string,
+  now = new Date()
+): boolean {
+  if (!at) return false;
+  /* Local, deliberately: no `Z`, no offset. Every time in this application is
+     the site's own, and the container carries its zone. */
+  const gate = new Date(`${shiftDate}T${at}`);
+  if (Number.isNaN(gate.getTime())) return false;
+  return now.getTime() >= gate.getTime();
+}
+
+/**
  * The `finger-in` deadline for a shift, as the operator has it configured.
  *
  * A named wrapper rather than a bare `stageTimeOf` call at each site: this is
