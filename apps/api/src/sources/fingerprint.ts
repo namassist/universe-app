@@ -39,6 +39,7 @@
 import ZKLib from "node-zklib";
 
 import { recordDeviceRequest } from "../device-log";
+import { env } from "../env";
 
 /*
  * The reference above is load-bearing, not decoration.
@@ -128,7 +129,7 @@ export function parseAttLog(xml: string): DeviceTap[] {
 export async function fetchAttLog(
   ip: string,
   comKey: number,
-  timeoutMs = 10_000
+  timeoutMs = env.DEVICE_PULL_TIMEOUT_MS
 ): Promise<DeviceTap[]> {
   const body =
     `<GetAttLog><ArgComKey xsi:type="xsd:integer">${comKey}</ArgComKey>` +

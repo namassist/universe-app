@@ -5,18 +5,25 @@ import { api, API_URL, unwrap } from "@/lib/api";
 /**
  * The fleet TV's own feed: the Actual board of whichever shift is running.
  *
- * A minute, not the fingerprint wall's thirty seconds — the board is written
+ * Thirty seconds. It was a minute, on the reasoning that the board is written
  * once at `spare-validate` and afterwards only moves when a supervisor
- * corrects a slot, so a faster poll would re-read the same rows all shift. It
- * is still frequent enough that a correction reaches the yard while the person
- * who made it is still standing at the screen, and that the turn from day to
- * night lands within a minute of its gate.
+ * corrects a slot — so a faster poll would re-read the same rows all shift.
+ *
+ * That stopped being the whole story when the readiness badges began moving
+ * during the muster. Between the changeover and the board being generated the
+ * wall is now the live picture of who has uploaded FTW and who has tapped, and
+ * it changes with every reading rather than once. Half the interval is half
+ * the wait before an arriving operator sees their own badge turn.
+ *
+ * Still frequent enough for the older reasons too: a correction reaches the
+ * yard while the person who made it is standing at the screen, and the turn
+ * from day to night lands close to its gate.
  *
  * `retry: false` for the same reason as the other kiosks: an unpaired screen
  * gets a 401 no second attempt will change, and the poll underneath recovers
  * on its own once contact returns.
  */
-export const FLEET_DISPLAY_POLL_MS = 60_000;
+export const FLEET_DISPLAY_POLL_MS = 30_000;
 
 export const fleetDisplayKey = (deviceId?: string) =>
   ["fleet-display", deviceId ?? null] as const;

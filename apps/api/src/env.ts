@@ -186,10 +186,31 @@ export const env = {
   PROBE_MISSES_BEFORE_OFFLINE: number("PROBE_MISSES_BEFORE_OFFLINE", "2"),
 
   /** How often a collecting pass asks each machine whether its log has grown.
-   *  Sixty to begin with; fifteen to thirty is the target once the behaviour
-   *  is seen in the field. The cheap question runs at this rate — the
-   *  expensive pull only when the answer moved. */
-  DEVICE_COLLECT_SECONDS: number("DEVICE_COLLECT_SECONDS", "60"),
+   *
+   *  Thirty. The cheap question runs at this rate; the expensive pull only when
+   *  the answer moved, which is what makes a short cadence affordable — a
+   *  production machine answers a count in a few hundred bytes and a full log
+   *  in 2.7 MB over seven seconds (measured 2026-09-11).
+   *
+   *  A pass sleeps *after* it finishes rather than on a fixed clock, so a slow
+   *  round delays the next one instead of overlapping it. That is what keeps
+   *  thirty seconds safe across thirty-odd machines. */
+  DEVICE_COLLECT_SECONDS: number("DEVICE_COLLECT_SECONDS", "30"),
+  /**
+   * How long to wait for a machine's full attendance log.
+   *
+   * Sixty seconds, which is generous on purpose. A machine returns its *whole*
+   * log every time and the busiest ones hold the most: measured 2026-09-11,
+   * 11,816 records came back in 4.3 s while 73,417 records — about 9.9 MB —
+   * could not finish inside the ten seconds this used to allow. Every pull
+   * from the four busiest machines failed, and they are precisely the ones
+   * worth having.
+   *
+   * A slow pull costs a cycle, not data: the pass sleeps after it finishes, so
+   * a long one delays the next rather than overlapping it, and the machine
+   * keeps everything until we manage to read it.
+   */
+  DEVICE_PULL_TIMEOUT_MS: number("DEVICE_PULL_TIMEOUT_MS", "60000"),
   /** How long collecting keeps running past `bus-depart`, so somebody who taps
    *  after the bus still reaches the attendance screen. They are past the
    *  deadline and will get no unit either way; this is about the record being

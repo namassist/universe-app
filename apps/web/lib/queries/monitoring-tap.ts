@@ -15,7 +15,10 @@ export const tapMonitorQueryOptions = (date: string, q: string) =>
   queryOptions({
     queryKey: tapMonitorKey(date, q),
     queryFn: () => unwrap(api.v1["monitoring-tap"].get({ query: { date, q } })),
-    refetchInterval: 30_000,
+    /* Half the collection cadence, so a tap is on screen within a cycle of
+       landing rather than a cycle and a half. This screen is read while
+       somebody is standing at a muster watching for a name. */
+    refetchInterval: 15_000,
   });
 
 export type TapRow = Awaited<
