@@ -22,7 +22,7 @@ import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
-import { ErrorSchema, TapMonitorSchema } from "./schemas";
+import { ErrorSchema, TapCompareSchema, TapMonitorSchema } from "./schemas";
 
 /** A page of taps, newest first — the end a supervisor reads. */
 const PAGE = 500;
@@ -124,6 +124,127 @@ async function tapWorkbook(rows: TapRow[]): Promise<Buffer> {
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
+/**
+ * Where the two sources disagree, for one shift on one date.
+ *
+ * The point of the parallel run. Everything else about the device path can be
+ * proven by tests; that it produces the *same answers as the system it
+ * replaces* can only be shown by running both and looking.
+ *
+ * **Scoped to our register, and to the shift's own column.** Two things would
+ * otherwise fill this screen with differences that are not differences:
+ *
+ * - Nakula's table is the whole site's tap log, not ShiftCorner's operator
+ *   subset, so it carries about a thousand people a month that we deliberately
+ *   never collect. Compared without scoping, the device source looks like it
+ *   lost a thousand people on its first day.
+ * - Collection runs inside the muster window and nowhere else, so after a
+ *   night-shift run the morning column is empty by design. Comparing both IN
+ *   columns would report every morning arrival as missing.
+ *
+ * So: only people the register carries, and only the column `shiftIn` would
+ * read for the shift being checked.
+ */
+async function compareOn(date: string, shift: "day" | "night") {
+  /* The column this shift is actually judged by — the same choice `shiftIn`
+     makes, spelled out here because this comparison has to ask it of two
+     tables at once. */
+  const nakulaIn =
+    shift === "day"
+      ? schema.fingerReadings.firstInAt
+      : schema.fingerReadings.firstInPmAt;
+  const deviceIn =
+    shift === "day"
+      ? schema.derivedReadings.firstInAt
+      : schema.derivedReadings.firstInPmAt;
+
+  const rows = await db
+    .select({
+      nik: schema.employees.nik,
+      name: schema.employees.name,
+      nakula: nakulaIn,
+      device: deviceIn,
+    })
+    .from(schema.employees)
+    .leftJoin(
+      schema.fingerReadings,
+      and(
+        eq(schema.fingerReadings.nik, schema.employees.nik),
+        eq(schema.fingerReadings.date, date)
+      )
+    )
+    .leftJoin(
+      schema.derivedReadings,
+      and(
+        eq(schema.derivedReadings.nik, schema.employees.nik),
+        eq(schema.derivedReadings.date, date)
+      )
+    )
+    .where(eq(schema.employees.status, "aktif"));
+
+  const differences: {
+    nik: string;
+    name: string;
+    kind: "only-nakula" | "only-device" | "drift";
+    nakula: string | null;
+    device: string | null;
+    seconds: number | null;
+  }[] = [];
+  let matched = 0;
+
+  for (const row of rows) {
+    if (!row.nakula && !row.device) continue;
+    if (row.nakula && row.device) {
+      if (row.nakula === row.device) {
+        matched += 1;
+        continue;
+      }
+      differences.push({
+        nik: row.nik,
+        name: row.name,
+        kind: "drift",
+        nakula: row.nakula,
+        device: row.device,
+        seconds: Math.round(
+          Math.abs(
+            new Date(row.nakula).getTime() - new Date(row.device).getTime()
+          ) / 1000
+        ),
+      });
+      continue;
+    }
+    differences.push({
+      nik: row.nik,
+      name: row.name,
+      /* The first of these is the one that costs somebody a unit: the old
+         system saw them arrive and the new one did not. */
+      kind: row.nakula ? "only-nakula" : "only-device",
+      nakula: row.nakula,
+      device: row.device,
+      seconds: null,
+    });
+  }
+
+  const count = (kind: string) =>
+    differences.filter((d) => d.kind === kind).length;
+
+  return {
+    date,
+    shift,
+    matched,
+    onlyNakula: count("only-nakula"),
+    onlyDevice: count("only-device"),
+    drift: count("drift"),
+    /* Worst first: a missing arrival before a few seconds of drift. */
+    differences: differences.sort(
+      (a, b) =>
+        (a.kind === "only-nakula" ? 0 : a.kind === "only-device" ? 1 : 2) -
+          (b.kind === "only-nakula" ? 0 : b.kind === "only-device" ? 1 : 2) ||
+        (b.seconds ?? 0) - (a.seconds ?? 0)
+    ),
+  };
+}
+
 export const monitoringTapRoutes = new Elysia({
   prefix: "/monitoring-tap",
   tags: ["monitoring-tap"],
@@ -195,5 +316,27 @@ export const monitoringTapRoutes = new Elysia({
         q: t.Optional(t.String()),
       }),
       detail: { summary: "The same taps, as a workbook" },
+    }
+  )
+
+  .get(
+    "/compare",
+    async ({ query }) =>
+      compareOn(
+        query.date ?? new Date().toISOString().slice(0, 10),
+        query.shift ?? "day"
+      ),
+    {
+      auth: { menu: "monitoring-tap", mode: "view" },
+      query: t.Object({
+        date: t.Optional(t.String()),
+        shift: t.Optional(t.Union([t.Literal("day"), t.Literal("night")])),
+      }),
+      response: {
+        200: TapCompareSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Where the old source and the new one disagree" },
     }
   );

@@ -150,3 +150,127 @@ describe("who may look", () => {
     expect((await list(outsider)).status).toBe(403);
   });
 });
+
+describe("where the two sources disagree", () => {
+  /* Borrowed from the register rather than invented: the comparison is scoped
+     to it, so a made-up person would simply not appear and every assertion
+     would pass without testing anything. */
+  let NIK_A = "";
+  let NIK_B = "";
+
+  const compare = async (cookie: string, shift: "day" | "night" = "day") => {
+    const response = await app.handle(
+      new Request(
+        `http://localhost/monitoring-tap/compare?date=${DATE}&shift=${shift}`,
+        { headers: { cookie } }
+      )
+    );
+    return (await response.json()) as {
+      matched: number;
+      onlyNakula: number;
+      onlyDevice: number;
+      drift: number;
+      differences: { nik: string; kind: string; seconds: number | null }[];
+    };
+  };
+
+  beforeAll(async () => {
+    const rows = await db
+      .select({ nik: schema.employees.nik })
+      .from(schema.employees)
+      .where(eq(schema.employees.status, "aktif"))
+      .limit(2);
+    NIK_A = rows[0]?.nik ?? "";
+    NIK_B = rows[1]?.nik ?? "";
+    expect(NIK_A).not.toBe("");
+    expect(NIK_B).not.toBe("");
+  });
+
+  beforeEach(async () => {
+    await db
+      .delete(schema.fingerReadings)
+      .where(inArray(schema.fingerReadings.nik, [NIK_A, NIK_B]));
+    await db
+      .delete(schema.derivedReadings)
+      .where(inArray(schema.derivedReadings.nik, [NIK_A, NIK_B]));
+  });
+
+  afterAll(async () => {
+    await db
+      .delete(schema.fingerReadings)
+      .where(inArray(schema.fingerReadings.nik, [NIK_A, NIK_B]));
+    await db
+      .delete(schema.derivedReadings)
+      .where(inArray(schema.derivedReadings.nik, [NIK_A, NIK_B]));
+  });
+
+  const nakulaSaw = (nik: string, at: string) =>
+    db.insert(schema.fingerReadings).values({ nik, date: DATE, firstInAt: at });
+  const deviceSaw = (nik: string, at: string) =>
+    db
+      .insert(schema.derivedReadings)
+      .values({ nik, date: DATE, firstInAt: at });
+
+  test("the same moment from both is a match, not a difference", async () => {
+    await nakulaSaw(NIK_A, `${DATE} 04:10:00`);
+    await deviceSaw(NIK_A, `${DATE} 04:10:00`);
+
+    const r = await compare(watcher);
+
+    expect(r.matched).toBeGreaterThanOrEqual(1);
+    expect(r.differences.find((d) => d.nik === NIK_A)).toBeUndefined();
+  });
+
+  /* The one that costs somebody a unit. It sorts first for that reason. */
+  test("an arrival the old source saw and the new one missed is reported first", async () => {
+    await nakulaSaw(NIK_A, `${DATE} 04:10:00`);
+    await deviceSaw(NIK_B, `${DATE} 04:20:00`);
+
+    const r = await compare(watcher);
+
+    expect(r.onlyNakula).toBe(1);
+    expect(r.onlyDevice).toBe(1);
+    expect(r.differences[0]!.kind).toBe("only-nakula");
+  });
+
+  test("two moments that differ are drift, measured in seconds", async () => {
+    await nakulaSaw(NIK_A, `${DATE} 04:10:00`);
+    await deviceSaw(NIK_A, `${DATE} 04:10:12`);
+
+    const r = await compare(watcher);
+    const row = r.differences.find((d) => d.nik === NIK_A)!;
+
+    expect(row.kind).toBe("drift");
+    expect(row.seconds).toBe(12);
+  });
+
+  /*
+   * Collection runs inside the muster window and nowhere else, so after a
+   * night run the morning column is empty by design. Comparing the wrong
+   * column would report every morning arrival as a missing one.
+   */
+  test("a night comparison reads the night column, not the morning one", async () => {
+    await nakulaSaw(NIK_A, `${DATE} 04:10:00`);
+
+    const night = await compare(watcher, "night");
+
+    expect(night.onlyNakula).toBe(0);
+    expect(night.differences.find((d) => d.nik === NIK_A)).toBeUndefined();
+  });
+
+  /* Nakula's table is the whole site's, ours is the register's. Without this
+     scope the new source looks like it lost a thousand people on day one. */
+  test("somebody outside the register is not a difference", async () => {
+    await db
+      .insert(schema.fingerReadings)
+      .values({ nik: "779999999", date: DATE, firstInAt: `${DATE} 04:10:00` });
+
+    const r = await compare(watcher);
+
+    expect(r.differences.find((d) => d.nik === "779999999")).toBeUndefined();
+
+    await db
+      .delete(schema.fingerReadings)
+      .where(eq(schema.fingerReadings.nik, "779999999"));
+  });
+});

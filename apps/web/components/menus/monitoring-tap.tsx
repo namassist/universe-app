@@ -6,7 +6,10 @@ import { Download, Fingerprint } from "lucide-react";
 
 import { MENU_LABELS } from "@/lib/access";
 import { fetchBlob } from "@/lib/api";
-import { tapMonitorQueryOptions } from "@/lib/queries/monitoring-tap";
+import {
+  tapCompareQueryOptions,
+  tapMonitorQueryOptions,
+} from "@/lib/queries/monitoring-tap";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +22,7 @@ import {
   ToolbarGroup,
 } from "@/components/ui/panel";
 import { SearchInput } from "@/components/ui/search-input";
+import { Segmented, SegmentedButton } from "@/components/ui/segmented";
 import { StateBox } from "@/components/ui/state-box";
 import {
   Table,
@@ -60,6 +64,16 @@ export function MonitoringTapMenu() {
   const data = listQ.data;
   const rows = data?.rows ?? [];
 
+  const [view, setView] = React.useState<"taps" | "compare">("taps");
+  const [shift, setShift] = React.useState<"day" | "night">(
+    new Date().getHours() >= 16 || new Date().getHours() < 4 ? "night" : "day"
+  );
+  const compareQ = useQuery({
+    ...tapCompareQueryOptions(date, shift),
+    enabled: view === "compare",
+  });
+  const cmp = compareQ.data;
+
   const [exporting, setExporting] = React.useState(false);
 
   async function exportExcel() {
@@ -99,6 +113,21 @@ export function MonitoringTapMenu() {
       <Panel>
         <Toolbar>
           <ToolbarGroup>
+            <Segmented role="group" aria-label="Tampilan">
+              <SegmentedButton
+                active={view === "taps"}
+                onClick={() => setView("taps")}
+              >
+                Tap mentah
+              </SegmentedButton>
+              {/* Only while both sources run. It goes when Nakula does. */}
+              <SegmentedButton
+                active={view === "compare"}
+                onClick={() => setView("compare")}
+              >
+                Banding sumber
+              </SegmentedButton>
+            </Segmented>
             <Input
               type="date"
               value={date}
@@ -106,8 +135,24 @@ export function MonitoringTapMenu() {
               onChange={(e) => setDate(e.target.value || today())}
               className="w-[170px]"
             />
+            {view === "compare" ? (
+              <Segmented role="group" aria-label="Shift">
+                <SegmentedButton
+                  active={shift === "day"}
+                  onClick={() => setShift("day")}
+                >
+                  Pagi
+                </SegmentedButton>
+                <SegmentedButton
+                  active={shift === "night"}
+                  onClick={() => setShift("night")}
+                >
+                  Malam
+                </SegmentedButton>
+              </Segmented>
+            ) : null}
             <SearchInput
-              className="w-[240px]"
+              className={cn("w-[240px]", view === "compare" && "hidden")}
               placeholder="NIK, nama, atau mesin"
               aria-label="Cari tap"
               value={typed}
@@ -119,7 +164,7 @@ export function MonitoringTapMenu() {
             <Button
               variant="ghost"
               onClick={exportExcel}
-              disabled={exporting || rows.length === 0}
+              disabled={exporting || rows.length === 0 || view === "compare"}
             >
               <Download />
               Export Excel
@@ -127,7 +172,9 @@ export function MonitoringTapMenu() {
           </ToolbarGroup>
         </Toolbar>
 
-        {rows.length === 0 ? (
+        {view === "compare" ? (
+          <CompareView data={cmp} loading={compareQ.isLoading} />
+        ) : rows.length === 0 ? (
           <StateBox
             icon={<Fingerprint className="text-(--text-tertiary)" />}
             title="Belum ada tap"
@@ -189,12 +236,118 @@ export function MonitoringTapMenu() {
           {/* Counted over the whole day rather than the page, so searching does
               not appear to change how busy the morning was. */}
           <FootSum>
-            {data
-              ? `${data.taps} tap · ${data.people} orang · ${data.machines} mesin`
-              : ""}
+            {view === "compare"
+              ? cmp
+                ? `${cmp.matched} cocok · ${cmp.onlyNakula} hanya di ShiftCorner · ${cmp.onlyDevice} hanya di mesin · ${cmp.drift} beda jam`
+                : ""
+              : data
+                ? `${data.taps} tap · ${data.people} orang · ${data.machines} mesin`
+                : ""}
           </FootSum>
         </PanelFoot>
       </Panel>
     </div>
+  );
+}
+
+/**
+ * The parallel run, as a supervisor reads it.
+ *
+ * Only `only-nakula` really matters. It means the system being replaced saw an
+ * arrival and the new one did not — which in production is an operator losing
+ * their unit while standing at a sensor. It is listed first for that reason,
+ * and it is the one number that has to be zero before anything switches over.
+ *
+ * `only-device` is the mirror and is not dangerous, but every one of them is
+ * still worth explaining. Drift of a few seconds between two systems pulling
+ * at different moments is expected.
+ */
+function CompareView({
+  data,
+  loading,
+}: {
+  data:
+    | {
+        matched: number;
+        onlyNakula: number;
+        onlyDevice: number;
+        drift: number;
+        differences: {
+          nik: string;
+          name: string;
+          kind: "only-nakula" | "only-device" | "drift";
+          nakula: string | null;
+          device: string | null;
+          seconds: number | null;
+        }[];
+      }
+    | undefined;
+  loading: boolean;
+}) {
+  if (!data)
+    return (
+      <StateBox
+        icon={<Fingerprint className="text-(--text-tertiary)" />}
+        title={loading ? "Memuat…" : "Belum ada data"}
+        body="Perbandingan butuh kedua sumber sudah menarik data pada tanggal dan shift ini."
+      />
+    );
+
+  if (data.differences.length === 0)
+    return (
+      <StateBox
+        icon={<Fingerprint className="text-(--badge-success-text)" />}
+        title="Kedua sumber sepakat"
+        body={`${data.matched} operator, jam masuk sama persis. Tidak ada selisih.`}
+      />
+    );
+
+  const label = {
+    "only-nakula": "Hanya ShiftCorner",
+    "only-device": "Hanya mesin",
+    drift: "Beda jam",
+  } as const;
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>NIK</TableHead>
+          <TableHead>Nama</TableHead>
+          <TableHead>Selisih</TableHead>
+          <TableHead>ShiftCorner</TableHead>
+          <TableHead>Dari mesin</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.differences.map((d) => (
+          <TableRow key={d.nik}>
+            <TableCell className="font-mono tabular-nums">{d.nik}</TableCell>
+            <TableCell>{d.name}</TableCell>
+            <TableCell>
+              <span
+                className={cn(
+                  "rounded-chip px-2 py-0.5 text-[11px] font-semibold",
+                  d.kind === "only-nakula"
+                    ? "bg-[rgba(252,60,59,.12)] text-(--color-danger)"
+                    : d.kind === "only-device"
+                      ? "bg-[rgba(240,160,32,.12)] text-(--badge-warning-text)"
+                      : "bg-(--fill-subtle) text-(--text-secondary)"
+                )}
+              >
+                {label[d.kind]}
+                {d.seconds !== null ? ` · ${d.seconds} dtk` : ""}
+              </span>
+            </TableCell>
+            <TableCell className="font-mono tabular-nums">
+              {d.nakula?.slice(11, 19) ?? "—"}
+            </TableCell>
+            <TableCell className="font-mono tabular-nums">
+              {d.device?.slice(11, 19) ?? "—"}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
