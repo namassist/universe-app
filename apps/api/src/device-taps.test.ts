@@ -218,3 +218,63 @@ describe("which taps are kept", () => {
     expect(pulled).not.toContain(ip);
   });
 });
+
+/**
+ * What one bad machine is allowed to cost.
+ *
+ * Both of these are regressions from the morning of 2026-09-12, when
+ * collection ran for twenty-six seconds and then stopped without a word. Two
+ * machines' taps had landed; the other seventeen never did, the derived
+ * readings were never rebuilt, and the three-day sweep never ran — and nothing
+ * looked wrong, because the board still reads the Nakula readings.
+ */
+describe("a pass that meets trouble", () => {
+  /*
+   * Postgres binds at most 65,535 parameters per statement and a tap costs
+   * five, so a single insert tops out at 13,106 rows. A machine replays its
+   * entire log on every pull — 73,613 records on the largest here — so this is
+   * not an edge case, it is every morning on a busy machine. Unchunked it
+   * raised MAX_PARAMETERS_EXCEEDED before writing anything at all.
+   */
+  test("a machine holding more taps than one statement can bind is stored whole", async () => {
+    const ip = await addMachine(`10.98.${uid().slice(0, 2)}.1`);
+    /* Inside the three-day window the pass sweeps, and stepped by five seconds
+       so fourteen thousand of them still fit in it. Dated any older, the sweep
+       removes them again and the test measures the wrong thing. */
+    const base = Date.now() - 6 * 60 * 60 * 1000;
+    const wallClock = (ms: number) => {
+      const d = new Date(ms);
+      const p2 = (n: number) => String(n).padStart(2, "0");
+      return (
+        `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ` +
+        `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`
+      );
+    };
+    const taps = Array.from({ length: 14_000 }, (_, i) =>
+      tap(known, wallClock(base + i * 5_000))
+    );
+
+    const result = await collectOnce(fake({ [ip]: { count: 1, taps } }).client);
+
+    expect(result.stored).toBe(14_000);
+    expect(await storedFor(ip)).toHaveLength(14_000);
+  });
+
+  test("a machine that raises does not stop the ones beside it", async () => {
+    const bad = await addMachine(`10.99.${uid().slice(0, 2)}.1`);
+    const good = await addMachine(`10.99.${uid().slice(0, 2)}.2`);
+    const client: DeviceClient = {
+      count: async () => 5,
+      taps: async (ip) => {
+        if (ip === bad) throw new Error("mesin ini meledak");
+        return [tap(known, "2026-09-11 04:12:00")];
+      },
+    };
+
+    const result = await collectOnce(client);
+
+    expect(result.failed).toBe(1);
+    expect(await storedFor(bad)).toHaveLength(0);
+    expect(await storedFor(good)).toHaveLength(1);
+  });
+});

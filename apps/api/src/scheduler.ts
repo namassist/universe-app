@@ -305,21 +305,34 @@ async function runCollection(endsAt: Date): Promise<void> {
   try {
     await reportLogSizes("start");
     for (;;) {
-      const pass = await collectOnce();
-      if (pass.stored) {
-        /* Rebuilt from the taps rather than amended, and only when new ones
-           landed. The rows are a view of the taps, so re-running is how a late
-           pull or a manual sync reaches the reading without anything having to
-           merge two partial answers. */
-        const rebuilt = await deriveDate(localDate(new Date()));
-        console.log(`[taps] ${rebuilt} bacaan diturunkan ulang`);
+      /*
+       * A failed pass costs one pass, not the window.
+       *
+       * This used to sit outside the loop, so the first thing to raise ended
+       * collection for the rest of the muster — silently, because the board
+       * reads `finger_readings` and nothing there looks any different. On
+       * 2026-09-12 that turned one oversized insert into a morning with
+       * thirty-eight taps in it.
+       */
+      try {
+        const pass = await collectOnce();
+        if (pass.stored) {
+          /* Rebuilt from the taps rather than amended, and only when new ones
+             landed. The rows are a view of the taps, so re-running is how a
+             late pull or a manual sync reaches the reading without anything
+             having to merge two partial answers. */
+          const rebuilt = await deriveDate(localDate(new Date()));
+          console.log(`[taps] ${rebuilt} bacaan diturunkan ulang`);
+        }
+        if (pass.pulled || pass.unreachable || pass.failed)
+          console.log(
+            `[taps] ${pass.asked} mesin ditanya, ${pass.pulled} ditarik, ` +
+              `${pass.stored} tap baru, ${pass.unknownNik} NIK tak dikenal, ` +
+              `${pass.unreachable} tidak menjawab, ${pass.failed} gagal`
+          );
+      } catch (error) {
+        console.error("[taps] satu pass gagal, jendela diteruskan", error);
       }
-      if (pass.pulled || pass.unreachable)
-        console.log(
-          `[taps] ${pass.asked} mesin ditanya, ${pass.pulled} ditarik, ` +
-            `${pass.stored} tap baru, ${pass.unknownNik} NIK tak dikenal, ` +
-            `${pass.unreachable} tidak menjawab`
-        );
       if (Date.now() + everyMs > endsAt.getTime()) break;
       await new Promise((r) => setTimeout(r, everyMs));
     }

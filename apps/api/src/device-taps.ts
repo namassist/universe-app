@@ -56,7 +56,31 @@ export type CollectResult = {
   unknownNik: number;
   /** Machines that would not say how many records they hold. */
   unreachable: number;
+  /** Machines whose pull or store raised — counted, never fatal to the pass. */
+  failed: number;
 };
+
+/**
+ * Rows per insert.
+ *
+ * Postgres binds at most 65,535 parameters per statement, and a tap costs five
+ * of them. A machine replays its whole log on every pull, so a machine holding
+ * 73,613 records hands us far more registered taps than one statement can
+ * carry — and the failure is not a slow query, it is `MAX_PARAMETERS_EXCEEDED`
+ * thrown before anything is written. Measured 2026-09-12: it killed the
+ * morning's collection after a single partial pass.
+ *
+ * 5,000 leaves room for a column to be added without this having to be
+ * re-derived.
+ */
+const INSERT_CHUNK = 5_000;
+
+function chunks<T>(rows: T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK)
+    out.push(rows.slice(i, i + INSERT_CHUNK));
+  return out;
+}
 
 /**
  * How long a tap is worth keeping here.
@@ -118,6 +142,7 @@ export async function collectOnce(
     stored: 0,
     unknownNik: 0,
     unreachable: 0,
+    failed: 0,
   };
   if (!machines.length) return result;
 
@@ -132,50 +157,68 @@ export async function collectOnce(
   /* Bounded, like the prober's: fifty-eight connects at once was measured to
      push the slower machines past their own timeout. */
   await mapPooled(machines, env.PROBE_CONCURRENCY, async (machine) => {
-    const count = await client.count(machine.ip);
-    if (count === null) {
-      /* A machine that will not answer is skipped, never fatal: the other
-         thirty-two are still this morning's attendance. Its own count is left
-         alone so the next pass tries again rather than assuming. */
-      result.unreachable += 1;
-      return;
-    }
-
-    const before = lastCount.get(machine.ip);
-    if (before !== undefined && count <= before) return;
-
-    const taps = await client.taps(machine.ip, machine.comKey, machine.port);
-    result.pulled += 1;
-    /* Recorded after the pull, not before: a pull that failed must not leave
-       us believing we already have what it was holding. */
-    lastCount.set(machine.ip, count);
-
-    const keep = taps.flatMap((tap) => {
-      const nik = normalizeNik(tap.nik);
-      if (!nik || !registered.has(nik)) {
-        result.unknownNik += 1;
-        return [];
+    try {
+      const count = await client.count(machine.ip);
+      if (count === null) {
+        /* A machine that will not answer is skipped, never fatal: the other
+           thirty-two are still this morning's attendance. Its own count is left
+           alone so the next pass tries again rather than assuming. */
+        result.unreachable += 1;
+        return;
       }
-      return [
-        {
-          ip: machine.ip,
-          nik,
-          at: tap.at,
-          direction: tap.direction,
-          verified: tap.verified,
-        },
-      ];
-    });
-    if (!keep.length) return;
 
-    /* Every pull replays the machine's whole log, so the conflict is the
-       normal case rather than the exception. */
-    const written = await db
-      .insert(schema.deviceTaps)
-      .values(keep)
-      .onConflictDoNothing()
-      .returning({ id: schema.deviceTaps.id });
-    result.stored += written.length;
+      const before = lastCount.get(machine.ip);
+      if (before !== undefined && count <= before) return;
+
+      const taps = await client.taps(machine.ip, machine.comKey, machine.port);
+      result.pulled += 1;
+      /* Recorded after the pull, not before: a pull that failed must not leave
+         us believing we already have what it was holding. */
+      lastCount.set(machine.ip, count);
+
+      const keep = taps.flatMap((tap) => {
+        const nik = normalizeNik(tap.nik);
+        if (!nik || !registered.has(nik)) {
+          result.unknownNik += 1;
+          return [];
+        }
+        return [
+          {
+            ip: machine.ip,
+            nik,
+            at: tap.at,
+            direction: tap.direction,
+            verified: tap.verified,
+          },
+        ];
+      });
+      if (!keep.length) return;
+
+      /* Every pull replays the machine's whole log, so the conflict is the
+         normal case rather than the exception — and the log is why this is
+         chunked: one statement cannot bind a whole machine's history. */
+      for (const slice of chunks(keep)) {
+        const written = await db
+          .insert(schema.deviceTaps)
+          .values(slice)
+          .onConflictDoNothing()
+          .returning({ id: schema.deviceTaps.id });
+        result.stored += written.length;
+      }
+    } catch (error) {
+      /*
+       * One machine cannot end the muster's collection.
+       *
+       * Before this, anything raised here rejected the pool, which threw out
+       * of the pass, which ended the whole collection window — so a single
+       * machine took the other nineteen down with it and the morning
+       * collected nothing more. Counted and logged instead; the next pass is
+       * thirty seconds away and its count was deliberately not recorded, so
+       * that pass pulls it again.
+       */
+      result.failed += 1;
+      console.error(`[taps] ${machine.ip} gagal pada pass ini`, error);
+    }
   });
 
   /* Swept here rather than on a schedule of its own: collection already runs
