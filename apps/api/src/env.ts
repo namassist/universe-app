@@ -185,6 +185,17 @@ export const env = {
    *  TV, and two still surfaces a real outage inside a couple of minutes. */
   PROBE_MISSES_BEFORE_OFFLINE: number("PROBE_MISSES_BEFORE_OFFLINE", "2"),
 
+  /** How often a collecting pass asks each machine whether its log has grown.
+   *  Sixty to begin with; fifteen to thirty is the target once the behaviour
+   *  is seen in the field. The cheap question runs at this rate — the
+   *  expensive pull only when the answer moved. */
+  DEVICE_COLLECT_SECONDS: number("DEVICE_COLLECT_SECONDS", "60"),
+  /** How long collecting keeps running past `bus-depart`, so somebody who taps
+   *  after the bus still reaches the attendance screen. They are past the
+   *  deadline and will get no unit either way; this is about the record being
+   *  honest, not about the board. */
+  DEVICE_COLLECT_GRACE_MINUTES: number("DEVICE_COLLECT_GRACE_MINUTES", "30"),
+
   /** Where a roster upload waits between its preview and its commit (D8).
    *
    *  Explicit like the two above, and the least precious of the three: nothing

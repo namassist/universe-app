@@ -104,6 +104,7 @@ const TimelineActionUnion = t.Union([
 const NotificationKindUnion = t.Union([
   t.Literal("allocation-generated"),
   t.Literal("allocation-failed"),
+  t.Literal("device-log-sizes"),
 ]);
 
 const NotificationToneUnion = t.Union([
@@ -1289,6 +1290,15 @@ export const FingerprintMachineSchema = t.Object({
   /** IPv4 host address — the prober's target, and the machine's identity. */
   ip: t.String(),
   active: t.Boolean(),
+  /**
+   * Whether this machine stands in the operator booth — which is what decides
+   * whether taps are collected from it. Named after the physical fact, so a
+   * machine in the booth and not ticked reads as wrong on the screen.
+   */
+  operatorBooth: t.Boolean(),
+  /** The communication key and SOAP port, per machine rather than assumed. */
+  comKey: t.Integer(),
+  port: t.Integer(),
   /** Last probe verdict, after the miss-count debounce. */
   online: t.Boolean(),
   /** Last probe that reached the machine; null until one ever has. */

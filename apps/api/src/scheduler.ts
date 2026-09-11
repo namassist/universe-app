@@ -34,7 +34,8 @@ import { runIngestWindow, type IngestKind } from "./ingest";
 import { notify } from "./notify";
 import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
-import { pullClosesAt } from "./stage-time";
+import { pullClosesAt, stageTimeOf } from "./stage-time";
+import { collectOnce, reportLogSizes } from "./device-taps";
 import { redis } from "./redis";
 
 /** One tick per minute: the schedule is specified to the minute. */
@@ -247,10 +248,82 @@ const allocate: Hook = async (dispatch) => {
   }
 };
 
+/**
+ * ── Collecting taps from the fingerprint machines. ────────────────────────
+ *
+ * Opens at the changeover and runs until `bus-depart` plus a grace period, and
+ * **at no other time**. That bound is the strongest of the guarantees around
+ * this feature: for the other twenty-one hours nothing of ours opens a
+ * conversation with a machine at all. The prober keeps knocking, but a knock
+ * is a TCP connect and a close — it never speaks the protocol and cannot read
+ * or delete a record.
+ *
+ * The size of every machine's log is reported at both ends of that window, so
+ * a log that shrank in between is visible by comparing two notifications
+ * rather than by watching all day.
+ *
+ * Detached, like the ingest windows, and for the same reason: a collection that
+ * runs for two hours must not hold this tick's loop.
+ */
+const collect: Hook = async (dispatch) => {
+  const shift = dispatch.stage.shift;
+  if (!shift)
+    return record(
+      dispatch,
+      "stage carries no shift — cannot tell which muster to collect for"
+    );
+
+  const closes = await stageTimeOf("bus-depart", shift);
+  if (!closes)
+    return record(
+      dispatch,
+      `no active bus-depart stage for the ${shift} shift — nothing says when collecting should stop, and collecting without an end is the one thing this must not do`
+    );
+
+  const endsAt = new Date();
+  const [hours = "0", minutes = "0"] = closes.split(":");
+  endsAt.setHours(Number(hours), Number(minutes), 0, 0);
+  endsAt.setMinutes(endsAt.getMinutes() + env.DEVICE_COLLECT_GRACE_MINUTES);
+
+  record(
+    dispatch,
+    `collecting taps until ${timeOfDay(endsAt)}, asking every ${env.DEVICE_COLLECT_SECONDS}s`
+  );
+  void runCollection(endsAt);
+};
+
+/**
+ * Ask, pull what grew, sleep, repeat — until the window closes.
+ *
+ * Reports the log sizes at both ends. The opening report is taken before the
+ * first pass so it describes the machines as we found them, not as we left
+ * them.
+ */
+async function runCollection(endsAt: Date): Promise<void> {
+  const everyMs = env.DEVICE_COLLECT_SECONDS * 1000;
+  try {
+    await reportLogSizes("start");
+    for (;;) {
+      const pass = await collectOnce();
+      if (pass.pulled || pass.unreachable)
+        console.log(
+          `[taps] ${pass.asked} mesin ditanya, ${pass.pulled} ditarik, ` +
+            `${pass.stored} tap baru, ${pass.unknownNik} NIK tak dikenal, ` +
+            `${pass.unreachable} tidak menjawab`
+        );
+      if (Date.now() + everyMs > endsAt.getTime()) break;
+      await new Promise((r) => setTimeout(r, everyMs));
+    }
+    await reportLogSizes("end");
+  } catch (error) {
+    console.error("[taps] collection window failed", error);
+  }
+}
+
 const HOOKS: Record<TimelineAction, Hook> = {
-  // Fires nothing. Its time is read by `shiftGates` for the walls; the dispatch
-  // exists so the log records that the changeover moment passed.
-  "shift-start": marker,
+  /* The changeover, and now also when collecting begins. Its time is read by
+     `shiftGates` for the walls as it always was. */
+  "shift-start": collect,
   "ftw-deadline": marker,
   "finger-in": marker,
   /* Nothing attached yet: it names the tap that collects a printed ticket, and

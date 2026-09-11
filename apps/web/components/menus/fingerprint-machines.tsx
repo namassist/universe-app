@@ -82,6 +82,9 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
   const [fName, setFName] = React.useState("");
   const [fIp, setFIp] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
+  const [fBooth, setFBooth] = React.useState(false);
+  const [fComKey, setFComKey] = React.useState("0");
+  const [fPort, setFPort] = React.useState("80");
   const [errName, setErrName] = React.useState(false);
   const [errIp, setErrIp] = React.useState(false);
   const [delTarget, setDelTarget] =
@@ -96,8 +99,18 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
       name: string;
       ip: string;
       active: boolean;
+      operatorBooth: boolean;
+      comKey: number;
+      port: number;
     }) => {
-      const body = { name: input.name, ip: input.ip, active: input.active };
+      const body = {
+        name: input.name,
+        ip: input.ip,
+        active: input.active,
+        operatorBooth: input.operatorBooth,
+        comKey: input.comKey,
+        port: input.port,
+      };
       const result = input.id
         ? await api.v1["fingerprint-machines"]({ id: input.id }).patch(body)
         : await api.v1["fingerprint-machines"].post(body);
@@ -150,6 +163,9 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     setFName("");
     setFIp("");
     setFActive(true);
+    setFBooth(false);
+    setFComKey("0");
+    setFPort("80");
     setErrName(false);
     setErrIp(false);
     setDlgOpen(true);
@@ -159,6 +175,9 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     setFName(r.name);
     setFIp(r.ip);
     setFActive(r.active);
+    setFBooth(r.operatorBooth);
+    setFComKey(String(r.comKey));
+    setFPort(String(r.port));
     setErrName(false);
     setErrIp(false);
     setDlgOpen(true);
@@ -172,7 +191,17 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     setErrName(badName);
     setErrIp(badIp);
     if (badName || badIp) return;
-    save.mutate({ id: editing?.id ?? null, name, ip, active: fActive });
+    save.mutate({
+      id: editing?.id ?? null,
+      name,
+      ip,
+      active: fActive,
+      operatorBooth: fBooth,
+      /* Blank reads as the factory value rather than as an error: somebody
+         clearing the box means "the usual one", not "no key at all". */
+      comKey: Number(fComKey) || 0,
+      port: Number(fPort) || 80,
+    });
   }
 
   return (
@@ -350,6 +379,46 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           </ToggleRow>
           <p className="mt-2 text-xs text-(--text-tertiary)">
             {t.mfNonaktifNote}
+          </p>
+
+          {/* Asked as a fact about where the machine stands, not as a setting
+              about what the software does with it. Somebody who knows the yard
+              can answer it; nobody has to know that it decides which machines
+              taps are collected from. */}
+          <ToggleRow className="mt-4" htmlFor="mf-booth">
+            <Checkbox
+              id="mf-booth"
+              checked={fBooth}
+              onChange={(e) => setFBooth(e.target.checked)}
+            />
+            Mesin bilik operator
+          </ToggleRow>
+          <p className="mt-2 text-xs text-(--text-tertiary)">
+            Absensi operator ditarik dari mesin yang ditandai ini. Mesin di luar
+            bilik operator tetap dipantau hidup/matinya, tapi tidak ditarik
+            datanya.
+          </p>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Field label="Com Key" htmlFor="mf-comkey">
+              <Input
+                id="mf-comkey"
+                inputMode="numeric"
+                value={fComKey}
+                onChange={(e) => setFComKey(e.target.value)}
+              />
+            </Field>
+            <Field label="Port" htmlFor="mf-port">
+              <Input
+                id="mf-port"
+                inputMode="numeric"
+                value={fPort}
+                onChange={(e) => setFPort(e.target.value)}
+              />
+            </Field>
+          </div>
+          <p className="mt-2 text-xs text-(--text-tertiary)">
+            Biarkan 0 dan 80 kecuali mesin ini memang disetel lain.
           </p>
           <DialogActions>
             <Button

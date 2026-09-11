@@ -253,6 +253,13 @@
       "when": 1789098698298,
       "tag": "0035_common_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1789099630027,
+      "tag": "0036_silky_fenris",
+      "breakpoints": true
     }
   ]
 }

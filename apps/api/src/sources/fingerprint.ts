@@ -31,9 +31,25 @@
  * When somebody asks what we did to a machine at 11:42, the answer is a list.
  */
 
+/* eslint-disable-next-line @typescript-eslint/triple-slash-reference --
+   the rule's advice is to use `import` instead, and an ambient module
+   declaration is the one thing that cannot be imported: nothing exports it.
+   See the note below for why this reference has to be here at all. */
+/// <reference path="./node-zklib.d.ts" />
 import ZKLib from "node-zklib";
 
 import { recordDeviceRequest } from "../device-log";
+
+/*
+ * The reference above is load-bearing, not decoration.
+ *
+ * `node-zklib` ships no types, so `node-zklib.d.ts` beside this file supplies
+ * them — narrowed to the three calls we may make, which is the third guard on
+ * the read-only promise. A declaration file is not reached by an `import`, so
+ * a compilation that pulls this module in without also including that file
+ * fails on an implicit `any`. The web app is such a compilation: Eden Treaty
+ * gives it the API's types, and with them this file.
+ */
 
 /** What the machine's SOAP endpoint is called. Fixed in firmware. */
 const SOAP_PATH = "/iWsService";

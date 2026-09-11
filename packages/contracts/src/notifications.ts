@@ -18,6 +18,7 @@
 export const NOTIFICATION_KINDS = [
   "allocation-generated",
   "allocation-failed",
+  "device-log-sizes",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -50,3 +51,16 @@ export type AllocationFailure = (typeof ALLOCATION_FAILURES)[number];
 export function isAllocationFailure(value: string): value is AllocationFailure {
   return (ALLOCATION_FAILURES as readonly string[]).includes(value);
 }
+
+/**
+ * Which end of the muster a machine-size report describes.
+ *
+ * The machines are shared, and other services' record of the site's attendance
+ * depends on their logs surviving. Reporting how much each machine was holding
+ * when our collection started, and again when it stopped, is how a count that
+ * fell in between becomes visible without watching continuously — and how the
+ * question "what did you do to this machine" is answered with numbers from
+ * both ends rather than a denial.
+ */
+export const DEVICE_REPORT_MOMENTS = ["start", "end"] as const;
+export type DeviceReportMoment = (typeof DEVICE_REPORT_MOMENTS)[number];

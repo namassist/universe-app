@@ -243,6 +243,35 @@ export const fingerprintMachines = pgTable("fingerprint_machines", {
   name: text("name").notNull(),
   ip: text("ip").notNull().unique(),
   active: boolean("active").notNull().default(true),
+  /**
+   * Whether this machine stands in the operator booth.
+   *
+   * Named after the physical fact rather than its effect — it decides which
+   * machines we pull taps from, but calling it "sync this one" would invite
+   * somebody to untick it to save something, and nothing on the screen would
+   * look wrong afterwards. A machine standing in the booth and not ticked is
+   * visibly wrong to anyone reading the list.
+   *
+   * The cost of getting it wrong is measured: operators used 33 machines in a
+   * month, and pulling only the busiest 16 would have missed 425 taps — about
+   * fourteen people a day marked absent while standing at a sensor. So the
+   * column was seeded from what operators actually did, not from a list
+   * somebody typed.
+   *
+   * Every machine stays registered whatever this says: monitoring still covers
+   * the whole site, and only collection is narrowed.
+   */
+  operatorBooth: boolean("operator_booth").notNull().default(false),
+  /**
+   * The machine's communication key, and the port its SOAP endpoint answers on.
+   *
+   * Defaults are the factory ones, which is what the development machine
+   * answers to. Stored per machine because the reference implementation stores
+   * them per machine — discovering in production that one differs is the
+   * expensive way to learn it.
+   */
+  comKey: integer("com_key").notNull().default(0),
+  port: integer("port").notNull().default(80),
   /* ---- written by the prober, read by the wall ---- */
   /** Last probe verdict, after the miss-count debounce. */
   online: boolean("online").notNull().default(false),
@@ -1496,4 +1525,61 @@ export const deviceRequests = pgTable(
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("device_requests_at_idx").on(table.at)]
+);
+
+export const tapDirection = pgEnum("tap_direction", ["in", "out"]);
+
+/**
+ * Taps as the machines recorded them, before anything is decided about them.
+ *
+ * Until now the raw log lived in Nakula and we kept only the reduction — first
+ * IN, first OUT, one row a person a day. That made two things impossible: a
+ * supervisor could not ask "did he tap at all, and where", and a reduction rule
+ * that turned out wrong could not be re-run without re-reading somebody else's
+ * database. Keeping the taps makes `finger_readings` a *derivation* rather than
+ * the only copy.
+ *
+ * **Unique on (ip, nik, at), because every pull replays the whole log.** The
+ * machines are never cleared and offer no way to ask for a range, so idempotence
+ * is not an optimisation here — it is the only thing standing between one
+ * morning and thirty copies of it.
+ *
+ * **Only NIKs in our register** (owner). The machines carry 2,930 enrolled
+ * people against our 989, and the rest are not ours to store. A tap from
+ * somebody registered afterwards is recovered by the manual sync, which re-reads
+ * a log the machine still holds.
+ *
+ * Three days. The machines hold months and remain the archive; this is a window
+ * for watching a muster, not a record of the site's attendance.
+ */
+export const deviceTaps = pgTable(
+  "device_taps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Which machine, by the address it answers on. */
+    ip: text("ip").notNull(),
+    /** Normalized the same way every other source is — the join key to us. */
+    nik: text("nik").notNull(),
+    /**
+     * Local wall-clock as the machine wrote it, string mode.
+     *
+     * The machine states no zone. Reading it into a moment would bind it to
+     * whatever zone the process runs in, which is how the binary client
+     * reported an 08:29:34 tap as `00:29:34Z`. Whether this text means the
+     * site's morning is the roster's question.
+     */
+    at: timestamp("at", { mode: "string" }).notNull(),
+    /** `Status` 0 on the wire; "IN" on the machine's own screen. */
+    direction: tapDirection("direction").notNull(),
+    /** How the person was verified; 1 is a fingerprint. */
+    verified: integer("verified").notNull().default(0),
+    pulledAt: timestamp("pulled_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("device_taps_unique").on(table.ip, table.nik, table.at),
+    index("device_taps_at_idx").on(table.at),
+    index("device_taps_nik_idx").on(table.nik),
+  ]
 );

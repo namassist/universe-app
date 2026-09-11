@@ -33,6 +33,9 @@ const toMachine = (row: FingerprintMachineRow) => ({
   name: row.name,
   ip: row.ip,
   active: row.active,
+  operatorBooth: row.operatorBooth,
+  comKey: row.comKey,
+  port: row.port,
   online: row.online,
   lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
   checkedAt: row.checkedAt?.toISOString() ?? null,
@@ -151,7 +154,14 @@ export const fingerprintMachineRoutes = new Elysia({
       try {
         const [row] = await db
           .insert(schema.fingerprintMachines)
-          .values({ name, ip, active: body.active ?? true })
+          .values({
+            name,
+            ip,
+            active: body.active ?? true,
+            operatorBooth: body.operatorBooth ?? false,
+            comKey: body.comKey ?? 0,
+            port: body.port ?? 80,
+          })
           .returning();
         return status(201, toMachine(row!));
       } catch (error) {
@@ -166,6 +176,9 @@ export const fingerprintMachineRoutes = new Elysia({
         name: t.String({ minLength: 1 }),
         ip: t.String({ minLength: 1 }),
         active: t.Optional(t.Boolean()),
+        operatorBooth: t.Optional(t.Boolean()),
+        comKey: t.Optional(t.Integer({ minimum: 0 })),
+        port: t.Optional(t.Integer({ minimum: 1, maximum: 65535 })),
       }),
       response: {
         201: FingerprintMachineSchema,
@@ -204,6 +217,11 @@ export const fingerprintMachineRoutes = new Elysia({
             ...(name !== undefined ? { name } : {}),
             ...(ip !== undefined ? { ip } : {}),
             ...(body.active !== undefined ? { active: body.active } : {}),
+            ...(body.operatorBooth !== undefined
+              ? { operatorBooth: body.operatorBooth }
+              : {}),
+            ...(body.comKey !== undefined ? { comKey: body.comKey } : {}),
+            ...(body.port !== undefined ? { port: body.port } : {}),
           })
           .where(eq(schema.fingerprintMachines.id, params.id))
           .returning();
@@ -221,6 +239,9 @@ export const fingerprintMachineRoutes = new Elysia({
         name: t.Optional(t.String({ minLength: 1 })),
         ip: t.Optional(t.String({ minLength: 1 })),
         active: t.Optional(t.Boolean()),
+        operatorBooth: t.Optional(t.Boolean()),
+        comKey: t.Optional(t.Integer({ minimum: 0 })),
+        port: t.Optional(t.Integer({ minimum: 1, maximum: 65535 })),
       }),
       response: {
         200: FingerprintMachineSchema,
