@@ -1467,3 +1467,33 @@ export const notificationReads = pgTable(
     index("notification_reads_user_id_idx").on(table.userId),
   ]
 );
+
+/**
+ * Every request this application made to a fingerprint machine.
+ *
+ * The machines are shared, and their logs are other services' record of the
+ * site's attendance. If data goes missing we will be asked about it, and being
+ * the newest thing on the network is not a defence. This table is.
+ *
+ * It answers one question — *what did you do to this machine at 11:42* — with
+ * a list rather than an assurance. The list is written by the client itself,
+ * so a request cannot be made without appearing here.
+ *
+ * Deliberately not a foreign key to `fingerprint_machines`: a machine removed
+ * from the registry must not take the record of what we did to it with it.
+ * The address is the fact worth keeping.
+ */
+export const deviceRequests = pgTable(
+  "device_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ip: text("ip").notNull(),
+    /** The command sent. Only ever one that reads — see `sources/fingerprint.ts`. */
+    command: text("command").notNull(),
+    ok: boolean("ok").notNull(),
+    /** Short and safe to show: a count and a duration, or why it failed. */
+    note: text("note"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("device_requests_at_idx").on(table.at)]
+);
