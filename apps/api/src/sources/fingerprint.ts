@@ -191,9 +191,44 @@ export async function fetchLogCount(
      */
     const count = await deadline(
       (async () => {
-        await zk.createSocket();
-        const info = await zk.getInfo();
-        return typeof info?.logCounts === "number" ? info.logCounts : null;
+        /*
+         * The error callback is not optional in practice.
+         *
+         * When TCP fails with anything but a refused connection the library
+         * falls back to UDP, and a dgram socket reports failure by *emitting*
+         * an `error` event. An event with no listener is not a rejected
+         * promise — Node rethrows it as an uncaught exception, and that is how
+         * one unreachable machine took the whole API down. No `try` around
+         * this could have caught it.
+         *
+         * So we hand the library a listener and turn the event back into a
+         * rejection. The alternative — swallowing it — would leave us waiting
+         * out the full timeout for an answer already known to be lost, and
+         * would record `Error` where the log should say `EHOSTUNREACH`.
+         */
+        let reportSocketError: (error: unknown) => void = () => {};
+        const socketFailed = new Promise<never>((_, reject) => {
+          reportSocketError = (error) =>
+            reject(error instanceof Error ? error : new Error(String(error)));
+        });
+
+        const conversation = (async () => {
+          await zk.createSocket(
+            (error) => {
+              /* The library's own listener has just been spent. Re-arm before
+                 the next failure arrives, then turn this one into a
+                 rejection. */
+              keepSocketErrorsHeard(zk);
+              reportSocketError(error);
+            },
+            () => {}
+          );
+          keepSocketErrorsHeard(zk);
+          const info = await zk.getInfo();
+          return typeof info?.logCounts === "number" ? info.logCounts : null;
+        })();
+
+        return await Promise.race([conversation, socketFailed]);
       })(),
       timeoutMs
     );
@@ -216,6 +251,9 @@ export async function fetchLogCount(
     /* Always, and never allowed to throw: a socket left open on a machine that
        tolerates one conversation at a time is the next pull's failure. */
     try {
+      /* `disconnect` writes CMD_EXIT first. On a machine that has gone that
+         write fails, and this is the failure that used to be unheard. */
+      keepSocketErrorsHeard(zk);
       await zk.disconnect();
     } catch {
       /* the machine has already gone; nothing here can improve on that */
@@ -224,8 +262,41 @@ export async function fetchLogCount(
 }
 
 /** A short reason for the log — never the whole error, which can carry a URL. */
-const reasonOf = (error: unknown): string =>
-  error instanceof Error ? error.name : "gagal";
+/**
+ * Make sure a socket error can never reach the process unheard.
+ *
+ * `node-zklib` listens with `once('error', ...)` on both transports. Once is
+ * not enough. The first failure spends the listener; the second — usually
+ * `disconnect()` writing CMD_EXIT down a socket to a machine that is no longer
+ * there — arrives with nothing listening, and Node turns an unheard `error`
+ * event into an uncaught exception. That is not a caught error, it is a dead
+ * API, and during a muster a dead API collects no taps at all.
+ *
+ * So we attach a listener that stays. It deliberately does nothing: by the
+ * time a second error lands the first has already been recorded in
+ * `device_requests` and the caller has its answer. Keeping the process alive
+ * is the whole job.
+ *
+ * Reaches into the library's internals, which is not free — see
+ * `node-zklib.d.ts`. Every step is optional-chained so a changed package
+ * degrades to the old behaviour rather than throwing here.
+ */
+function keepSocketErrorsHeard(zk: ZKLib): void {
+  for (const socket of [zk.zklibTcp?.socket, zk.zklibUdp?.socket]) {
+    /* `once` counts too, so `> 1` means ours is already attached. */
+    if (!socket || socket.listenerCount("error") > 1) continue;
+    socket.on("error", () => {});
+  }
+}
+
+const reasonOf = (error: unknown): string => {
+  if (!(error instanceof Error)) return "gagal";
+  /* A socket failure carries its reason in `code`, not in `name` — every one
+     of them is called "Error". `EHOSTUNREACH` in the request log is the
+     difference between "the machine is off" and "we have no idea". */
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.length > 0 ? code : error.name;
+};
 
 /**
  * Give up after `ms`, whatever the thing we are waiting on decides to do.
