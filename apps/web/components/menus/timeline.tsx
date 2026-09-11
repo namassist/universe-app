@@ -66,8 +66,83 @@ import { useToast } from "@/components/ui/toast";
  * **value**, never the label: dispatch matches on the value, so rewording a
  * label is a presentation change and nothing else.
  */
+/**
+ * Stages the application never reads — labels on a wall chart, nothing more.
+ *
+ * `finger-second` earns its place on the screen by describing the muster the
+ * yard actually runs, and will fire the ticket printing when that exists; for
+ * now, like `bus-depart`, moving it changes nothing anywhere.
+ */
+const LABEL_ONLY: TimelineAction[] = ["finger-second", "bus-depart", "other"];
+
+/** The pull each deadline closes, for the notice below. */
+const PULLED_BY: Partial<Record<TimelineAction, TimelineAction>> = {
+  "ftw-deadline": "ftw-ingest",
+  "finger-in": "finger-ingest",
+};
+
+const minutesOf = (at: string) => {
+  const [h = "0", m = "0"] = at.split(":");
+  return Number(h) * 60 + Number(m);
+};
+
+/**
+ * What today has already settled about the stage being edited.
+ *
+ * A schedule edited mid-morning does not all take effect at once, and which
+ * half applies is not guessable from the screen. A stage that has already
+ * fired is claimed for the day and will not fire again however its time
+ * moves; a deadline is re-read continuously and moves the pass rule at once —
+ * except as the end of a pull window, which was fixed when the pull opened.
+ *
+ * `null` when there is nothing worth saying, which is the common case: most
+ * edits happen outside the muster and the notice would be noise.
+ */
+function scheduleNotice(input: {
+  action: TimelineAction;
+  shift: ShiftKind | "";
+  at: string;
+  /** The time the stage carries now, for an edit — absent when adding. */
+  wasAt: string | null;
+  entries: TimelineStageRow[];
+  lang: "id" | "en";
+  now: Date;
+}): string | null {
+  const { action, shift, at, wasAt, entries, lang } = input;
+  if (!shift || LABEL_ONLY.includes(action)) return null;
+
+  const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
+  const timeOf = (a: TimelineAction) =>
+    entries.find((e) => e.action === a && e.shift === shift && e.active)?.at ??
+    null;
+
+  if (action === "shift-start") {
+    if (minutesOf(at) <= nowMinutes) return null;
+    return lang === "id"
+      ? `Jam ini belum tiba hari ini. Sampai ${at}, dinding akan menampilkan shift sebelumnya — bukan shift yang sedang berkumpul.`
+      : `This time has not arrived today. Until ${at} the walls will show the previous shift, not the one mustering.`;
+  }
+
+  const pull = PULLED_BY[action];
+  if (pull) {
+    const opened = timeOf(pull);
+    if (!opened || minutesOf(opened) > nowMinutes) return null;
+    return lang === "id"
+      ? `Penarikan data sudah dibuka ${opened} hari ini dan sudah mengunci batas lamanya. Aturan lolos/telat dan lencana ikut jam baru seketika, tapi penarikannya tetap berhenti di jam lama sampai besok.`
+      : `The pull opened at ${opened} today and has already fixed the old deadline. The pass rule and the badges follow the new time at once, but the pull still stops at the old one until tomorrow.`;
+  }
+
+  /* A trigger: claimed once per day, so a time it has already passed is spent
+     whatever the new one says. */
+  const fired = wasAt ?? at;
+  if (minutesOf(fired) > nowMinutes) return null;
+  return lang === "id"
+    ? `Tahap ini sudah menyala ${fired} hari ini dan tidak akan menyala lagi. Jam baru berlaku besok.`
+    : `This stage already fired at ${fired} today and will not fire again. The new time applies tomorrow.`;
+}
+
 export function TimelineMenu({ mode }: { mode: AccessMode }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
   const canW = mode === "manage";
@@ -177,6 +252,18 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     setErrName(false);
     setDlgOpen(true);
   }
+  /* Recomputed as the form changes rather than checked on submit: it is a
+     thing to know while deciding, not an obstacle after deciding. */
+  const notice = scheduleNotice({
+    action: fAction,
+    shift: fShift,
+    at: fAt,
+    wasAt: editing?.at ?? null,
+    entries,
+    lang,
+    now: new Date(),
+  });
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const name = fName.trim();
@@ -320,6 +407,14 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
         </DialogIcon>
         <DialogTitle id="tl-t">{editing ? t.mdEditT : t.mdAdd}</DialogTitle>
         <DialogBody>{t.tlDlgB}</DialogBody>
+        {notice ? (
+          <p
+            role="status"
+            className="mt-3 rounded-lg border border-[rgba(240,160,32,.35)] bg-[rgba(240,160,32,.10)] px-3 py-2 text-[13px] leading-normal text-(--badge-warning-text)"
+          >
+            {notice}
+          </p>
+        ) : null}
         <form onSubmit={submit} noValidate>
           <Field
             className="mt-4"
