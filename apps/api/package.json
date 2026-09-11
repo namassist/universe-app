@@ -20,6 +20,7 @@
     "db:seed": "bun --env-file=.env src/db/seed.ts",
     "db:seed:fresh": "SEED_FRESH=1 bun --env-file=.env src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
+    "stage:rearm": "bun scripts/rearm-stage.ts",
     "photos:upload": "bun scripts/upload-photos.ts"
   },
   "dependencies": {
