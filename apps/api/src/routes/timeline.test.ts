@@ -238,3 +238,96 @@ describe("who may edit the schedule", () => {
     expect((await create({}, viewer.cookie)).status).toBe(403);
   });
 });
+
+/* ------------------------------------------------------- ordering rules */
+
+/**
+ * The two edits that can quietly wreck a morning.
+ *
+ * A board built before the tap deadline judges people who were still entitled
+ * to arrive — and because the stage is claimed once it fires, the wrong board
+ * is the one the yard uses until the bus leaves. A pull that opens after its
+ * own deadline has a window of nothing, which is how the readings tables went
+ * back to standing still.
+ *
+ * Refused rather than warned: both are misconfigurations with no reading under
+ * which they are what somebody meant.
+ */
+describe("a stage cannot be put out of order", () => {
+  const message = async (response: Response) =>
+    ((await response.json()) as { message: string }).message;
+
+  test("the board cannot be built before the tap deadline", async () => {
+    // The seeded day `finger-in` is 05:25.
+    const response = await create({
+      at: "05:20",
+      action: "spare-validate",
+      shift: "day",
+    });
+
+    expect(response.status).toBe(422);
+    expect(await message(response)).toContain("05:25");
+  });
+
+  test("and can be built after it", async () => {
+    const response = await create({
+      at: "05:40",
+      action: "spare-validate",
+      shift: "day",
+    });
+    expect(response.status).toBe(201);
+  });
+
+  test("an edit is held to the same rule as a creation", async () => {
+    const made = await create({
+      at: "05:41",
+      action: "spare-validate",
+      shift: "day",
+    });
+    const stage = (await made.json()) as Stage;
+
+    const response = await send(
+      "PATCH",
+      `/timeline/${stage.id}`,
+      admin.cookie,
+      {
+        at: "05:10",
+      }
+    );
+
+    expect(response.status).toBe(422);
+  });
+
+  test("a pull cannot open after the deadline it runs until", async () => {
+    const response = await create({
+      at: "05:40",
+      action: "finger-ingest",
+      shift: "day",
+    });
+
+    expect(response.status).toBe(422);
+    const said = await message(response);
+    expect(said).toContain("Batas finger in");
+    expect(said).toMatch(/\d\d:\d\d/);
+  });
+
+  /* A stage governing neither shift is the `other` marker, which sits outside
+     the muster's order entirely — validating it against a shift's gates would
+     invent a relationship nobody stated. */
+  test("a stage with no shift is not held to any of it", async () => {
+    const response = await create({ at: "05:10", action: "other" });
+    expect(response.status).toBe(201);
+  });
+
+  /* Deactivating is how a stage is taken out of the schedule, and a stage out
+     of the schedule cannot be out of order. */
+  test("an inactive stage is not compared against", async () => {
+    const response = await create({
+      at: "05:20",
+      action: "spare-validate",
+      shift: "day",
+      active: false,
+    });
+    expect(response.status).toBe(201);
+  });
+});

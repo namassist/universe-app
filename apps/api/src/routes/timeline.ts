@@ -11,8 +11,13 @@
  * to work out which is which.
  */
 
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
+import {
+  TIMELINE_ACTION_LABELS,
+  type ShiftKind,
+  type TimelineAction,
+} from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
 import { db, schema, type TimelineStageRow } from "../db";
@@ -41,6 +46,96 @@ const notFound = {
 };
 
 const AT_PATTERN = "^([01][0-9]|2[0-3]):[0-5][0-9]$";
+
+/**
+ * The order the muster's gates have to keep, and why each pair matters.
+ *
+ * Not the whole schedule — only the two relationships where getting it wrong
+ * damages a morning rather than merely looking odd.
+ *
+ * `spare-validate` **after** `finger-in`: a board built before the tap
+ * deadline judges people who were still entitled to arrive, and because a
+ * stage is claimed once it fires, that wrong board is the one the yard uses
+ * until the bus leaves. There is no second attempt.
+ *
+ * A pull **at or before** the deadline it runs until: a window is the span
+ * between the two, so opening a pull after its own deadline is a window of
+ * nothing — which is how the readings tables stood still all morning before
+ * they ran until their deadlines at all.
+ */
+const ORDER: {
+  action: TimelineAction;
+  against: TimelineAction;
+  /** `after`: strictly later. `notAfter`: at or before. */
+  rule: "after" | "notAfter";
+  why: string;
+}[] = [
+  {
+    action: "spare-validate",
+    against: "finger-in",
+    rule: "after",
+    why: "papan tidak boleh dibangun sebelum batas tap lewat",
+  },
+  {
+    action: "finger-ingest",
+    against: "finger-in",
+    rule: "notAfter",
+    why: "penarikan berjalan sampai batasnya, jadi tidak boleh dibuka setelahnya",
+  },
+  {
+    action: "ftw-ingest",
+    against: "ftw-deadline",
+    rule: "notAfter",
+    why: "penarikan berjalan sampai batasnya, jadi tidak boleh dibuka setelahnya",
+  },
+];
+
+/**
+ * Whether a stage would sit out of order, as the message to refuse it with.
+ *
+ * `null` when it is fine, when it governs no shift — the `other` markers sit
+ * outside the muster's order entirely — or when its partner is not configured,
+ * which the engine already refuses at dispatch with a message naming the
+ * missing stage.
+ *
+ * Compared against the **latest** partner for `after` and the **earliest** for
+ * `notAfter`: a schedule carrying two rows for one gate is already ambiguous —
+ * `stageTimeOf` takes whichever the database hands back first — so the
+ * conservative end is the honest one to hold a new stage to.
+ */
+async function outOfOrder(stage: {
+  at: string;
+  action: TimelineAction;
+  shift: ShiftKind | null;
+  active: boolean;
+}): Promise<string | null> {
+  if (!stage.shift || !stage.active) return null;
+  const rule = ORDER.find((r) => r.action === stage.action);
+  if (!rule) return null;
+
+  const rows = await db
+    .select({ at: schema.timelineStages.at })
+    .from(schema.timelineStages)
+    .where(
+      and(
+        eq(schema.timelineStages.action, rule.against),
+        eq(schema.timelineStages.shift, stage.shift),
+        eq(schema.timelineStages.active, true)
+      )
+    );
+  if (!rows.length) return null;
+
+  const times = rows.map((r) => r.at.slice(0, 5)).sort();
+  const partner = rule.rule === "after" ? times[times.length - 1]! : times[0]!;
+  const ok = rule.rule === "after" ? stage.at > partner : stage.at <= partner;
+  if (ok) return null;
+
+  const label = TIMELINE_ACTION_LABELS[stage.action];
+  const other = TIMELINE_ACTION_LABELS[rule.against];
+  return rule.rule === "after"
+    ? `"${label}" harus setelah "${other}" (${partner}), bukan ${stage.at} — ${rule.why}`
+    : `"${label}" harus sebelum atau sama dengan "${other}" (${partner}), bukan ${stage.at} — ${rule.why}`;
+}
 
 export const timelineRoutes = new Elysia({
   prefix: "/timeline",
@@ -77,6 +172,16 @@ export const timelineRoutes = new Elysia({
           code: "validation_failed",
           message: "Nama tahap tidak boleh kosong",
         });
+
+      const disorder = await outOfOrder({
+        at: body.at,
+        action: body.action,
+        shift: body.shift ?? null,
+        active: body.active ?? true,
+      });
+      if (disorder)
+        return status(422, { code: "stage_out_of_order", message: disorder });
+
       const [row] = await db
         .insert(schema.timelineStages)
         .values({
@@ -119,6 +224,24 @@ export const timelineRoutes = new Elysia({
   .patch(
     "/:id",
     async ({ params, body, status }) => {
+      /* Read first, because a patch is partial: the rule is about the stage
+         the edit would leave behind, not about the fields it mentions. */
+      const [before] = await db
+        .select()
+        .from(schema.timelineStages)
+        .where(eq(schema.timelineStages.id, params.id))
+        .limit(1);
+      if (!before) return status(404, notFound);
+
+      const disorder = await outOfOrder({
+        at: body.at ?? before.at.slice(0, 5),
+        action: body.action ?? before.action,
+        shift: body.shift !== undefined ? body.shift : before.shift,
+        active: body.active ?? before.active,
+      });
+      if (disorder)
+        return status(422, { code: "stage_out_of_order", message: disorder });
+
       const [row] = await db
         .update(schema.timelineStages)
         .set({
@@ -148,6 +271,7 @@ export const timelineRoutes = new Elysia({
         401: ErrorSchema,
         403: ErrorSchema,
         404: ErrorSchema,
+        422: ErrorSchema,
       },
       detail: { summary: "Edit a stage" },
     }
