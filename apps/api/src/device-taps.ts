@@ -58,6 +58,8 @@ export type CollectResult = {
   unreachable: number;
   /** Machines whose pull or store raised — counted, never fatal to the pass. */
   failed: number;
+  /** Taps older than we keep, dropped before the insert rather than after. */
+  stale: number;
 };
 
 /**
@@ -92,6 +94,31 @@ function chunks<T>(rows: T[]): T[][] {
  * re-derive, not the reading itself.
  */
 const KEEP_DAYS = 3;
+
+/**
+ * The oldest tap worth writing down, as the machines spell time.
+ *
+ * A machine cannot be asked for a date range — four argument shapes were put
+ * to one on 2026-09-12 and all four came back with the same 11,921 rows over
+ * eighty days — so every pull hands us the whole history whether we want it or
+ * not. What we can do is refuse to write it: we keep three days, so the other
+ * seventy-seven were being inserted and then deleted again by the sweep at the
+ * end of the same pass. On nineteen machines that is hundreds of thousands of
+ * rows of pure waste per pass, and it is the first pass of a muster — the one
+ * that has to finish quickly — that pays it.
+ *
+ * Compared as text. The machines send `"YYYY-MM-DD HH:MM:SS"` with no zone,
+ * which sorts correctly as a string, and parsing it into a `Date` would bind
+ * it to this process's zone for no gain.
+ */
+function oldestWorthKeeping(now = new Date()): string {
+  const then = new Date(now.getTime() - KEEP_DAYS * 24 * 60 * 60 * 1000);
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${then.getFullYear()}-${p2(then.getMonth() + 1)}-${p2(then.getDate())} ` +
+    `${p2(then.getHours())}:${p2(then.getMinutes())}:${p2(then.getSeconds())}`
+  );
+}
 
 /**
  * The last count each machine gave us, by address.
@@ -143,6 +170,7 @@ export async function collectOnce(
     unknownNik: 0,
     unreachable: 0,
     failed: 0,
+    stale: 0,
   };
   if (!machines.length) return result;
 
@@ -153,6 +181,9 @@ export async function collectOnce(
       (r) => normalizeNik(r.nik)
     )
   );
+
+  /* Once for the pass, not once per tap. */
+  const cutoff = oldestWorthKeeping();
 
   /* Bounded, like the prober's: fifty-eight connects at once was measured to
      push the slower machines past their own timeout. */
@@ -177,6 +208,10 @@ export async function collectOnce(
       lastCount.set(machine.ip, count);
 
       const keep = taps.flatMap((tap) => {
+        if (tap.at < cutoff) {
+          result.stale += 1;
+          return [];
+        }
         const nik = normalizeNik(tap.nik);
         if (!nik || !registered.has(nik)) {
           result.unknownNik += 1;

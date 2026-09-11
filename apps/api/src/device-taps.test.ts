@@ -49,6 +49,16 @@ async function addMachine(ip: string, booth = true, active = true) {
   return ip;
 }
 
+/** Local wall-clock text, the way the machines spell it. */
+const wallClock = (ms: number) => {
+  const d = new Date(ms);
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ` +
+    `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`
+  );
+};
+
 const tap = (nik: string, at: string): DeviceTap => ({
   nik,
   at,
@@ -238,18 +248,10 @@ describe("a pass that meets trouble", () => {
    */
   test("a machine holding more taps than one statement can bind is stored whole", async () => {
     const ip = await addMachine(`10.98.${uid().slice(0, 2)}.1`);
-    /* Inside the three-day window the pass sweeps, and stepped by five seconds
-       so fourteen thousand of them still fit in it. Dated any older, the sweep
-       removes them again and the test measures the wrong thing. */
+    /* Inside the three-day window, and stepped by five seconds so fourteen
+       thousand of them still fit in it. Dated any older they are dropped
+       before the insert and the test measures the wrong thing. */
     const base = Date.now() - 6 * 60 * 60 * 1000;
-    const wallClock = (ms: number) => {
-      const d = new Date(ms);
-      const p2 = (n: number) => String(n).padStart(2, "0");
-      return (
-        `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ` +
-        `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`
-      );
-    };
     const taps = Array.from({ length: 14_000 }, (_, i) =>
       tap(known, wallClock(base + i * 5_000))
     );
@@ -258,6 +260,29 @@ describe("a pass that meets trouble", () => {
 
     expect(result.stored).toBe(14_000);
     expect(await storedFor(ip)).toHaveLength(14_000);
+  });
+
+  /*
+   * The machines cannot be asked for a date range — four argument shapes were
+   * put to one on 2026-09-12 and all four returned the same eighty days — so
+   * the whole history arrives every pull. Writing it and then sweeping it is
+   * hundreds of thousands of wasted rows per pass, paid by the first pass of
+   * the muster, which is the one that has to finish quickly.
+   */
+  test("taps older than the retention window are never written", async () => {
+    const ip = await addMachine(`10.97.${uid().slice(0, 2)}.5`);
+    const old = tap(known, "2026-06-25 04:30:00");
+    const fresh = tap(known, wallClock(Date.now() - 60 * 60 * 1000));
+
+    const result = await collectOnce(
+      fake({ [ip]: { count: 2, taps: [old, fresh] } }).client
+    );
+
+    expect(result.stale).toBe(1);
+    expect(result.stored).toBe(1);
+    const rows = await storedFor(ip);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.at).toBe(fresh.at);
   });
 
   test("a machine that raises does not stop the ones beside it", async () => {

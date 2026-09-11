@@ -328,7 +328,8 @@ async function runCollection(endsAt: Date): Promise<void> {
           console.log(
             `[taps] ${pass.asked} mesin ditanya, ${pass.pulled} ditarik, ` +
               `${pass.stored} tap baru, ${pass.unknownNik} NIK tak dikenal, ` +
-              `${pass.unreachable} tidak menjawab, ${pass.failed} gagal`
+              `${pass.unreachable} tidak menjawab, ${pass.failed} gagal, ` +
+              `${pass.stale} terlalu lama`
           );
       } catch (error) {
         console.error("[taps] satu pass gagal, jendela diteruskan", error);
