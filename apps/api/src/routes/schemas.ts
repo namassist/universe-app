@@ -464,6 +464,31 @@ export const NotificationSchema = t.Object({
   read: t.Boolean(),
 });
 
+/** One tap, as the monitor lists it. */
+const TapRowSchema = t.Object({
+  nik: t.String(),
+  /** Null when the tap belongs to somebody our register does not carry —
+   *  which collection drops, so in practice only for a name changed since. */
+  name: t.Nullable(t.String()),
+  department: t.Nullable(t.String()),
+  at: t.String(),
+  direction: t.Union([t.Literal("in"), t.Literal("out")]),
+  verified: t.Integer(),
+  ip: t.String(),
+  /** The machine's name, or its address when the machine is no longer
+   *  registered — a tap outlives the registry row that explains it. */
+  machine: t.String(),
+});
+
+export const TapMonitorSchema = t.Object({
+  date: t.String(),
+  /** Counted over the day, not over the page, so a search does not move them. */
+  taps: t.Integer(),
+  people: t.Integer(),
+  machines: t.Integer(),
+  rows: t.Array(TapRowSchema),
+});
+
 /** One unit the file parks because the digger it hauls for is broken. */
 const FleetImportStandbyRowSchema = t.Object({
   row: t.Integer(),

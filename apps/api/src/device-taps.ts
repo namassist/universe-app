@@ -21,7 +21,7 @@
  * until they have been compared.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import type { DeviceReportMoment } from "@universe/contracts";
 
 import { db, schema } from "./db";
@@ -57,6 +57,17 @@ export type CollectResult = {
   /** Machines that would not say how many records they hold. */
   unreachable: number;
 };
+
+/**
+ * How long a tap is worth keeping here.
+ *
+ * Three days (owner). The machines hold months and remain the archive, so this
+ * is a window for watching a muster rather than a record of the site's
+ * attendance — and anything worth keeping longer leaves through the export.
+ * The derived readings outlive it: losing the taps costs the ability to
+ * re-derive, not the reading itself.
+ */
+const KEEP_DAYS = 3;
 
 /**
  * The last count each machine gave us, by address.
@@ -166,6 +177,16 @@ export async function collectOnce(
       .returning({ id: schema.deviceTaps.id });
     result.stored += written.length;
   });
+
+  /* Swept here rather than on a schedule of its own: collection already runs
+     on a cadence, and a stage existing only to run one indexed delete would be
+     more machinery than the problem. The same bargain `notify.ts` strikes. */
+  if (result.stored)
+    await db
+      .delete(schema.deviceTaps)
+      .where(
+        lt(schema.deviceTaps.at, sql`now() - ${`${KEEP_DAYS} days`}::interval`)
+      );
 
   return result;
 }

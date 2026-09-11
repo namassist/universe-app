@@ -18,6 +18,7 @@ import { FitToWorkMenu } from "./fit-to-work";
 import { FleetAllocationMenu } from "./fleet-allocation";
 import { FleetSettingMenu } from "./fleet-setting";
 import { MasterMenu } from "./master";
+import { MonitoringTapMenu } from "./monitoring-tap";
 import { MenuPlaceholder } from "./placeholder";
 import { RosterDataMenu } from "./roster-data";
 import { RunTextsMenu } from "./run-texts";
@@ -48,6 +49,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "fleet-allocation": FleetAllocationMenu,
   "fleet-setting": FleetSettingMenu,
   "allocation-priority": AllocationPriorityMenu,
+  "monitoring-tap": MonitoringTapMenu,
   "database-unit": DatabaseUnitMenu,
   "jenis-unit": (p) => <MasterMenu {...p} cat="jenis-unit" />,
   "model-unit": (p) => <MasterMenu {...p} cat="model-unit" />,

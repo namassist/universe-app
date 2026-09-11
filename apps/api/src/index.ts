@@ -23,6 +23,7 @@ import { fleetActualRoutes } from "./routes/fleet-actual";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { allocationPriorityRoutes } from "./routes/allocation-priority";
 import { notificationRoutes } from "./routes/notifications";
+import { monitoringTapRoutes } from "./routes/monitoring-tap";
 import { fleetsRoutes } from "./routes/fleets";
 import {
   attendanceSyncRoutes,
@@ -62,6 +63,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(fleetsRoutes)
   .use(allocationPriorityRoutes)
   .use(notificationRoutes)
+  .use(monitoringTapRoutes)
   .use(unitStatusRoutes)
   .use(fleetAllocationRoutes)
   .use(fleetActualRoutes)

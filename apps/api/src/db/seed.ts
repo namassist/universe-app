@@ -175,6 +175,10 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
     /* Manpower runs the muster and is who a failed board is addressed to.
      Superadmin needs no row — its grants are reconciled to every slug. */
     { slug: "notifications", mode: "manage", roles: ["manpower"] },
+    /* The raw tap monitor answers "did he tap at all, and where", which is a
+     manpower question during a muster. Read-only: there is nothing on the
+     screen to change, only taps to look at and export. */
+    { slug: "monitoring-tap", mode: "view", roles: ["manpower"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */
