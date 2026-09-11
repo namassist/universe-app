@@ -260,6 +260,13 @@
       "when": 1789099630027,
       "tag": "0036_silky_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789100543258,
+      "tag": "0037_cute_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }

@@ -36,6 +36,7 @@ import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { pullClosesAt, stageTimeOf } from "./stage-time";
 import { collectOnce, reportLogSizes } from "./device-taps";
+import { deriveDate } from "./derive";
 import { redis } from "./redis";
 
 /** One tick per minute: the schedule is specified to the minute. */
@@ -305,6 +306,14 @@ async function runCollection(endsAt: Date): Promise<void> {
     await reportLogSizes("start");
     for (;;) {
       const pass = await collectOnce();
+      if (pass.stored) {
+        /* Rebuilt from the taps rather than amended, and only when new ones
+           landed. The rows are a view of the taps, so re-running is how a late
+           pull or a manual sync reaches the reading without anything having to
+           merge two partial answers. */
+        const rebuilt = await deriveDate(localDate(new Date()));
+        console.log(`[taps] ${rebuilt} bacaan diturunkan ulang`);
+      }
       if (pass.pulled || pass.unreachable)
         console.log(
           `[taps] ${pass.asked} mesin ditanya, ${pass.pulled} ditarik, ` +

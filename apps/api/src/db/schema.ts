@@ -1583,3 +1583,48 @@ export const deviceTaps = pgTable(
     index("device_taps_nik_idx").on(table.nik),
   ]
 );
+
+/**
+ * The same reading as `finger_readings`, worked out from our own taps.
+ *
+ * Deliberately a second table rather than the same one. Both sources are
+ * running: Nakula still writes `finger_readings` and the board still reads it,
+ * and will until a week of the two side by side has said whether they agree.
+ * Sharing a table would have them overwrite each other, and would quietly make
+ * the board depend on a source nobody had checked — which is the cutover, not
+ * the preparation for it.
+ *
+ * Identical columns on purpose. Comparing two sources is then a join rather
+ * than an argument about shape, and the cutover is a change to which table is
+ * read rather than a migration of what is in it.
+ *
+ * **Derived, never authored.** Every row here can be thrown away and rebuilt
+ * from `device_taps`. That is the point of keeping the taps at all: the
+ * reduction — first IN before noon, first IN after it, first OUT — stops being
+ * a decision made once inside a source adapter and becomes something that can
+ * be re-run when the rule is refined or found wrong.
+ */
+export const derivedReadings = pgTable(
+  "derived_readings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nik: text("nik").notNull(),
+    date: date("date").notNull(),
+    /** See `fingerReadings` for why the IN tap is split at noon — the rule is
+     *  the same one, applied to our taps instead of Nakula's. */
+    firstInAt: timestamp("first_in_at", { mode: "string" }),
+    firstInIp: text("first_in_ip"),
+    firstInPmAt: timestamp("first_in_pm_at", { mode: "string" }),
+    firstInPmIp: text("first_in_pm_ip"),
+    firstOutAt: timestamp("first_out_at", { mode: "string" }),
+    firstOutIp: text("first_out_ip"),
+    /** When this row was last rebuilt, not when the taps arrived. */
+    derivedAt: timestamp("derived_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("derived_readings_nik_date_unique").on(table.nik, table.date),
+    index("derived_readings_date_idx").on(table.date),
+  ]
+);
