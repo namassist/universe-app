@@ -148,7 +148,12 @@ export async function fetchAttLog(
       ip,
       command: "GetAttLog",
       ok: response.ok,
-      note: `${taps.length} tap, ${Date.now() - started}ms`,
+      /* A refused pull says so. It used to be logged as "0 tap", which on the
+         device screen reads as a quiet machine rather than a rejected request
+         and sends whoever is looking to the wrong place. */
+      note: response.ok
+        ? `${taps.length} tap, ${Date.now() - started}ms`
+        : `HTTP ${response.status}, ${Date.now() - started}ms`,
     });
     return taps;
   } catch (error) {
