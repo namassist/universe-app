@@ -510,6 +510,43 @@ const TapDifferenceSchema = t.Object({
   seconds: t.Nullable(t.Integer()),
 });
 
+/**
+ * One machine, as the collector last found it.
+ *
+ * Built from `device_requests`, which until now was written on every call and
+ * read by nobody but whoever had a psql prompt open. That asymmetry is the
+ * reason this exists: when a machine goes quiet during a muster, the person who
+ * needs to know is standing in the yard, not reading a terminal.
+ */
+const DeviceStatusSchema = t.Object({
+  ip: t.String(),
+  name: t.String(),
+  /** Only the operator booths are collected from; the rest are monitored. */
+  operatorBooth: t.Boolean(),
+  active: t.Boolean(),
+  /** What the machine last said it holds. Null when it has never answered. */
+  records: t.Nullable(t.Integer()),
+  /** Local time of the last answer of any kind, `HH:MM:SS`. */
+  lastSeen: t.Nullable(t.String()),
+  /** Why the last attempt failed, verbatim from the log — `EHOSTUNREACH`, say. */
+  lastError: t.Nullable(t.String()),
+  ok: t.Integer(),
+  failed: t.Integer(),
+  /** Taps this machine contributed today, after the register filter. */
+  taps: t.Integer(),
+});
+
+export const DeviceStatusListSchema = t.Object({
+  date: t.String(),
+  /** Machines that answered at least once today. */
+  answering: t.Integer(),
+  /** Active operator booths that did not answer at all. */
+  silent: t.Integer(),
+  /** When the collector last spoke to anything, `HH:MM:SS`. */
+  lastContact: t.Nullable(t.String()),
+  rows: t.Array(DeviceStatusSchema),
+});
+
 export const TapCompareSchema = t.Object({
   date: t.String(),
   shift: t.Union([t.Literal("day"), t.Literal("night")]),

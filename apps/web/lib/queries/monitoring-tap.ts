@@ -25,6 +25,30 @@ export type TapRow = Awaited<
   ReturnType<NonNullable<ReturnType<typeof tapMonitorQueryOptions>["queryFn"]>>
 >["rows"][number];
 
+export const deviceStatusKey = (date: string) =>
+  ["monitoring-tap", "devices", date] as const;
+
+/**
+ * What the collector can and cannot reach, refreshed while a muster runs.
+ *
+ * Faster than the tap list on purpose: a tap that arrives a cycle late is
+ * still the same tap, but a machine that has gone quiet is only worth knowing
+ * about while there is still time to walk over to it.
+ */
+export const deviceStatusQueryOptions = (date: string) =>
+  queryOptions({
+    queryKey: deviceStatusKey(date),
+    queryFn: () =>
+      unwrap(api.v1["monitoring-tap"].devices.get({ query: { date } })),
+    refetchInterval: 10_000,
+  });
+
+export type DeviceStatusRow = Awaited<
+  ReturnType<
+    NonNullable<ReturnType<typeof deviceStatusQueryOptions>["queryFn"]>
+  >
+>["rows"][number];
+
 export const tapCompareKey = (date: string, shift: string) =>
   ["monitoring-tap", "compare", date, shift] as const;
 

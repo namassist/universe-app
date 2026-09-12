@@ -7,6 +7,7 @@ import { Download, Fingerprint } from "lucide-react";
 import { MENU_LABELS } from "@/lib/access";
 import { fetchBlob } from "@/lib/api";
 import {
+  deviceStatusQueryOptions,
   tapCompareQueryOptions,
   tapMonitorQueryOptions,
 } from "@/lib/queries/monitoring-tap";
@@ -64,10 +65,20 @@ export function MonitoringTapMenu() {
   const data = listQ.data;
   const rows = data?.rows ?? [];
 
-  const [view, setView] = React.useState<"taps" | "compare">("taps");
+  const [view, setView] = React.useState<"taps" | "compare" | "devices">(
+    "taps"
+  );
   const [shift, setShift] = React.useState<"day" | "night">(
     new Date().getHours() >= 16 || new Date().getHours() < 4 ? "night" : "day"
   );
+  /* Polled whenever this tab is open, and only then: it is the one view whose
+     value is entirely in being current. */
+  const devicesQ = useQuery({
+    ...deviceStatusQueryOptions(date),
+    enabled: view === "devices",
+  });
+  const devices = devicesQ.data;
+
   const compareQ = useQuery({
     ...tapCompareQueryOptions(date, shift),
     enabled: view === "compare",
@@ -127,6 +138,14 @@ export function MonitoringTapMenu() {
               >
                 Banding sumber
               </SegmentedButton>
+              {/* Not a report but an instrument: it answers "is anything down
+                  right now", which is only worth asking while a muster runs. */}
+              <SegmentedButton
+                active={view === "devices"}
+                onClick={() => setView("devices")}
+              >
+                Perangkat
+              </SegmentedButton>
             </Segmented>
             <Input
               type="date"
@@ -152,7 +171,7 @@ export function MonitoringTapMenu() {
               </Segmented>
             ) : null}
             <SearchInput
-              className={cn("w-[240px]", view === "compare" && "hidden")}
+              className={cn("w-[240px]", view !== "taps" && "hidden")}
               placeholder="NIK, nama, atau mesin"
               aria-label="Cari tap"
               value={typed}
@@ -164,7 +183,7 @@ export function MonitoringTapMenu() {
             <Button
               variant="ghost"
               onClick={exportExcel}
-              disabled={exporting || rows.length === 0 || view === "compare"}
+              disabled={exporting || rows.length === 0 || view !== "taps"}
             >
               <Download />
               Export Excel
@@ -172,7 +191,9 @@ export function MonitoringTapMenu() {
           </ToolbarGroup>
         </Toolbar>
 
-        {view === "compare" ? (
+        {view === "devices" ? (
+          <DevicesView data={devices} loading={devicesQ.isLoading} />
+        ) : view === "compare" ? (
           <CompareView data={cmp} loading={compareQ.isLoading} />
         ) : rows.length === 0 ? (
           <StateBox
@@ -236,13 +257,20 @@ export function MonitoringTapMenu() {
           {/* Counted over the whole day rather than the page, so searching does
               not appear to change how busy the morning was. */}
           <FootSum>
-            {view === "compare"
-              ? cmp
-                ? `${cmp.matched} cocok · ${cmp.onlyNakula} hanya di ShiftCorner · ${cmp.onlyDevice} hanya di mesin · ${cmp.drift} beda jam`
+            {view === "devices"
+              ? devices
+                ? `${devices.answering} mesin menjawab · ${devices.silent} diam` +
+                  (devices.lastContact
+                    ? ` · kontak terakhir ${devices.lastContact}`
+                    : " · belum ada kontak hari ini")
                 : ""
-              : data
-                ? `${data.taps} tap · ${data.people} orang · ${data.machines} mesin`
-                : ""}
+              : view === "compare"
+                ? cmp
+                  ? `${cmp.matched} cocok · ${cmp.onlyNakula} hanya di ShiftCorner · ${cmp.onlyDevice} hanya di mesin · ${cmp.drift} beda jam`
+                  : ""
+                : data
+                  ? `${data.taps} tap · ${data.people} orang · ${data.machines} mesin`
+                  : ""}
           </FootSum>
         </PanelFoot>
       </Panel>
@@ -347,6 +375,145 @@ function CompareView({
             </TableCell>
           </TableRow>
         ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+/**
+ * Every machine and how the collector last found it.
+ *
+ * Until this existed the answer lived in `device_requests`, a table written on
+ * every call and read by nobody without a psql prompt. That is the wrong shape
+ * for the question: when a machine goes quiet during a muster the person who
+ * needs to know is standing in the yard.
+ *
+ * Ordered booths first, and within them the ones in trouble first, because a
+ * screen read under time pressure should not need sorting.
+ */
+function DevicesView({
+  data,
+  loading,
+}: {
+  data?: {
+    rows: Array<{
+      ip: string;
+      name: string;
+      operatorBooth: boolean;
+      active: boolean;
+      records: number | null;
+      lastSeen: string | null;
+      lastError: string | null;
+      ok: number;
+      failed: number;
+      taps: number;
+    }>;
+  };
+  loading: boolean;
+}) {
+  const rows = data?.rows ?? [];
+  if (rows.length === 0)
+    return (
+      <StateBox
+        icon={<Fingerprint className="text-(--text-tertiary)" />}
+        title="Belum ada mesin"
+        body={loading ? "Memuat…" : "Belum ada mesin fingerprint terdaftar."}
+      />
+    );
+
+  /* A booth that never answered outranks one that answered and then failed:
+     the first means nobody's taps are being read at all. */
+  const rank = (r: (typeof rows)[number]) =>
+    !r.active || !r.operatorBooth
+      ? 3
+      : r.lastSeen === null
+        ? 0
+        : r.lastError
+          ? 1
+          : 2;
+  const sorted = [...rows].sort((a, b) => rank(a) - rank(b));
+
+  const chip = (r: (typeof rows)[number]) => {
+    if (!r.active)
+      return {
+        label: "Nonaktif",
+        tone: "bg-(--fill-subtle) text-(--text-secondary)",
+      };
+    if (!r.operatorBooth)
+      return {
+        label: "Dipantau",
+        tone: "bg-(--fill-subtle) text-(--text-secondary)",
+      };
+    if (r.lastSeen === null)
+      return {
+        label: "Diam",
+        tone: "bg-[rgba(252,60,59,.12)] text-(--color-danger)",
+      };
+    if (r.lastError)
+      return {
+        label: "Sempat gagal",
+        tone: "bg-[rgba(240,160,32,.12)] text-(--badge-warning-text)",
+      };
+    return {
+      label: "Menjawab",
+      tone: "bg-[rgba(32,200,120,.12)] text-(--badge-success-text)",
+    };
+  };
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Mesin</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Isi memori</TableHead>
+          <TableHead>Kontak terakhir</TableHead>
+          <TableHead>Tap hari ini</TableHead>
+          <TableHead>Permintaan</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {sorted.map((r) => {
+          const c = chip(r);
+          return (
+            <TableRow key={r.ip}>
+              <TableCell>
+                <div>{r.name}</div>
+                <div className="font-mono text-[11px] text-(--text-tertiary)">
+                  {r.ip}
+                </div>
+              </TableCell>
+              <TableCell>
+                <span
+                  className={cn(
+                    "rounded-chip px-2 py-0.5 text-[11px] font-semibold",
+                    c.tone
+                  )}
+                >
+                  {c.label}
+                </span>
+                {/* The reason verbatim from the log — EHOSTUNREACH reads very
+                    differently from "the machine is off". */}
+                {r.lastError ? (
+                  <div className="mt-1 font-mono text-[11px] text-(--text-tertiary)">
+                    {r.lastError}
+                  </div>
+                ) : null}
+              </TableCell>
+              <TableCell className="font-mono tabular-nums">
+                {r.records === null ? "—" : r.records.toLocaleString("id-ID")}
+              </TableCell>
+              <TableCell className="font-mono tabular-nums">
+                {r.lastSeen ?? "—"}
+              </TableCell>
+              <TableCell className="font-mono tabular-nums">{r.taps}</TableCell>
+              <TableCell className="font-mono text-(--text-secondary) tabular-nums">
+                {r.ok} ok
+                {r.failed > 0 ? ` · ${r.failed} gagal` : ""}
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );

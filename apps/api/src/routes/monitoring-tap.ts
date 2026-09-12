@@ -22,7 +22,12 @@ import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
-import { ErrorSchema, TapCompareSchema, TapMonitorSchema } from "./schemas";
+import {
+  DeviceStatusListSchema,
+  ErrorSchema,
+  TapCompareSchema,
+  TapMonitorSchema,
+} from "./schemas";
 
 /** A page of taps, newest first — the end a supervisor reads. */
 const PAGE = 500;
@@ -245,6 +250,79 @@ async function compareOn(date: string, shift: "day" | "night") {
   };
 }
 
+/**
+ * Every machine and how the collector last found it.
+ *
+ * One statement rather than a query per machine: thirty-three round trips to
+ * answer "is anything down" is how a status screen becomes the reason the
+ * database is busy during a muster.
+ *
+ * `note` carries the answer in the shape the collector wrote it — `"51200,
+ * 95ms"` for a count, `"50591 tap, 13894ms"` for a pull, a bare reason like
+ * `"ECONNREFUSED"` for a failure. The leading integer is the record count, and
+ * a failure has none, which is why it is read with a regexp rather than split.
+ */
+async function deviceStatusOn(date: string) {
+  const rows = await db.execute(sql`
+    with req as (
+      select ip, ok, note, at
+      from ${schema.deviceRequests}
+      where (at at time zone 'Asia/Makassar')::date = ${date}::date
+    ),
+    tally as (
+      select ip,
+             count(*) filter (where ok)::int as ok,
+             count(*) filter (where not ok)::int as failed,
+             max(at) filter (where ok) as last_ok,
+             max(at) filter (where not ok) as last_fail
+      from req group by ip
+    ),
+    counted as (
+      select distinct on (ip) ip,
+             nullif(substring(note from '^[0-9]+'), '')::int as records
+      from req
+      where ok and note ~ '^[0-9]+'
+      order by ip, at desc
+    ),
+    failed as (
+      select distinct on (ip) ip, note from req
+      where not ok order by ip, at desc
+    ),
+    taps as (
+      select ip, count(*)::int as taps from ${schema.deviceTaps}
+      where at >= ${`${date} 00:00:00`} and at <= ${`${date} 23:59:59`}
+      group by ip
+    )
+    select m.ip, m.name, m.operator_booth as "operatorBooth", m.active,
+           c.records,
+           to_char(t.last_ok at time zone 'Asia/Makassar', 'HH24:MI:SS') as "lastSeen",
+           case when t.last_fail is not null
+                 and (t.last_ok is null or t.last_fail > t.last_ok)
+                then f.note end as "lastError",
+           coalesce(t.ok, 0) as ok,
+           coalesce(t.failed, 0) as failed,
+           coalesce(p.taps, 0) as taps
+    from ${schema.fingerprintMachines} m
+    left join tally t on t.ip = m.ip
+    left join counted c on c.ip = m.ip
+    left join failed f on f.ip = m.ip
+    left join taps p on p.ip = m.ip
+    order by m.operator_booth desc, m.active desc, m.name
+  `);
+  return ((rows as unknown as { rows?: unknown[] }).rows ?? rows) as Array<{
+    ip: string;
+    name: string;
+    operatorBooth: boolean;
+    active: boolean;
+    records: number | null;
+    lastSeen: string | null;
+    lastError: string | null;
+    ok: number;
+    failed: number;
+    taps: number;
+  }>;
+}
+
 export const monitoringTapRoutes = new Elysia({
   prefix: "/monitoring-tap",
   tags: ["monitoring-tap"],
@@ -293,6 +371,41 @@ export const monitoringTapRoutes = new Elysia({
         403: ErrorSchema,
       },
       detail: { summary: "Every tap on one date, newest first" },
+    }
+  )
+
+  .get(
+    "/devices",
+    async ({ query }) => {
+      const date = query.date ?? new Date().toISOString().slice(0, 10);
+      const rows = await deviceStatusOn(date);
+
+      /* Counted over the booths we actually collect from. A monitored machine
+         that is off is a fact; an operator booth that is off is a queue of
+         people whose taps are not being read. */
+      const booths = rows.filter((r) => r.active && r.operatorBooth);
+      const seen = rows
+        .map((r) => r.lastSeen)
+        .filter((t): t is string => t !== null)
+        .sort();
+
+      return {
+        date,
+        answering: booths.filter((r) => r.lastSeen !== null).length,
+        silent: booths.filter((r) => r.lastSeen === null).length,
+        lastContact: seen.at(-1) ?? null,
+        rows,
+      };
+    },
+    {
+      auth: { menu: "monitoring-tap", mode: "view" },
+      query: t.Object({ date: t.Optional(t.String()) }),
+      response: {
+        200: DeviceStatusListSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Every machine and how the collector last found it" },
     }
   )
 
