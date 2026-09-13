@@ -63,17 +63,28 @@ describe("reading the stream", () => {
 
 describe("the machine's own clock", () => {
   /*
-   * The library builds the machine's local fields as though they were UTC, so
-   * a tap at 18:49:41 arrives as ...T10:49:41Z. Storing that as an instant is
-   * how an 08:29 tap once became 00:29Z.
+   * The library builds `new Date(year, month, day, hour, ...)` from the six
+   * numbers the machine sent — local components. Reading them back as UTC
+   * shifts every tap by this process's offset, which is how a 21:11 tap was
+   * written down as 13:11 on 2026-09-13 before this was fixed.
    */
+  const asLibraryBuildsIt = (
+    y: number,
+    m: number,
+    d: number,
+    h: number,
+    min: number,
+    sec: number
+  ) => new Date(y, m - 1, d, h, min, sec);
+
   test("recovers the wall clock the machine actually sent", () => {
-    const asLibraryBuildsIt = new Date("2026-09-12T18:49:41.000Z");
-    expect(wallClockOf(asLibraryBuildsIt)).toBe("2026-09-12 18:49:41");
+    expect(wallClockOf(asLibraryBuildsIt(2026, 9, 12, 18, 49, 41))).toBe(
+      "2026-09-12 18:49:41"
+    );
   });
 
   test("pads every field", () => {
-    expect(wallClockOf(new Date("2026-01-02T03:04:05.000Z"))).toBe(
+    expect(wallClockOf(asLibraryBuildsIt(2026, 1, 2, 3, 4, 5))).toBe(
       "2026-01-02 03:04:05"
     );
   });

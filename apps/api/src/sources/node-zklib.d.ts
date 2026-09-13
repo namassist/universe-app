@@ -115,9 +115,10 @@ declare module "node-zklib/utils" {
   /**
    * A real-time attendance frame.
    *
-   * `attTime` is built from the machine's wall-clock fields as though they were
-   * UTC, so a tap at 18:49:41 local arrives as `...T10:49:41.000Z`. Read it
-   * back with the UTC getters to recover what the machine actually said.
+   * `attTime` is built with `new Date(year, month, day, hour, ...)` — local
+   * components — so the *local* getters return what the machine sent. Its ISO
+   * form does not: at UTC+8 a tap at 18:49:41 prints as `...T10:49:41.000Z`.
+   * Reading it as UTC shifts every tap by this process's offset.
    */
   export function decodeRecordRealTimeLog52(data: Buffer): {
     userId: string;

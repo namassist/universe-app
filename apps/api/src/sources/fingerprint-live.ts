@@ -114,19 +114,24 @@ export function makeCommkey(
 /**
  * The machine's wall clock, recovered from the library's `Date`.
  *
- * `decodeRecordRealTimeLog52` reads the machine's local fields and builds a
- * `Date` as though they were UTC, so a tap at 18:49:41 arrives as
- * `...T10:49:41.000Z`. Reading it back with the UTC getters returns what the
- * machine actually said — which is what we store, for the same reason
- * `device_taps` does: the device states no zone, and binding the reading to
- * this process's zone is how an 08:29 tap became `00:29Z`.
+ * `parseHexToTime` builds `new Date(year, month, day, hour, ...)` — *local*
+ * components — so the local getters return exactly the six numbers the machine
+ * sent, and the ISO form does not: a tap at 18:49:41 prints as
+ * `...T10:49:41.000Z` here at UTC+8.
+ *
+ * Read with the UTC getters at first, which shifted every stored tap by the
+ * process's own offset — eight hours — and was caught by the owner's own test
+ * on 2026-09-13, when a 21:11 tap was written down as 13:11. The reading is
+ * stored as the machine's text for the same reason `device_taps` does it: the
+ * device states no zone, and binding it to a zone is how an 08:29 tap once
+ * became `00:29Z`.
  */
 export function wallClockOf(attTime: Date): string {
   const two = (n: number) => String(n).padStart(2, "0");
   return (
-    `${attTime.getUTCFullYear()}-${two(attTime.getUTCMonth() + 1)}-` +
-    `${two(attTime.getUTCDate())} ${two(attTime.getUTCHours())}:` +
-    `${two(attTime.getUTCMinutes())}:${two(attTime.getUTCSeconds())}`
+    `${attTime.getFullYear()}-${two(attTime.getMonth() + 1)}-` +
+    `${two(attTime.getDate())} ${two(attTime.getHours())}:` +
+    `${two(attTime.getMinutes())}:${two(attTime.getSeconds())}`
   );
 }
 
