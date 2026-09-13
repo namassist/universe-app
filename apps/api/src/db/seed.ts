@@ -118,6 +118,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "sound",
       "timeline",
       "mesin-fingerprint",
+      "mesin-printer",
       "setting",
     ],
   },
@@ -168,6 +169,7 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
     { slug: "perusahaan", mode: "manage", roles: ["manpower"] },
     { slug: "jabatan", mode: "manage", roles: ["manpower"] },
     { slug: "mesin-fingerprint", mode: "manage", roles: ["manpower"] },
+    { slug: "mesin-printer", mode: "manage", roles: ["manpower"] },
     /* Manpower configures the fleet, and the order vacancies are filled in is
        part of configuring it. Nobody else gains it: the two `dept`-scoped
        roles read the fleet screens but do not set the yard's own rules. */

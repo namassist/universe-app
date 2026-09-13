@@ -27,7 +27,19 @@ const made = {
   users: [] as string[],
   roles: [] as string[],
   machines: [] as string[],
+  printers: [] as string[],
 };
+
+/** A printer row straight in the table: pairing is what is under test here,
+    not the printer registry, which has its own suite. */
+async function makePrinter(last: number) {
+  const [row] = await db
+    .insert(schema.printers)
+    .values({ name: `${tag} PRINTER ${last}`, ip: ipOf(last) })
+    .returning({ id: schema.printers.id });
+  made.printers.push(row!.id);
+  return row!.id;
+}
 
 let admin: { cookie: string };
 let viewer: { cookie: string };
@@ -39,6 +51,8 @@ type Machine = {
   name: string;
   ip: string;
   active: boolean;
+  printerId: string | null;
+  universeOnly: boolean;
   createdAt: string;
 };
 
@@ -109,6 +123,10 @@ afterAll(async () => {
     await db
       .delete(schema.fingerprintMachines)
       .where(inArray(schema.fingerprintMachines.id, made.machines));
+  if (made.printers.length)
+    await db
+      .delete(schema.printers)
+      .where(inArray(schema.printers.id, made.printers));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
@@ -323,5 +341,84 @@ describe("authorization", () => {
       viewer.cookie
     );
     expect(created.status).toBe(403);
+  });
+});
+
+/* --------------------------------------------------------------- pairing */
+
+describe("a booth and its printer", () => {
+  test("pairs a printer, and reports it back", async () => {
+    const printerId = await makePrinter(81);
+    const created = await create({ name: `${tag} PASANG`, ip: ipOf(31) });
+    const row = (await created.json()) as Machine;
+    expect(row.printerId).toBeNull();
+    expect(row.universeOnly).toBe(false);
+
+    const patched = await send(
+      "PATCH",
+      `/fingerprint-machines/${row.id}`,
+      admin.cookie,
+      { printerId, universeOnly: true }
+    );
+    expect(patched.status).toBe(200);
+    const paired = (await patched.json()) as Machine;
+    expect(paired.printerId).toBe(printerId);
+    expect(paired.universeOnly).toBe(true);
+  });
+
+  /*
+   * The ticket names the printer it came out of. Two booths sharing one would
+   * put a second person's unit in the first person's hand, which is why the
+   * column is unique and this is a 409 rather than a silent second pairing.
+   */
+  test("a printer already paired cannot be claimed again", async () => {
+    const printerId = await makePrinter(82);
+    const first = (await (
+      await create({ name: `${tag} P1`, ip: ipOf(32) })
+    ).json()) as Machine;
+    const second = (await (
+      await create({ name: `${tag} P2`, ip: ipOf(33) })
+    ).json()) as Machine;
+
+    expect(
+      (
+        await send("PATCH", `/fingerprint-machines/${first.id}`, admin.cookie, {
+          printerId,
+        })
+      ).status
+    ).toBe(200);
+
+    const clash = await send(
+      "PATCH",
+      `/fingerprint-machines/${second.id}`,
+      admin.cookie,
+      { printerId }
+    );
+    expect(clash.status).toBe(409);
+    expect(((await clash.json()) as { code: string }).code).toBe(
+      "printer_taken"
+    );
+  });
+
+  test("a machine can be created already paired, and unpaired later", async () => {
+    const printerId = await makePrinter(83);
+    const created = await send("POST", "/fingerprint-machines", admin.cookie, {
+      name: `${tag} LANGSUNG`,
+      ip: ipOf(34),
+      printerId,
+      universeOnly: true,
+    });
+    expect(created.status).toBe(201);
+    const row = (await created.json()) as Machine;
+    made.machines.push(row.id);
+    expect(row.printerId).toBe(printerId);
+
+    const cleared = await send(
+      "PATCH",
+      `/fingerprint-machines/${row.id}`,
+      admin.cookie,
+      { printerId: null }
+    );
+    expect(((await cleared.json()) as Machine).printerId).toBeNull();
   });
 });

@@ -267,6 +267,13 @@
       "when": 1789100543258,
       "tag": "0037_cute_shinko_yamashiro",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789299211104,
+      "tag": "0038_massive_loa",
+      "breakpoints": true
     }
   ]
 }

@@ -27,6 +27,7 @@ import {
   FingerprintDisplaySchema,
   FingerprintMachineSchema,
 } from "./schemas";
+import { invalidIp, IPV4 } from "./ipv4";
 
 const toMachine = (row: FingerprintMachineRow) => ({
   id: row.id,
@@ -36,6 +37,8 @@ const toMachine = (row: FingerprintMachineRow) => ({
   operatorBooth: row.operatorBooth,
   comKey: row.comKey,
   port: row.port,
+  printerId: row.printerId,
+  universeOnly: row.universeOnly,
   online: row.online,
   lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
   checkedAt: row.checkedAt?.toISOString() ?? null,
@@ -48,25 +51,20 @@ const notFound = {
   message: "Mesin fingerprint tidak ditemukan",
 };
 
+/** One printer belongs to one booth — see the unique constraint on the column. */
+const printerTaken = {
+  code: "printer_taken",
+  message: "Printer itu sudah dipasangkan ke mesin lain",
+};
+
+/* The two unique constraints this table can raise, told apart by name so a
+   clash on the printer is not reported as a clash on the address. */
+const IP_UNIQUE = "fingerprint_machines_ip_unique";
+const PRINTER_UNIQUE = "fingerprint_machines_printer_id_unique";
+
 const duplicateIp = (ip: string) => ({
   code: "ip_taken",
   message: `IP ${ip} sudah dipakai mesin lain`,
-});
-
-/**
- * A single IPv4 host, each octet 0–255.
- *
- * Checked in the handler rather than declared as a TypeBox `pattern`, because
- * validation runs before this code can trim: an address pasted from a
- * spreadsheet arrives padded, and refusing that would be a rule about
- * whitespace rather than about addresses.
- */
-const IPV4 =
-  /^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$/;
-
-const invalidIp = (ip: string) => ({
-  code: "validation_failed",
-  message: `"${ip}" bukan alamat IPv4 yang sah`,
 });
 
 export const fingerprintMachineRoutes = new Elysia({
@@ -161,12 +159,17 @@ export const fingerprintMachineRoutes = new Elysia({
             operatorBooth: body.operatorBooth ?? false,
             comKey: body.comKey ?? 0,
             port: body.port ?? 80,
+            printerId: body.printerId ?? null,
+            universeOnly: body.universeOnly ?? false,
           })
           .returning();
         return status(201, toMachine(row!));
       } catch (error) {
         // One address is one machine — see the table's unique constraint.
-        if (isUniqueViolation(error)) return status(409, duplicateIp(ip));
+        if (isUniqueViolation(error, IP_UNIQUE))
+          return status(409, duplicateIp(ip));
+        if (isUniqueViolation(error, PRINTER_UNIQUE))
+          return status(409, printerTaken);
         throw error;
       }
     },
@@ -179,6 +182,8 @@ export const fingerprintMachineRoutes = new Elysia({
         operatorBooth: t.Optional(t.Boolean()),
         comKey: t.Optional(t.Integer({ minimum: 0 })),
         port: t.Optional(t.Integer({ minimum: 1, maximum: 65535 })),
+        printerId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
+        universeOnly: t.Optional(t.Boolean()),
       }),
       response: {
         201: FingerprintMachineSchema,
@@ -222,13 +227,22 @@ export const fingerprintMachineRoutes = new Elysia({
               : {}),
             ...(body.comKey !== undefined ? { comKey: body.comKey } : {}),
             ...(body.port !== undefined ? { port: body.port } : {}),
+            ...(body.printerId !== undefined
+              ? { printerId: body.printerId }
+              : {}),
+            ...(body.universeOnly !== undefined
+              ? { universeOnly: body.universeOnly }
+              : {}),
           })
           .where(eq(schema.fingerprintMachines.id, params.id))
           .returning();
         if (!row) return status(404, notFound);
         return toMachine(row);
       } catch (error) {
-        if (isUniqueViolation(error)) return status(409, duplicateIp(ip!));
+        if (isUniqueViolation(error, IP_UNIQUE))
+          return status(409, duplicateIp(ip!));
+        if (isUniqueViolation(error, PRINTER_UNIQUE))
+          return status(409, printerTaken);
         throw error;
       }
     },
@@ -242,6 +256,8 @@ export const fingerprintMachineRoutes = new Elysia({
         operatorBooth: t.Optional(t.Boolean()),
         comKey: t.Optional(t.Integer({ minimum: 0 })),
         port: t.Optional(t.Integer({ minimum: 1, maximum: 65535 })),
+        printerId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
+        universeOnly: t.Optional(t.Boolean()),
       }),
       response: {
         200: FingerprintMachineSchema,

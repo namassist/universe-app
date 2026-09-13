@@ -133,6 +133,7 @@ export const NAV: NavEntry[] = [
       ...section(
         "Perangkat & Konten",
         "mesin-fingerprint",
+        "mesin-printer",
         "running-text",
         "sound"
       ),

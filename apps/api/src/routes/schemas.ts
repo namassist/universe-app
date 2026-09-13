@@ -1378,6 +1378,17 @@ export const DeviceSchema = t.Object({
   createdAt: t.String(),
 });
 
+/** A ticket printer, as the master screen lists it. */
+export const PrinterSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  /** IPv4 host — what a ticket is written to, and the printer's identity. */
+  ip: t.String(),
+  port: t.Integer(),
+  active: t.Boolean(),
+  createdAt: t.String(),
+});
+
 export const FingerprintMachineSchema = t.Object({
   id: t.String(),
   name: t.String(),
@@ -1393,6 +1404,17 @@ export const FingerprintMachineSchema = t.Object({
   /** The communication key and SOAP port, per machine rather than assumed. */
   comKey: t.Integer(),
   port: t.Integer(),
+  /**
+   * The printer this booth prints tickets on, or null while unpaired. One
+   * printer belongs to one machine, so pairing a claimed printer is a 409.
+   */
+  printerId: t.Nullable(t.String()),
+  /**
+   * Whether the machine is Universe's alone. Live listening enables the device,
+   * so it runs only on machines carrying this; production machines keep the
+   * read-only pull they already have.
+   */
+  universeOnly: t.Boolean(),
   /** Last probe verdict, after the miss-count debounce. */
   online: t.Boolean(),
   /** Last probe that reached the machine; null until one ever has. */

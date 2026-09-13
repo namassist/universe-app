@@ -39,6 +39,7 @@ export type {
   FingerprintMachineRow,
   MessRow,
   PositionRow,
+  PrinterRow,
   RolePermissionRow,
   RoleRow,
   RosterDayRow,

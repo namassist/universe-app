@@ -238,6 +238,28 @@ export const deviceFleets = pgTable(
  * The reachability columns are written only by the prober (`prober.ts`) and
  * read by everything else; no request path ever opens a socket to a machine.
  */
+/**
+ * The ticket printers, one per booth.
+ *
+ * Owned here for the same reason the machines are: ShiftCorner keeps its own
+ * pairing table, and a printer that moves would otherwise need a request to
+ * another team. Its `ip` is unique because that is what a ticket is written
+ * to — two rows on one address would be two names for one device.
+ *
+ * ESC/POS over TCP; 9100 is the port every printer on site answers on, so it
+ * is a default rather than a question asked of whoever registers one.
+ */
+export const printers = pgTable("printers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  ip: text("ip").notNull().unique(),
+  port: integer("port").notNull().default(9100),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const fingerprintMachines = pgTable("fingerprint_machines", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -272,6 +294,29 @@ export const fingerprintMachines = pgTable("fingerprint_machines", {
    */
   comKey: integer("com_key").notNull().default(0),
   port: integer("port").notNull().default(80),
+  /**
+   * The printer this booth prints its tickets on.
+   *
+   * Unique, so one printer cannot be claimed by two machines: the ticket names
+   * the printer it came out of, and two booths sharing one would put a second
+   * person's unit in the first person's hand. ShiftCorner's own table has 33
+   * pairs and 33 distinct printers, so one-to-one is what the site already
+   * runs. Null until a booth is paired, and null again if the printer row is
+   * deleted — a booth without a printer still collects taps.
+   */
+  printerId: uuid("printer_id")
+    .references(() => printers.id, { onDelete: "set null" })
+    .unique(),
+  /**
+   * Whether this machine belongs to Universe alone.
+   *
+   * Live listening sends `enableDevice`, which changes the machine's state, so
+   * it must never reach a machine ShiftCorner is listening to. We cannot see
+   * ShiftCorner's machine list — it lives in its database — so this flag is how
+   * a machine is declared ours. Default false: a machine is production until
+   * somebody says otherwise, which is the safe direction to be wrong in.
+   */
+  universeOnly: boolean("universe_only").notNull().default(false),
   /* ---- written by the prober, read by the wall ---- */
   /** Last probe verdict, after the miss-count debounce. */
   online: boolean("online").notNull().default(false),
@@ -1414,6 +1459,7 @@ export type RolePermissionRow = typeof rolePermissions.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type DeviceRow = typeof devices.$inferSelect;
 export type FingerprintMachineRow = typeof fingerprintMachines.$inferSelect;
+export type PrinterRow = typeof printers.$inferSelect;
 
 export type UnitTypeRow = typeof unitTypes.$inferSelect;
 export type UnitModelRow = typeof unitModels.$inferSelect;

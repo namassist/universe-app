@@ -20,6 +20,7 @@ import { FleetSettingMenu } from "./fleet-setting";
 import { MasterMenu } from "./master";
 import { MonitoringTapMenu } from "./monitoring-tap";
 import { MenuPlaceholder } from "./placeholder";
+import { PrintersMenu } from "./printers";
 import { RosterDataMenu } from "./roster-data";
 import { RunTextsMenu } from "./run-texts";
 import { SettingMenu } from "./setting";
@@ -70,6 +71,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   sound: SoundsMenu,
   timeline: TimelineMenu,
   "mesin-fingerprint": FingerprintMachinesMenu,
+  "mesin-printer": PrintersMenu,
   users: UmUsersMenu,
   roles: UmRolesMenu,
   setting: SettingMenu,

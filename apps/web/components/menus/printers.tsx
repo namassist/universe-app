@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Printer, Search, Trash2 } from "lucide-react";
 
 import { MENU_LABELS } from "@universe/contracts";
 
@@ -10,11 +10,10 @@ import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import {
-  fingerprintMachinesKey,
-  fingerprintMachinesQueryOptions,
-  type FingerprintMachineRow,
-} from "@/lib/queries/fingerprint-machines";
-import { printersQueryOptions } from "@/lib/queries/printers";
+  printersKey,
+  printersQueryOptions,
+  type PrinterRow,
+} from "@/lib/queries/printers";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -50,78 +49,58 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
-/**
- * The same IPv4 shape the API enforces, checked here only so a typo is caught
- * before a round trip. The server's answer is still the one that decides — a
- * duplicate address, in particular, is a conflict only the database can see.
- */
+/** The same shape the API enforces, checked here only to catch a typo before
+    a round trip. A duplicate address is still the server's call. */
 const IPV4 =
   /^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$/;
 
 /**
- * The fingerprint machine registry.
+ * The ticket printer registry.
  *
- * These rows are what the monitoring TV shows a card for, so a machine missing
- * here is a machine nobody is watching. Deactivating is the right move for one
- * that is merely unplugged: it keeps its identity and drops off the wall.
+ * A printer is paired with a booth on the fingerprint machine screen, not
+ * here: a booth has a printer, and that is where somebody looks for it.
  */
-export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
+export function PrintersMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
   const canW = mode === "manage";
 
-  const listQ = useQuery(fingerprintMachinesQueryOptions());
-  const printersQ = useQuery(printersQueryOptions());
+  const listQ = useQuery(printersQueryOptions());
   const entries = React.useMemo(() => listQ.data ?? [], [listQ.data]);
 
   const [q, setQ] = React.useState("");
   const [stF, setStF] = React.useState("");
   const [dlgOpen, setDlgOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<FingerprintMachineRow | null>(
-    null
-  );
+  const [editing, setEditing] = React.useState<PrinterRow | null>(null);
   const [fName, setFName] = React.useState("");
   const [fIp, setFIp] = React.useState("");
+  const [fPort, setFPort] = React.useState("9100");
   const [fActive, setFActive] = React.useState(true);
-  const [fBooth, setFBooth] = React.useState(false);
-  const [fComKey, setFComKey] = React.useState("0");
-  const [fPort, setFPort] = React.useState("80");
-  const [fPrinterId, setFPrinterId] = React.useState("");
-  const [fUniverse, setFUniverse] = React.useState(false);
   const [errName, setErrName] = React.useState(false);
   const [errIp, setErrIp] = React.useState(false);
-  const [delTarget, setDelTarget] =
-    React.useState<FingerprintMachineRow | null>(null);
+  const [delTarget, setDelTarget] = React.useState<PrinterRow | null>(null);
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: fingerprintMachinesKey });
+    queryClient.invalidateQueries({ queryKey: printersKey });
 
   const save = useMutation({
     mutationFn: async (input: {
       id: string | null;
       name: string;
       ip: string;
-      active: boolean;
-      operatorBooth: boolean;
-      comKey: number;
       port: number;
-      printerId: string | null;
-      universeOnly: boolean;
+      active: boolean;
     }) => {
       const body = {
         name: input.name,
         ip: input.ip,
-        active: input.active,
-        operatorBooth: input.operatorBooth,
-        comKey: input.comKey,
         port: input.port,
-        printerId: input.printerId,
-        universeOnly: input.universeOnly,
+        active: input.active,
       };
       const result = input.id
-        ? await api.v1["fingerprint-machines"]({ id: input.id }).patch(body)
-        : await api.v1["fingerprint-machines"].post(body);
+        ? await api.v1.printers({ id: input.id }).patch(body)
+        : await api.v1.printers.post(body);
       if (result.error) throw result.error;
       return result.data;
     },
@@ -139,10 +118,8 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
   });
 
   const del = useMutation({
-    mutationFn: async (row: FingerprintMachineRow) => {
-      const { error } = await api.v1["fingerprint-machines"]({
-        id: row.id,
-      }).delete();
+    mutationFn: async (row: PrinterRow) => {
+      const { error } = await api.v1.printers({ id: row.id }).delete();
       if (error) throw error;
     },
     onSuccess: async (_d, row) => {
@@ -170,26 +147,18 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     setEditing(null);
     setFName("");
     setFIp("");
+    setFPort("9100");
     setFActive(true);
-    setFBooth(false);
-    setFComKey("0");
-    setFPort("80");
-    setFPrinterId("");
-    setFUniverse(false);
     setErrName(false);
     setErrIp(false);
     setDlgOpen(true);
   }
-  function openEdit(r: FingerprintMachineRow) {
+  function openEdit(r: PrinterRow) {
     setEditing(r);
     setFName(r.name);
     setFIp(r.ip);
-    setFActive(r.active);
-    setFBooth(r.operatorBooth);
-    setFComKey(String(r.comKey));
     setFPort(String(r.port));
-    setFPrinterId(r.printerId ?? "");
-    setFUniverse(r.universeOnly);
+    setFActive(r.active);
     setErrName(false);
     setErrIp(false);
     setDlgOpen(true);
@@ -207,20 +176,18 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
       id: editing?.id ?? null,
       name,
       ip,
+      /* Blank reads as the usual port rather than as an error. */
+      port: Number(fPort) || 9100,
       active: fActive,
-      operatorBooth: fBooth,
-      /* Blank reads as the factory value rather than as an error: somebody
-         clearing the box means "the usual one", not "no key at all". */
-      comKey: Number(fComKey) || 0,
-      port: Number(fPort) || 80,
-      printerId: fPrinterId || null,
-      universeOnly: fUniverse,
     });
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={MENU_LABELS["mesin-fingerprint"]} sub={t.mfSub}>
+      <PageTitle
+        title={MENU_LABELS["mesin-printer"]}
+        sub="Daftar printer tiket — dipasangkan ke mesin fingerprint di menu Mesin Fingerprint"
+      >
         {canW ? (
           <Button onClick={openAdd}>
             <Plus />
@@ -231,7 +198,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>{MENU_LABELS["mesin-fingerprint"]}</ToolbarTitle>
+          <ToolbarTitle>{MENU_LABELS["mesin-printer"]}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
               className="w-[240px]"
@@ -259,8 +226,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
               <tr>
                 <TableHead>{t.mfName}</TableHead>
                 <TableHead>{t.mfIp}</TableHead>
-                <TableHead>Printer</TableHead>
-                <TableHead>{t.mfReach}</TableHead>
+                <TableHead>Port</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
               </tr>
@@ -274,37 +240,8 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
                   <TableCell className="font-mono tabular-nums">
                     {r.ip}
                   </TableCell>
-                  <TableCell>
-                    {/* The booth's printer, by name — the pairing is what a
-                        ticket is written to, so it belongs on the list rather
-                        than only inside the dialog. */}
-                    {r.printerId ? (
-                      <span>
-                        {printersQ.data?.find((x) => x.id === r.printerId)
-                          ?.name ?? "—"}
-                      </span>
-                    ) : (
-                      <span className="text-(--text-tertiary)">—</span>
-                    )}
-                    {r.universeOnly ? (
-                      <Badge className="ml-2" variant="info">
-                        Universe
-                      </Badge>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    {/* The prober's reading, not the operator's flag — a
-                        machine can be active and unreachable, which is
-                        precisely the case worth seeing here. */}
-                    {r.checkedAt === null ? (
-                      <span className="text-(--text-tertiary)">
-                        {t.mfNotChecked}
-                      </span>
-                    ) : (
-                      <Badge variant={r.online ? "success" : "danger"} dot>
-                        {r.online ? t.mfOnline : t.mfOffline}
-                      </Badge>
-                    )}
+                  <TableCell className="font-mono tabular-nums">
+                    {r.port}
                   </TableCell>
                   <TableCell>
                     <Badge variant={r.active ? "success" : "danger"} dot>
@@ -340,7 +277,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           <StateBox
             icon={<Search className="text-(--color-primary-bright)" />}
             title={t.noResTitle}
-            body={t.mfEmptyB}
+            body="Belum ada printer terdaftar."
           />
         )}
 
@@ -363,24 +300,27 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
       <Dialog
         open={dlgOpen}
         onClose={() => setDlgOpen(false)}
-        labelledBy="mf-t"
+        labelledBy="pr-t"
       >
         <DialogIcon variant="info">
-          <Fingerprint />
+          <Printer />
         </DialogIcon>
-        <DialogTitle id="mf-t">{editing ? t.mdEditT : t.mdAdd}</DialogTitle>
-        <DialogBody>{t.mfDlgB}</DialogBody>
+        <DialogTitle id="pr-t">{editing ? t.mdEditT : t.mdAdd}</DialogTitle>
+        <DialogBody>
+          Printer tiket muster. Pasangkan ke mesin fingerprint setelah
+          didaftarkan.
+        </DialogBody>
         <form onSubmit={submit} noValidate>
           <Field
             className="mt-4"
             label={t.mfName}
-            htmlFor="mf-name"
+            htmlFor="pr-name"
             required
             error={errName}
             errorMessage={t.mdErrName}
           >
             <Input
-              id="mf-name"
+              id="pr-name"
               value={fName}
               onChange={(e) => setFName(e.target.value)}
             />
@@ -388,111 +328,39 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           <Field
             className="mt-4"
             label={t.mfIp}
-            htmlFor="mf-ip"
+            htmlFor="pr-ip"
             required
             error={errIp}
             errorMessage={t.mfErrIp}
           >
             <Input
-              id="mf-ip"
+              id="pr-ip"
               className="font-mono"
               inputMode="decimal"
-              placeholder="192.168.179.229"
+              placeholder="192.168.179.87"
               value={fIp}
               onChange={(e) => setFIp(e.target.value)}
             />
           </Field>
-          <ToggleRow className="mt-4" htmlFor="mf-active">
+          <Field className="mt-4" label="Port" htmlFor="pr-port">
+            <Input
+              id="pr-port"
+              inputMode="numeric"
+              value={fPort}
+              onChange={(e) => setFPort(e.target.value)}
+            />
+          </Field>
+          <p className="mt-2 text-xs text-(--text-tertiary)">
+            Biarkan 9100 kecuali printer ini memang disetel lain.
+          </p>
+          <ToggleRow className="mt-4" htmlFor="pr-active">
             <Checkbox
-              id="mf-active"
+              id="pr-active"
               checked={fActive}
               onChange={(e) => setFActive(e.target.checked)}
             />
             {t.stAktif}
           </ToggleRow>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            {t.mfNonaktifNote}
-          </p>
-
-          {/* Asked as a fact about where the machine stands, not as a setting
-              about what the software does with it. Somebody who knows the yard
-              can answer it; nobody has to know that it decides which machines
-              taps are collected from. */}
-          <ToggleRow className="mt-4" htmlFor="mf-booth">
-            <Checkbox
-              id="mf-booth"
-              checked={fBooth}
-              onChange={(e) => setFBooth(e.target.checked)}
-            />
-            Mesin bilik operator
-          </ToggleRow>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            Absensi operator ditarik dari mesin yang ditandai ini. Mesin di luar
-            bilik operator tetap dipantau hidup/matinya, tapi tidak ditarik
-            datanya.
-          </p>
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Field label="Com Key" htmlFor="mf-comkey">
-              <Input
-                id="mf-comkey"
-                inputMode="numeric"
-                value={fComKey}
-                onChange={(e) => setFComKey(e.target.value)}
-              />
-            </Field>
-            <Field label="Port" htmlFor="mf-port">
-              <Input
-                id="mf-port"
-                inputMode="numeric"
-                value={fPort}
-                onChange={(e) => setFPort(e.target.value)}
-              />
-            </Field>
-          </div>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            Biarkan 0 dan 80 kecuali mesin ini memang disetel lain.
-          </p>
-
-          <Field className="mt-4" label="Printer tiket" htmlFor="mf-printer">
-            <Select
-              id="mf-printer"
-              value={fPrinterId}
-              onChange={(e) => setFPrinterId(e.target.value)}
-            >
-              <option value="">Tanpa printer</option>
-              {(printersQ.data ?? [])
-                /* A printer already claimed by another booth is left out: one
-                   printer belongs to one machine, and offering a taken one
-                   would only produce a 409 after the click. */
-                .filter(
-                  (pr) =>
-                    (pr.active || pr.id === fPrinterId) &&
-                    !entries.some(
-                      (m) => m.printerId === pr.id && m.id !== editing?.id
-                    )
-                )
-                .map((pr) => (
-                  <option key={pr.id} value={pr.id}>
-                    {pr.name} — {pr.ip}
-                  </option>
-                ))}
-            </Select>
-          </Field>
-
-          <ToggleRow className="mt-4" htmlFor="mf-universe">
-            <Checkbox
-              id="mf-universe"
-              checked={fUniverse}
-              onChange={(e) => setFUniverse(e.target.checked)}
-            />
-            Mesin khusus Universe
-          </ToggleRow>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            Hanya mesin bertanda ini yang boleh didengarkan langsung (live).
-            Mesin produksi yang dipakai ShiftCorner jangan ditandai — cukup
-            ditarik berkala seperti sekarang.
-          </p>
           <DialogActions>
             <Button
               type="button"
@@ -511,15 +379,18 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
       <Dialog
         open={!!delTarget}
         onClose={() => setDelTarget(null)}
-        labelledBy="mfd-t"
+        labelledBy="prd-t"
       >
         <DialogIcon variant="danger">
           <Trash2 />
         </DialogIcon>
-        <DialogTitle id="mfd-t">
+        <DialogTitle id="prd-t">
           {t.mdDelT} &ldquo;{delTarget?.name}&rdquo;?
         </DialogTitle>
-        <DialogBody>{t.mdDelB}</DialogBody>
+        <DialogBody>
+          Mesin yang dipasangkan ke printer ini tetap ada, pasangannya saja yang
+          lepas.
+        </DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setDelTarget(null)}>
             {t.btnCancel}
