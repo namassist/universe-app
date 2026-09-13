@@ -1232,10 +1232,16 @@ fleet, unit, bus, area — are filled only for a person who has a unit
 
 ### Manual placement of someone who failed FTW
 
-- **Allowed, with a warning, and recorded** (owner, 2026-09-13). Today a manual
-  placement stores only `source = manual`: not who, not when, not what warning
-  was dismissed. A placement history is needed, on the pattern of
-  `roster_revisions` (`submitted_by`, `submitted_at`).
+- **Allowed, with a warning, and recorded** (owner, 2026-09-13) — shipped.
+  Every manual placement writes a row to `fleet_placements`: the unit, the
+  person or the vacancy, who made it and when, and both verdicts as they read
+  at that moment rather than as they read later. The name is copied rather than
+  joined, so a deleted account still answers "who".
+- **The two kinds of override are not alike.** Lateness a supervisor decides on
+  their own judgement; a failed or missing FTW on a unit that asks for one is
+  refused by the server until it is confirmed, and the screen asks in those
+  words before sending the confirmation. The verdict is judged again at the
+  moment of the placement rather than trusted from the screen.
 
 ### Ticket contents and where each field comes from
 
@@ -1281,7 +1287,3 @@ same fields from the plan.
   machine alone and the two sources are no longer being compared. Registering
   them again is a decision, not an oversight — their official names are in the
   `tbl_m_absen_to_finger` export.
-- **A placement history does not exist yet.** Allowing an admin to place
-  somebody who failed FTW was agreed on condition it is recorded, and today a
-  manual placement stores only `source = manual`: not who, not when, not what
-  warning was dismissed. Until that lands, the condition is unmet.
