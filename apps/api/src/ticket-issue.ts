@@ -335,6 +335,7 @@ export async function issueTicket(
       status: "dry",
       contentHash,
       preview,
+      fields,
     })
     .onConflictDoNothing()
     .returning({ id: schema.tickets.id });
@@ -375,4 +376,70 @@ export async function issueTicket(
         attempts,
         error: outcome.reason,
       };
+}
+
+/**
+ * Print a stored ticket again.
+ *
+ * Renders the slip from the fields it was built with, not from the allocation
+ * as it stands now: the paper somebody is handed after a jam should be the
+ * paper they were owed, not a fresh answer to a question asked an hour ago.
+ *
+ * Refuses quietly rather than throwing — the caller is a button on a screen.
+ */
+export async function reprintTicket(
+  id: string,
+  deps: IssueDeps = {}
+): Promise<
+  | {
+      reprinted: false;
+      reason: "ticket_not_found" | "no_printer" | "printing_off";
+    }
+  | {
+      reprinted: true;
+      status: "printed" | "failed";
+      attempts: number;
+      error?: string;
+    }
+> {
+  const [ticket] = await db
+    .select({
+      id: schema.tickets.id,
+      fields: schema.tickets.fields,
+      printerIp: schema.printers.ip,
+      printerPort: schema.printers.port,
+      printerActive: schema.printers.active,
+    })
+    .from(schema.tickets)
+    .leftJoin(schema.printers, eq(schema.printers.id, schema.tickets.printerId))
+    .where(eq(schema.tickets.id, id))
+    .limit(1);
+  if (!ticket) return { reprinted: false, reason: "ticket_not_found" };
+
+  if (!(deps.printingEnabled ?? env.TICKET_PRINTING))
+    return { reprinted: false, reason: "printing_off" };
+  if (!ticket.printerIp || !ticket.printerActive)
+    return { reprinted: false, reason: "no_printer" };
+
+  const target = { ip: ticket.printerIp, port: ticket.printerPort ?? 9100 };
+  const send = deps.print ?? ((t, bytes) => sendToPrinter(t.ip, t.port, bytes));
+  const { outcome, attempts } = await printWithRetry(
+    (bytes) => send(target, bytes),
+    renderTicket(ticket.fields as TicketFields),
+    deps.retry
+  );
+
+  await db
+    .update(schema.tickets)
+    .set({
+      status: outcome.sent ? "printed" : "failed",
+      attempts,
+      printedAt: outcome.sent ? new Date() : null,
+      lastError: outcome.sent ? null : outcome.reason,
+    })
+    .where(eq(schema.tickets.id, ticket.id));
+
+  return outcome.sent
+    ? { reprinted: true, status: "printed", attempts }
+    : { reprinted: true, status: "failed", attempts, error: outcome.reason };
 }

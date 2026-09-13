@@ -29,6 +29,7 @@ import {
   TapCompareSchema,
   LiveLogSchema,
   TapMonitorSchema,
+  TicketListSchema,
 } from "./schemas";
 import {
   activeListens,
@@ -37,6 +38,8 @@ import {
   startListening,
   stopListening,
 } from "../live-listener";
+import { reprintTicket } from "../ticket-issue";
+import { env } from "../env";
 
 /** A page of taps, newest first — the end a supervisor reads. */
 const PAGE = 500;
@@ -380,6 +383,118 @@ export const monitoringTapRoutes = new Elysia({
         403: ErrorSchema,
       },
       detail: { summary: "Every tap on one date, newest first" },
+    }
+  )
+
+  .get(
+    "/tickets",
+    async ({ query }) => {
+      const date = query.date ?? new Date().toISOString().slice(0, 10);
+      const rows = await db
+        .select({
+          id: schema.tickets.id,
+          nik: schema.tickets.nik,
+          name: schema.employees.name,
+          status: schema.tickets.status,
+          preview: schema.tickets.preview,
+          fields: schema.tickets.fields,
+          attempts: schema.tickets.attempts,
+          lastError: schema.tickets.lastError,
+          issuedAt: schema.tickets.createdAt,
+          machine: schema.fingerprintMachines.name,
+          ip: schema.tickets.ip,
+          printer: schema.printers.name,
+        })
+        .from(schema.tickets)
+        .leftJoin(
+          schema.employees,
+          eq(schema.employees.nik, schema.tickets.nik)
+        )
+        .leftJoin(
+          schema.fingerprintMachines,
+          eq(schema.fingerprintMachines.ip, schema.tickets.ip)
+        )
+        .leftJoin(
+          schema.printers,
+          eq(schema.printers.id, schema.tickets.printerId)
+        )
+        .where(eq(schema.tickets.date, date))
+        .orderBy(desc(schema.tickets.createdAt))
+        .limit(500);
+
+      const shaped = rows.map((r) => {
+        const fields = r.fields as {
+          at: string;
+          seat: { unit: string } | null;
+        };
+        return {
+          id: r.id,
+          nik: r.nik,
+          name: r.name ?? null,
+          status: r.status,
+          at: fields.at,
+          unit: fields.seat?.unit ?? null,
+          machine: r.machine ?? r.ip,
+          printer: r.printer ?? null,
+          attempts: r.attempts,
+          lastError: r.lastError,
+          preview: r.preview,
+          issuedAt: r.issuedAt.toISOString(),
+        };
+      });
+
+      return {
+        date,
+        printed: shaped.filter((r) => r.status === "printed").length,
+        failed: shaped.filter((r) => r.status === "failed").length,
+        dry: shaped.filter((r) => r.status === "dry").length,
+        printing: env.TICKET_PRINTING,
+        rows: shaped,
+      };
+    },
+    {
+      auth: { menu: "monitoring-tap", mode: "view" },
+      query: t.Object({ date: t.Optional(t.String()) }),
+      response: {
+        200: TicketListSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Tickets issued on one date" },
+    }
+  )
+
+  .post(
+    "/tickets/:id/reprint",
+    async ({ params, status }) => {
+      const result = await reprintTicket(params.id);
+      if (result.reprinted) return { status: result.status };
+      /* Each refusal names itself: a ticket that is gone, a printer that is
+         not there, and printing switched off are three different answers and
+         three different things to do about them. */
+      return status(result.reason === "ticket_not_found" ? 404 : 422, {
+        code: result.reason,
+        message:
+          result.reason === "ticket_not_found"
+            ? "Tiket tidak ditemukan"
+            : result.reason === "no_printer"
+              ? "Mesin ini tidak punya printer aktif"
+              : "Pencetakan sedang dimatikan (TICKET_PRINTING)",
+      });
+    },
+    {
+      auth: { menu: "monitoring-tap", mode: "manage" },
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      response: {
+        200: t.Object({
+          status: t.Union([t.Literal("printed"), t.Literal("failed")]),
+        }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Print a stored ticket again" },
     }
   )
 

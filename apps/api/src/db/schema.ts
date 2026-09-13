@@ -1703,6 +1703,14 @@ export const tickets = pgTable(
     contentHash: text("content_hash").notNull(),
     /** The slip as text, so a failure can be read without a printer. */
     preview: text("preview").notNull(),
+    /**
+     * The fields the slip was built from.
+     *
+     * Kept so a reprint reproduces the slip that failed, rather than a fresh
+     * one built from an allocation that may have moved since. The paper a
+     * person is handed after a jam should be the paper they were owed.
+     */
+    fields: jsonb("fields").notNull(),
     attempts: integer("attempts").notNull().default(0),
     /** Why the last attempt failed, verbatim. Null once it printed. */
     lastError: text("last_error"),

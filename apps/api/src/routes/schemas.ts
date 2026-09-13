@@ -578,6 +578,40 @@ const LiveEventSchema = t.Object({
   machine: t.String(),
 });
 
+/** One issued ticket, as the ticket tab lists it. */
+const TicketRowSchema = t.Object({
+  id: t.String(),
+  nik: t.String(),
+  name: t.Nullable(t.String()),
+  /** `printed`, `failed`, or `dry` — rendered but never sent. */
+  status: t.Union([
+    t.Literal("printed"),
+    t.Literal("failed"),
+    t.Literal("dry"),
+  ]),
+  /** The arrival the slip states, `"YYYY-MM-DD HH:MM:SS"`. */
+  at: t.String(),
+  /** Null on a proof-of-attendance slip, which is most spares most mornings. */
+  unit: t.Nullable(t.String()),
+  machine: t.String(),
+  printer: t.Nullable(t.String()),
+  attempts: t.Integer(),
+  lastError: t.Nullable(t.String()),
+  /** The whole slip as text, so a failure can be read without a printer. */
+  preview: t.String(),
+  issuedAt: t.String(),
+});
+
+export const TicketListSchema = t.Object({
+  date: t.String(),
+  printed: t.Integer(),
+  failed: t.Integer(),
+  dry: t.Integer(),
+  /** Whether tickets are actually sent to printers on this deployment. */
+  printing: t.Boolean(),
+  rows: t.Array(TicketRowSchema),
+});
+
 export const LiveLogSchema = t.Object({
   sessions: t.Array(ActiveListenSchema),
   machines: t.Array(ListenableMachineSchema),
