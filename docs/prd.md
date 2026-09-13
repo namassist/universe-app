@@ -1071,3 +1071,175 @@ runs intermittently.
   as offline. `PROBE_CONCURRENCY` (10) and a 5 s timeout removed the false
   alarms; a full cycle takes ~3.4 s, far inside its interval. A monitoring wall
   that cries wolf is worse than one that answers a second later.
+
+## Live capture and muster tickets — planned
+
+**Goal:** a person taps at a Universe booth and a ticket prints before they
+step away — proof of attendance for everyone, and the unit, bus, fleet and area
+for everyone who has one.
+
+**Pain point:** the periodic pull reaches a tap in about a minute and a half on
+thirty-odd machines. That is fine for a board and useless for a queue at a
+printer. ShiftCorner prints within a second, but only on machines paired with a
+printer (33 of the 57 active machines), only inside hard-coded windows, and it
+loses every tap made while its connection is down.
+
+### What the spike proved (2026-09-12, dev machine 192.168.1.2)
+
+- **The session must be authenticated.** The machine answers `CMD_CONNECT` with
+  `CMD_ACK_UNAUTH` (2005). `CMD_AUTH` (1102) carrying pyzk's commkey — derived
+  from comm key `0` and the session id — is accepted (2000). `node-zklib` never
+  checks that reply, so an unauthenticated session looks healthy and simply
+  never receives an event. `zk-attendance-sdk` surfaces the error but does not
+  authenticate either; the handshake is ours, about fifteen lines.
+- **The device must be enabled before listening** (caobo171/node-zklib#26):
+  `enableDevice()` then `getRealTimeLogs()`. With both, a tap at 18:49:41
+  arrived as an event at 18:49:42.
+- **Listening does not block counting.** `getInfo` from a second connection
+  succeeded 5 of 5 times while a live connection was held for 150 s, so the
+  periodic pull stays as the safety net.
+- Not yet proven: sixteen connections held together for ninety minutes,
+  recovery after a network drop, and ESC/POS output on a real printer.
+
+### Device guard
+
+- **`enableDevice` is allowed; nothing else is** (owner, 2026-09-13). It changes
+  device state but deletes nothing — it returns the machine to accepting
+  fingerprints. `disableDevice`, `clearAttendanceLog`, `deleteUser` and every
+  clear/delete command stay undeclared and rejected by the read-only guard.
+
+### Machines and printers
+
+- **Sixteen new machines, used by Universe only** (owner, 2026-09-13). They are
+  not in `tbl_m_absen_to_finger`, so ShiftCorner never listens to them and no
+  person receives two tickets for one tap.
+- **Printers are master data of their own** (owner, 2026-09-13): name and IP,
+  with the same create/edit/deactivate treatment as the fingerprint machines.
+- **A finger machine is paired with at most one printer, and a printer with at
+  most one machine.** ShiftCorner's pairing table has 33 pairs and 33 distinct
+  printers — none shared — so one-to-one is the shape the site already runs.
+  The printer name is printed on the ticket. ESC/POS over TCP port 9100.
+- **Machines carry a "Universe only" flag.** Universe cannot see which machines
+  ShiftCorner listens to — that lives in ShiftCorner's own database — so the
+  flag is how a machine is declared safe for live listening. The development
+  machine and the sixteen new booths carry it; every production machine
+  registered today does not.
+
+### When it listens and when it prints (day shift; night is +12 h)
+
+| Stage            | Time  | Behaviour                                          |
+| ---------------- | ----- | -------------------------------------------------- |
+| `finger-ingest`  | 04:30 | Listening opens on every booth                     |
+| `finger-in`      | 05:25 | First finger closes; a later first tap is **late** |
+| `spare-validate` | 05:26 | Allocation runs and is **final**                   |
+| `finger-second`  | 05:28 | Spare tickets start printing                       |
+
+A spare's repeat tap before 05:28 is recorded and prints nothing, even if the
+allocation has already finished (owner, 2026-09-13).
+
+### Listening outside the schedule, and the live log
+
+- **Live listening never touches a production machine** (owner, 2026-09-13).
+  Listening sends `enableDevice`, which changes device state, and production
+  machines are ShiftCorner's. Scheduled and manual listening both run only on
+  machines flagged "Universe only" — the development machine and the sixteen
+  new booths. Production machines keep the periodic pull they have today:
+  read-only, no live session.
+- **Listening follows the timeline by default** (owner, 2026-09-13): it opens at
+  `finger-ingest` and stays open through the gap between the two fingers until
+  `bus-depart` plus the collection grace. It does not disconnect for the three
+  minutes between 05:25 and 05:28 — those taps are still recorded.
+- **A manual listen exists for testing** (owner, 2026-09-13). An admin picks
+  machines one at a time and starts listening. Only "Universe only" machines
+  can be chosen; a production machine is not offered.
+- **A manual listen runs until someone presses stop** (owner, 2026-09-13). To
+  keep a forgotten session visible, the screen shows every active listen with
+  who started it and since when, and a server restart ends every manual
+  session rather than resuming it.
+- **The live log is a tab on the tap monitoring screen.** The server holds the
+  connections and records each event; the tab refreshes every few seconds, the
+  same polling every other monitoring screen uses. No WebSocket or SSE — the
+  application has none today, and a testing log does not justify the first.
+- Starting and stopping a listen needs `manage` access to the monitoring menu;
+  reading the log needs `view`.
+
+### Who gets a ticket
+
+**Everyone who taps gets a ticket as proof of attendance.** Allocation fields —
+fleet, unit, bus, area — are filled only for a person who has a unit
+(owner, 2026-09-13).
+
+| Person                                       | When          | Ticket                                |
+| -------------------------------------------- | ------------- | ------------------------------------- |
+| Standing operator, FTW passed, on time       | first finger  | Full                                  |
+| Standing operator, FTW not yet in, on time   | first finger  | No allocation fields                  |
+| Standing operator, FTW failed or late upload | any tap       | No allocation fields; never allocated |
+| Standing operator, unit on a non-FTW unit    | first finger  | Not judged on FTW                     |
+| Standing operator, tapped after 05:25        | any tap       | No allocation fields; not allocated   |
+| Fleet setting not filled when they tap       | any tap       | No allocation fields                  |
+| Spare                                        | first finger  | **No ticket**; tap recorded           |
+| Spare, allocated                             | second finger | Full; time is the **first** tap       |
+| Spare, not allocated                         | second finger | No allocation fields                  |
+| Spare who skipped first finger               | any tap       | No allocation fields; not allocated   |
+
+- **FTW passes only on `FTW aman` and `Dapat Bekerja` together** (≥ 330 minutes
+  of sleep, the category savera assigns), uploaded before `ftw-deadline`. This
+  is the rule `readiness.ts` already enforces; unchanged.
+- **The attendance time is always the person's first tap of the shift.** That is
+  why a spare taps twice.
+
+### Filling in a unit later
+
+- Allocation is final. A late person reaches a unit only through a **manual
+  placement by an admin**, which the Actual tab already allows.
+- After a manual placement, or after the fleet setting is filled, the person
+  **taps again** and a full ticket prints. Tickets never print on their own.
+- **A repeat tap prints only when the ticket's contents changed** — a unit that
+  is now filled, say. The same contents print nothing (owner, 2026-09-13).
+
+### Manual placement of someone who failed FTW
+
+- **Allowed, with a warning, and recorded** (owner, 2026-09-13). Today a manual
+  placement stores only `source = manual`: not who, not when, not what warning
+  was dismissed. A placement history is needed, on the pattern of
+  `roster_revisions` (`submitted_by`, `submitted_at`).
+
+### Ticket contents and where each field comes from
+
+- **Two sources, by when the ticket prints.** A standing operator's
+  first-finger ticket prints before the board exists, so it reads the
+  **standing plan**: the unit held in `fleet_plan_slots`, with bus, fleet and
+  area from that unit and the fleet setting. Every later ticket — spares at the
+  second finger, anyone after a manual placement — reads the **generated
+  board** (`fleet_actual_slots`).
+- **The plan is printed as it stands** (owner, 2026-09-13). Making unit status
+  final — breakdown, standby, who holds what — is the admin's job when the
+  fleet setting is imported at shift start (04:00). The ticket does not second-
+  guess it.
+
+The fields below are the generated board's; a first-finger ticket takes the
+same fields from the plan.
+
+| Field                | Source                                                     |
+| -------------------- | ---------------------------------------------------------- |
+| NIK, name            | `employees`                                                |
+| Position, department | `positions.name`, `departments.name`                       |
+| Unit                 | `units.code` of the seated slot                            |
+| Bus                  | `fleet_actual_slots.transport_code`                        |
+| Fleet                | `fleet_actual_fleets.leader_code`; support units have none |
+| Area                 | `fleet_actual_slots.work_area`                             |
+| Printer name         | the booth's paired printer                                 |
+| Attendance time      | first tap of the shift                                     |
+| Status               | IN                                                         |
+
+### When the printer fails
+
+- The tap is recorded as attendance regardless.
+- The ticket is retried for about 60 s, then marked for a manual reprint on the
+  monitoring screen. Nothing prints unattended after the person has left
+  (owner, 2026-09-13).
+
+### Open questions
+
+- The dashboard counts FTW as passed on the word "aman" alone — looser than the
+  allocation's rule. Tracked separately; not part of this work.
