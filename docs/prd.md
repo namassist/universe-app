@@ -1072,7 +1072,7 @@ runs intermittently.
   alarms; a full cycle takes ~3.4 s, far inside its interval. A monitoring wall
   that cries wolf is worse than one that answers a second later.
 
-## Live capture and muster tickets — planned
+## Live capture and muster tickets — shipped, rolling out in stages
 
 **Goal:** a person taps at a Universe booth and a ticket prints before they
 step away — proof of attendance for everyone, and the unit, bus, fleet and area
@@ -1098,8 +1098,37 @@ loses every tap made while its connection is down.
 - **Listening does not block counting.** `getInfo` from a second connection
   succeeded 5 of 5 times while a live connection was held for 150 s, so the
   periodic pull stays as the safety net.
-- Not yet proven: sixteen connections held together for ninety minutes,
-  recovery after a network drop, and ESC/POS output on a real printer.
+
+### What running it proved (2026-09-13 and 14)
+
+- **A scheduled window holds a booth for a muster.** Opened 04:30:51, closed
+  05:59:54, one session, nothing pressed: `[listen] jendela tutup — 1 sesi
+dibuka, 0 gagal, 1 ditutup`.
+- **The latency is what it promised.** A tap the machine clocked at 05:02:41
+  was recorded at 05:02:42.
+- **Listening and pulling share a machine.** 240 `getInfo` calls ran at a
+  thirty-second cadence while a live session was held, with a single
+  `ECONNREFUSED` — about 0.4%, and it cost nothing: the pull only asks for a
+  count and the next cycle succeeded. The live session was untouched.
+- **A slip reaches paper.** ESC/POS to a printer on port 9100, accepted in 6 ms
+  and printed, then the whole path again from a real tap.
+- Still unproven: sixteen connections held together for ninety minutes. There
+  is one development machine, so this waits for the hardware.
+
+### Two clock mistakes, both found by the owner rather than by a test
+
+Recorded because the same shape will happen again. `parseHexToTime` builds
+`new Date(year, month, day, hour, ...)` — _local_ components — so the machine's
+wall clock is what the **local** getters return. Reading it as UTC shifted every
+stored tap by this process's offset, and a 21:11 tap was written down as 13:11.
+Separately, the Live tab printed the received time straight from its ISO text,
+putting 13:53 beside a machine clock reading 21:53 on the one screen whose job
+is comparing those two numbers.
+
+Both unit tests were green while the code was wrong, because each test
+constructed its `Date` the same wrong way the code read it. A test written by
+whoever wrote the code is blind in the same place; what caught these was a
+person holding a wall clock against a screen.
 
 ### Device guard
 
@@ -1110,9 +1139,13 @@ loses every tap made while its connection is down.
 
 ### Machines and printers
 
-- **Sixteen new machines, used by Universe only** (owner, 2026-09-13). They are
-  not in `tbl_m_absen_to_finger`, so ShiftCorner never listens to them and no
-  person receives two tickets for one tap.
+- **New machines, used by Universe only** (owner, 2026-09-13). They are not in
+  `tbl_m_absen_to_finger`, so ShiftCorner never listens to them and no person
+  receives two tickets for one tap.
+- **Rolled out in stages, not all at once** (owner, 2026-09-14): two machines
+  first, then more. Sixteen is where it is going, not where it starts — and
+  since sixteen held sessions is the one thing the spike could not prove, the
+  staging is also how that gets proven, a few machines at a time.
 - **Printers are master data of their own** (owner, 2026-09-13): name and IP,
   with the same create/edit/deactivate treatment as the fingerprint machines.
 - **A finger machine is paired with at most one printer, and a printer with at
@@ -1243,3 +1276,12 @@ same fields from the plan.
 
 - The dashboard counts FTW as passed on the word "aman" alone — looser than the
   allocation's rule. Tracked separately; not part of this work.
+- **The parallel run against Nakula is paused.** The 33 production machines were
+  removed from the registry, so the periodic pull now covers the development
+  machine alone and the two sources are no longer being compared. Registering
+  them again is a decision, not an oversight — their official names are in the
+  `tbl_m_absen_to_finger` export.
+- **A placement history does not exist yet.** Allowing an admin to place
+  somebody who failed FTW was agreed on condition it is recorded, and today a
+  manual placement stores only `source = manual`: not who, not when, not what
+  warning was dismissed. Until that lands, the condition is unmet.
