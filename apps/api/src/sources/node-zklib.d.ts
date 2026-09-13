@@ -59,3 +59,68 @@ declare module "node-zklib" {
     listenerCount(event: string): number;
   }
 }
+
+/**
+ * The TCP transport on its own, for the live session.
+ *
+ * The live listener talks to the socket directly rather than through `ZKLib`,
+ * because every method that would send a command for us — `connect()`,
+ * `enableDevice()`, `getRealTimeLogs()` — routes through `executeCmd`, a
+ * function that forwards an arbitrary command and would defeat every guard we
+ * have. We build the four packets we are allowed to send ourselves.
+ *
+ * Declared without `executeCmd`, `disconnect`, `clearAttendanceLog` or any
+ * other method for the same reason the main class is: what is not declared
+ * cannot be called.
+ */
+declare module "node-zklib/zklibtcp" {
+  export default class ZKLibTCP {
+    constructor(ip: string, port: number, timeout: number);
+    /** Opens the TCP socket only. No protocol handshake happens here. */
+    createSocket(
+      cbErr?: (error: unknown) => void,
+      cbClose?: (type: string) => void
+    ): Promise<unknown>;
+    readonly socket?: ZkSocket | null;
+  }
+
+  /** As much of a `net.Socket` as a live session needs. */
+  export interface ZkSocket {
+    on(event: "data", listener: (chunk: Buffer) => void): unknown;
+    on(event: "error", listener: (error: unknown) => void): unknown;
+    on(event: "close", listener: () => void): unknown;
+    once(event: "data", listener: (chunk: Buffer) => void): unknown;
+    off(event: "data", listener: (chunk: Buffer) => void): unknown;
+    write(data: Buffer): unknown;
+    destroy(): unknown;
+    listenerCount(event: string): number;
+  }
+}
+
+/**
+ * The two pure functions we borrow: one frames a packet, one reads an event.
+ *
+ * Neither sends anything. Writing our own framing would be a second
+ * implementation of somebody else's wire format, and getting it subtly wrong
+ * is how a tap is read as the wrong person.
+ */
+declare module "node-zklib/utils" {
+  export function createTCPHeader(
+    command: number,
+    sessionId: number,
+    replyId: number,
+    data: Buffer | string
+  ): Buffer;
+
+  /**
+   * A real-time attendance frame.
+   *
+   * `attTime` is built from the machine's wall-clock fields as though they were
+   * UTC, so a tap at 18:49:41 local arrives as `...T10:49:41.000Z`. Read it
+   * back with the UTC getters to recover what the machine actually said.
+   */
+  export function decodeRecordRealTimeLog52(data: Buffer): {
+    userId: string;
+    attTime: Date;
+  };
+}

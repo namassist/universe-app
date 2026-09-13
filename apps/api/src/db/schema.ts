@@ -1650,6 +1650,43 @@ export const deviceTaps = pgTable(
  * a decision made once inside a source adapter and becomes something that can
  * be re-run when the rule is refined or found wrong.
  */
+/**
+ * Taps as they arrive, while somebody is listening.
+ *
+ * The periodic pull answers "who tapped this morning" a minute and a half
+ * later, which is right for a board and useless for a queue at a printer. A
+ * live session answers in about a second, and this is what it wrote down.
+ *
+ * Kept for the same three days as `device_taps`, and for the same reason: the
+ * machines hold months and remain the archive. Unique on the tap itself, so a
+ * reconnect that replays an event writes nothing twice.
+ *
+ * `at` is the machine's own wall clock, stored as text exactly as `device_taps`
+ * does — the device states no zone, and building a `Date` would bind the
+ * reading to whatever zone this process happens to run in.
+ */
+export const deviceLiveEvents = pgTable(
+  "device_live_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ip: text("ip").notNull(),
+    nik: text("nik").notNull(),
+    at: timestamp("at", { mode: "string" }).notNull(),
+    /** When we received it — the gap against `at` is the latency we promise. */
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("device_live_events_ip_nik_at_idx").on(
+      table.ip,
+      table.nik,
+      table.at
+    ),
+    index("device_live_events_at_idx").on(table.at),
+  ]
+);
+
 export const derivedReadings = pgTable(
   "derived_readings",
   {

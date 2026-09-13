@@ -547,6 +547,45 @@ export const DeviceStatusListSchema = t.Object({
   rows: t.Array(DeviceStatusSchema),
 });
 
+/** One machine being listened to, as the live tab lists it. */
+const ActiveListenSchema = t.Object({
+  machineId: t.String(),
+  ip: t.String(),
+  name: t.String(),
+  source: t.Union([t.Literal("manual"), t.Literal("schedule")]),
+  /** Who pressed start, so a forgotten session has a name against it. */
+  startedBy: t.Nullable(t.String()),
+  startedAt: t.String(),
+  taps: t.Integer(),
+});
+
+/** A machine a listen may be started on — only the Universe-only ones. */
+const ListenableMachineSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  ip: t.String(),
+  listening: t.Boolean(),
+});
+
+/** One tap as it arrived, newest first. */
+const LiveEventSchema = t.Object({
+  nik: t.String(),
+  name: t.Nullable(t.String()),
+  /** The machine's wall clock, `"YYYY-MM-DD HH:MM:SS"`. */
+  at: t.String(),
+  /** When we received it — the gap against `at` is the latency. */
+  receivedAt: t.String(),
+  machine: t.String(),
+});
+
+export const LiveLogSchema = t.Object({
+  sessions: t.Array(ActiveListenSchema),
+  machines: t.Array(ListenableMachineSchema),
+  rows: t.Array(LiveEventSchema),
+});
+
+export const ActiveListenOneSchema = ActiveListenSchema;
+
 export const TapCompareSchema = t.Object({
   date: t.String(),
   shift: t.Union([t.Literal("day"), t.Literal("night")]),

@@ -23,11 +23,20 @@ import { Elysia, t } from "elysia";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
 import {
+  ActiveListenOneSchema,
   DeviceStatusListSchema,
   ErrorSchema,
   TapCompareSchema,
+  LiveLogSchema,
   TapMonitorSchema,
 } from "./schemas";
+import {
+  activeListens,
+  listenableMachines,
+  ListenRefused,
+  startListening,
+  stopListening,
+} from "../live-listener";
 
 /** A page of taps, newest first — the end a supervisor reads. */
 const PAGE = 500;
@@ -371,6 +380,114 @@ export const monitoringTapRoutes = new Elysia({
         403: ErrorSchema,
       },
       detail: { summary: "Every tap on one date, newest first" },
+    }
+  )
+
+  .get(
+    "/live",
+    async () => {
+      /* Newest first and capped: this is a testing log, read while somebody
+         taps, not a report. */
+      const rows = await db
+        .select({
+          nik: schema.deviceLiveEvents.nik,
+          name: schema.employees.name,
+          at: schema.deviceLiveEvents.at,
+          receivedAt: schema.deviceLiveEvents.receivedAt,
+          machine: schema.fingerprintMachines.name,
+          ip: schema.deviceLiveEvents.ip,
+        })
+        .from(schema.deviceLiveEvents)
+        .leftJoin(
+          schema.employees,
+          eq(schema.employees.nik, schema.deviceLiveEvents.nik)
+        )
+        .leftJoin(
+          schema.fingerprintMachines,
+          eq(schema.fingerprintMachines.ip, schema.deviceLiveEvents.ip)
+        )
+        .orderBy(desc(schema.deviceLiveEvents.receivedAt))
+        .limit(200);
+
+      return {
+        sessions: activeListens(),
+        machines: await listenableMachines(),
+        rows: rows.map((r) => ({
+          nik: r.nik,
+          name: r.name ?? null,
+          at: r.at,
+          receivedAt: r.receivedAt.toISOString(),
+          machine: r.machine ?? r.ip,
+        })),
+      };
+    },
+    {
+      auth: { menu: "monitoring-tap", mode: "view" },
+      response: {
+        200: LiveLogSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Taps as they arrive, and who is listening" },
+    }
+  )
+
+  .post(
+    "/live/start",
+    async ({ body, principal, status }) => {
+      try {
+        return await startListening({
+          machineId: body.machineId,
+          source: "manual",
+          startedBy: principal.kind === "user" ? principal.name : null,
+        });
+      } catch (error) {
+        if (error instanceof ListenRefused)
+          return status(
+            error.code === "machine_not_found"
+              ? 404
+              : error.code === "already_listening"
+                ? 409
+                : 422,
+            { code: error.code, message: error.message }
+          );
+        /* The machine refused the handshake, or is not answering at all. Said
+           plainly rather than as a 500: nothing here is broken. */
+        return status(502, {
+          code: "listen_failed",
+          message:
+            error instanceof Error ? error.message : "Mesin tidak menjawab",
+        });
+      }
+    },
+    {
+      auth: { menu: "monitoring-tap", mode: "manage" },
+      body: t.Object({ machineId: t.String({ format: "uuid" }) }),
+      response: {
+        200: ActiveListenOneSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+        409: ErrorSchema,
+        422: ErrorSchema,
+        502: ErrorSchema,
+      },
+      detail: { summary: "Start listening to one machine" },
+    }
+  )
+
+  .post(
+    "/live/stop",
+    async ({ body }) => ({ stopped: await stopListening(body.ip) }),
+    {
+      auth: { menu: "monitoring-tap", mode: "manage" },
+      body: t.Object({ ip: t.String({ minLength: 1 }) }),
+      response: {
+        200: t.Object({ stopped: t.Boolean() }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Stop listening to one machine" },
     }
   )
 

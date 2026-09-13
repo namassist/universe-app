@@ -274,6 +274,13 @@
       "when": 1789299211104,
       "tag": "0038_massive_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1789300285241,
+      "tag": "0039_lyrical_zombie",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,26 @@ export type TapRow = Awaited<
   ReturnType<NonNullable<ReturnType<typeof tapMonitorQueryOptions>["queryFn"]>>
 >["rows"][number];
 
+export const liveLogKey = ["monitoring-tap", "live"] as const;
+
+/**
+ * Taps as they land, while somebody is watching the tab.
+ *
+ * Two seconds: the machine pushes in about one, and this is the only screen
+ * where the delay is the thing being measured. Polling rather than a socket —
+ * the application has none, and a testing log does not justify the first.
+ */
+export const liveLogQueryOptions = () =>
+  queryOptions({
+    queryKey: liveLogKey,
+    queryFn: () => unwrap(api.v1["monitoring-tap"].live.get()),
+    refetchInterval: 2_000,
+  });
+
+export type LiveEventRow = Awaited<
+  ReturnType<NonNullable<ReturnType<typeof liveLogQueryOptions>["queryFn"]>>
+>["rows"][number];
+
 export const deviceStatusKey = (date: string) =>
   ["monitoring-tap", "devices", date] as const;
 
