@@ -456,6 +456,123 @@ describe("correcting a board", () => {
   });
 });
 
+describe("placing somebody who failed fit-to-work", () => {
+  /* A unit that asks for the verdict, and a person nobody has judged — which
+     is what "missing" means, and the ordinary state at 04:35. */
+  let ftwUnit = "";
+
+  beforeAll(async () => {
+    const [cl] = await db
+      .select({ id: schema.unitClasses.id })
+      .from(schema.unitClasses)
+      .limit(1);
+    const [ty] = await db
+      .select({ id: schema.unitTypes.id })
+      .from(schema.unitTypes)
+      .limit(1);
+    const [mo] = await db
+      .select({ id: schema.unitModels.id })
+      .from(schema.unitModels)
+      .limit(1);
+    const [br] = await db
+      .select({ id: schema.unitBrands.id })
+      .from(schema.unitBrands)
+      .limit(1);
+    const [unit] = await db
+      .insert(schema.units)
+      .values({
+        code: `${tag}-FTW`,
+        classId: cl!.id,
+        typeId: ty!.id,
+        modelId: mo!.id,
+        brandId: br!.id,
+        ftw: true,
+        fleetSupport: true,
+        workArea: `${tag} PIT`,
+      })
+      .returning({ id: schema.units.id });
+    ftwUnit = unit!.id;
+    made.units.push(ftwUnit);
+    await db.insert(schema.fleetActualSlots).values({
+      documentId: made.docs[0]!,
+      unitId: ftwUnit,
+      employeeId: null,
+      source: null,
+    });
+  });
+
+  /*
+   * Lateness a supervisor may override on their own judgement. Whether
+   * somebody has slept is a different kind of question, so the click is
+   * refused until it is confirmed.
+   */
+  test("is refused until it is confirmed", async () => {
+    const response = await send(
+      "PATCH",
+      `/fleet-allocation/actual/${DATE}/day/${ftwUnit}`,
+      admin.cookie,
+      { employeeId: opTwo }
+    );
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { code: string }).code).toBe(
+      "ftw_acknowledgement_required"
+    );
+  });
+
+  test("goes through once confirmed, and the override is recorded", async () => {
+    const response = await send(
+      "PATCH",
+      `/fleet-allocation/actual/${DATE}/day/${ftwUnit}`,
+      admin.cookie,
+      { employeeId: opTwo, acknowledgeFtw: true }
+    );
+    expect(response.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(schema.fleetPlacements)
+      .where(eq(schema.fleetPlacements.unitId, ftwUnit));
+    expect(row?.employeeId).toBe(opTwo);
+    expect(row?.overrode).toBe(true);
+    /* The verdict as it read at the moment, not as it reads later. */
+    expect(row?.ftwVerdict).not.toBe("pass");
+    // Who did it, by name, so a deleted account still answers the question.
+    expect(row?.placedByName).toBeTruthy();
+  });
+});
+
+describe("the placement history", () => {
+  test("records an ordinary placement without an override", async () => {
+    await send(
+      "PATCH",
+      `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+      admin.cookie,
+      { employeeId: opTwo }
+    );
+    const rows = await db
+      .select()
+      .from(schema.fleetPlacements)
+      .where(eq(schema.fleetPlacements.unitId, unitB));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.some((r) => r.overrode)).toBe(false);
+  });
+
+  /* Clearing a unit is a decision too, and the history says who made it. */
+  test("records a unit being cleared", async () => {
+    await send(
+      "PATCH",
+      `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+      admin.cookie,
+      { employeeId: null }
+    );
+    const rows = await db
+      .select()
+      .from(schema.fleetPlacements)
+      .where(eq(schema.fleetPlacements.unitId, unitB));
+    expect(rows.some((r) => r.employeeId === null)).toBe(true);
+  });
+});
+
 describe("who may do what", () => {
   test("refuses an anonymous caller", async () => {
     expect((await send("GET", "/fleet-allocation/actual")).status).toBe(401);

@@ -1461,6 +1461,7 @@ export type DeviceRow = typeof devices.$inferSelect;
 export type FingerprintMachineRow = typeof fingerprintMachines.$inferSelect;
 export type PrinterRow = typeof printers.$inferSelect;
 export type TicketRow = typeof tickets.$inferSelect;
+export type FleetPlacementRow = typeof fleetPlacements.$inferSelect;
 
 export type UnitTypeRow = typeof unitTypes.$inferSelect;
 export type UnitModelRow = typeof unitModels.$inferSelect;
@@ -1727,6 +1728,59 @@ export const tickets = pgTable(
       table.contentHash
     ),
     index("tickets_date_shift_idx").on(table.date, table.shift),
+  ]
+);
+
+/**
+ * Every placement a person made by hand, and what they were warned about.
+ *
+ * The board records *that* somebody was placed by hand — `source = manual` —
+ * and until now nothing recorded who did it, when, or what the screen told them
+ * before they did. That gap was acceptable while an override only meant
+ * disagreeing with the engine about lateness. It stopped being acceptable when
+ * the owner allowed an admin to place somebody who failed fit-to-work, on the
+ * condition that it is recorded (owner, 2026-09-13): a fatigue rule overridden
+ * with nobody's name against it is not an override, it is an erasure.
+ *
+ * Append-only by use. Nothing deletes from here, and a slot edited five times
+ * leaves five rows — the history is the point.
+ */
+export const fleetPlacements = pgTable(
+  "fleet_placements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => fleetActualDocuments.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "cascade" }),
+    /** Null when the slot was cleared — a vacancy is a placement decision. */
+    employeeId: uuid("employee_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    placedBy: uuid("placed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** The name as it was then, so a deleted account still answers "who". */
+    placedByName: text("placed_by_name").notNull(),
+    /** The verdicts at the moment of the placement, not as they read later. */
+    ftwVerdict: text("ftw_verdict"),
+    fingerVerdict: text("finger_verdict"),
+    /**
+     * Whether a warning was shown and dismissed to make this placement.
+     *
+     * True only where the screen refused until somebody confirmed — today that
+     * is a failed or missing FTW on a unit that asks for one.
+     */
+    overrode: boolean("overrode").notNull().default(false),
+    placedAt: timestamp("placed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("fleet_placements_document_idx").on(table.documentId),
+    index("fleet_placements_employee_idx").on(table.employeeId),
   ]
 );
 

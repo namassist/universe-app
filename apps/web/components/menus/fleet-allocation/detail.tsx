@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronsUpDown,
   ChevronUp,
+  TriangleAlert,
   UserCog,
   Users,
 } from "lucide-react";
@@ -116,15 +117,25 @@ export function FleetAllocationDetail() {
   const [q, setQ] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [per, setPer] = React.useState("12");
+  /* Held until somebody confirms: the server refuses this placement without
+     an acknowledgement, and the dialog is where the acknowledging happens. */
+  const [unfit, setUnfit] = React.useState<{
+    employeeId: string;
+    name: string;
+  } | null>(null);
 
   const assign = useMutation({
     mutationFn: async (input: {
       unitId: string;
       employeeId: string | null;
+      acknowledgeFtw?: boolean;
     }) => {
       const result = await api.v1["fleet-allocation"]
         .actual({ date })({ shift })({ unitId: input.unitId })
-        .patch({ employeeId: input.employeeId });
+        .patch({
+          employeeId: input.employeeId,
+          ...(input.acknowledgeFtw ? { acknowledgeFtw: true } : {}),
+        });
       if (result.error) throw result.error;
       return result.data;
     },
@@ -456,11 +467,53 @@ export function FleetAllocationDetail() {
           slot={picking}
           busy={assign.isPending}
           onClose={() => setPicking(null)}
-          onPick={(employeeId) =>
-            assign.mutate({ unitId: picking.unitId, employeeId })
-          }
+          onPick={(employeeId, ftw, name) => {
+            /* Lateness a supervisor decides on their own; whether somebody has
+               slept is asked out loud, once, with their name against it. */
+            if (employeeId && ftw && ftw !== "pass" && ftw !== "not-required") {
+              setUnfit({ employeeId, name: name ?? "" });
+              return;
+            }
+            assign.mutate({ unitId: picking.unitId, employeeId });
+          }}
         />
       ) : null}
+
+      <Dialog
+        open={!!unfit}
+        onClose={() => setUnfit(null)}
+        labelledBy="ftw-ack-t"
+      >
+        <DialogIcon variant="danger">
+          <TriangleAlert />
+        </DialogIcon>
+        <DialogTitle id="ftw-ack-t">Tidak lolos fit-to-work</DialogTitle>
+        <DialogBody>
+          {unfit?.name || "Operator ini"} tidak lolos fit-to-work untuk unit
+          yang mensyaratkannya. Penempatan tetap bisa dilakukan, tapi akan
+          dicatat beserta nama Anda dan jam penempatannya.
+        </DialogBody>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setUnfit(null)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={assign.isPending}
+            onClick={() => {
+              if (!unfit || !picking) return;
+              assign.mutate({
+                unitId: picking.unitId,
+                employeeId: unfit.employeeId,
+                acknowledgeFtw: true,
+              });
+              setUnfit(null);
+            }}
+          >
+            Tetap tempatkan
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }
@@ -525,7 +578,7 @@ function CandidatePicker({
   slot: ActualSlot;
   busy: boolean;
   onClose: () => void;
-  onPick: (employeeId: string | null) => void;
+  onPick: (employeeId: string | null, ftw?: string, name?: string) => void;
 }) {
   const { t } = useI18n();
   const candidatesQ = useQuery(
@@ -719,7 +772,7 @@ function CandidatePicker({
                       variant="secondary"
                       className="h-8 text-[13px]"
                       disabled={busy || c.onAnotherUnit}
-                      onClick={() => onPick(c.employeeId)}
+                      onClick={() => onPick(c.employeeId, c.ftw, c.name)}
                     >
                       {t.faActPick}
                     </Button>

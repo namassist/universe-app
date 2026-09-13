@@ -630,6 +630,68 @@ export function groupIntoFleets(
   });
 }
 
+/**
+ * How this person reads against this unit, right now.
+ *
+ * The same judgement the candidate list shows, made again at the moment of the
+ * placement rather than trusted from the screen: what a supervisor saw a minute
+ * ago is not what the record should claim they were warned about.
+ */
+async function readingForPlacement(input: {
+  date: string;
+  shift: ShiftKind;
+  unitId: string;
+  employeeId: string;
+}) {
+  const [unit] = await db
+    .select({ requiresFtw: schema.units.ftw })
+    .from(schema.units)
+    .where(eq(schema.units.id, input.unitId))
+    .limit(1);
+  const [person] = await db
+    .select({ nik: schema.employees.nik })
+    .from(schema.employees)
+    .where(eq(schema.employees.id, input.employeeId))
+    .limit(1);
+  const [deadline, uploadClose] = await Promise.all([
+    fingerInDeadline(input.shift),
+    ftwDeadline(input.shift),
+  ]);
+  if (!unit || !person || !deadline || !uploadClose) return null;
+
+  const [ftw] = await db
+    .select()
+    .from(schema.ftwReadings)
+    .where(
+      and(
+        eq(schema.ftwReadings.nik, person.nik),
+        eq(schema.ftwReadings.date, input.date)
+      )
+    )
+    .limit(1);
+  const [finger] = await db
+    .select()
+    .from(schema.fingerReadings)
+    .where(
+      and(
+        eq(schema.fingerReadings.nik, person.nik),
+        eq(schema.fingerReadings.date, input.date)
+      )
+    )
+    .limit(1);
+
+  return {
+    requiresFtw: unit.requiresFtw,
+    readiness: judge({
+      ftw: ftw ?? null,
+      finger: shiftIn(finger ?? null, input.shift),
+      requiresFtw: unit.requiresFtw,
+      deadline,
+      ftwDeadline: uploadClose,
+    }),
+  };
+}
+
 export const fleetActualRoutes = new Elysia({
   prefix: "/fleet-allocation/actual",
   tags: ["fleet-allocation"],
@@ -1438,9 +1500,36 @@ export const fleetActualRoutes = new Elysia({
 
   .patch(
     "/:date/:shift/:unitId",
-    async ({ params, body, status }) => {
+    async ({ params, body, status, principal }) => {
       const doc = await documentOf(params.date, params.shift);
       if (!doc) return status(404, noBoard);
+
+      /*
+       * Fatigue is not a rule a click may pass silently.
+       *
+       * Lateness a supervisor may override on their own judgement — it is a
+       * question of discipline, and the screen already shows it. A failed or
+       * missing FTW on a unit that asks for one is a question of whether
+       * somebody has slept, so it is refused until it is confirmed, and the
+       * confirmation is recorded with a name against it (owner, 2026-09-13).
+       */
+      const reading = body.employeeId
+        ? await readingForPlacement({
+            date: params.date,
+            shift: params.shift,
+            unitId: params.unitId,
+            employeeId: body.employeeId,
+          })
+        : null;
+
+      const unfit =
+        reading?.requiresFtw === true && reading.readiness.ftw !== "pass";
+      if (unfit && !body.acknowledgeFtw)
+        return status(422, {
+          code: "ftw_acknowledgement_required",
+          message:
+            "Operator ini tidak lolos fit-to-work untuk unit yang mensyaratkannya. Konfirmasi dulu kalau tetap mau ditempatkan.",
+        });
 
       if (body.employeeId) {
         // One person, one unit — the partial unique index says so too, but a
@@ -1476,6 +1565,21 @@ export const fleetActualRoutes = new Elysia({
           code: "slot_not_found",
           message: "Unit itu tidak ada di papan ini",
         });
+
+      /* Append-only, and written after the change so it records what happened
+         rather than what was about to. The name is copied rather than joined:
+         a deleted account must still answer "who". */
+      await db.insert(schema.fleetPlacements).values({
+        documentId: doc.id,
+        unitId: params.unitId,
+        employeeId: body.employeeId ?? null,
+        placedBy: principal.kind === "user" ? principal.id : null,
+        placedByName: principal.name,
+        ftwVerdict: reading?.readiness.ftw ?? null,
+        fingerVerdict: reading?.readiness.finger ?? null,
+        overrode: unfit,
+      });
+
       return { ok: true };
     },
     {
@@ -1488,6 +1592,11 @@ export const fleetActualRoutes = new Elysia({
       body: t.Object({
         /** null clears the unit — a vacancy is a legitimate thing to record. */
         employeeId: t.Nullable(t.String({ format: "uuid" })),
+        /**
+         * Sent only after the screen has warned about a failed fit-to-work and
+         * somebody confirmed. Without it such a placement is refused.
+         */
+        acknowledgeFtw: t.Optional(t.Boolean()),
       }),
       response: {
         200: t.Object({ ok: t.Boolean() }),
@@ -1495,6 +1604,7 @@ export const fleetActualRoutes = new Elysia({
         403: ErrorSchema,
         404: ErrorSchema,
         409: ErrorSchema,
+        422: ErrorSchema,
       },
       detail: { summary: "Put someone on a unit, or take them off" },
     }
