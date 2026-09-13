@@ -636,6 +636,20 @@ function LiveView({
   const [picked, setPicked] = React.useState("");
   const free = (data?.machines ?? []).filter((m) => !m.listening);
 
+  /*
+   * The moment we received it, in the reader's own clock.
+   *
+   * The API sends an instant (ISO, therefore UTC), and slicing the string
+   * showed 13:53 beside a machine clock reading 21:53 — eight hours apart on a
+   * screen whose whole job is comparing those two numbers. The arithmetic was
+   * right all along; only this was wrong.
+   */
+  const clockOf = (iso: string) => {
+    const at = new Date(iso);
+    const two = (n: number) => String(n).padStart(2, "0");
+    return `${two(at.getHours())}:${two(at.getMinutes())}:${two(at.getSeconds())}`;
+  };
+
   /* The gap between the machine's own clock and our receipt — the number this
      whole milestone exists to produce. Both are read as local time: `at` is
      the machine's wall clock, and it keeps the same zone we run in. */
@@ -684,7 +698,7 @@ function LiveView({
                 <div className="font-mono text-[11px] text-(--text-tertiary)">
                   {s.ip} · {s.source === "manual" ? "manual" : "terjadwal"}
                   {s.startedBy ? ` · ${s.startedBy}` : ""} · sejak{" "}
-                  {s.startedAt.slice(11, 19)} · {s.taps} tap
+                  {clockOf(s.startedAt)} · {s.taps} tap
                 </div>
               </div>
               {canW ? (
@@ -733,7 +747,7 @@ function LiveView({
                     {r.at.slice(11, 19)}
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">
-                    {r.receivedAt.slice(11, 19)}
+                    {clockOf(r.receivedAt)}
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">
                     {seconds === null ? "—" : `${seconds} dtk`}
