@@ -216,6 +216,15 @@ export const env = {
    *  deadline and will get no unit either way; this is about the record being
    *  honest, not about the board. */
   DEVICE_COLLECT_GRACE_MINUTES: number("DEVICE_COLLECT_GRACE_MINUTES", "30"),
+  /**
+   * How often a listen window checks that every booth is still being heard.
+   *
+   * The window reconciles rather than reacts: a machine that dropped is simply
+   * missing at the next check and is opened again. Fifteen seconds is short
+   * enough that a reconnect costs less than half a minute of a muster, and long
+   * enough that a machine refusing connections is not hammered.
+   */
+  DEVICE_LISTEN_RETRY_SECONDS: number("DEVICE_LISTEN_RETRY_SECONDS", "15"),
 
   /** Where a roster upload waits between its preview and its commit (D8).
    *

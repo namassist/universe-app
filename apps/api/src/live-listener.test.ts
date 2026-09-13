@@ -16,6 +16,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db, schema } from "./db";
 import {
   activeListens,
+  runListenWindow,
   forgetListens,
   listenableMachines,
   ListenRefused,
@@ -35,6 +36,7 @@ async function addMachine(options: {
   last: number;
   universeOnly?: boolean;
   active?: boolean;
+  booth?: boolean;
 }) {
   const ip = ipOf(options.last);
   const [row] = await db
@@ -44,6 +46,7 @@ async function addMachine(options: {
       ip,
       universeOnly: options.universeOnly ?? true,
       active: options.active ?? true,
+      operatorBooth: options.booth ?? false,
     })
     .returning({ id: schema.fingerprintMachines.id });
   made.machines.push(row!.id);
@@ -190,5 +193,101 @@ describe("a session while it runs", () => {
     expect(activeListens().map((s) => s.ip)).not.toContain(machine.ip);
     // Stopping twice is not an error — the caller wanted it stopped.
     expect(await stopListening(machine.ip)).toBe(false);
+  });
+});
+
+describe("a scheduled window", () => {
+  /* The window hears every booth there is, which is right in production and
+     means these tests must each be the only booths in the table. */
+  beforeEach(async () => {
+    if (made.machines.length)
+      await db
+        .delete(schema.fingerprintMachines)
+        .where(inArray(schema.fingerprintMachines.id, made.machines));
+    made.machines = [];
+  });
+
+  test("opens the booths, and closes them when the window ends", async () => {
+    const booth = await addMachine({ last: 71, booth: true });
+    /* Universe-only but not a booth: monitored, not listened to. */
+    await addMachine({ last: 72, booth: false });
+    const fake = fakeOpener();
+
+    const result = await runListenWindow(new Date(Date.now() + 40), {
+      open: fake.open,
+      everyMs: 20,
+    });
+
+    expect(result.opened).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(fake.stopped).toBe(1);
+    expect(activeListens().map((s) => s.ip)).not.toContain(booth.ip);
+  });
+
+  /*
+   * One machine refusing must never end a muster's listening. This codebase
+   * has made that mistake once already, in the collection pass.
+   */
+  test("a machine that refuses is counted, and the rest are still heard", async () => {
+    const bad = await addMachine({ last: 73, booth: true });
+    await addMachine({ last: 74, booth: true });
+    let calls = 0;
+    const opener: OpenLive = async ({ ip }) => {
+      calls += 1;
+      if (ip === bad.ip) throw new Error("mesin ini menolak");
+      return { ip, stop: async () => {} };
+    };
+
+    const result = await runListenWindow(new Date(Date.now() + 40), {
+      open: opener,
+      everyMs: 20,
+    });
+
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(result.opened).toBe(1);
+    /* Counted per attempt, not per machine: a booth that refuses twice refused
+       twice, and a window that hid the second one would read as healthier than
+       it was. */
+    expect(result.failed).toBeGreaterThanOrEqual(1);
+  });
+
+  /* The window reconciles rather than reacts, which is what makes a reconnect
+     free: a booth that dropped is simply missing at the next check. */
+  test("a booth that dropped is opened again on the next check", async () => {
+    await addMachine({ last: 75, booth: true });
+    let attempts = 0;
+    const opener: OpenLive = async ({ ip }) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("jaringan sedang putus");
+      return { ip, stop: async () => {} };
+    };
+
+    const result = await runListenWindow(new Date(Date.now() + 120), {
+      open: opener,
+      everyMs: 30,
+    });
+
+    expect(attempts).toBeGreaterThan(1);
+    expect(result.opened).toBe(1);
+  });
+
+  /* Somebody asked for it by hand; the schedule does not get to close it. */
+  test("a manual session survives the window closing", async () => {
+    const booth = await addMachine({ last: 76, booth: true });
+    const fake = fakeOpener();
+    await startListening({
+      machineId: booth.id,
+      source: "manual",
+      startedBy: "Budi",
+      open: fake.open,
+    });
+
+    await runListenWindow(new Date(Date.now() + 40), {
+      open: fake.open,
+      everyMs: 20,
+    });
+
+    expect(activeListens().map((s) => s.ip)).toContain(booth.ip);
+    expect(fake.stopped).toBe(0);
   });
 });

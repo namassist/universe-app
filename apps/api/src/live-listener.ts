@@ -17,6 +17,7 @@
 import { and, eq, lt, sql } from "drizzle-orm";
 
 import { db, schema } from "./db";
+import { env } from "./env";
 import {
   openLiveSession,
   type LiveSession,
@@ -188,4 +189,84 @@ export async function listenableMachines() {
     )
     .orderBy(schema.fingerprintMachines.name);
   return rows.map((r) => ({ ...r, listening: held.has(r.ip) }));
+}
+
+/** The booths a scheduled window is responsible for. */
+async function boothsToHear() {
+  return db
+    .select({
+      id: schema.fingerprintMachines.id,
+      ip: schema.fingerprintMachines.ip,
+      name: schema.fingerprintMachines.name,
+    })
+    .from(schema.fingerprintMachines)
+    .where(
+      and(
+        eq(schema.fingerprintMachines.active, true),
+        eq(schema.fingerprintMachines.universeOnly, true),
+        eq(schema.fingerprintMachines.operatorBooth, true)
+      )
+    );
+}
+
+/** Close every session the schedule opened, leaving manual ones alone. */
+export async function stopScheduledListens(): Promise<number> {
+  const scheduled = [...held.values()].filter((h) => h.source === "schedule");
+  await Promise.all(scheduled.map((h) => stopListening(h.ip)));
+  return scheduled.length;
+}
+
+/**
+ * Hold the booths open for a muster.
+ *
+ * Reconciles rather than reacts: every few seconds it asks which booths are
+ * not being heard and opens those. One loop therefore covers three things that
+ * would otherwise be three mechanisms — the first open, a reconnect after the
+ * network drops, and a machine that was simply switched on late.
+ *
+ * A machine that refuses is counted and skipped, never fatal to the window:
+ * one machine ending a muster's collection is a mistake this codebase has
+ * already made once (see `device-taps.ts`).
+ *
+ * A booth already held by a *manual* listen is left as it is — one machine,
+ * one conversation — and that session keeps running when the window closes,
+ * because somebody asked for it by hand.
+ */
+export async function runListenWindow(
+  endsAt: Date,
+  options: { open?: OpenLive; everyMs?: number } = {}
+): Promise<{ opened: number; failed: number }> {
+  const everyMs = options.everyMs ?? env.DEVICE_LISTEN_RETRY_SECONDS * 1000;
+  let opened = 0;
+  let failed = 0;
+
+  for (;;) {
+    const booths = await boothsToHear();
+    for (const booth of booths) {
+      if (held.has(booth.ip)) continue;
+      try {
+        await startListening({
+          machineId: booth.id,
+          source: "schedule",
+          startedBy: null,
+          open: options.open,
+        });
+        opened += 1;
+      } catch (error) {
+        failed += 1;
+        console.error(
+          `[listen] ${booth.name} (${booth.ip}) tidak bisa didengarkan`,
+          error
+        );
+      }
+    }
+    if (Date.now() + everyMs >= endsAt.getTime()) break;
+    await Bun.sleep(everyMs);
+  }
+
+  const closed = await stopScheduledListens();
+  console.log(
+    `[listen] jendela tutup — ${opened} sesi dibuka, ${failed} gagal, ${closed} ditutup`
+  );
+  return { opened, failed };
 }

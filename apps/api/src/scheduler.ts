@@ -22,7 +22,11 @@
  */
 
 import { eq } from "drizzle-orm";
-import type { AllocationFailure, TimelineAction } from "@universe/contracts";
+import type {
+  AllocationFailure,
+  ShiftKind,
+  TimelineAction,
+} from "@universe/contracts";
 
 import { db, schema, type TimelineStageRow } from "./db";
 import { env } from "./env";
@@ -35,6 +39,7 @@ import { notify } from "./notify";
 import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { pullClosesAt, stageTimeOf } from "./stage-time";
+import { runListenWindow } from "./live-listener";
 import { collectOnce, reportLogSizes } from "./device-taps";
 import { deriveDate } from "./derive";
 import { redis } from "./redis";
@@ -343,6 +348,59 @@ async function runCollection(endsAt: Date): Promise<void> {
   }
 }
 
+/** "HH:MM:SS" today, optionally pushed on by some minutes. */
+function todayAt(clock: string, plusMinutes = 0): Date {
+  const at = new Date();
+  const [hours = "0", minutes = "0"] = clock.split(":");
+  at.setHours(Number(hours), Number(minutes), 0, 0);
+  at.setMinutes(at.getMinutes() + plusMinutes);
+  return at;
+}
+
+/**
+ * When a muster stops listening: the bus, plus the collection grace.
+ *
+ * The same end the periodic pull uses, deliberately. Two windows that closed
+ * at different times would be two answers to "is the muster over".
+ */
+async function listenClosesAt(shift: ShiftKind): Promise<Date | null> {
+  const closes = await stageTimeOf("bus-depart", shift);
+  return closes ? todayAt(closes, env.DEVICE_COLLECT_GRACE_MINUTES) : null;
+}
+
+/**
+ * Hold the booths open for this muster.
+ *
+ * Hung off `finger-ingest` because that is when the first finger opens, and it
+ * runs *beside* the Nakula pull that stage already carries rather than
+ * replacing it — the two sources run in parallel until the comparison says
+ * otherwise.
+ *
+ * Detached, like the collection window: listening lasts ninety minutes and
+ * must not hold the tick's loop.
+ */
+const listen: Hook = async (dispatch) => {
+  const shift = dispatch.stage.shift;
+  if (!shift)
+    return record(
+      dispatch,
+      "stage carries no shift — cannot tell which muster to listen for"
+    );
+
+  const endsAt = await listenClosesAt(shift);
+  if (!endsAt)
+    return record(
+      dispatch,
+      `no active bus-depart stage for the ${shift} shift — listening without an end is the one thing this must not do`
+    );
+
+  record(dispatch, `listening to the booths until ${timeOfDay(endsAt)}`);
+  void runListenWindow(endsAt);
+};
+
+/** The Nakula pull this stage has always carried. Hoisted so it can be paired. */
+const fingerIngest = ingest("finger");
+
 const HOOKS: Record<TimelineAction, Hook> = {
   /* The changeover, and now also when collecting begins. Its time is read by
      `shiftGates` for the walls as it always was. */
@@ -356,7 +414,13 @@ const HOOKS: Record<TimelineAction, Hook> = {
   "bus-depart": marker,
   other: marker,
   "ftw-ingest": ingest("ftw"),
-  "finger-ingest": ingest("finger"),
+  /* Two things at one moment: the old source is still pulled, and the booths
+     start pushing. Composed rather than replaced — stopping the Nakula pull
+     here would end the parallel run without anybody deciding to. */
+  "finger-ingest": async (dispatch) => {
+    await fingerIngest(dispatch);
+    await listen(dispatch);
+  },
   "roster-ingest": async () => {
     await runRosterSync();
   },
@@ -431,8 +495,35 @@ export async function tick(now = new Date()): Promise<Dispatch[]> {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * Pick listening back up after a restart inside a muster.
+ *
+ * A stage fires once per day and the claim survives the process, so a restart
+ * at 05:00 would otherwise leave the booths unheard until tomorrow — the same
+ * shape of bug that once cost a morning's collection. The window is a fact
+ * about the clock, not about whether a stage has fired, so it is recomputed
+ * here rather than re-armed.
+ */
+export async function resumeListening(): Promise<void> {
+  for (const shift of ["day", "night"] as const) {
+    const opens = await stageTimeOf("finger-ingest", shift);
+    const endsAt = await listenClosesAt(shift);
+    if (!opens || !endsAt) continue;
+    const now = new Date();
+    if (now < todayAt(opens) || now >= endsAt) continue;
+    console.log(
+      `[listen] restart di tengah muster ${shift} — dengarkan lagi sampai ${timeOfDay(endsAt)}`
+    );
+    void runListenWindow(endsAt);
+    return;
+  }
+}
+
 export function startScheduler(): void {
   if (timer) return;
+  void resumeListening().catch((error) =>
+    console.error("[listen] gagal melanjutkan jendela", error)
+  );
   // An immediate tick as well as the interval, so a stage whose time passed
   // while the process was down fires on startup rather than up to a minute
   // later.
