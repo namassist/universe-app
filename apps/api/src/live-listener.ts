@@ -18,6 +18,7 @@ import { and, eq, lt, sql } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import { env } from "./env";
+import { issueTicket } from "./ticket-issue";
 import {
   openLiveSession,
   type LiveSession,
@@ -77,6 +78,25 @@ export const isListening = (ip: string) => held.has(ip);
 
 /** Tests only: drop the registry without touching a socket. */
 export const forgetListens = () => held.clear();
+
+/**
+ * Which muster a tap belongs to, from its own clock.
+ *
+ * Noon splits the day here exactly as it splits a reading in `readiness.ts`: a
+ * tap before noon is the morning's, after it the afternoon's. Taking the shift
+ * from the tap rather than from the clock on the wall means a ticket issued a
+ * moment after midnight still belongs to the muster the person tapped in.
+ */
+function ticketTapOf(ip: string, tap: { nik: string; at: string }) {
+  return {
+    ip,
+    nik: tap.nik,
+    at: tap.at,
+    date: tap.at.slice(0, 10),
+    shift: (tap.at.slice(11, 19) < "12:00:00" ? "day" : "night") as
+      "day" | "night",
+  };
+}
 
 async function recordTap(ip: string, nik: string, at: string) {
   /* Replays are the normal case on a reconnect, not the exception. */
@@ -146,7 +166,15 @@ export async function startListening(input: {
       entry.taps += 1;
       /* Never awaited into the socket's path: a slow write must not stall the
          next tap, and a failed one must not kill the session. */
-      void recordTap(machine.ip, tap.nik, tap.at).catch(() => {});
+      void recordTap(machine.ip, tap.nik, tap.at)
+        .then(() => issueTicket(ticketTapOf(machine.ip, tap)))
+        .then((result) => {
+          if (result.issued)
+            console.log(
+              `[tiket] ${tap.nik} — ${result.status}${result.error ? ` (${result.error})` : ""}`
+            );
+        })
+        .catch((error) => console.error("[tiket] gagal menerbitkan", error));
     },
     onClosed: () => {
       held.delete(machine.ip);

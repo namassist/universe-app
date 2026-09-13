@@ -225,6 +225,16 @@ export const env = {
    * enough that a machine refusing connections is not hammered.
    */
   DEVICE_LISTEN_RETRY_SECONDS: number("DEVICE_LISTEN_RETRY_SECONDS", "15"),
+  /**
+   * Whether a decided ticket is actually sent to a printer.
+   *
+   * Off by default, and deliberately: a ticket that reaches paper is the one
+   * thing here nobody can take back, and the development network has no printer
+   * to take it. With this off every ticket is still decided, rendered and
+   * stored — it simply stops one step short, which is what makes a dry run
+   * worth reading.
+   */
+  TICKET_PRINTING: boolean("TICKET_PRINTING", "false"),
 
   /** Where a roster upload waits between its preview and its commit (D8).
    *

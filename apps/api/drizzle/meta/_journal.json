@@ -281,6 +281,13 @@
       "when": 1789300285241,
       "tag": "0039_lyrical_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789339527433,
+      "tag": "0040_absurd_captain_marvel",
+      "breakpoints": true
     }
   ]
 }

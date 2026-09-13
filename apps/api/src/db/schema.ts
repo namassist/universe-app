@@ -1460,6 +1460,7 @@ export type UserRow = typeof users.$inferSelect;
 export type DeviceRow = typeof devices.$inferSelect;
 export type FingerprintMachineRow = typeof fingerprintMachines.$inferSelect;
 export type PrinterRow = typeof printers.$inferSelect;
+export type TicketRow = typeof tickets.$inferSelect;
 
 export type UnitTypeRow = typeof unitTypes.$inferSelect;
 export type UnitModelRow = typeof unitModels.$inferSelect;
@@ -1665,6 +1666,62 @@ export const deviceTaps = pgTable(
  * does — the device states no zone, and building a `Date` would bind the
  * reading to whatever zone this process happens to run in.
  */
+/** What became of a ticket: sent to paper, refused, or only rendered. */
+export const ticketStatus = pgEnum("ticket_status", [
+  "printed",
+  "failed",
+  "dry",
+]);
+
+/**
+ * One ticket, and whether it reached paper.
+ *
+ * Kept because a slip that failed to print is the only kind nobody can see:
+ * the tap is recorded, the person walks away, and without a row here the
+ * failure exists only in a log. This is what the reprint button reads.
+ *
+ * **Unique on the contents.** A repeat tap prints only when something changed —
+ * a unit that is now filled, say — so the same person, day, shift and content
+ * is one ticket however many times they tap. That is the whole dedup rule, held
+ * by the database rather than by a timer, because "the same ticket" is a fact
+ * about what it says, not about how long ago it said it.
+ */
+export const tickets = pgTable(
+  "tickets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nik: text("nik").notNull(),
+    date: date("date").notNull(),
+    shift: shiftKind("shift").notNull(),
+    /** The booth they tapped at, and the printer it is paired with. */
+    ip: text("ip").notNull(),
+    printerId: uuid("printer_id").references(() => printers.id, {
+      onDelete: "set null",
+    }),
+    status: ticketStatus("status").notNull(),
+    /** Of the printed fields — the dedup key, not of the bytes. */
+    contentHash: text("content_hash").notNull(),
+    /** The slip as text, so a failure can be read without a printer. */
+    preview: text("preview").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    /** Why the last attempt failed, verbatim. Null once it printed. */
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    printedAt: timestamp("printed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("tickets_person_content_idx").on(
+      table.nik,
+      table.date,
+      table.shift,
+      table.contentHash
+    ),
+    index("tickets_date_shift_idx").on(table.date, table.shift),
+  ]
+);
+
 export const deviceLiveEvents = pgTable(
   "device_live_events",
   {
