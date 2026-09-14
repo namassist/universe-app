@@ -54,8 +54,7 @@ describe("the slip a person reads", () => {
         "JAM ABSEN      : 2026-09-14 05:02:41",
         "STATUS         : IN",
         "--------------------------------",
-        "STATUS FTW",
-        "Dapat Bekerja",
+        "FTW: Dapat Bekerja",
         "--------------------------------",
         "LOKASI BERBAHAYA",
         "PIT TEMPUDO, KASTURI ATAS",
@@ -103,28 +102,30 @@ describe("fit to work, on the slip", () => {
      with the rule at the booth. */
   test("carries the category and no reading behind it", () => {
     const lines = ticketPreview(full).split("\n");
-    expect(lines).toContain("STATUS FTW");
-    expect(lines).toContain("Dapat Bekerja");
+    expect(lines).toContain("FTW: Dapat Bekerja");
     for (const line of lines) expect(line).not.toMatch(/\d+j \d+m/);
   });
 
-  /* Twenty-three characters against a field column that leaves fifteen: as a
-     `LABEL : value` line this would break mid word every time. */
-  test("the longest category fits the roll whole", () => {
-    const lines = ticketPreview({
-      ...full,
-      ftw: "Istirahat Minimal 1 Jam",
-    }).split("\n");
-    expect(lines).toContain("Istirahat Minimal 1 Jam");
-    expect(lines[lines.indexOf("STATUS FTW") + 1]).toBe(
-      "Istirahat Minimal 1 Jam"
-    );
+  /* Every category on one line, which is the whole reason the label sits
+     outside the slip's aligned column. The aligned form runs to forty. */
+  test("every category fits the roll on one line", () => {
+    for (const category of [
+      "Dapat Bekerja",
+      "Istirahat Minimal 1 Jam",
+      "Istirahat Minimal 2 Jam",
+      "Tidak Boleh Bekerja",
+    ]) {
+      const line = ticketPreview({ ...full, ftw: category })
+        .split("\n")
+        .find((l) => l.startsWith("FTW: "));
+      expect(line).toBe(`FTW: ${category}`);
+      expect(line!.length).toBeLessThanOrEqual(32);
+    }
   });
 
   test("nothing uploaded says so rather than leaving a blank", () => {
     const lines = ticketPreview({ ...full, ftw: null }).split("\n");
-    expect(lines).toContain("STATUS FTW");
-    expect(lines).toContain("Belum mengisi FTW");
+    expect(lines).toContain("FTW: Belum mengisi FTW");
   });
 });
 
@@ -137,13 +138,12 @@ describe("how a person came to the muster", () => {
     expect(lines).toContain("UNIT           : DT-118");
   });
 
-  /* Two `LABEL : value` lines beginning with STATUS would be read as one
-     thing said twice; the fit-to-work one is a section heading instead. */
+  /* Two lines beginning with STATUS would be read as one thing said twice.
+     The fit-to-work line is labelled FTW, so there is only ever one. */
   test("does not collide with the tap's own status line", () => {
     const lines = ticketPreview(full).split("\n");
     expect(lines.filter((l) => l.startsWith("STATUS"))).toEqual([
       "STATUS         : IN",
-      "STATUS FTW",
     ]);
   });
 });

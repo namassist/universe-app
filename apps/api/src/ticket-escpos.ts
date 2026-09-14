@@ -101,13 +101,16 @@ export function ticketLines(fields: TicketFields): {
   centred: string[];
   body: string[];
   /**
-   * Its own named section, like the two below it.
+   * One line, and the only shape that is one.
    *
-   * Not a `LABEL : value` line: the longest category runs to twenty-three
-   * characters and the field column leaves fifteen, so it would have been
-   * broken mid word on every operator told to rest an hour.
+   * The slip's own `LABEL : value` column leaves fifteen characters and the
+   * longest category runs to twenty-three, so the aligned form breaks mid word
+   * on every operator told to rest an hour — forty columns against a roll that
+   * holds thirty-two. A short label outside the column fits all five: "FTW:
+   * Istirahat Minimal 1 Jam" is twenty-eight. Losing the alignment is what
+   * buys the single line.
    */
-  ftw: { heading: string; verdict: string };
+  ftw: string;
   /** Named sections, each already wrapped. Empty when nothing is set. */
   notices: { heading: string; lines: string[] }[];
   footer: string[];
@@ -130,10 +133,7 @@ export function ticketLines(fields: TicketFields): {
       field("JAM ABSEN", fields.at),
       field("STATUS", "IN"),
     ],
-    ftw: {
-      heading: "STATUS FTW",
-      verdict: fields.ftw ?? "Belum mengisi FTW",
-    },
+    ftw: `FTW: ${fields.ftw ?? "Belum mengisi FTW"}`,
     notices: [
       ...(fields.hazards.length
         ? [
@@ -174,8 +174,7 @@ export function ticketPreview(fields: TicketFields): string {
     RULE,
     ...body,
     RULE,
-    ftw.heading,
-    ftw.verdict,
+    ftw,
     ...notices.flatMap((section) => [RULE, section.heading, ...section.lines]),
     RULE,
     ...footer,
@@ -226,12 +225,9 @@ export function renderTicket(fields: TicketFields): Buffer {
     ALIGN_LEFT,
     ...body.map(text),
     text(RULE),
+    /* Bold: it is the line that decides whether he works today. */
     BOLD_ON,
-    text(ftw.heading),
-    BOLD_OFF,
-    /* The half that decides whether he works today. */
-    BOLD_ON,
-    text(ftw.verdict),
+    text(ftw),
     BOLD_OFF,
     ...notices.flatMap((section) => [
       text(RULE),
