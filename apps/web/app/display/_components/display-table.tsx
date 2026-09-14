@@ -56,15 +56,13 @@ const thClass =
  * which is the distance these are read from. `success` is deliberately absent
  * — the rows that need nothing doing should be the quiet ones.
  */
-export type RowTone = "danger" | "warning" | "neutral";
+export type RowTone = "danger" | "warning";
 
 const ROW_TONE: Record<RowTone, string> = {
   danger:
     "[&>td]:bg-[rgba(252,60,59,.1)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--color-danger)]",
   warning:
     "[&>td]:bg-[rgba(240,160,32,.1)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--badge-warning-text)]",
-  neutral:
-    "[&>td]:bg-[rgba(255,255,255,.05)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--text-tertiary)]",
 };
 
 export function DisplayTable({

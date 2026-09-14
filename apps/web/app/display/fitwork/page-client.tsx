@@ -44,11 +44,19 @@ import {
  */
 
 /**
- * Category → the wash behind the row. `fit` is absent on purpose: a clearance
- * needs no colour, and leaving it undefined is what keeps the wall quiet.
+ * Category → the wash behind the row.
+ *
+ * It follows the row's Status badge, which is the one that names the person's
+ * situation: red for a man told not to work and red for one who has not filed
+ * at all (owner, 2026-09-14) — with the muster running, an empty filing is as
+ * urgent as a refused one. The Kategori badge beside it reads "—" there, which
+ * is why the grey it would have implied was the wrong signal.
+ *
+ * `fit` is absent on purpose: a clearance needs no colour, and leaving it
+ * undefined is what keeps the wall quiet enough for the rest to carry.
  */
 const ROW_TONE_OF: Record<FtwCatKey, RowTone | undefined> = {
-  belum: "neutral",
+  belum: "danger",
   tidak: "danger",
   istirahat: "warning",
   fit: undefined,
