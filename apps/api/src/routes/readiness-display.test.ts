@@ -174,17 +174,17 @@ describe("the fit-to-work wall", () => {
     expect(board.rest).toBe(1);
     /* TOLAK is the clinic's refusal; ANEH is a verdict we could not read,
        which is ours. Two tiles, because they are two people's jobs. */
-    expect(board.ftwFailed).toBe(1);
-    /* ISTIRAHAT counts here too: he has also failed the allocation, which is
-       why he cannot be seated yet. `rest` is the part of this figure that
-       expires on its own. */
-    expect(board.allocFailed).toBe(2);
+    /* TOLAK is the clinic's answer, ANEH a verdict we could not read. Both
+       are a filing that did not get through, and one figure counts them. */
+    expect(board.ftwFailed).toBe(2);
+    /* Everyone who cannot be given a unit — the whole wall. */
+    expect(board.allocFailed).toBe(4);
     expect(board.missing).toBe(1);
-    /* Three tiles add up to what was filed. `rest` is inside `allocFailed`,
-       so it is deliberately not in this sum. */
-    expect(board.passed + board.ftwFailed + board.allocFailed).toBe(
-      board.filed
+    /* The three parts divide it exactly. */
+    expect(board.missing + board.rest + board.ftwFailed).toBe(
+      board.allocFailed
     );
+    expect(board.passed + board.allocFailed).toBe(board.total);
   });
 
   /*
@@ -209,8 +209,8 @@ describe("the fit-to-work wall", () => {
       ["TELAT FIT", "allocFail"],
     ]);
     expect(board.passed).toBe(0);
-    expect(board.ftwFailed).toBe(1);
-    expect(board.allocFailed).toBe(1);
+    expect(board.ftwFailed).toBe(2);
+    expect(board.allocFailed).toBe(2);
   });
 
   /*
@@ -227,18 +227,23 @@ describe("the fit-to-work wall", () => {
     );
     expect(board.rows[0]!.group).toBe("ftwFail");
     expect(board.ftwFailed).toBe(1);
-    expect(board.allocFailed).toBe(0);
+    expect(board.allocFailed).toBe(1);
   });
 
-  /* Cleared by the clinic on both lines, refused by our deadline alone. */
-  test("a late upload savera cleared is our refusal, not the clinic's", () => {
+  /*
+   * Cleared by the clinic on both lines and refused by our deadline alone.
+   * The owner counts him with the refusals (2026-09-14): his FTW did not
+   * arrive in time to be one. The group still says which it was, and the card
+   * prints the reason under the badge.
+   */
+  test("a late upload savera cleared is still counted as a refusal", () => {
     const board = fitWorkBoard(
       [person("1", "SATU")],
       [filing("1", "FTW aman", "Dapat Bekerja", "05:31:00")],
       GATE
     );
     expect(board.rows[0]!.group).toBe("allocFail");
-    expect(board.ftwFailed).toBe(0);
+    expect(board.ftwFailed).toBe(1);
     expect(board.allocFailed).toBe(1);
   });
 
@@ -252,6 +257,14 @@ describe("the fit-to-work wall", () => {
     );
     expect(board.rows[0]!.group).toBe("rest");
     expect(board.rest).toBe(1);
+    expect(board.allocFailed).toBe(1);
+    expect(board.ftwFailed).toBe(0);
+  });
+
+  /* Nobody has filed, so nobody can be seated — the tile counts him too. */
+  test("somebody who has not filed is an allocation refusal as well", () => {
+    const board = fitWorkBoard([person("1", "SATU")], [], GATE);
+    expect(board.missing).toBe(1);
     expect(board.allocFailed).toBe(1);
     expect(board.ftwFailed).toBe(0);
   });

@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Ban,
   CheckCircle2,
   ClipboardCheck,
   Clock,
@@ -53,8 +54,10 @@ const GROUP: Record<
   { tone: DisplayTone; label: string }
 > = {
   none: { tone: "danger", label: "Belum FTW" },
+  /* Both read the same on a badge: the difference is in the line under it,
+     which names what refused him. */
   ftwFail: { tone: "danger", label: "Tidak Lolos FTW" },
-  allocFail: { tone: "danger", label: "Tidak Lolos Alokasi" },
+  allocFail: { tone: "danger", label: "Tidak Lolos FTW" },
   rest: { tone: "warning", label: "Istirahat" },
   fit: { tone: "success", label: "Lolos FTW" },
 };
@@ -132,28 +135,37 @@ export default function DisplayFitworkPage() {
           value: String(data?.passed ?? 0),
           label: "Lolos FTW",
         },
-        /* The two refusals, then the part of the second one that expires.
-           Lolos FTW + the two refusals is exactly Sudah Lapor; Istirahat sits
-           inside the allocation figure and says so, because a tile a reader
-           can add to the wrong total is worse than no tile. */
+        /*
+         * The whole wall, then the three parts that divide it.
+         *
+         * "Tidak Lolos Alokasi" is the headcount a supervisor works from —
+         * nobody in it can be given a unit — and the three beneath say why,
+         * each prefixed so nobody adds them into the wrong total.
+         */
         {
-          icon: <HeartPulse className="text-(--color-danger-text)" />,
+          icon: <Ban className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
-          value: String(data?.ftwFailed ?? 0),
-          label: "Tidak Lolos FTW",
+          value: String(data?.allocFailed ?? 0),
+          label: "Tidak Lolos Alokasi",
         },
         {
           icon: <AlertTriangle className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
-          value: String(data?.allocFailed ?? 0),
-          label: "Tidak Lolos Alokasi",
+          value: String(data?.missing ?? 0),
+          label: "— Belum Upload",
+        },
+        {
+          icon: <HeartPulse className="text-(--color-danger-text)" />,
+          iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
+          value: String(data?.ftwFailed ?? 0),
+          label: "— Tidak Lolos FTW",
         },
         {
           icon: <Clock className="text-(--badge-warning-text)" />,
           iconClass:
             "bg-(--badge-warning-fill) border-(--badge-warning-border)",
           value: String(data?.rest ?? 0),
-          label: "— di antaranya Istirahat",
+          label: "— Istirahat",
         },
       ]}
     >

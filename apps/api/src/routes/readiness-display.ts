@@ -334,8 +334,11 @@ type FtwGroup = (typeof FTW_ORDER)[number];
 /** What each group is called where a person can read it. */
 export const FTW_GROUP_LABEL: Record<FtwGroup, string> = {
   none: "Belum FTW",
+  /* Both refusals read "Tidak Lolos FTW" on the badge. The groups stay apart
+     so the clinic's answer still sorts above our own bookkeeping, and the
+     line under the badge names which it was. */
   ftwFail: "Tidak Lolos FTW",
-  allocFail: "Tidak Lolos Alokasi",
+  allocFail: "Tidak Lolos FTW",
   rest: "Istirahat",
   fit: "Lolos FTW",
 };
@@ -435,17 +438,21 @@ export function fitWorkBoard(
     total: judged.length,
     filed: judged.length - count("missing"),
     passed: count("pass"),
-    /* A part of `allocFailed`, not a fifth thing beside it: a man told to
-       rest an hour has also failed the allocation, which is the whole reason
-       he cannot be seated yet. Counted on its own because it is the one
-       refusal that expires — he works after the hour. */
+    /*
+     * `allocFailed` is the whole wall, and the other three divide it.
+     *
+     * Nobody here can be given a unit — that is what they have in common, and
+     * it is the figure a supervisor counts heads against (owner, 2026-09-14).
+     * The three beneath it say why: he has not filed, he must rest first, or
+     * his filing did not get through. They sum to it exactly.
+     */
     rest: inGroup("rest"),
-    /* The two refusals, kept apart because they are somebody else's job each.
-       The clinic's is medical and nobody here can move it; ours is a deadline
-       or a wording, and those are ours to chase. With `passed` they add up to
-       exactly `filed`. */
-    ftwFailed: inGroup("ftwFail"),
-    allocFailed: inGroup("allocFail", "rest"),
+    /* Filed and refused: the clinic's own answer, and an upload that missed
+       the deadline. The owner counts a late filing here — "tidak lolos FTW"
+       because his FTW did not arrive in time to be one. Which of the two it
+       was is on the person's own card, under the badge. */
+    ftwFailed: inGroup("ftwFail", "allocFail"),
+    allocFailed: judged.length - count("pass"),
     missing: count("missing"),
     rows,
   };
