@@ -46,6 +46,7 @@ const person = (nik: string, name: string) => ({
   name,
   position: "OPERATOR",
   department: "MINING",
+  company: "PT UNGGUL DINAMIKA UTAMA",
 });
 
 const tap = (nik: string, firstInAt: string | null) => ({

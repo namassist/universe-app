@@ -1749,6 +1749,7 @@ export const FitWorkDisplaySchema = t.Object({
       name: t.String(),
       position: t.Nullable(t.String()),
       department: t.Nullable(t.String()),
+      company: t.Nullable(t.String()),
       verdict: t.UnionEnum([
         "pass",
         "fail",
@@ -1760,6 +1761,8 @@ export const FitWorkDisplaySchema = t.Object({
       /** savera's sleep minutes, null when nothing was filed. */
       sleepMinutes: t.Nullable(t.Integer()),
       sleepCategory: t.Nullable(t.String()),
+      /** savera's own decision wording, beside its category. */
+      ftwDecision: t.Nullable(t.String()),
       /** "HH:MM:SS" the upload landed. */
       sentAt: t.Nullable(t.String()),
     })

@@ -60,9 +60,9 @@ export type RowTone = "danger" | "warning";
 
 const ROW_TONE: Record<RowTone, string> = {
   danger:
-    "[&>td]:bg-[rgba(252,60,59,.1)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--color-danger)]",
+    "[&>td]:bg-(--wall-danger-wash) [&>td:first-child]:shadow-[inset_4px_0_0_var(--color-danger)]",
   warning:
-    "[&>td]:bg-[rgba(240,160,32,.1)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--badge-warning-text)]",
+    "[&>td]:bg-(--wall-warning-wash) [&>td:first-child]:shadow-[inset_4px_0_0_var(--badge-warning-text)]",
 };
 
 export function DisplayTable({

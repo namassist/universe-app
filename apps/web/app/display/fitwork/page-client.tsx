@@ -18,18 +18,20 @@ import {
 } from "@/lib/queries/readiness-display";
 import { FTW_CAT_BADGE, ftwCatOf } from "@/components/menus/fit-to-work-shared";
 
+import { CardField, DisplayCards } from "../_components/display-cards";
 import { DisplayShell } from "../_components/display-shell";
-import {
-  DisplayBadge,
-  DisplayTable,
-  type DisplayTone,
-} from "../_components/display-table";
+import { DisplayBadge, type DisplayTone } from "../_components/display-table";
 
 /**
  * Fit To Work kiosk — the running shift's roster against savera's verdicts.
  *
- * Same bargain as the attendance wall: the table is the exception list, worst
- * first and capped, while the tiles count the whole shift.
+ * Cards rather than a table (owner, 2026-09-14). Seven columns on one line
+ * wrapped "Yohanes Novensius Wangge" to three rows while cutting "Istirahat
+ * Minimal 2 Jam" off at the edge, and at six metres a reader lost track of
+ * which line belonged to whom. A card gives each person a block of their own.
+ *
+ * Same bargain as the attendance wall otherwise: the list is the exception
+ * list, worst first and capped, while the tiles count the whole shift.
  *
  * The four verdicts a filing can carry are kept apart rather than folded into
  * "tidak lolos", because they send a supervisor to different places. `fail` is
@@ -136,56 +138,103 @@ export default function DisplayFitworkPage() {
         },
       ]}
     >
-      <DisplayTable
-        cols={[
-          { label: "NIK", width: "11%" },
-          { label: "Nama", width: "20%" },
-          { label: "Posisi", width: "16%" },
-          { label: "Departemen", width: "13%" },
-          { label: "Status", width: "14%" },
-          { label: "Log Tidur", width: "11%" },
-          { label: "Kategori" },
-        ]}
-        rows={rows.map((r) => ({
-          key: r.nik,
-          /* Yellow behind a man told to rest, red behind everybody else on
-             the wall. Every row here is an exception now — the cleared are
-             counted in the tile above and never rendered — so the question is
-             only which kind, and "wait an hour" is not "do not work". */
-          tone:
-            ftwCatOf(r.sleepCategory) === "istirahat"
-              ? ("warning" as const)
-              : ("danger" as const),
-          cells: [
-            <span
-              key="k"
-              className="font-mono text-(--text-secondary) tabular-nums"
-            >
-              {r.nik}
-            </span>,
-            <b key="n" className="font-bold">
-              {r.name}
-            </b>,
-            r.position ?? "—",
-            r.department ?? "—",
-            <DisplayBadge key="s" tone={VERDICT[r.verdict].tone}>
-              {VERDICT[r.verdict].label}
-            </DisplayBadge>,
-            <span key="sl" className="font-mono whitespace-nowrap tabular-nums">
-              {sleepText(r.sleepMinutes)}
-            </span>,
-            /* The same tones the FTW screen already gives these words —
-               "Istirahat Minimal 1 Jam" is a wait, not a refusal, and grey
-               text made it read like neither. One mapping, so the wall and
-               the screen a supervisor opens afterwards agree on the colour. */
-            <DisplayBadge
-              key="c"
-              tone={FTW_CAT_BADGE[ftwCatOf(r.sleepCategory)]}
-            >
-              {r.sleepCategory ?? "—"}
-            </DisplayBadge>,
-          ],
-        }))}
+      <DisplayCards
+        items={rows.map((r) => {
+          const resting = ftwCatOf(r.sleepCategory) === "istirahat";
+          return {
+            key: r.nik,
+            /* Yellow behind a man told to rest, red behind everybody else on
+               the wall. Every row here is an exception now — the cleared are
+               counted in the tile above and never rendered — so the question
+               is only which kind, and "wait an hour" is not "do not work". */
+            tone: resting ? ("warning" as const) : ("danger" as const),
+            /* Read before any of the words are: a wait, or a stop. */
+            mark: resting ? "~" : "!",
+            cells: [
+              <CardField
+                key="who"
+                label="Operator"
+                className="w-[23%] flex-none"
+              >
+                <span className="truncate text-[34px] leading-tight font-bold">
+                  {r.name}
+                </span>
+                <span className="font-mono text-xl text-(--text-secondary) tabular-nums">
+                  NIK {r.nik}
+                </span>
+              </CardField>,
+
+              <CardField
+                key="org"
+                label="Perusahaan / Posisi / Dept"
+                className="w-[20%] flex-none"
+              >
+                <span className="truncate text-xl font-semibold">
+                  {r.company ?? "—"}
+                </span>
+                <span className="truncate text-xl text-(--text-secondary)">
+                  {r.position ?? "—"}
+                </span>
+                <span className="truncate text-xl text-(--text-secondary)">
+                  {r.department ?? "—"}
+                </span>
+              </CardField>,
+
+              /* The verdict block. Two badges because savera can say two
+                 things: its category, and the decision it signed — and where
+                 those disagree is precisely why the card is on the wall. */
+              <CardField key="call" label="Keputusan" className="flex-1">
+                <span className="flex flex-wrap items-center gap-3">
+                  <DisplayBadge tone={FTW_CAT_BADGE[ftwCatOf(r.sleepCategory)]}>
+                    {r.sleepCategory ?? VERDICT[r.verdict].label}
+                  </DisplayBadge>
+                  {r.sleepCategory ? (
+                    <DisplayBadge tone={VERDICT[r.verdict].tone}>
+                      {VERDICT[r.verdict].label}
+                    </DisplayBadge>
+                  ) : null}
+                </span>
+                {r.ftwDecision ? (
+                  <span className="truncate text-lg text-(--text-secondary)">
+                    {r.ftwDecision}
+                  </span>
+                ) : null}
+              </CardField>,
+
+              <CardField
+                key="sleep"
+                label="Tidur efektif"
+                className="w-[11%] flex-none"
+              >
+                <span className="font-mono text-[30px] leading-tight font-bold tabular-nums">
+                  {sleepText(r.sleepMinutes)}
+                </span>
+              </CardField>,
+
+              /* Pinned right, boxed, and the only cyan on the card: the one
+                 number a supervisor reads off to ask "before or after the
+                 deadline". An unfiled row has none, and says so rather than
+                 leaving the box empty. */
+              <div
+                key="sent"
+                className="w-[180px] flex-none rounded-panel border border-(--divider) bg-(--fill-subtle) px-6 py-4"
+              >
+                <span className="text-[15px] font-semibold tracking-[.12em] text-(--text-tertiary) uppercase">
+                  Jam Upload
+                </span>
+                <div
+                  className={
+                    r.sentAt
+                      ? "font-mono text-[38px] leading-tight font-bold text-(--color-primary-bright) tabular-nums"
+                      : "text-[26px] leading-tight font-bold text-(--text-tertiary)"
+                  }
+                >
+                  {r.sentAt ? r.sentAt.slice(0, 5) : "Belum"}
+                </div>
+              </div>,
+            ],
+          };
+        })}
       />
     </DisplayShell>
   );

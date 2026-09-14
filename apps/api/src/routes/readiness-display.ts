@@ -70,6 +70,7 @@ type RosterPerson = {
   name: string;
   position: string | null;
   department: string | null;
+  company: string | null;
 };
 
 /** Only the columns the walls judge on — the rows carry more. */
@@ -147,6 +148,7 @@ async function shiftRoster(
       name: schema.employees.name,
       position: schema.positions.name,
       department: schema.departments.name,
+      company: schema.companies.name,
     })
     .from(schema.rosterDays)
     .innerJoin(
@@ -160,6 +162,10 @@ async function shiftRoster(
     .leftJoin(
       schema.departments,
       eq(schema.departments.id, schema.employees.departmentId)
+    )
+    .leftJoin(
+      schema.companies,
+      eq(schema.companies.id, schema.employees.companyId)
     )
     .where(
       and(
@@ -367,6 +373,10 @@ export function fitWorkBoard(
       verdict: judgeFtw({ ftw: reading, requiresFtw: true, ftwDeadline }),
       sleepMinutes: reading?.sleepMinutes ?? null,
       sleepCategory: reading?.sleepCategory ?? null,
+      /* savera's own words for the decision, beside its own words for the
+         category. The card shows both because they can disagree, and the
+         disagreement is the whole reason a row is on the wall. */
+      ftwDecision: reading?.ftwDecision ?? null,
       sentAt: reading?.sentAt ? reading.sentAt.slice(11, 19) : null,
     };
   });
