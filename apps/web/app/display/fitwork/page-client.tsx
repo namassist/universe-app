@@ -11,7 +11,6 @@ import {
   fitWorkDisplayQueryOptions,
   type FitWorkDisplayRow,
 } from "@/lib/queries/readiness-display";
-import { FTW_CAT_BADGE, ftwCatOf } from "@/components/menus/fit-to-work-shared";
 
 import { CardField, DisplayCards } from "../_components/display-cards";
 import { DisplayShell } from "../_components/display-shell";
@@ -46,7 +45,7 @@ const GROUP: Record<
   FitWorkDisplayRow["group"],
   { tone: DisplayTone; label: string }
 > = {
-  none: { tone: "danger", label: "Belum FTW" },
+  none: { tone: "danger", label: "Belum upload FTW" },
   /* Both read the same on a badge: the difference is in the line under it,
      which names what refused him. */
   ftwFail: { tone: "danger", label: "Tidak Lolos FTW" },
@@ -192,25 +191,35 @@ export default function DisplayFitworkPage() {
                 </span>
               </CardField>,
 
-              /* The verdict block. Two badges because savera can say two
-                 things: its category, and the decision it signed — and where
-                 those disagree is precisely why the card is on the wall. */
+              /*
+               * One badge, saying the thing to be acted on (owner,
+               * 2026-09-14). Two of them repeated each other on most rows —
+               * "Belum ada vonis" beside "Belum FTW", "Istirahat Minimal 1
+               * Jam" beside "Istirahat" — and two badges that agree teach a
+               * reader to stop reading the second one.
+               *
+               * Which text wins depends on the row, because the useful half
+               * moves. For a man told to rest it is savera's own wording: the
+               * badge has to carry whether he waits one hour or two. For a
+               * refusal it is our verdict, because his category may read
+               * "Dapat Bekerja" and a badge saying so would look like a
+               * clearance. Nothing is lost either way — the line underneath
+               * carries whatever the badge did not.
+               */
               <CardField key="call" label="Keputusan" className="flex-1">
                 <span className="flex flex-wrap items-center gap-2">
-                  <DisplayBadge
-                    size="sm"
-                    tone={FTW_CAT_BADGE[ftwCatOf(r.sleepCategory)]}
-                  >
-                    {r.sleepCategory ?? "Belum ada vonis"}
-                  </DisplayBadge>
                   <DisplayBadge size="sm" tone={GROUP[r.group].tone}>
-                    {GROUP[r.group].label}
+                    {r.group === "rest" && r.sleepCategory
+                      ? r.sleepCategory
+                      : GROUP[r.group].label}
                   </DisplayBadge>
                 </span>
-                {/* savera's own decision, and — where our rule is the one
-                    refusing — what it was that our rule objected to. */}
                 <span className="truncate text-[15px] text-(--text-secondary)">
-                  {[r.ftwDecision, OUR_REASON[r.verdict]]
+                  {[
+                    r.group === "rest" ? null : r.sleepCategory,
+                    r.ftwDecision,
+                    OUR_REASON[r.verdict],
+                  ]
                     .filter(Boolean)
                     .join(" · ") || "\u2014"}
                 </span>

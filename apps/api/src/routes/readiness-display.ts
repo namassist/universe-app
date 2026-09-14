@@ -333,7 +333,7 @@ type FtwGroup = (typeof FTW_ORDER)[number];
 
 /** What each group is called where a person can read it. */
 export const FTW_GROUP_LABEL: Record<FtwGroup, string> = {
-  none: "Belum FTW",
+  none: "Belum upload FTW",
   /* Both refusals read "Tidak Lolos FTW" on the badge. The groups stay apart
      so the clinic's answer still sorts above our own bookkeeping, and the
      line under the badge names which it was. */
