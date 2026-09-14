@@ -23,6 +23,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { EmployeeStatus } from "@universe/contracts";
 
 import { buildBoard, storeBoard } from "./allocation";
+import { deriveDate } from "./derive";
 import { pairingRefusal } from "./routes/fleet-allocation";
 import { db, schema } from "./db";
 import { redis } from "./redis";
@@ -85,6 +86,9 @@ let codeA: string;
 /** NIKs are the join key to the snapshots; keep them digits-only and unique. */
 let nextNik = 990000001;
 const newNik = () => String(nextNik++);
+
+/** Documentation range — never a booth on site. */
+const liveIp = "203.0.113.180";
 
 async function addEmployee(input: {
   nik: string;
@@ -361,6 +365,10 @@ afterAll(async () => {
       .delete(schema.rosterDays)
       .where(inArray(schema.rosterDays.employeeId, made.employees));
   }
+  await db
+    .delete(schema.deviceLiveEvents)
+    .where(eq(schema.deviceLiveEvents.ip, liveIp));
+  await db.delete(schema.deviceTaps).where(eq(schema.deviceTaps.ip, liveIp));
   if (dates.length) {
     await db
       .delete(schema.ftwReadings)
@@ -440,6 +448,68 @@ const mine = async (date: string, shift: "day" | "night" = "day") => {
   const board = await buildBoard(date, shift, DEADLINE, FTW_CLOSE);
   return board.slots.filter((s) => made.units.includes(s.unitId));
 };
+
+/**
+ * Where the board's arrivals actually come from.
+ *
+ * Every other test in this file writes `finger_readings` directly, which is
+ * the right shortcut for testing the engine — but it hides a coupling that a
+ * whole-muster simulation found on 2026-09-14, and that nothing on any screen
+ * would report.
+ *
+ * Two readers hear a tap. The live session hears it in about a second and is
+ * what issues the ticket; the periodic pull writes it to `device_taps`, and
+ * only `deriveDate` turns those into the one-arrival-a-person reading the
+ * board judges. So if the pull stops while the live session keeps running,
+ * tickets go on printing and the wall goes on filling, and at spare-validate
+ * the board seats nobody — with nothing anywhere having said a word.
+ *
+ * These two tests pin that dependency so it cannot be optimised away by
+ * somebody reasoning that the live session already has the taps.
+ */
+describe("what the board counts as an arrival", () => {
+  test("a tap only the live session heard seats nobody", async () => {
+    const date = nextDate();
+    const nik = newNik();
+    const person = await addEmployee({ nik });
+    const unit = await addUnit({ code: `${tag}-LIVE1` });
+    await roster(date, person, "D");
+    await plan(unit, person);
+    await ftwOk(date, nik);
+    /* Heard, ticketed, and invisible to the allocation. */
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip: liveIp, nik, at: `${date} 05:01:00` });
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBeNull();
+    expect(slot?.readiness?.finger).toBe("missing");
+  });
+
+  test("the same tap seats him once the pull has been reduced", async () => {
+    const date = nextDate();
+    const nik = newNik();
+    const person = await addEmployee({ nik });
+    const unit = await addUnit({ code: `${tag}-LIVE2` });
+    await roster(date, person, "D");
+    await plan(unit, person);
+    await ftwOk(date, nik);
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip: liveIp, nik, at: `${date} 05:01:00` });
+    /* The other half: what the thirty-second pull writes, and what turns it
+       into a reading. */
+    await db
+      .insert(schema.deviceTaps)
+      .values({ ip: liveIp, nik, at: `${date} 05:01:00`, direction: "in" });
+    await deriveDate(date);
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(person);
+    expect(slot?.source).toBe("plan");
+    expect(slot?.tappedAt).toBe("05:01:00");
+  });
+});
 
 describe("the planned operator", () => {
   test("keeps the unit when they pass", async () => {
