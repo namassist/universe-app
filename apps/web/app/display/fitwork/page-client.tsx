@@ -2,14 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  Ban,
-  CheckCircle2,
-  ClipboardCheck,
-  Clock,
-  HeartPulse,
-} from "lucide-react";
+import { AlertTriangle, Ban, Clock, HeartPulse } from "lucide-react";
 
 import { SHIFT_KIND_LABELS } from "@universe/contracts";
 
@@ -122,25 +115,13 @@ export default function DisplayFitworkPage() {
         )
       }
       stats={[
-        {
-          icon: <ClipboardCheck className="text-(--color-primary-bright)" />,
-          iconClass: "bg-(--badge-info-fill) border-(--badge-info-border)",
-          value: String(data?.filed ?? 0),
-          label: "Sudah Lapor",
-        },
-        {
-          icon: <CheckCircle2 className="text-(--badge-success-text)" />,
-          iconClass:
-            "bg-(--badge-success-fill) border-(--badge-success-border)",
-          value: String(data?.passed ?? 0),
-          label: "Lolos FTW",
-        },
         /*
-         * The whole wall, then the three parts that divide it.
+         * The wall's own headcount, then the three reasons that divide it.
          *
-         * "Tidak Lolos Alokasi" is the headcount a supervisor works from —
-         * nobody in it can be given a unit — and the three beneath say why,
-         * each prefixed so nobody adds them into the wrong total.
+         * "Sudah Lapor" and "Lolos FTW" were here and are gone (owner,
+         * 2026-09-14): they counted people this screen does not show, and a
+         * wall of exceptions that leads with two numbers about everybody else
+         * buries the one a supervisor acts on.
          */
         {
           icon: <Ban className="text-(--color-danger-text)" />,
@@ -152,20 +133,20 @@ export default function DisplayFitworkPage() {
           icon: <AlertTriangle className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
           value: String(data?.missing ?? 0),
-          label: "— Belum Upload",
+          label: "Belum Upload",
         },
         {
           icon: <HeartPulse className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
           value: String(data?.ftwFailed ?? 0),
-          label: "— Tidak Lolos FTW",
+          label: "Tidak Lolos FTW",
         },
         {
           icon: <Clock className="text-(--badge-warning-text)" />,
           iconClass:
             "bg-(--badge-warning-fill) border-(--badge-warning-border)",
           value: String(data?.rest ?? 0),
-          label: "— Istirahat",
+          label: "Istirahat",
         },
       ]}
     >
