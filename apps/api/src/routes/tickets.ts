@@ -11,7 +11,7 @@
  * reprint sends those same bytes to the printer a second time.
  */
 
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
@@ -30,11 +30,46 @@ export const ticketRoutes = new Elysia({
     "/",
     async ({ query }) => {
       const date = query.date ?? new Date().toISOString().slice(0, 10);
+
+      /*
+       * Filtered in the database, not in the browser.
+       *
+       * The counts under the table have to answer "how many failed in *my*
+       * department" — the question somebody opens this screen with — and a
+       * filter applied after the five hundred row cut would count a different
+       * set than it shows.
+       */
+      const needle = query.q?.trim();
+      const where = [
+        eq(schema.tickets.date, date),
+        ...(query.shift ? [eq(schema.tickets.shift, query.shift)] : []),
+        ...(query.status ? [eq(schema.tickets.status, query.status)] : []),
+        ...(query.department
+          ? [eq(schema.departments.name, query.department)]
+          : []),
+        /* `role` lives in the stored fields rather than a column: it is part
+           of the slip, and the slip is what a reprint reproduces. Tickets
+           issued before the line existed carry none, and match nothing. */
+        ...(query.role
+          ? [sql`${schema.tickets.fields}->>'role' = ${query.role}`]
+          : []),
+        ...(needle
+          ? [
+              or(
+                ilike(schema.tickets.nik, `%${needle}%`),
+                ilike(schema.employees.name, `%${needle}%`)
+              )!,
+            ]
+          : []),
+      ];
+
       const rows = await db
         .select({
           id: schema.tickets.id,
           nik: schema.tickets.nik,
           name: schema.employees.name,
+          department: schema.departments.name,
+          shift: schema.tickets.shift,
           status: schema.tickets.status,
           preview: schema.tickets.preview,
           fields: schema.tickets.fields,
@@ -51,6 +86,10 @@ export const ticketRoutes = new Elysia({
           eq(schema.employees.nik, schema.tickets.nik)
         )
         .leftJoin(
+          schema.departments,
+          eq(schema.departments.id, schema.employees.departmentId)
+        )
+        .leftJoin(
           schema.fingerprintMachines,
           eq(schema.fingerprintMachines.ip, schema.tickets.ip)
         )
@@ -58,19 +97,42 @@ export const ticketRoutes = new Elysia({
           schema.printers,
           eq(schema.printers.id, schema.tickets.printerId)
         )
-        .where(eq(schema.tickets.date, date))
+        .where(and(...where))
         .orderBy(desc(schema.tickets.createdAt))
         .limit(500);
+
+      /* The picker's options come from the whole day, not from the filtered
+         rows — otherwise choosing a department empties the list you would use
+         to choose a different one. */
+      const departments = await db
+        .selectDistinct({ name: schema.departments.name })
+        .from(schema.tickets)
+        .innerJoin(
+          schema.employees,
+          eq(schema.employees.nik, schema.tickets.nik)
+        )
+        .innerJoin(
+          schema.departments,
+          eq(schema.departments.id, schema.employees.departmentId)
+        )
+        .where(eq(schema.tickets.date, date))
+        .orderBy(schema.departments.name);
 
       const shaped = rows.map((r) => {
         const fields = r.fields as {
           at: string;
           seat: { unit: string } | null;
+          role?: "standing" | "spare";
         };
         return {
           id: r.id,
           nik: r.nik,
           name: r.name ?? null,
+          department: r.department ?? null,
+          shift: r.shift,
+          /* Null on a slip printed before the line existed, which the screen
+             shows as a dash rather than guessing. */
+          role: fields.role ?? null,
           status: r.status,
           at: fields.at,
           unit: fields.seat?.unit ?? null,
@@ -89,12 +151,33 @@ export const ticketRoutes = new Elysia({
         failed: shaped.filter((r) => r.status === "failed").length,
         dry: shaped.filter((r) => r.status === "dry").length,
         printing: env.TICKET_PRINTING,
+        departments: departments.map((d) => d.name),
         rows: shaped,
       };
     },
     {
       auth: { menu: "tiket", mode: "view" },
-      query: t.Object({ date: t.Optional(t.String()) }),
+      /*
+       * `t.Union([t.Literal(…)])` on every optional enum, never
+       * `t.Optional(t.UnionEnum([…]))`.
+       *
+       * The latter injects the *first* member when the field is absent, which
+       * is the footgun the repo's own AGENTS.md warns about. Here it silently
+       * filtered an unfiltered request to `status=printed`, `role=standing`,
+       * `shift=day` — a list that looked like a short morning rather than a
+       * broken query.
+       */
+      query: t.Object({
+        date: t.Optional(t.String()),
+        /** NIK or name, matched loosely — it is typed at a counter. */
+        q: t.Optional(t.String()),
+        department: t.Optional(t.String()),
+        role: t.Optional(t.Union([t.Literal("standing"), t.Literal("spare")])),
+        shift: t.Optional(t.Union([t.Literal("day"), t.Literal("night")])),
+        status: t.Optional(
+          t.Union([t.Literal("printed"), t.Literal("failed"), t.Literal("dry")])
+        ),
+      }),
       response: {
         200: TicketListSchema,
         401: ErrorSchema,

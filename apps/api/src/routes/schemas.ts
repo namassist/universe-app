@@ -574,6 +574,10 @@ const TicketRowSchema = t.Object({
   id: t.String(),
   nik: t.String(),
   name: t.Nullable(t.String()),
+  department: t.Nullable(t.String()),
+  shift: ShiftKindSchema,
+  /** Null on a slip printed before the line existed. */
+  role: t.Nullable(t.UnionEnum(["standing", "spare"] as const)),
   /** `printed`, `failed`, or `dry` — rendered but never sent. */
   status: t.Union([
     t.Literal("printed"),
@@ -600,6 +604,8 @@ export const TicketListSchema = t.Object({
   dry: t.Integer(),
   /** Whether tickets are actually sent to printers on this deployment. */
   printing: t.Boolean(),
+  /** Every department with a ticket today — the picker's options, unfiltered. */
+  departments: t.Array(t.String()),
   rows: t.Array(TicketRowSchema),
 });
 

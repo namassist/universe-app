@@ -6,8 +6,13 @@ import { Printer } from "lucide-react";
 
 import { MENU_LABELS, type AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { ticketsKey, ticketsQueryOptions } from "@/lib/queries/tickets";
+import {
+  ticketsKey,
+  ticketsQueryOptions,
+  type TicketFilters,
+} from "@/lib/queries/tickets";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +23,8 @@ import {
   Toolbar,
   ToolbarGroup,
 } from "@/components/ui/panel";
+import { SearchInput } from "@/components/ui/search-input";
+import { Select } from "@/components/ui/select";
 import { StateBox } from "@/components/ui/state-box";
 import {
   Table,
@@ -45,7 +52,34 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
   const canW = mode === "manage";
   const queryClient = useQueryClient();
 
-  const ticketsQ = useQuery(ticketsQueryOptions(date));
+  const [department, setDepartment] = React.useState("");
+  const [role, setRole] = React.useState("");
+  const [shift, setShift] = React.useState("");
+  const [status, setStatus] = React.useState("");
+
+  /* The search runs server-side, so it is debounced rather than sent per
+     keystroke to a list that can hold five hundred rows. */
+  const [typed, setTyped] = React.useState("");
+  const [q, setQ] = React.useState("");
+  React.useEffect(() => {
+    const timer = setTimeout(() => setQ(typed.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [typed]);
+
+  /* An empty select means "all", which is an absent parameter rather than an
+     empty one — the API reads a blank string as a value to match. */
+  const filters: TicketFilters = React.useMemo(
+    () => ({
+      ...(q ? { q } : {}),
+      ...(department ? { department } : {}),
+      ...(role ? { role: role as "standing" | "spare" } : {}),
+      ...(shift ? { shift: shift as "day" | "night" } : {}),
+      ...(status ? { status: status as "printed" | "failed" | "dry" } : {}),
+    }),
+    [q, department, role, shift, status]
+  );
+
+  const ticketsQ = useQuery(ticketsQueryOptions(date, filters));
   const tickets = ticketsQ.data;
 
   const reprint = useMutation({
@@ -55,22 +89,22 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
       return result.data;
     },
     onSuccess: async (r) => {
-      await queryClient.invalidateQueries({ queryKey: ticketsKey(date) });
+      await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       pushToast(
         r.status === "printed" ? "success" : "error",
-        "Cetak ulang",
-        r.status === "printed" ? "Tiket tercetak" : "Printer masih menolak"
+        "Cetak tiket",
+        r.status === "printed" ? "Tiket tercetak" : "Printer menolak"
       );
     },
     onError: (error) =>
-      pushToast("error", "Cetak ulang", errorMessage(error, "Gagal")),
+      pushToast("error", "Cetak tiket", errorMessage(error, "Gagal")),
   });
 
   return (
     <div className="flex flex-col gap-6">
       <PageTitle
         title={MENU_LABELS.tiket}
-        sub="Tiket muster yang terbit hari itu — termasuk yang gagal tercetak dan masih menunggu cetak ulang."
+        sub="Tiket muster yang terbit hari itu. Saring per departemen, nama, jenis operator atau shift — dan cetak ulang sendiri kalau ada yang tidak sampai ke tangan orangnya."
       />
 
       <Panel>
@@ -83,6 +117,60 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setDate(e.target.value || today())}
               className="w-[170px]"
             />
+            <SearchInput
+              className="w-[240px]"
+              placeholder="NIK atau nama"
+              aria-label="Cari tiket"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onClear={() => setTyped("")}
+            />
+            {/* Options come from the whole day, so picking one department does
+                not empty the list you would use to pick another. */}
+            <Select
+              wrapperClassName="w-[210px]"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              aria-label="Departemen"
+            >
+              <option value="">Semua departemen</option>
+              {(tickets?.departments ?? []).map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </Select>
+            <Select
+              wrapperClassName="w-[170px]"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              aria-label="Jenis operator"
+            >
+              <option value="">Semua jenis</option>
+              <option value="standing">Tetap</option>
+              <option value="spare">Spare</option>
+            </Select>
+            <Select
+              wrapperClassName="w-[150px]"
+              value={shift}
+              onChange={(e) => setShift(e.target.value)}
+              aria-label="Shift"
+            >
+              <option value="">Semua shift</option>
+              <option value="day">Siang</option>
+              <option value="night">Malam</option>
+            </Select>
+            <Select
+              wrapperClassName="w-[170px]"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              aria-label="Status cetak"
+            >
+              <option value="">Semua status</option>
+              <option value="printed">Tercetak</option>
+              <option value="failed">Gagal</option>
+              <option value="dry">Cetak kering</option>
+            </Select>
           </ToolbarGroup>
         </Toolbar>
 
@@ -127,6 +215,9 @@ function TicketsView({
       id: string;
       nik: string;
       name: string | null;
+      department: string | null;
+      shift: "day" | "night";
+      role: "standing" | "spare" | null;
       status: "printed" | "failed" | "dry";
       at: string;
       unit: string | null;
@@ -195,6 +286,9 @@ function TicketsView({
               <TableHead>Jam absen</TableHead>
               <TableHead>NIK</TableHead>
               <TableHead>Nama</TableHead>
+              <TableHead>Departemen</TableHead>
+              <TableHead>Jenis</TableHead>
+              <TableHead>Shift</TableHead>
               <TableHead>Unit</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Printer</TableHead>
@@ -214,6 +308,26 @@ function TicketsView({
                       {r.nik}
                     </TableCell>
                     <TableCell>{r.name ?? "—"}</TableCell>
+                    <TableCell className="text-(--text-secondary)">
+                      {r.department ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {/* The words the slip itself carries. A ticket printed
+                          before the line existed shows a dash rather than a
+                          guess at what it would have said. */}
+                      {r.role ? (
+                        <Badge
+                          variant={r.role === "spare" ? "warning" : "info"}
+                        >
+                          {r.role === "spare" ? "SPARE" : "TETAP"}
+                        </Badge>
+                      ) : (
+                        <span className="text-(--text-tertiary)">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-(--text-secondary)">
+                      {r.shift === "night" ? "Malam" : "Siang"}
+                    </TableCell>
                     <TableCell className="font-mono">
                       {/* Most spares hold none, most mornings. */}
                       {r.unit ?? (
@@ -246,12 +360,21 @@ function TicketsView({
                         >
                           {open === r.id ? "Tutup" : "Lihat"}
                         </Button>
-                        {canW && r.status === "failed" ? (
+                        {/* Every row, not only the failures (owner,
+                            2026-09-14). A slip the printer swallowed, one
+                            torn on the way out, one an operator lost between
+                            the booth and the bus — none of those look like a
+                            failure from here, and all of them end with
+                            somebody asking for the paper again. */}
+                        {canW ? (
                           <Button
+                            variant={
+                              r.status === "failed" ? "primary" : "ghost"
+                            }
                             disabled={busy}
                             onClick={() => onReprint(r.id)}
                           >
-                            Cetak ulang
+                            {r.status === "dry" ? "Cetak" : "Cetak ulang"}
                           </Button>
                         ) : null}
                       </div>
@@ -259,7 +382,7 @@ function TicketsView({
                   </TableRow>
                   {open === r.id ? (
                     <TableRow>
-                      <TableCell colSpan={7}>
+                      <TableCell colSpan={10}>
                         {/* The slip itself — readable without a printer, which
                             is the only way to review one until there is one. */}
                         <pre className="overflow-x-auto rounded-chip bg-(--fill-subtle) p-3 font-mono text-[12px] leading-relaxed">
