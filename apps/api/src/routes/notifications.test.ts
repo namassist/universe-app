@@ -119,7 +119,10 @@ afterAll(async () => {
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
     await db.delete(schema.roles).where(inArray(schema.roles.id, made.roles));
-  await redis.quit();
+  /* The redis client is one object shared by every suite in the process.
+     Closing it here left whichever file ran next unable to open a session —
+     which is what `tickets.test.ts` walked into the day it was written. The
+     runner exits on its own; nothing needs this. */
 });
 
 /** Writes one and remembers it, so the assertions can ignore the neighbours. */
