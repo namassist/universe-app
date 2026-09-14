@@ -1738,11 +1738,11 @@ export const FitWorkDisplaySchema = t.Object({
   /** Uploaded something, whatever it said. */
   filed: t.Integer(),
   passed: t.Integer(),
-  /** Filed, not cleared, told to rest first — he works after it. */
+  /** Told to rest first — a part of `allocFailed`, not a figure beside it. */
   rest: t.Integer(),
   /** The clinic refused: savera's decision, or a category forbidding work. */
   ftwFailed: t.Integer(),
-  /** savera cleared him and our own rule did not — a late upload, mostly. */
+  /** savera cleared him and our rule did not: told to rest, or filed late. */
   allocFailed: t.Integer(),
   missing: t.Integer(),
   rows: t.Array(

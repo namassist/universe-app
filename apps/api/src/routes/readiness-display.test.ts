@@ -175,13 +175,16 @@ describe("the fit-to-work wall", () => {
     /* TOLAK is the clinic's refusal; ANEH is a verdict we could not read,
        which is ours. Two tiles, because they are two people's jobs. */
     expect(board.ftwFailed).toBe(1);
-    expect(board.allocFailed).toBe(1);
+    /* ISTIRAHAT counts here too: he has also failed the allocation, which is
+       why he cannot be seated yet. `rest` is the part of this figure that
+       expires on its own. */
+    expect(board.allocFailed).toBe(2);
     expect(board.missing).toBe(1);
-    /* The four add up to what was filed: nobody counted twice, nobody lost
-       between the tiles. */
-    expect(
-      board.passed + board.rest + board.ftwFailed + board.allocFailed
-    ).toBe(board.filed);
+    /* Three tiles add up to what was filed. `rest` is inside `allocFailed`,
+       so it is deliberately not in this sum. */
+    expect(board.passed + board.ftwFailed + board.allocFailed).toBe(
+      board.filed
+    );
   });
 
   /*
@@ -237,6 +240,20 @@ describe("the fit-to-work wall", () => {
     expect(board.rows[0]!.group).toBe("allocFail");
     expect(board.ftwFailed).toBe(0);
     expect(board.allocFailed).toBe(1);
+  });
+
+  /* He is not cleared for a unit either, so he belongs in the same figure —
+     while keeping the group that makes his row yellow rather than red. */
+  test("somebody told to rest counts as an allocation refusal", () => {
+    const board = fitWorkBoard(
+      [person("1", "SATU")],
+      [filing("1", "FTW aman", "Istirahat Minimal 1 Jam", "04:50:00")],
+      GATE
+    );
+    expect(board.rows[0]!.group).toBe("rest");
+    expect(board.rest).toBe(1);
+    expect(board.allocFailed).toBe(1);
+    expect(board.ftwFailed).toBe(0);
   });
 
   /* A late upload still says something about the person, and that is what

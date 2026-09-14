@@ -435,12 +435,17 @@ export function fitWorkBoard(
     total: judged.length,
     filed: judged.length - count("missing"),
     passed: count("pass"),
+    /* A part of `allocFailed`, not a fifth thing beside it: a man told to
+       rest an hour has also failed the allocation, which is the whole reason
+       he cannot be seated yet. Counted on its own because it is the one
+       refusal that expires — he works after the hour. */
     rest: inGroup("rest"),
     /* The two refusals, kept apart because they are somebody else's job each.
-       With `passed` and `rest` they add up to exactly `filed`, so the tiles
-       never double-count and never lose anybody between them. */
+       The clinic's is medical and nobody here can move it; ours is a deadline
+       or a wording, and those are ours to chase. With `passed` they add up to
+       exactly `filed`. */
     ftwFailed: inGroup("ftwFail"),
-    allocFailed: inGroup("allocFail"),
+    allocFailed: inGroup("allocFail", "rest"),
     missing: count("missing"),
     rows,
   };

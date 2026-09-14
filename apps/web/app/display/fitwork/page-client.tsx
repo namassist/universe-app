@@ -132,17 +132,10 @@ export default function DisplayFitworkPage() {
           value: String(data?.passed ?? 0),
           label: "Lolos FTW",
         },
-        /* The three ways a filing does not clear, kept apart because each
-           sends somebody different: one man waits an hour, one does not work
-           today and that is the clinic's word, and one is held up by a rule of
-           ours. With Lolos FTW they add up to Sudah Lapor exactly. */
-        {
-          icon: <Clock className="text-(--badge-warning-text)" />,
-          iconClass:
-            "bg-(--badge-warning-fill) border-(--badge-warning-border)",
-          value: String(data?.rest ?? 0),
-          label: "Istirahat",
-        },
+        /* The two refusals, then the part of the second one that expires.
+           Lolos FTW + the two refusals is exactly Sudah Lapor; Istirahat sits
+           inside the allocation figure and says so, because a tile a reader
+           can add to the wrong total is worse than no tile. */
         {
           icon: <HeartPulse className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
@@ -154,6 +147,13 @@ export default function DisplayFitworkPage() {
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
           value: String(data?.allocFailed ?? 0),
           label: "Tidak Lolos Alokasi",
+        },
+        {
+          icon: <Clock className="text-(--badge-warning-text)" />,
+          iconClass:
+            "bg-(--badge-warning-fill) border-(--badge-warning-border)",
+          value: String(data?.rest ?? 0),
+          label: "— di antaranya Istirahat",
         },
       ]}
     >
