@@ -162,21 +162,26 @@ describe("the fit-to-work wall", () => {
        and they would spend the whole cut saying nothing needs doing. */
     expect(board.rows.map((r) => r.name)).toEqual([
       "BELUM",
-      /* ANEH is filed, not cleared, and not told to rest, so it shares TOLAK's
-         group and its instruction; within a group the tiebreak is the name. */
-      "ANEH",
+      /* The clinic's refusal outranks ours: TOLAK is a medical answer, ANEH
+         a verdict we could not read. */
       "TOLAK",
+      "ANEH",
       "ISTIRAHAT",
     ]);
     expect(board.total).toBe(5);
     expect(board.filed).toBe(4);
     expect(board.passed).toBe(1);
     expect(board.rest).toBe(1);
-    expect(board.notPassed).toBe(2);
+    /* TOLAK is the clinic's refusal; ANEH is a verdict we could not read,
+       which is ours. Two tiles, because they are two people's jobs. */
+    expect(board.ftwFailed).toBe(1);
+    expect(board.allocFailed).toBe(1);
     expect(board.missing).toBe(1);
-    /* The three add up to what was filed: four tiles, nobody counted twice
-       and nobody lost between them. */
-    expect(board.passed + board.rest + board.notPassed).toBe(board.filed);
+    /* The four add up to what was filed: nobody counted twice, nobody lost
+       between the tiles. */
+    expect(
+      board.passed + board.rest + board.ftwFailed + board.allocFailed
+    ).toBe(board.filed);
   });
 
   /*
@@ -194,12 +199,44 @@ describe("the fit-to-work wall", () => {
       ],
       GATE
     );
-    expect(board.rows.map((r) => r.name)).toEqual([
-      "TELAT FIT",
-      "TOLAK KEPUTUSAN",
+    /* One refused by us for landing late, one refused by the clinic — and
+       the clinic's refusal leads. */
+    expect(board.rows.map((r) => [r.name, r.group])).toEqual([
+      ["TOLAK KEPUTUSAN", "ftwFail"],
+      ["TELAT FIT", "allocFail"],
     ]);
     expect(board.passed).toBe(0);
-    expect(board.notPassed).toBe(2);
+    expect(board.ftwFailed).toBe(1);
+    expect(board.allocFailed).toBe(1);
+  });
+
+  /*
+   * savera contradicts itself on this shape — "FTW aman" over a category that
+   * forbids work, 177 rows in one sample. The owner's call (2026-09-14): what
+   * forbids a man to work is a medical statement, whatever the line above it
+   * says, so the clinic owns the refusal.
+   */
+  test("a forbidding category beats a decision that says aman", () => {
+    const board = fitWorkBoard(
+      [person("1", "SATU")],
+      [filing("1", "FTW aman", "Tidak Boleh Bekerja", "04:50:00")],
+      GATE
+    );
+    expect(board.rows[0]!.group).toBe("ftwFail");
+    expect(board.ftwFailed).toBe(1);
+    expect(board.allocFailed).toBe(0);
+  });
+
+  /* Cleared by the clinic on both lines, refused by our deadline alone. */
+  test("a late upload savera cleared is our refusal, not the clinic's", () => {
+    const board = fitWorkBoard(
+      [person("1", "SATU")],
+      [filing("1", "FTW aman", "Dapat Bekerja", "05:31:00")],
+      GATE
+    );
+    expect(board.rows[0]!.group).toBe("allocFail");
+    expect(board.ftwFailed).toBe(0);
+    expect(board.allocFailed).toBe(1);
   });
 
   /* A late upload still says something about the person, and that is what

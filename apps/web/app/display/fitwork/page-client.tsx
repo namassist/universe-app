@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock,
+  HeartPulse,
 } from "lucide-react";
 
 import { SHIFT_KIND_LABELS } from "@universe/contracts";
@@ -40,16 +41,28 @@ import { DisplayBadge, type DisplayTone } from "../_components/display-table";
  * if it were merged into a refusal.
  */
 
-const VERDICT: Record<
-  FitWorkDisplayRow["verdict"],
+/**
+ * What refused this person, in the words a supervisor acts on.
+ *
+ * "Tidak lolos" alone was ambiguous (owner, 2026-09-14): it stood for the
+ * clinic refusing on medical grounds and for our own rule refusing on grounds
+ * of its own, and only one of those is anybody here's to chase.
+ */
+const GROUP: Record<
+  FitWorkDisplayRow["group"],
   { tone: DisplayTone; label: string }
 > = {
-  pass: { tone: "success", label: "Lolos FTW" },
-  fail: { tone: "danger", label: "Tidak lolos" },
-  late: { tone: "warning", label: "Terlambat" },
-  missing: { tone: "danger", label: "Belum FTW" },
-  unreadable: { tone: "warning", label: "Tak terbaca" },
-  "not-required": { tone: "neutral", label: "Tidak diminta" },
+  none: { tone: "danger", label: "Belum FTW" },
+  ftwFail: { tone: "danger", label: "Tidak Lolos FTW" },
+  allocFail: { tone: "danger", label: "Tidak Lolos Alokasi" },
+  rest: { tone: "warning", label: "Istirahat" },
+  fit: { tone: "success", label: "Lolos FTW" },
+};
+
+/** Why our own rule refused, when it was ours that did. */
+const OUR_REASON: Partial<Record<FitWorkDisplayRow["verdict"], string>> = {
+  late: "Upload lewat batas waktu",
+  unreadable: "Vonis savera tidak dikenali",
 };
 
 /** 445 → "7j 25m". Minutes as savera's rules actually counted them. */
@@ -119,10 +132,10 @@ export default function DisplayFitworkPage() {
           value: String(data?.passed ?? 0),
           label: "Lolos FTW",
         },
-        /* The two halves of "filed but not cleared", kept apart because they
-           send a supervisor to different places: one man waits an hour, the
-           other does not work today. Together with Lolos FTW they add up to
-           Sudah Lapor exactly. */
+        /* The three ways a filing does not clear, kept apart because each
+           sends somebody different: one man waits an hour, one does not work
+           today and that is the clinic's word, and one is held up by a rule of
+           ours. With Lolos FTW they add up to Sudah Lapor exactly. */
         {
           icon: <Clock className="text-(--badge-warning-text)" />,
           iconClass:
@@ -131,16 +144,22 @@ export default function DisplayFitworkPage() {
           label: "Istirahat",
         },
         {
+          icon: <HeartPulse className="text-(--color-danger-text)" />,
+          iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
+          value: String(data?.ftwFailed ?? 0),
+          label: "Tidak Lolos FTW",
+        },
+        {
           icon: <AlertTriangle className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
-          value: String(data?.notPassed ?? 0),
-          label: "Tidak Lolos",
+          value: String(data?.allocFailed ?? 0),
+          label: "Tidak Lolos Alokasi",
         },
       ]}
     >
       <DisplayCards
         items={rows.map((r) => {
-          const resting = ftwCatOf(r.sleepCategory) === "istirahat";
+          const resting = r.group === "rest";
           return {
             key: r.nik,
             /* Yellow behind a man told to rest, red behind everybody else on
@@ -189,19 +208,19 @@ export default function DisplayFitworkPage() {
                     size="sm"
                     tone={FTW_CAT_BADGE[ftwCatOf(r.sleepCategory)]}
                   >
-                    {r.sleepCategory ?? VERDICT[r.verdict].label}
+                    {r.sleepCategory ?? "Belum ada vonis"}
                   </DisplayBadge>
-                  {r.sleepCategory ? (
-                    <DisplayBadge size="sm" tone={VERDICT[r.verdict].tone}>
-                      {VERDICT[r.verdict].label}
-                    </DisplayBadge>
-                  ) : null}
+                  <DisplayBadge size="sm" tone={GROUP[r.group].tone}>
+                    {GROUP[r.group].label}
+                  </DisplayBadge>
                 </span>
-                {r.ftwDecision ? (
-                  <span className="truncate text-[15px] text-(--text-secondary)">
-                    {r.ftwDecision}
-                  </span>
-                ) : null}
+                {/* savera's own decision, and — where our rule is the one
+                    refusing — what it was that our rule objected to. */}
+                <span className="truncate text-[15px] text-(--text-secondary)">
+                  {[r.ftwDecision, OUR_REASON[r.verdict]]
+                    .filter(Boolean)
+                    .join(" · ") || "\u2014"}
+                </span>
               </CardField>,
 
               <CardField

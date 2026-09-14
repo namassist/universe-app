@@ -1738,10 +1738,12 @@ export const FitWorkDisplaySchema = t.Object({
   /** Uploaded something, whatever it said. */
   filed: t.Integer(),
   passed: t.Integer(),
-  /** Filed, not cleared, told to rest first. */
+  /** Filed, not cleared, told to rest first — he works after it. */
   rest: t.Integer(),
-  /** Filed and not cleared for any other reason — forbidden, late, unreadable. */
-  notPassed: t.Integer(),
+  /** The clinic refused: savera's decision, or a category forbidding work. */
+  ftwFailed: t.Integer(),
+  /** savera cleared him and our own rule did not — a late upload, mostly. */
+  allocFailed: t.Integer(),
   missing: t.Integer(),
   rows: t.Array(
     t.Object({
@@ -1763,6 +1765,15 @@ export const FitWorkDisplaySchema = t.Object({
       sleepCategory: t.Nullable(t.String()),
       /** savera's own decision wording, beside its category. */
       ftwDecision: t.Nullable(t.String()),
+      /** Which refusal this is, decided on the server so the wall cannot
+          disagree with the tiles above it. */
+      group: t.UnionEnum([
+        "none",
+        "ftwFail",
+        "allocFail",
+        "rest",
+        "fit",
+      ] as const),
       /** "HH:MM:SS" the upload landed. */
       sentAt: t.Nullable(t.String()),
     })

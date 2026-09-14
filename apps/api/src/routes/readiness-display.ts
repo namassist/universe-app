@@ -320,39 +320,62 @@ export const attendanceDisplayRoutes = new Elysia({
 /**
  * The order a supervisor walks the wall in (owner, 2026-09-14).
  *
- * By what savera decided about the *person*, not by which of our verdicts
- * applies: nobody has filed, then nobody may work, then everybody who must
- * rest first, then the rest. The wall used to lead with our own bookkeeping —
- * `unreadable` and `late` above a man told not to work — which put the row
- * that needs a phone call to IT above the row that needs one to a supervisor.
+ * By what was decided about the *person*, not by which of our verdicts
+ * applies. The wall used to lead with our own bookkeeping — `unreadable` and
+ * `late` above a man told not to work — which put the row that needs a phone
+ * call to IT above the row that needs one to a supervisor.
  *
- * A filing whose category we cannot place reads as `rest`: it is not a refusal
- * and not a clearance, and the badge beside it says the words savera used.
+ * `fit` is last and never rendered: it is counted in a tile and left off the
+ * glass, because on a good morning it is most of the shift.
  */
-const FTW_ORDER = ["none", "forbidden", "rest", "fit"] as const;
+const FTW_ORDER = ["none", "ftwFail", "allocFail", "rest", "fit"] as const;
 type FtwGroup = (typeof FTW_ORDER)[number];
 
+/** What each group is called where a person can read it. */
+export const FTW_GROUP_LABEL: Record<FtwGroup, string> = {
+  none: "Belum FTW",
+  ftwFail: "Tidak Lolos FTW",
+  allocFail: "Tidak Lolos Alokasi",
+  rest: "Istirahat",
+  fit: "Lolos FTW",
+};
+
 /**
- * Which of those four a row belongs to.
+ * Which of the five a row belongs to.
  *
- * `missing` is the verdict, not the category, because a person with no filing
- * at all and a person whose filing carries no category are different mornings
- * — the first has not been to the clinic.
+ * Two different things refuse people, and calling both "tidak lolos" hid the
+ * difference (owner, 2026-09-14). The clinic refuses on medical grounds, and
+ * a supervisor can do nothing about it. Our own rule refuses on grounds of
+ * its own — an upload that missed the deadline, a verdict worded so we cannot
+ * read it — and those are ours to chase.
  *
- * Only a `pass` is `fit`, and that is what keeps anybody from vanishing. The
- * group decides both the order and whether the row is shown at all, so keying
- * `fit` off the category would have dropped every filing that reads "Dapat
- * Bekerja" but was refused for another reason — a late upload, a decision
- * savera would not sign. Those are not clearances, and they stay on the wall.
+ * The order of the tests is the decision:
+ *
+ * 1. No filing at all, or one carrying no category — he has not been seen.
+ * 2. A pass is a pass.
+ * 3. A verdict we cannot read is our problem, never the operator's, so it is
+ *    an allocation refusal even though savera may have cleared him.
+ * 4. savera's decision not reading "aman" is the clinic refusing.
+ * 5. So is the category "Tidak Boleh Bekerja" — even beside a decision that
+ *    says "aman" (owner, 2026-09-14). savera contradicts itself on 177 rows
+ *    in one sample, and what forbids a man to work is a medical statement
+ *    whatever the line above it says.
+ * 6. "Istirahat Minimal n Jam" is a wait, not a refusal: he works after it.
+ * 7. Everything left is cleared by the clinic and refused by us — in
+ *    practice, an upload that landed after the deadline.
  */
 function ftwGroup(row: {
   verdict: FtwVerdict;
   sleepCategory: string | null;
+  ftwDecision: string | null;
 }): FtwGroup {
   if (row.verdict === "missing" || !row.sleepCategory) return "none";
   if (row.verdict === "pass") return "fit";
+  if (row.verdict === "unreadable") return "allocFail";
+  if (!/aman/i.test(row.ftwDecision ?? "")) return "ftwFail";
+  if (/^tidak/i.test(row.sleepCategory)) return "ftwFail";
   if (/^istirahat/i.test(row.sleepCategory)) return "rest";
-  return "forbidden";
+  return "allocFail";
 }
 
 /** The fit-to-work wall's rows and counts. Pure, for the reasons above. */
@@ -404,18 +427,20 @@ export function fitWorkBoard(
         byName(a.row, b.row)
     )
     .slice(0, WALL_ROWS)
-    .map((r) => r.row);
+    /* The group travels with the row: the wall labels and colours by it, and
+       re-deriving the rule in the browser is how the two drift apart. */
+    .map((r) => ({ ...r.row, group: r.group }));
 
   return {
     total: judged.length,
     filed: judged.length - count("missing"),
     passed: count("pass"),
     rest: inGroup("rest"),
-    /* Filed and not cleared for any reason other than being told to rest:
-       forbidden, late, or a verdict we could not read. They add up with the
-       two above to exactly `filed`, so the four tiles never double-count and
-       never lose anybody between them. */
-    notPassed: inGroup("forbidden"),
+    /* The two refusals, kept apart because they are somebody else's job each.
+       With `passed` and `rest` they add up to exactly `filed`, so the tiles
+       never double-count and never lose anybody between them. */
+    ftwFailed: inGroup("ftwFail"),
+    allocFailed: inGroup("allocFail"),
     missing: count("missing"),
     rows,
   };
@@ -448,7 +473,8 @@ export const fitWorkDisplayRoutes = new Elysia({
         filed: 0,
         passed: 0,
         rest: 0,
-        notPassed: 0,
+        ftwFailed: 0,
+        allocFailed: 0,
         missing: 0,
         rows: [],
       };
