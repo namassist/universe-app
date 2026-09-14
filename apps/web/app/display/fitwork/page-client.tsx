@@ -16,6 +16,7 @@ import {
   fitWorkDisplayQueryOptions,
   type FitWorkDisplayRow,
 } from "@/lib/queries/readiness-display";
+import { FTW_CAT_BADGE, ftwCatOf } from "@/components/menus/fit-to-work-shared";
 
 import { DisplayShell } from "../_components/display-shell";
 import {
@@ -148,9 +149,16 @@ export default function DisplayFitworkPage() {
             <span key="sl" className="font-mono whitespace-nowrap tabular-nums">
               {sleepText(r.sleepMinutes)}
             </span>,
-            <span key="c" className="text-xl text-(--text-secondary)">
+            /* The same tones the FTW screen already gives these words —
+               "Istirahat Minimal 1 Jam" is a wait, not a refusal, and grey
+               text made it read like neither. One mapping, so the wall and
+               the screen a supervisor opens afterwards agree on the colour. */
+            <DisplayBadge
+              key="c"
+              tone={FTW_CAT_BADGE[ftwCatOf(r.sleepCategory)]}
+            >
               {r.sleepCategory ?? "—"}
-            </span>,
+            </DisplayBadge>,
           ],
         }))}
       />

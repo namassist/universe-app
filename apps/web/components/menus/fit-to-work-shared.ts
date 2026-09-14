@@ -17,12 +17,18 @@ export const ftwCatOf = (category: string | null): FtwCatKey => {
   return "istirahat";
 };
 
-export const FTW_CAT_BADGE: Record<FtwCatKey, BadgeVariant> = {
+/*
+ * `satisfies` rather than an annotation, so the values stay the four literals
+ * they are. The kiosk badge takes a narrower set of tones than the admin one,
+ * and these four are in both — widening them to `BadgeVariant` would hand the
+ * wall an "accent" it cannot render and force a second copy of this mapping.
+ */
+export const FTW_CAT_BADGE = {
   fit: "success",
   istirahat: "warning",
   tidak: "danger",
   belum: "neutral",
-};
+} as const satisfies Record<FtwCatKey, BadgeVariant>;
 
 export const ftwSleepClass = (cat: FtwCatKey) =>
   cn(
