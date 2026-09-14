@@ -133,8 +133,8 @@ describe("rebuilding a date", () => {
   const wipe = async () => {
     await db.delete(schema.deviceTaps).where(eq(schema.deviceTaps.ip, ip));
     await db
-      .delete(schema.derivedReadings)
-      .where(eq(schema.derivedReadings.nik, nik));
+      .delete(schema.fingerReadings)
+      .where(eq(schema.fingerReadings.nik, nik));
   };
 
   const addTap = (at: string, direction: "in" | "out" = "in") =>
@@ -147,8 +147,8 @@ describe("rebuilding a date", () => {
     (
       await db
         .select()
-        .from(schema.derivedReadings)
-        .where(eq(schema.derivedReadings.nik, nik))
+        .from(schema.fingerReadings)
+        .where(eq(schema.fingerReadings.nik, nik))
     )[0];
 
   beforeEach(wipe);

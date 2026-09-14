@@ -1805,28 +1805,3 @@ export const deviceLiveEvents = pgTable(
     index("device_live_events_at_idx").on(table.at),
   ]
 );
-
-export const derivedReadings = pgTable(
-  "derived_readings",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    nik: text("nik").notNull(),
-    date: date("date").notNull(),
-    /** See `fingerReadings` for why the IN tap is split at noon — the rule is
-     *  the same one, applied to our taps instead of Nakula's. */
-    firstInAt: timestamp("first_in_at", { mode: "string" }),
-    firstInIp: text("first_in_ip"),
-    firstInPmAt: timestamp("first_in_pm_at", { mode: "string" }),
-    firstInPmIp: text("first_in_pm_ip"),
-    firstOutAt: timestamp("first_out_at", { mode: "string" }),
-    firstOutIp: text("first_out_ip"),
-    /** When this row was last rebuilt, not when the taps arrived. */
-    derivedAt: timestamp("derived_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("derived_readings_nik_date_unique").on(table.nik, table.date),
-    index("derived_readings_date_idx").on(table.date),
-  ]
-);

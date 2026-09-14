@@ -21,7 +21,8 @@ import { Elysia, t } from "elysia";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
 import { rosterDayInForce } from "../roster-in-force";
-import { ingestDates, syncFingerReadings, syncFtwReadings } from "../ingest";
+import { ingestDates, syncFtwReadings } from "../ingest";
+import { deriveDate } from "../derive";
 import { fingerInDeadline, ftwDeadline, shiftIn } from "../readiness";
 import {
   AttendanceListSchema,
@@ -773,10 +774,28 @@ export const attendanceSyncRoutes = new Elysia({
     "/sync",
     async ({ status }) => {
       try {
-        const result = await syncFingerReadings(ingestDates());
-        return { ...result, syncedAt: new Date().toISOString() };
+        /*
+         * Rebuilds the readings from the taps we hold, since the cutover
+         * (owner, 2026-09-14). It used to pull Nakula, and leaving it that way
+         * would have turned a helpful button into the one thing able to
+         * overwrite the machines' own record with a stale copy of it.
+         *
+         * Same promise to whoever presses it: make today's attendance current.
+         */
+        let rebuilt = 0;
+        for (const date of ingestDates()) rebuilt += await deriveDate(date);
+        /* `inserted` answers "what did pressing this change", and a rebuild
+           rewrites rows rather than discovering them — so it is honestly
+           zero rather than flattered by the count of rows touched. */
+        return {
+          fetched: rebuilt,
+          upserted: rebuilt,
+          inserted: 0,
+          skipped: 0,
+          syncedAt: new Date().toISOString(),
+        };
       } catch (error) {
-        console.error("[ingest] manual finger sync failed", error);
+        console.error("[derive] manual rebuild failed", error);
         return status(502, sourceUnreachable);
       }
     },
@@ -788,7 +807,7 @@ export const attendanceSyncRoutes = new Elysia({
         403: ErrorSchema,
         502: ErrorSchema,
       },
-      detail: { summary: "Pull fingerprint taps from Nakula now (one pass)" },
+      detail: { summary: "Rebuild the readings from the taps we hold" },
     }
   )
 

@@ -130,14 +130,22 @@ export async function deriveDate(date: string): Promise<number> {
     nik,
     date,
     ...reduceTaps(list),
-    derivedAt: new Date(),
+    /* When we last rebuilt this row, which is what the screens call "synced". */
+    syncedAt: new Date(),
   }));
 
+  /*
+   * Written straight into `finger_readings` since the cutover (owner,
+   * 2026-09-14): the table the board, the walls and the dashboard have always
+   * read. Nothing downstream changed — that is why the shadow table this used
+   * to fill carried the same shape, so the day Nakula was dropped became one
+   * line here rather than a rewrite of every reader.
+   */
   await db
-    .insert(schema.derivedReadings)
+    .insert(schema.fingerReadings)
     .values(rows)
     .onConflictDoUpdate({
-      target: [schema.derivedReadings.nik, schema.derivedReadings.date],
+      target: [schema.fingerReadings.nik, schema.fingerReadings.date],
       set: {
         firstInAt: sqlExcluded("first_in_at"),
         firstInIp: sqlExcluded("first_in_ip"),
@@ -145,7 +153,7 @@ export async function deriveDate(date: string): Promise<number> {
         firstInPmIp: sqlExcluded("first_in_pm_ip"),
         firstOutAt: sqlExcluded("first_out_at"),
         firstOutIp: sqlExcluded("first_out_ip"),
-        derivedAt: sqlExcluded("derived_at"),
+        syncedAt: sqlExcluded("synced_at"),
       },
     });
   return rows.length;

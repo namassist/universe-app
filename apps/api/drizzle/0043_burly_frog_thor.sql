@@ -1,0 +1,1 @@
+DROP TABLE "derived_readings" CASCADE;

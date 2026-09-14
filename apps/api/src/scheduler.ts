@@ -398,9 +398,6 @@ const listen: Hook = async (dispatch) => {
   void runListenWindow(endsAt);
 };
 
-/** The Nakula pull this stage has always carried. Hoisted so it can be paired. */
-const fingerIngest = ingest("finger");
-
 const HOOKS: Record<TimelineAction, Hook> = {
   /* The changeover, and now also when collecting begins. Its time is read by
      `shiftGates` for the walls as it always was. */
@@ -414,13 +411,15 @@ const HOOKS: Record<TimelineAction, Hook> = {
   "bus-depart": marker,
   other: marker,
   "ftw-ingest": ingest("ftw"),
-  /* Two things at one moment: the old source is still pulled, and the booths
-     start pushing. Composed rather than replaced — stopping the Nakula pull
-     here would end the parallel run without anybody deciding to. */
-  "finger-ingest": async (dispatch) => {
-    await fingerIngest(dispatch);
-    await listen(dispatch);
-  },
+  /*
+   * Listening, and nothing else.
+   *
+   * This stage pulled Nakula alongside the booths while the two sources ran in
+   * parallel. The owner ended that on 2026-09-14: the machines are read
+   * directly now, and a second source quietly overwriting the first is worse
+   * than no second source at all.
+   */
+  "finger-ingest": listen,
   "roster-ingest": async () => {
     await runRosterSync();
   },

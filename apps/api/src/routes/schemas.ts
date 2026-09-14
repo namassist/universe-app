@@ -490,27 +490,6 @@ export const TapMonitorSchema = t.Object({
 });
 
 /**
- * One person the two attendance sources disagree about.
- *
- * `only-nakula` is the expensive kind: the system being replaced saw an
- * arrival and the new one did not, which in production would be an operator
- * losing their unit while standing at a sensor.
- */
-const TapDifferenceSchema = t.Object({
-  nik: t.String(),
-  name: t.String(),
-  kind: t.Union([
-    t.Literal("only-nakula"),
-    t.Literal("only-device"),
-    t.Literal("drift"),
-  ]),
-  nakula: t.Nullable(t.String()),
-  device: t.Nullable(t.String()),
-  /** How far apart, when both saw them. Null when only one did. */
-  seconds: t.Nullable(t.Integer()),
-});
-
-/**
  * One machine, as the collector last found it.
  *
  * Built from `device_requests`, which until now was written on every call and
@@ -619,17 +598,6 @@ export const LiveLogSchema = t.Object({
 });
 
 export const ActiveListenOneSchema = ActiveListenSchema;
-
-export const TapCompareSchema = t.Object({
-  date: t.String(),
-  shift: t.Union([t.Literal("day"), t.Literal("night")]),
-  /** People both sources place at the same moment. */
-  matched: t.Integer(),
-  onlyNakula: t.Integer(),
-  onlyDevice: t.Integer(),
-  drift: t.Integer(),
-  differences: t.Array(TapDifferenceSchema),
-});
 
 /** One unit the file parks because the digger it hauls for is broken. */
 const FleetImportStandbyRowSchema = t.Object({
