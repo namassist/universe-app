@@ -311,7 +311,37 @@ export const attendanceDisplayRoutes = new Elysia({
 
 /* ------------------------------------------------------------- fit to work */
 
-const FTW_ORDER = ["missing", "fail", "unreadable", "late", "pass"] as const;
+/**
+ * The order a supervisor walks the wall in (owner, 2026-09-14).
+ *
+ * By what savera decided about the *person*, not by which of our verdicts
+ * applies: nobody has filed, then nobody may work, then everybody who must
+ * rest first, then the rest. The wall used to lead with our own bookkeeping —
+ * `unreadable` and `late` above a man told not to work — which put the row
+ * that needs a phone call to IT above the row that needs one to a supervisor.
+ *
+ * A filing whose category we cannot place reads as `rest`: it is not a refusal
+ * and not a clearance, and the badge beside it says the words savera used.
+ */
+const FTW_ORDER = ["none", "forbidden", "rest", "fit"] as const;
+type FtwGroup = (typeof FTW_ORDER)[number];
+
+/**
+ * Which of those four a row belongs to.
+ *
+ * `missing` is the verdict, not the category, because a person with no filing
+ * at all and a person whose filing carries no category are different mornings
+ * — the first has not been to the clinic.
+ */
+function ftwGroup(row: {
+  verdict: FtwVerdict;
+  sleepCategory: string | null;
+}): FtwGroup {
+  if (row.verdict === "missing" || !row.sleepCategory) return "none";
+  if (/^dapat/i.test(row.sleepCategory)) return "fit";
+  if (/^tidak/i.test(row.sleepCategory)) return "forbidden";
+  return "rest";
+}
 
 /** The fit-to-work wall's rows and counts. Pure, for the reasons above. */
 export function fitWorkBoard(
@@ -341,7 +371,7 @@ export function fitWorkBoard(
   const rows = [...judged]
     .sort(
       (a, b) =>
-        rank(FTW_ORDER, a.verdict) - rank(FTW_ORDER, b.verdict) ||
+        rank(FTW_ORDER, ftwGroup(a)) - rank(FTW_ORDER, ftwGroup(b)) ||
         (a.verdict === "pass"
           ? (b.sentAt ?? "").localeCompare(a.sentAt ?? "")
           : byName(a, b))

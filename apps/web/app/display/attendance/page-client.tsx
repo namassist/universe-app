@@ -115,7 +115,7 @@ export default function DisplayAttendancePage() {
         ]}
         rows={rows.map((r) => ({
           key: r.nik,
-          danger: r.verdict === "missing",
+          tone: r.verdict === "missing" ? ("danger" as const) : undefined,
           cells: [
             <span
               key="k"

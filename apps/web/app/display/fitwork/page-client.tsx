@@ -16,13 +16,18 @@ import {
   fitWorkDisplayQueryOptions,
   type FitWorkDisplayRow,
 } from "@/lib/queries/readiness-display";
-import { FTW_CAT_BADGE, ftwCatOf } from "@/components/menus/fit-to-work-shared";
+import {
+  FTW_CAT_BADGE,
+  ftwCatOf,
+  type FtwCatKey,
+} from "@/components/menus/fit-to-work-shared";
 
 import { DisplayShell } from "../_components/display-shell";
 import {
   DisplayBadge,
   DisplayTable,
   type DisplayTone,
+  type RowTone,
 } from "../_components/display-table";
 
 /**
@@ -37,6 +42,17 @@ import {
  * having reworded a verdict — our problem, not the operator's, and invisible
  * if it were merged into a refusal.
  */
+
+/**
+ * Category → the wash behind the row. `fit` is absent on purpose: a clearance
+ * needs no colour, and leaving it undefined is what keeps the wall quiet.
+ */
+const ROW_TONE_OF: Record<FtwCatKey, RowTone | undefined> = {
+  belum: "neutral",
+  tidak: "danger",
+  istirahat: "warning",
+  fit: undefined,
+};
 
 const VERDICT: Record<
   FitWorkDisplayRow["verdict"],
@@ -130,7 +146,11 @@ export default function DisplayFitworkPage() {
         ]}
         rows={rows.map((r) => ({
           key: r.nik,
-          danger: r.verdict === "missing" || r.verdict === "fail",
+          /* The row wears its own badge's colour: yellow behind a man told to
+             rest, red behind one told not to work, grey behind one who has not
+             filed. Nothing behind the rows that need nothing doing — a wall
+             where every line is shaded is a wall with no signal on it. */
+          tone: ROW_TONE_OF[ftwCatOf(r.sleepCategory)],
           cells: [
             <span
               key="k"

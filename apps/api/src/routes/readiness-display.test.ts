@@ -133,30 +133,38 @@ describe("the attendance wall", () => {
 /* ------------------------------------------------------------- fit to work */
 
 describe("the fit-to-work wall", () => {
-  test("orders by what a supervisor would walk over for", () => {
+  /*
+   * Ordered by what savera decided about the person, not by which of our
+   * verdicts applies. `late` and `unreadable` are our own bookkeeping; a man
+   * told not to work outranks both, because the wall is read by a supervisor
+   * and only one of those rows is his to act on.
+   */
+  test("orders by what savera decided, worst first", () => {
     const board = fitWorkBoard(
       [
         person("1", "LOLOS"),
         person("2", "BELUM"),
         person("3", "TOLAK"),
-        person("4", "TELAT"),
+        person("4", "ISTIRAHAT"),
         person("5", "ANEH"),
       ],
       [
         filing("1", "FTW aman", "Dapat Bekerja", "04:50:00"),
-        filing("3", "FTW Perlu Tindak Lanjut", "Dapat Bekerja", "04:50:00"),
-        filing("4", "FTW aman", "Dapat Bekerja", "05:31:00"),
-        filing("5", "Entah apa", "Dapat Bekerja", "04:50:00"),
+        filing("3", "FTW aman", "Tidak Boleh Bekerja", "04:50:00"),
+        filing("4", "FTW aman", "Istirahat Minimal 1 Jam", "04:50:00"),
+        filing("5", "FTW aman", "Entah apa", "04:50:00"),
       ],
       GATE
     );
 
-    expect(board.rows.map((r) => r.verdict)).toEqual([
-      "missing",
-      "fail",
-      "unreadable",
-      "late",
-      "pass",
+    expect(board.rows.map((r) => r.name)).toEqual([
+      "BELUM",
+      "TOLAK",
+      /* A category we cannot place sits with the rest: not a refusal, not a
+         clearance, and the badge beside it shows savera's own words. */
+      "ANEH",
+      "ISTIRAHAT",
+      "LOLOS",
     ]);
     expect(board.total).toBe(5);
     expect(board.filed).toBe(4);
@@ -165,6 +173,39 @@ describe("the fit-to-work wall", () => {
     // this person", and a wall has no room to split an instruction three ways.
     expect(board.refused).toBe(3);
     expect(board.missing).toBe(1);
+  });
+
+  /* A late upload still says something about the person, and that is what
+     places it. The Status badge beside it is what says it came in late. */
+  test("a late filing sorts by its category, not by its lateness", () => {
+    const board = fitWorkBoard(
+      [person("1", "TELAT ISTIRAHAT"), person("2", "TEPAT TOLAK")],
+      [
+        filing("1", "FTW aman", "Istirahat Minimal 2 Jam", "05:31:00"),
+        filing("2", "FTW aman", "Tidak Boleh Bekerja", "04:50:00"),
+      ],
+      GATE
+    );
+    expect(board.rows.map((r) => r.name)).toEqual([
+      "TEPAT TOLAK",
+      "TELAT ISTIRAHAT",
+    ]);
+    expect(board.rows[1]!.verdict).toBe("late");
+  });
+
+  /* Somebody who filed but whose row carries no category has still been to
+     the clinic — but there is nothing to place him by, so he leads with the
+     people who have not filed at all. */
+  test("a filing with no category at all leads with the unfiled", () => {
+    const board = fitWorkBoard(
+      [person("1", "KOSONG"), person("2", "ISTIRAHAT")],
+      [
+        { ...filing("1", "FTW aman", "x", "04:50:00"), sleepCategory: null },
+        filing("2", "FTW aman", "Istirahat Minimal 1 Jam", "04:50:00"),
+      ],
+      GATE
+    );
+    expect(board.rows.map((r) => r.name)).toEqual(["KOSONG", "ISTIRAHAT"]);
   });
 
   test("a verdict that passes beside a sleep category that forbids work fails", () => {

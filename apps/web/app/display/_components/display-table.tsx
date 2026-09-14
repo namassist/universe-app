@@ -48,22 +48,35 @@ export type DisplayCol = { label: string; width?: string };
 const thClass =
   "bg-[linear-gradient(90deg,rgba(37,99,235,.4),rgba(0,84,199,.3))] px-6 py-3.5 text-left text-[22px] font-semibold tracking-[.05em] whitespace-nowrap uppercase first:rounded-l-[14px] last:rounded-r-[14px]";
 
+/**
+ * How urgent a row is, as a wash behind it and a bar down its left edge.
+ *
+ * The tone is the row's own badge, not a second judgement: a yellow badge over
+ * a red row would be the wall disagreeing with itself from six metres away,
+ * which is the distance these are read from. `success` is deliberately absent
+ * — the rows that need nothing doing should be the quiet ones.
+ */
+export type RowTone = "danger" | "warning" | "neutral";
+
+const ROW_TONE: Record<RowTone, string> = {
+  danger:
+    "[&>td]:bg-[rgba(252,60,59,.1)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--color-danger)]",
+  warning:
+    "[&>td]:bg-[rgba(240,160,32,.1)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--badge-warning-text)]",
+  neutral:
+    "[&>td]:bg-[rgba(255,255,255,.05)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--text-tertiary)]",
+};
+
 export function DisplayTable({
   cols,
   rows,
 }: {
   cols: DisplayCol[];
-  rows: { key: string; danger?: boolean; cells: React.ReactNode[] }[];
+  rows: { key: string; tone?: RowTone; cells: React.ReactNode[] }[];
 }) {
   const renderBody = () =>
     rows.map((r, dup) => (
-      <tr
-        key={`${r.key}-${dup}`}
-        className={cn(
-          r.danger &&
-            "[&>td]:bg-[rgba(252,60,59,.1)] [&>td:first-child]:shadow-[inset_4px_0_0_var(--color-danger)]"
-        )}
-      >
+      <tr key={`${r.key}-${dup}`} className={cn(r.tone && ROW_TONE[r.tone])}>
         {r.cells.map((c, i) => (
           <td
             key={i}
