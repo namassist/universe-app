@@ -1282,8 +1282,14 @@ same fields from the plan.
 
 - The dashboard counts FTW as passed on the word "aman" alone — looser than the
   allocation's rule. Tracked separately; not part of this work.
-- **The parallel run against Nakula is paused.** The 33 production machines were
-  removed from the registry, so the periodic pull now covers the development
-  machine alone and the two sources are no longer being compared. Registering
-  them again is a decision, not an oversight — their official names are in the
-  `tbl_m_absen_to_finger` export.
+- **Nakula is no longer read** (owner, 2026-09-14). `derive.ts` writes
+  `finger_readings` directly, the finger-ingest stage only listens, and the
+  manual Sync button rebuilds from the taps we hold. The comparison tab and the
+  shadow table went with the parallel run they belonged to.
+- **Coverage is the thing to watch now, and it is thin.** 330–355 operators tap
+  each day across 25–29 machines; Universe listens to two or three. Everyone who
+  taps somewhere else has no attendance in this system, so the board will seat
+  only the people who reached a Universe booth. That is acceptable while the
+  trial runs on a laptop and production still runs the previous branch against
+  Nakula — and it is the reason the machine rollout, not the code, is what
+  decides when this can be deployed.
