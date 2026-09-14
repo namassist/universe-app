@@ -25,6 +25,7 @@ import { RosterDataMenu } from "./roster-data";
 import { RunTextsMenu } from "./run-texts";
 import { SettingMenu } from "./setting";
 import { SoundsMenu } from "./sounds";
+import { TicketsMenu } from "./tickets";
 import { TimelineMenu } from "./timeline";
 import { UmRolesMenu } from "./um-roles";
 import { UmUsersMenu } from "./um-users";
@@ -51,6 +52,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "fleet-setting": FleetSettingMenu,
   "allocation-priority": AllocationPriorityMenu,
   "monitoring-tap": MonitoringTapMenu,
+  tiket: TicketsMenu,
   "database-unit": DatabaseUnitMenu,
   "jenis-unit": (p) => <MasterMenu {...p} cat="jenis-unit" />,
   "model-unit": (p) => <MasterMenu {...p} cat="model-unit" />,

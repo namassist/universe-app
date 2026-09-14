@@ -119,6 +119,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "timeline",
       "mesin-fingerprint",
       "mesin-printer",
+      "tiket",
       "setting",
     ],
   },
@@ -181,6 +182,11 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
      manpower question during a muster. Read-only: there is nothing on the
      screen to change, only taps to look at and export. */
     { slug: "monitoring-tap", mode: "view", roles: ["manpower"] },
+    /* Tickets get their own menu because they are their own question: not
+     "did he tap" but "did the slip come out". Manage, not view — the one
+     action on the screen is reprinting a slip that failed, and the person
+     standing at the muster with an empty hand is manpower's to answer. */
+    { slug: "tiket", mode: "manage", roles: ["manpower"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */

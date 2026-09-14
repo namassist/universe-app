@@ -85,7 +85,12 @@ export const NAV: NavEntry[] = [
     /* The monitor sits beside Attendance rather than beside the machine
        health screen: it is read while asking about a person, not about a
        machine. Attendance gives the answer, this gives the working. */
-    children: [leaf("roster-data"), leaf("attendance"), leaf("monitoring-tap")],
+    children: [
+      leaf("roster-data"),
+      leaf("attendance"),
+      leaf("monitoring-tap"),
+      leaf("tiket"),
+    ],
   },
   item("fit-to-work", Heart),
   {

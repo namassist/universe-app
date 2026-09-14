@@ -16,6 +16,7 @@ export const MENU_SLUGS = [
   "employees",
   "roster-data",
   "attendance",
+  "tiket",
   "fit-to-work",
   "unit-status",
   "fleet-allocation",
@@ -56,6 +57,7 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   employees: "Karyawan",
   "roster-data": "Data Roster",
   attendance: "Attendance",
+  tiket: "Tiket",
   "fit-to-work": "Fit To Work",
   "unit-status": "Status Unit",
   // The slug stays `fleet-allocation` for the same reason `jabatan` does: it
