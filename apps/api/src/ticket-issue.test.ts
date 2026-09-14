@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { issueTicket } from "./ticket-issue";
+import { firstTapOf, issueTicket } from "./ticket-issue";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Tiket ${uid()}`;
@@ -147,5 +147,52 @@ describe("when a printer is involved", () => {
     expect(row?.printedAt).toBeNull();
     /* Tried more than once inside its minute. */
     expect(row?.attempts).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * Which reader caught the first finger must not change the arrival.
+ *
+ * The live session hears a tap in about a second; the periodic pull finds it
+ * within half a minute. Either can miss one — a session that dropped, a
+ * machine nobody is listening to — and before this the arrival was read from
+ * the live events alone. A spare whose first finger went unheard had his
+ * second finger printed as his arrival, which is past the deadline, which
+ * costs him the unit on his slip.
+ */
+describe("the first tap of the shift", () => {
+  const day = "2026-01-08";
+
+  afterAll(async () => {
+    await db.delete(schema.deviceTaps).where(eq(schema.deviceTaps.ip, ip));
+    await db
+      .delete(schema.deviceLiveEvents)
+      .where(eq(schema.deviceLiveEvents.ip, ip));
+  });
+
+  test("is found in the pulled taps when the live session missed it", async () => {
+    /* Only the pull has the 04:41 tap; the live session joined later. */
+    await db
+      .insert(schema.deviceTaps)
+      .values({ ip, nik, at: `${day} 04:41:00`, direction: "in" });
+
+    expect(await firstTapOf(nik, day, "day")).toBe(`${day} 04:41:00`);
+  });
+
+  test("is the earliest across both readers, not the earliest of one", async () => {
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik, at: `${day} 04:39:00` });
+
+    expect(await firstTapOf(nik, day, "day")).toBe(`${day} 04:39:00`);
+  });
+
+  test("ignores a tap belonging to the other shift", async () => {
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik, at: `${day} 17:05:00` });
+
+    expect(await firstTapOf(nik, day, "day")).toBe(`${day} 04:39:00`);
+    expect(await firstTapOf(nik, day, "night")).toBe(`${day} 17:05:00`);
   });
 });

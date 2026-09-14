@@ -19,7 +19,7 @@
  * waiting for somebody to press it.
  */
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
@@ -163,27 +163,53 @@ export async function roleOf(nik: string): Promise<TicketRole> {
 /**
  * The first tap of this shift, as the machine spelled it.
  *
- * Read from the live events rather than from the derived reading, because this
- * runs while the muster is happening and the reading is rebuilt afterwards.
+ * Read from the taps themselves rather than from the derived reading, because
+ * this runs while the muster is happening and the reading is rebuilt
+ * afterwards.
+ *
+ * Both tap tables, not just the live one. They are two views of the same
+ * booth: the live session hears a tap in about a second, the periodic pull
+ * finds it within half a minute, and either may hold a tap the other missed —
+ * a session that dropped for a minute, a machine nobody is listening to.
+ *
+ * Taking only the live events cost a spare his allocation. His first finger
+ * went unheard, so his second finger at 17:28 became his "first", which is
+ * three minutes past the 17:25 deadline: the ticket printed, as it must, but
+ * with no unit on it. The arrival is a fact about the morning, not about which
+ * of our two readers happened to catch it.
  */
 export async function firstTapOf(
   nik: string,
   date: string,
   shift: ShiftKind
 ): Promise<string | null> {
-  const rows = await db
-    .select({ at: schema.deviceLiveEvents.at })
-    .from(schema.deviceLiveEvents)
-    .where(
-      and(
-        eq(schema.deviceLiveEvents.nik, nik),
-        sql`${schema.deviceLiveEvents.at}::date = ${date}::date`
-      )
-    )
-    .orderBy(asc(schema.deviceLiveEvents.at));
-  const mine = rows
+  const [live, pulled] = await Promise.all([
+    db
+      .select({ at: schema.deviceLiveEvents.at })
+      .from(schema.deviceLiveEvents)
+      .where(
+        and(
+          eq(schema.deviceLiveEvents.nik, nik),
+          sql`${schema.deviceLiveEvents.at}::date = ${date}::date`
+        )
+      ),
+    db
+      .select({ at: schema.deviceTaps.at })
+      .from(schema.deviceTaps)
+      .where(
+        and(
+          eq(schema.deviceTaps.nik, nik),
+          sql`${schema.deviceTaps.at}::date = ${date}::date`
+        )
+      ),
+  ]);
+
+  /* Sorted here rather than in two queries: the union is what has to be
+     ordered, and both halves are a handful of rows for one person on one day. */
+  const mine = [...live, ...pulled]
     .map((r) => r.at)
-    .filter((at) => inShift(at.slice(11, 19), shift));
+    .filter((at) => inShift(at.slice(11, 19), shift))
+    .sort();
   return mine[0] ?? null;
 }
 
