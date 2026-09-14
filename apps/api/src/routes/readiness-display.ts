@@ -83,6 +83,53 @@ type FtwRecord = {
 };
 
 /**
+ * Of these people, the ones who owe a fit-to-work filing this morning.
+ *
+ * Two conditions, both the owner's (2026-09-14). The position must be one that
+ * is allocated a unit at all — a payroll officer on the roster is not somebody
+ * the muster is waiting on. And the person must hold a licence for at least one
+ * unit the master marks `ftw`.
+ *
+ * **The master register is the authority, not what is running today.** The flag
+ * is read across every unit carrying that simper code, active or not: `active`
+ * says whether a machine is in service this morning, `ftw` says whether its
+ * kind demands a filing, and a dozer parked for repair has not stopped being a
+ * dozer. A code with no unit at all stays silent, and that is right rather than
+ * a gap — the fleet owns none of those machines, so nobody can be put on one.
+ *
+ * *Any* qualifying licence obliges, not all of them. Somebody licensed on both
+ * an excavator and a dump truck can be given either, so he files. Production
+ * holds no such person today — the register is clean — but the rule is written
+ * for the day one appears rather than against today's data.
+ */
+export async function ftwObliged(niks: string[]): Promise<Set<string>> {
+  if (!niks.length) return new Set();
+  const rows = await db
+    .selectDistinct({ nik: schema.employees.nik })
+    .from(schema.employees)
+    .innerJoin(
+      schema.positions,
+      and(
+        eq(schema.positions.id, schema.employees.positionId),
+        eq(schema.positions.fleetAllocation, true)
+      )
+    )
+    .innerJoin(
+      schema.employeeSkills,
+      eq(schema.employeeSkills.employeeId, schema.employees.id)
+    )
+    .innerJoin(
+      schema.units,
+      and(
+        eq(schema.units.simperCodeId, schema.employeeSkills.simperCodeId),
+        eq(schema.units.ftw, true)
+      )
+    )
+    .where(inArray(schema.employees.nik, niks));
+  return new Set(rows.map((r) => r.nik));
+}
+
+/**
  * Everyone the active roster puts on this shift.
  *
  * Only the document in force — joining `roster_days` without that check makes a
@@ -353,7 +400,18 @@ export const fitWorkDisplayRoutes = new Elysia({
       const deadline = await ftwDeadline(now.shift);
       if (!deadline) return { ...blank, date: now.date, shift: now.shift };
 
-      const roster = await shiftRoster(now.date, now.shift);
+      /*
+       * The wall counts who *owes* a filing, not who is on the roster.
+       *
+       * An excavator operator is never asked for one, so counting him as
+       * "belum lapor" put a red row on the glass that nobody could act on —
+       * and, because missing sorts first, pushed the people who had actually
+       * failed to file off the bottom of a forty-row screen.
+       */
+      const rostered = await shiftRoster(now.date, now.shift);
+      const obliged = await ftwObliged(rostered.map((p) => p.nik));
+      const roster = rostered.filter((p) => obliged.has(p.nik));
+
       const readings = roster.length
         ? await db
             .select()

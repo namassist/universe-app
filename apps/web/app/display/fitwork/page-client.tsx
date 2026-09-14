@@ -76,11 +76,13 @@ export default function DisplayFitworkPage() {
       disconnected={disconnected}
       staleSince={dataUpdatedAt || null}
       meta={
+        /* "terjadwal" would be a lie now: the roster is larger than this, and
+           the difference is every operator nobody asks for a filing. */
         data?.date ? (
           <span className="truncate">
             {rows.length < data.total
-              ? `${rows.length} dari ${data.total} orang — yang perlu dilihat lebih dulu`
-              : `${data.total} orang terjadwal`}
+              ? `${rows.length} dari ${data.total} orang wajib FTW — yang perlu dilihat lebih dulu`
+              : `${data.total} orang wajib FTW`}
           </span>
         ) : (
           <span className="truncate">Menunggu jadwal shift dari timeline</span>

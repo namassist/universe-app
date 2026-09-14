@@ -23,6 +23,7 @@ import {
   attendanceDisplayRoutes,
   fitWorkBoard,
   fitWorkDisplayRoutes,
+  ftwObliged,
 } from "./readiness-display";
 
 const app = new Elysia().use(attendanceDisplayRoutes).use(fitWorkDisplayRoutes);
@@ -231,6 +232,185 @@ async function makeDevice(kind: "att" | "fitwork") {
   const session = await createSession("device", id, "cookie");
   return `${DEVICE_COOKIE}=${session.id}`;
 }
+
+/**
+ * Who the fit-to-work wall is even about.
+ *
+ * The register decides, and the register is the master unit list: a licence
+ * counts when some unit carrying its simper code is marked `ftw`. Everything
+ * here is built from scratch rather than read off the dev seed, because the
+ * answer must not depend on which machines happen to be in the yard.
+ */
+describe("who owes a filing", () => {
+  const fixture = {
+    employees: [] as string[],
+    units: [] as string[],
+    codes: [] as string[],
+    positions: [] as string[],
+  };
+
+  afterAll(async () => {
+    if (fixture.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees));
+    if (fixture.units.length)
+      await db
+        .delete(schema.units)
+        .where(inArray(schema.units.id, fixture.units));
+    if (fixture.codes.length)
+      await db
+        .delete(schema.simperCodes)
+        .where(inArray(schema.simperCodes.id, fixture.codes));
+    if (fixture.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, fixture.positions));
+  });
+
+  /** A simper code, and one unit under it that either demands a filing or not. */
+  const code = async (
+    name: string,
+    ftw: boolean,
+    opts: { active?: boolean; withUnit?: boolean } = {}
+  ) => {
+    const [row] = await db
+      .insert(schema.simperCodes)
+      .values({ name: `${tag} ${name}` })
+      .returning({ id: schema.simperCodes.id });
+    fixture.codes.push(row!.id);
+    if (opts.withUnit !== false) {
+      /* The catalogue keys a unit cannot exist without. Any row will do: what
+         is under test is the `ftw` flag, not the machine's pedigree. */
+      const [cls] = await db
+        .select({ id: schema.unitClasses.id })
+        .from(schema.unitClasses)
+        .limit(1);
+      const [type] = await db
+        .select({ id: schema.unitTypes.id })
+        .from(schema.unitTypes)
+        .limit(1);
+      const [model] = await db
+        .select({ id: schema.unitModels.id })
+        .from(schema.unitModels)
+        .limit(1);
+      const [brand] = await db
+        .select({ id: schema.unitBrands.id })
+        .from(schema.unitBrands)
+        .limit(1);
+      const [unit] = await db
+        .insert(schema.units)
+        .values({
+          code: `${tag} ${name} 01`.slice(0, 40),
+          classId: cls!.id,
+          typeId: type!.id,
+          modelId: model!.id,
+          brandId: brand!.id,
+          simperCodeId: row!.id,
+          ftw,
+          active: opts.active ?? true,
+        })
+        .returning({ id: schema.units.id });
+      fixture.units.push(unit!.id);
+    }
+    return row!.id;
+  };
+
+  const operator = async (
+    nik: string,
+    codes: string[],
+    fleetAllocation = true
+  ) => {
+    const [dept] = await db
+      .select({
+        id: schema.departments.id,
+        companyId: schema.departments.companyId,
+      })
+      .from(schema.departments)
+      .limit(1);
+    const [pos] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} POS ${nik}`,
+        departmentId: dept!.id,
+        fleetAllocation,
+      })
+      .returning({ id: schema.positions.id });
+    fixture.positions.push(pos!.id);
+
+    const [emp] = await db
+      .insert(schema.employees)
+      .values({
+        nik,
+        name: `${tag} ${nik}`,
+        departmentId: dept!.id,
+        companyId: dept!.companyId,
+        positionId: pos!.id,
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(emp!.id);
+
+    if (codes.length)
+      await db
+        .insert(schema.employeeSkills)
+        .values(
+          codes.map((simperCodeId) => ({ employeeId: emp!.id, simperCodeId }))
+        );
+    return nik;
+  };
+
+  test("a licence on a unit the master marks ftw obliges its holder", async () => {
+    const dt = await code("DT", true);
+    const nik = await operator("ZZ90000001", [dt]);
+    expect([...(await ftwObliged([nik]))]).toEqual([nik]);
+  });
+
+  /* The excavator operator nobody asks. Before this he sat on the wall in red
+     for the whole muster, and missing sorts first. */
+  test("a licence on a unit the master does not mark ftw does not", async () => {
+    const exc = await code("EXC", false);
+    const nik = await operator("ZZ90000002", [exc]);
+    expect(await ftwObliged([nik])).not.toContain(nik);
+  });
+
+  /* Any qualifying licence, not all of them: he can be given either machine. */
+  test("holding both kinds obliges", async () => {
+    const dt = await code("DT2", true);
+    const exc = await code("EXC2", false);
+    const nik = await operator("ZZ90000003", [exc, dt]);
+    expect([...(await ftwObliged([nik]))]).toEqual([nik]);
+  });
+
+  /*
+   * `active` is about this morning, `ftw` about the kind of machine. A dozer
+   * parked for repair has not stopped being a dozer, and reading availability
+   * as if it were the requirement would quietly excuse its operator.
+   */
+  test("a unit out of service still states what its kind demands", async () => {
+    const dt = await code("DT3", true, { active: false });
+    const nik = await operator("ZZ90000004", [dt]);
+    expect([...(await ftwObliged([nik]))]).toEqual([nik]);
+  });
+
+  /* The fleet owns none of these, so nobody can be put on one. */
+  test("a code with no unit at all says nothing", async () => {
+    const orphan = await code("TR", true, { withUnit: false });
+    const nik = await operator("ZZ90000005", [orphan]);
+    expect(await ftwObliged([nik])).not.toContain(nik);
+  });
+
+  /* A payroll officer on the roster is not somebody the muster waits on. */
+  test("a position that is never allocated a unit is left out", async () => {
+    const dt = await code("DT4", true);
+    const nik = await operator("ZZ90000006", [dt], false);
+    expect(await ftwObliged([nik])).not.toContain(nik);
+  });
+
+  test("somebody with no licence at all is left out", async () => {
+    const nik = await operator("ZZ90000007", []);
+    expect(await ftwObliged([nik])).not.toContain(nik);
+  });
+});
 
 describe("who may read a wall", () => {
   test("no session gets 401", async () => {
