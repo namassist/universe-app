@@ -59,6 +59,18 @@ const wallClock = (ms: number) => {
   );
 };
 
+/**
+ * A wall clock inside the retention window, relative to now.
+ *
+ * Pinned dates rot: these fixtures carried `2026-09-11` against a three-day
+ * window, so on 2026-09-14 every tap in them aged past `oldestWorthKeeping`
+ * and was dropped before the insert — five tests turning red on a calendar
+ * day rather than on a change. The one test below that always built its taps
+ * this way is the one that never broke.
+ */
+const minutesAgo = (minutes: number) =>
+  wallClock(Date.now() - minutes * 60_000);
+
 const tap = (nik: string, at: string): DeviceTap => ({
   nik,
   at,
@@ -122,7 +134,7 @@ describe("asking before pulling", () => {
   test("a machine whose log has grown is pulled", async () => {
     const ip = await addMachine(`10.90.${uid().slice(0, 2)}.1`);
     const { client, pulled } = fake({
-      [ip]: { count: 3, taps: [tap(known, "2026-09-11 04:10:00")] },
+      [ip]: { count: 3, taps: [tap(known, minutesAgo(70))] },
     });
 
     const result = await collectOnce(client);
@@ -136,7 +148,7 @@ describe("asking before pulling", () => {
   test("a machine whose count has not moved is not pulled again", async () => {
     const ip = await addMachine(`10.91.${uid().slice(0, 2)}.1`);
     const script = {
-      [ip]: { count: 3, taps: [tap(known, "2026-09-11 04:11:00")] },
+      [ip]: { count: 3, taps: [tap(known, minutesAgo(69))] },
     };
 
     const first = fake(script);
@@ -166,7 +178,7 @@ describe("one machine's trouble is not the morning's", () => {
     const alive = await addMachine(`10.93.${uid().slice(0, 2)}.2`);
     const { client } = fake({
       [dead]: { count: null, taps: [] },
-      [alive]: { count: 1, taps: [tap(known, "2026-09-11 04:12:00")] },
+      [alive]: { count: 1, taps: [tap(known, minutesAgo(68))] },
     });
 
     await collectOnce(client);
@@ -181,10 +193,7 @@ describe("which taps are kept", () => {
     const { client } = fake({
       [ip]: {
         count: 2,
-        taps: [
-          tap(known, "2026-09-11 04:13:00"),
-          tap(unknown, "2026-09-11 04:13:30"),
-        ],
+        taps: [tap(known, minutesAgo(67)), tap(unknown, minutesAgo(66))],
       },
     });
 
@@ -200,7 +209,7 @@ describe("which taps are kept", () => {
      optimisation — it is what stands between one morning and thirty copies. */
   test("replaying the same log stores it once", async () => {
     const ip = await addMachine(`10.95.${uid().slice(0, 2)}.1`);
-    const taps = [tap(known, "2026-09-11 04:14:00")];
+    const taps = [tap(known, minutesAgo(65))];
 
     await collectOnce(fake({ [ip]: { count: 1, taps } }).client);
     forgetCounts();
@@ -292,7 +301,7 @@ describe("a pass that meets trouble", () => {
       count: async () => 5,
       taps: async (ip) => {
         if (ip === bad) throw new Error("mesin ini meledak");
-        return [tap(known, "2026-09-11 04:12:00")];
+        return [tap(known, minutesAgo(68))];
       },
     };
 
