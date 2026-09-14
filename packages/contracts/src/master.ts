@@ -139,3 +139,29 @@ export const COLOR_VAL: Record<RunTextColor, string> = {
 export function isRunTextColor(value: string): value is RunTextColor {
   return (RUNTEXT_COLORS as readonly string[]).includes(value);
 }
+
+/**
+ * What a running text *is*, which decides where it is allowed to appear.
+ *
+ * The ticker used to be one flat list, and the wall was its only audience. Now
+ * the muster ticket carries the same words, and a slip has two named sections
+ * an operator reads in a hurry — the hazardous places, and the safety message.
+ * Sorting that out on the paper means the list has to know which line is which.
+ *
+ * `general` is the ticker's own: announcements that belong on a wall and have
+ * no business lengthening a roll of till paper.
+ */
+export const RUNTEXT_KINDS = ["hazard", "safety", "general"] as const;
+export type RunTextKind = (typeof RUNTEXT_KINDS)[number];
+
+/** Indonesian, as the admin screen and the ticket both spell them. */
+export const RUNTEXT_KIND_LABELS: Record<RunTextKind, string> = {
+  hazard: "Lokasi berbahaya",
+  safety: "Pesan safety",
+  general: "Umum",
+};
+
+/** Type guard for a kind arriving from the wire. */
+export function isRunTextKind(value: string): value is RunTextKind {
+  return (RUNTEXT_KINDS as readonly string[]).includes(value);
+}

@@ -12,6 +12,7 @@ import {
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
+import { hazardSentence, MAX_HAZARDS } from "../safety-notices";
 import { invalidateDevice } from "../auth/principal";
 import {
   cookieAttributes,
@@ -701,7 +702,7 @@ export const devicesRoutes = new Elysia({
  * row and deleting it would otherwise mean two different things that look the
  * same from here.
  */
-async function effectiveRunTexts(
+export async function effectiveRunTexts(
   deviceId: string | null
 ): Promise<{ text: string; color: RunTextColor }[]> {
   if (deviceId) {
@@ -718,11 +719,48 @@ async function effectiveRunTexts(
   }
 
   const master = await db
-    .select({ text: schema.runTexts.text, color: schema.runTexts.color })
+    .select({
+      text: schema.runTexts.text,
+      color: schema.runTexts.color,
+      kind: schema.runTexts.kind,
+    })
     .from(schema.runTexts)
     .where(eq(schema.runTexts.active, true))
     .orderBy(asc(schema.runTexts.createdAt));
-  return master.map((r) => ({ text: r.text, color: r.color as RunTextColor }));
+
+  /*
+   * The hazardous places arrive as one sentence, not as eight.
+   *
+   * They are stored one place a row because that is how an administrator adds
+   * and removes them, and how the ticket prints them. On a ticker eight rows
+   * would scroll past as eight separate announcements, each too short to read
+   * and none of them naming what they are — so they are joined here into the
+   * sentence the slip prints under its own heading.
+   *
+   * Colour comes from the first of them: they are one line now, and a line has
+   * one colour. Their position in the run is the first one's too, so a hazard
+   * added last does not jump the announcement that was already there.
+   */
+  const hazards = master.filter((r) => r.kind === "hazard");
+  const sentence = hazardSentence(
+    hazards
+      .map((r) => r.text.trim())
+      .filter(Boolean)
+      .slice(0, MAX_HAZARDS)
+  );
+
+  const out: { text: string; color: RunTextColor }[] = [];
+  let spent = false;
+  for (const row of master) {
+    if (row.kind !== "hazard") {
+      out.push({ text: row.text, color: row.color as RunTextColor });
+      continue;
+    }
+    if (spent || !sentence) continue;
+    spent = true;
+    out.push({ text: sentence, color: row.color as RunTextColor });
+  }
+  return out;
 }
 
 /**

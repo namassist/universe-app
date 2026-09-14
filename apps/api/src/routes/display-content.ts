@@ -8,7 +8,7 @@
 
 import { asc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import type { RunTextColor } from "@universe/contracts";
+import type { RunTextColor, RunTextKind } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
 import { db, schema, type RunTextRow, type SoundRow } from "../db";
@@ -22,6 +22,7 @@ import {
 import {
   ErrorSchema,
   RunTextColorSchema,
+  RunTextKindSchema,
   RunTextSchema,
   SoundSchema,
 } from "./schemas";
@@ -32,6 +33,7 @@ const toRunText = (row: RunTextRow) => ({
   // `color` is text in the database (the palette is a code-level vocabulary,
   // not a migration), and validated against RUNTEXT_COLORS on the way in.
   color: row.color as RunTextColor,
+  kind: row.kind as RunTextKind,
   active: row.active,
   createdAt: row.createdAt.toISOString(),
 });
@@ -84,7 +86,12 @@ export const runTextsRoutes = new Elysia({
         });
       const [row] = await db
         .insert(schema.runTexts)
-        .values({ text, color: body.color, active: body.active ?? true })
+        .values({
+          text,
+          color: body.color,
+          kind: body.kind ?? "general",
+          active: body.active ?? true,
+        })
         .returning();
       return status(201, toRunText(row!));
     },
@@ -96,6 +103,9 @@ export const runTextsRoutes = new Elysia({
       body: t.Object({
         text: t.String({ minLength: 1 }),
         color: RunTextColorSchema,
+        /* Optional, and absent means `general`: a line nobody classified
+           belongs on the wall, never on a roll of paper. */
+        kind: t.Optional(RunTextKindSchema),
         active: t.Optional(t.Boolean()),
       }),
       response: {
@@ -116,6 +126,7 @@ export const runTextsRoutes = new Elysia({
         .set({
           ...(body.text !== undefined ? { text: body.text.trim() } : {}),
           ...(body.color !== undefined ? { color: body.color } : {}),
+          ...(body.kind !== undefined ? { kind: body.kind } : {}),
           ...(body.active !== undefined ? { active: body.active } : {}),
         })
         .where(eq(schema.runTexts.id, params.id))
@@ -136,6 +147,7 @@ export const runTextsRoutes = new Elysia({
             t.Literal("Merah"),
           ])
         ),
+        kind: t.Optional(RunTextKindSchema),
         active: t.Optional(t.Boolean()),
       }),
       response: {

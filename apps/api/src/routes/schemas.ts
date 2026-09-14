@@ -28,6 +28,7 @@ import {
   ROSTER_REVISION_STATUSES,
   SHIFT_KINDS,
   RUNTEXT_COLORS,
+  RUNTEXT_KINDS,
   SCOPES,
   NOTIFICATION_KINDS,
   NOTIFICATION_TONES,
@@ -43,6 +44,7 @@ export const DeviceKindSchema = t.UnionEnum(DEVICE_KINDS);
 export const DisplayLayoutSchema = t.UnionEnum(DISPLAY_LAYOUTS);
 export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
+export const RunTextKindSchema = t.UnionEnum(RUNTEXT_KINDS);
 export const TimelineActionSchema = t.UnionEnum(TIMELINE_ACTIONS);
 export const ShiftKindSchema = t.UnionEnum(SHIFT_KINDS);
 export const EmployeeStatusSchema = t.UnionEnum(EMPLOYEE_STATUSES);
@@ -86,6 +88,12 @@ const RunTextColorUnion = t.Union([
   t.Literal("Oranye"),
   t.Literal("Putih"),
   t.Literal("Merah"),
+]);
+
+const RunTextKindUnion = t.Union([
+  t.Literal("hazard"),
+  t.Literal("safety"),
+  t.Literal("general"),
 ]);
 
 const TimelineActionUnion = t.Union([
@@ -200,6 +208,9 @@ type _DeviceKindInSync = Assert<
 type _RunTextColorInSync = Assert<
   IsExact<(typeof RunTextColorUnion)["static"], (typeof RUNTEXT_COLORS)[number]>
 >;
+type _RunTextKindInSync = Assert<
+  IsExact<(typeof RunTextKindUnion)["static"], (typeof RUNTEXT_KINDS)[number]>
+>;
 type _TimelineActionInSync = Assert<
   IsExact<
     (typeof TimelineActionUnion)["static"],
@@ -253,6 +264,7 @@ type _RosterRevisionStatusInSync = Assert<
 export const OptionalScopeSchema = t.Optional(ScopeUnion);
 export const OptionalDeviceKindSchema = t.Optional(DeviceKindUnion);
 export const OptionalRunTextColorSchema = t.Optional(RunTextColorUnion);
+export const OptionalRunTextKindSchema = t.Optional(RunTextKindUnion);
 export const OptionalTimelineActionSchema = t.Optional(TimelineActionUnion);
 /** Nullable as well as optional: absent leaves the shift, `null` clears it. */
 export const OptionalShiftKindSchema = t.Optional(t.Nullable(ShiftKindUnion));
@@ -1042,6 +1054,7 @@ export const RunTextSchema = t.Object({
   id: t.String(),
   text: t.String(),
   color: RunTextColorSchema,
+  kind: RunTextKindSchema,
   active: t.Boolean(),
   createdAt: t.String(),
 });

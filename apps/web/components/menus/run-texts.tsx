@@ -8,7 +8,10 @@ import {
   COLOR_VAL,
   MENU_LABELS,
   RUNTEXT_COLORS,
+  RUNTEXT_KIND_LABELS,
+  RUNTEXT_KINDS,
   type RunTextColor,
+  type RunTextKind,
 } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
@@ -78,6 +81,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
   const [editing, setEditing] = React.useState<RunTextRow | null>(null);
   const [fText, setFText] = React.useState("");
   const [fColor, setFColor] = React.useState<RunTextColor>(RUNTEXT_COLORS[0]);
+  const [fKind, setFKind] = React.useState<RunTextKind>("general");
   const [fActive, setFActive] = React.useState(true);
   const [errText, setErrText] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<RunTextRow | null>(null);
@@ -90,17 +94,20 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
       id: string | null;
       text: string;
       color: RunTextColor;
+      kind: RunTextKind;
       active: boolean;
     }) => {
       const result = input.id
         ? await api.v1["run-texts"]({ id: input.id }).patch({
             text: input.text,
             color: input.color,
+            kind: input.kind,
             active: input.active,
           })
         : await api.v1["run-texts"].post({
             text: input.text,
             color: input.color,
+            kind: input.kind,
             active: input.active,
           });
       if (result.error) throw result.error;
@@ -145,6 +152,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
     setEditing(null);
     setFText("");
     setFColor(RUNTEXT_COLORS[0]);
+    setFKind("general");
     setFActive(true);
     setErrText(false);
     setDlgOpen(true);
@@ -153,6 +161,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
     setEditing(r);
     setFText(r.text);
     setFColor(r.color);
+    setFKind(r.kind);
     setFActive(r.active);
     setErrText(false);
     setDlgOpen(true);
@@ -166,6 +175,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
       id: editing?.id ?? null,
       text,
       color: fColor,
+      kind: fKind,
       active: fActive,
     });
   }
@@ -210,6 +220,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
             <TableHeader>
               <tr>
                 <TableHead>Teks</TableHead>
+                <TableHead>Jenis</TableHead>
                 <TableHead>Warna</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
@@ -220,6 +231,19 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
                 <TableRow key={r.id}>
                   <TableCell className="max-w-[520px]">
                     <span className="font-semibold">{r.text}</span>
+                  </TableCell>
+                  <TableCell>
+                    {/* Only the two that reach paper are marked. "Umum" is the
+                        ticker's own and needs no badge to say so. */}
+                    {r.kind === "general" ? (
+                      <span className="text-(--text-tertiary)">
+                        {RUNTEXT_KIND_LABELS.general}
+                      </span>
+                    ) : (
+                      <Badge variant={r.kind === "hazard" ? "danger" : "info"}>
+                        {RUNTEXT_KIND_LABELS[r.kind]}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center gap-2">
@@ -308,6 +332,24 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
               value={fText}
               onChange={(e) => setFText(e.target.value)}
             />
+          </Field>
+          <Field
+            className="mt-4"
+            label="Jenis"
+            htmlFor="rt-kind"
+            helper="Lokasi berbahaya dan pesan safety ikut tercetak di tiket muster. Umum hanya berjalan di display."
+          >
+            <Select
+              id="rt-kind"
+              value={fKind}
+              onChange={(e) => setFKind(e.target.value as RunTextKind)}
+            >
+              {RUNTEXT_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {RUNTEXT_KIND_LABELS[k]}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field className="mt-4" label="Warna" htmlFor="rt-color">
             <div className="flex items-center gap-3">

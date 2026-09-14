@@ -30,6 +30,7 @@ import {
   ROSTER_DOCUMENT_STATUSES,
   ROSTER_REVISION_STATUSES,
   SCOPES,
+  RUNTEXT_KINDS,
   SHIFT_KINDS,
   TIMELINE_ACTIONS,
   UNIT_STATUSES,
@@ -44,6 +45,7 @@ export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const notificationKind = pgEnum("notification_kind", NOTIFICATION_KINDS);
 export const notificationTone = pgEnum("notification_tone", NOTIFICATION_TONES);
 export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
+export const runTextKind = pgEnum("run_text_kind", RUNTEXT_KINDS);
 export const actualSlotSource = pgEnum("actual_slot_source", [
   "plan",
   "spare",
@@ -1121,6 +1123,16 @@ export const runTexts = pgTable("run_texts", {
   id: uuid("id").primaryKey().defaultRandom(),
   text: text("text").notNull(),
   color: text("color").notNull(),
+  /**
+   * What this line is, which decides where it may appear.
+   *
+   * `general` by default, and the default is what every existing row becomes:
+   * the ticker carried announcements long before a ticket wanted any of them,
+   * so a row that has never been classified belongs on the wall alone. An
+   * administrator promotes one to `hazard` or `safety` deliberately, and that
+   * is the act that puts it on paper.
+   */
+  kind: runTextKind("kind").notNull().default("general"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

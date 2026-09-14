@@ -18,7 +18,7 @@ import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { SUPPORT_DEVICE_ID, SUPPORT_DEVICE_NAME } from "@universe/contracts";
 import { redis } from "../redis";
-import { devicesRoutes } from "./devices";
+import { devicesRoutes, effectiveRunTexts } from "./devices";
 
 const app = new Elysia().use(devicesRoutes);
 const uid = () => crypto.randomUUID().slice(0, 8);
@@ -413,5 +413,59 @@ describe("how a screen spends itself", () => {
     const read = await send("GET", `/devices?kind=fleet`, admin.cookie);
     const rows = (await read.json()) as { id: string; fleetIds: string[] }[];
     expect(rows.find((r) => r.id === id)!.fleetIds).toEqual(picked);
+  });
+});
+
+/**
+ * What the ticker actually shows once hazards are rows rather than a sentence.
+ *
+ * Eight locations stored one a row is right for the ticket and for the admin
+ * who adds them; scrolled past one at a time it would be eight fragments, none
+ * of them saying what they are. So the wall gets the joined sentence, in the
+ * place the first of them held.
+ */
+describe("the running text a wall receives", () => {
+  const runTag = `ZZ ${crypto.randomUUID().slice(0, 8)}`;
+  const runRows: string[] = [];
+
+  const addText = async (
+    text: string,
+    kind: "hazard" | "safety" | "general"
+  ) => {
+    const [row] = await db
+      .insert(schema.runTexts)
+      .values({ text, color: "Oranye", kind })
+      .returning({ id: schema.runTexts.id });
+    runRows.push(row!.id);
+  };
+
+  afterAll(async () => {
+    if (runRows.length)
+      await db
+        .delete(schema.runTexts)
+        .where(inArray(schema.runTexts.id, runRows));
+  });
+
+  test("joins the hazards into one line and leaves the rest alone", async () => {
+    await addText(`${runTag} PIT`, "hazard");
+    await addText(`${runTag} pengumuman`, "general");
+    await addText(`${runTag} KASTURI ATAS`, "hazard");
+
+    const shown = (await effectiveRunTexts(null)).map((r) => r.text);
+    const ours = shown.filter((t) => t.includes(runTag));
+
+    expect(ours).toEqual([
+      `Lokasi berbahaya: ${runTag} PIT, ${runTag} KASTURI ATAS`,
+      `${runTag} pengumuman`,
+    ]);
+  });
+
+  /* The joined line sits where the first hazard was, so a location added last
+     does not jump ahead of an announcement that was already running. */
+  test("keeps the first hazard's place in the run", async () => {
+    const shown = (await effectiveRunTexts(null)).map((r) => r.text);
+    const joined = shown.findIndex((t) => t.startsWith("Lokasi berbahaya:"));
+    const notice = shown.findIndex((t) => t === `${runTag} pengumuman`);
+    expect(joined).toBeLessThan(notice);
   });
 });

@@ -25,6 +25,7 @@ import type { ShiftKind } from "@universe/contracts";
 import { db, schema } from "./db";
 import { env } from "./env";
 import { fingerInDeadline, ftwDeadline, judge } from "./readiness";
+import { activeNotices } from "./safety-notices";
 import { stageTimeOf } from "./stage-time";
 import { ticketFor, type Seat, type TicketRole } from "./ticket-rules";
 import {
@@ -320,27 +321,43 @@ export async function issueTicket(
   });
   if (!decision.print) return { issued: false, reason: "held-back" };
 
-  const [machine] = await db
-    .select({
-      printerId: schema.printers.id,
-      printerName: schema.printers.name,
-      printerIp: schema.printers.ip,
-      printerPort: schema.printers.port,
-      printerActive: schema.printers.active,
-    })
-    .from(schema.fingerprintMachines)
-    .leftJoin(
-      schema.printers,
-      eq(schema.printers.id, schema.fingerprintMachines.printerId)
-    )
-    .where(eq(schema.fingerprintMachines.ip, tap.ip))
-    .limit(1);
+  const [[machine], notices] = await Promise.all([
+    db
+      .select({
+        printerId: schema.printers.id,
+        printerName: schema.printers.name,
+        printerIp: schema.printers.ip,
+        printerPort: schema.printers.port,
+        printerActive: schema.printers.active,
+      })
+      .from(schema.fingerprintMachines)
+      .leftJoin(
+        schema.printers,
+        eq(schema.printers.id, schema.fingerprintMachines.printerId)
+      )
+      .where(eq(schema.fingerprintMachines.ip, tap.ip))
+      .limit(1),
+    /* The same rows the wall is showing this morning, capped for paper. */
+    activeNotices(),
+  ]);
 
   const fields: TicketFields = {
     nik: person.nik,
     name: person.name,
     position: person.position ?? "-",
     department: person.department ?? "-",
+    role,
+    /* The reading itself, not the verdict `judge` made of it: the slip states
+       what savera measured, and whether that was enough is said by the unit
+       line above it. */
+    ftw: ftwRow
+      ? {
+          minutes: ftwRow.sleepMinutes,
+          verdict: ftwRow.sleepCategory ?? "Belum mengisi FTW",
+        }
+      : null,
+    hazards: notices.hazards,
+    safety: notices.safety,
     seat: decision.seat,
     printerName: machine?.printerName ?? "-",
     at: `${tap.date} ${decision.at}`,

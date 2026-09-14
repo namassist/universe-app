@@ -30,10 +30,65 @@ export type TicketFields = {
   printerName: string;
   /** `"YYYY-MM-DD HH:MM:SS"` — the first tap of the shift. */
   at: string;
+  /**
+   * How this person came to the muster: holding a unit in the plan, or not.
+   *
+   * Printed even for a spare who is given a unit at the second finger. The
+   * line says how he arrived; the UNIT line says where he ended up, and the
+   * two together are what a supervisor needs to read off one slip.
+   */
+  role: "standing" | "spare";
+  /**
+   * Fit to work, as savera judged it — or null when nothing was uploaded.
+   *
+   * Two parts because they answer two questions: how long he slept, and what
+   * the rule made of it. The verdict is the half that decides whether he works
+   * today, so it prints on its own line rather than in a parenthesis nobody
+   * reads at the end of a number.
+   */
+  ftw: { minutes: number; verdict: string } | null;
+  /** Bare place names for this shift, already capped. */
+  hazards: string[];
+  /** The safety lines for this shift, already capped. */
+  safety: string[];
 };
 
 const WIDTH = 32;
 const RULE = "-".repeat(WIDTH);
+
+/**
+ * Break a sentence at the roll's width rather than letting the printer do it.
+ *
+ * A thermal printer wraps by cutting at the 33rd character, which lands mid
+ * word — fine for a name, wrong for a safety instruction somebody is meant to
+ * act on. `indent` hangs the continuation under the text of a bullet instead
+ * of under its dash.
+ */
+function wrapAt(sentence: string, indent = ""): string[] {
+  const out: string[] = [];
+  let line = "";
+  for (const word of sentence.split(/\s+/).filter(Boolean)) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (candidate.length > WIDTH && line) {
+      out.push(line);
+      line = indent + word;
+    } else line = candidate;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+/** `"8j 05m"` — the shape the yard writes a night's sleep in. */
+function sleepFor(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  return `${hours}j ${String(minutes - hours * 60).padStart(2, "0")}m`;
+}
+
+/** TETAP or SPARE, in the words operators use over the radio. */
+const ROLE_WORD: Record<TicketFields["role"], string> = {
+  standing: "TETAP",
+  spare: "SPARE",
+};
 
 /** `"NIK            : 5062..."` — the column ShiftCorner has always used. */
 const field = (label: string, value: string) => `${label.padEnd(15)}: ${value}`;
@@ -51,6 +106,10 @@ const orDash = (value: string | null | undefined) =>
 export function ticketLines(fields: TicketFields): {
   centred: string[];
   body: string[];
+  /** The sleep line, then the verdict that prints bold on its own. */
+  ftw: { line: string; verdict: string };
+  /** Named sections, each already wrapped. Empty when nothing is set. */
+  notices: { heading: string; lines: string[] }[];
   footer: string[];
 } {
   return {
@@ -60,6 +119,9 @@ export function ticketLines(fields: TicketFields): {
       field("NAMA", orDash(fields.name)),
       field("JABATAN", orDash(fields.position)),
       field("DEPARTEMEN", orDash(fields.department)),
+      /* Above UNIT on purpose: somebody reading a dash there finds the reason
+         for it on the line before. */
+      field("JENIS OPERATOR", ROLE_WORD[fields.role]),
       field("UNIT", orDash(fields.seat?.unit)),
       field("NO BUS", orDash(fields.seat?.bus)),
       field("FLEET", orDash(fields.seat?.fleet)),
@@ -67,6 +129,35 @@ export function ticketLines(fields: TicketFields): {
       field("NAMA PRINTER", orDash(fields.printerName)),
       field("JAM ABSEN", fields.at),
       field("STATUS", "IN"),
+    ],
+    ftw: {
+      line: field(
+        "STATUS FTW",
+        fields.ftw ? sleepFor(fields.ftw.minutes) : "-"
+      ),
+      verdict: fields.ftw ? fields.ftw.verdict : "Belum mengisi FTW",
+    },
+    notices: [
+      ...(fields.hazards.length
+        ? [
+            {
+              heading: "LOKASI BERBAHAYA",
+              /* Joined, not listed: they are place names without detail, and a
+                 dash in front of each would cost a line apiece. */
+              lines: wrapAt(fields.hazards.join(", ")),
+            },
+          ]
+        : []),
+      ...(fields.safety.length
+        ? [
+            {
+              heading: "PESAN SAFETY",
+              /* Listed, not joined: each is an instruction, and running them
+                 together would make one sentence out of three orders. */
+              lines: fields.safety.flatMap((line) => wrapAt(`- ${line}`, "  ")),
+            },
+          ]
+        : []),
     ],
     footer: [
       "Terima kasih sudah disiplin absensi",
@@ -78,13 +169,17 @@ export function ticketLines(fields: TicketFields): {
 
 /** A dry run's output: the whole slip as one block of text. */
 export function ticketPreview(fields: TicketFields): string {
-  const { centred, body, footer } = ticketLines(fields);
+  const { centred, body, ftw, notices, footer } = ticketLines(fields);
   return [
     ...centred,
     RULE,
     "BUKTI ABSEN MASUK",
     RULE,
     ...body,
+    RULE,
+    ftw.line,
+    ftw.verdict,
+    ...notices.flatMap((section) => [RULE, section.heading, ...section.lines]),
     RULE,
     ...footer,
     RULE,
@@ -115,7 +210,7 @@ const CUT = Buffer.from([0x1d, 0x56, 0x42, 0x00]);
 const text = (line: string) => Buffer.from(`${line}\r\n`, "latin1");
 
 export function renderTicket(fields: TicketFields): Buffer {
-  const { centred, body, footer } = ticketLines(fields);
+  const { centred, body, ftw, notices, footer } = ticketLines(fields);
   return Buffer.concat([
     INIT,
     CODEPAGE,
@@ -133,6 +228,19 @@ export function renderTicket(fields: TicketFields): Buffer {
     text(RULE),
     ALIGN_LEFT,
     ...body.map(text),
+    text(RULE),
+    text(ftw.line),
+    /* The verdict is the half that decides whether he works today. */
+    BOLD_ON,
+    text(ftw.verdict),
+    BOLD_OFF,
+    ...notices.flatMap((section) => [
+      text(RULE),
+      BOLD_ON,
+      text(section.heading),
+      BOLD_OFF,
+      ...section.lines.map(text),
+    ]),
     text(RULE),
     ALIGN_CENTRE,
     BOLD_ON,

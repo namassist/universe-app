@@ -26,6 +26,10 @@ const full: TicketFields = {
   seat: { unit: "DT-118", bus: "BUS 07", fleet: "EX-204", area: "PIT 3" },
   printerName: "MESIN 31 KM 31",
   at: "2026-09-14 05:02:41",
+  role: "standing",
+  ftw: { minutes: 485, verdict: "Dapat Bekerja" },
+  hazards: ["PIT TEMPUDO", "KASTURI ATAS"],
+  safety: ["Wajib P2H sebelum mengoperasikan unit."],
 };
 
 describe("the slip a person reads", () => {
@@ -41,6 +45,7 @@ describe("the slip a person reads", () => {
         "NAMA           : CHAIRUL ANAAM MAULIDIN",
         "JABATAN        : OPERATOR",
         "DEPARTEMEN     : PRODUCTION",
+        "JENIS OPERATOR : TETAP",
         "UNIT           : DT-118",
         "NO BUS         : BUS 07",
         "FLEET          : EX-204",
@@ -48,6 +53,16 @@ describe("the slip a person reads", () => {
         "NAMA PRINTER   : MESIN 31 KM 31",
         "JAM ABSEN      : 2026-09-14 05:02:41",
         "STATUS         : IN",
+        "--------------------------------",
+        "STATUS FTW     : 8j 05m",
+        "Dapat Bekerja",
+        "--------------------------------",
+        "LOKASI BERBAHAYA",
+        "PIT TEMPUDO, KASTURI ATAS",
+        "--------------------------------",
+        "PESAN SAFETY",
+        "- Wajib P2H sebelum",
+        "  mengoperasikan unit.",
         "--------------------------------",
         "Terima kasih sudah disiplin absensi",
         "Utamakan keselamatan kerja",
@@ -79,6 +94,109 @@ describe("the slip a person reads", () => {
     }).split("\n");
     expect(lines).toContain("UNIT           : DT-118");
     expect(lines).toContain("NO BUS         : -");
+  });
+});
+
+describe("fit to work, on the slip", () => {
+  test("prints the sleep on the field line and the verdict under it", () => {
+    const lines = ticketPreview(full).split("\n");
+    expect(lines).toContain("STATUS FTW     : 8j 05m");
+    expect(lines).toContain("Dapat Bekerja");
+  });
+
+  /* The label column leaves fifteen characters; the longest verdict is
+     twenty-three. Joining them would hand the printer a mid-word break. */
+  test("the longest verdict still fits the roll on its own line", () => {
+    const lines = ticketPreview({
+      ...full,
+      ftw: { minutes: 711, verdict: "Istirahat Minimal 1 Jam" },
+    }).split("\n");
+    expect(lines).toContain("STATUS FTW     : 11j 51m");
+    /* Twenty-three characters, so it fits the roll whole. Joined to the field
+       line it would have been thirty-three and broken mid word. */
+    expect(lines).toContain("Istirahat Minimal 1 Jam");
+  });
+
+  test("nothing uploaded says so rather than printing a zero", () => {
+    const lines = ticketPreview({ ...full, ftw: null }).split("\n");
+    expect(lines).toContain("STATUS FTW     : -");
+    expect(lines).toContain("Belum mengisi FTW");
+  });
+
+  test("under an hour of sleep keeps the two-digit minutes", () => {
+    const lines = ticketPreview({
+      ...full,
+      ftw: { minutes: 17, verdict: "Tidak Boleh Bekerja" },
+    }).split("\n");
+    expect(lines).toContain("STATUS FTW     : 0j 17m");
+  });
+});
+
+describe("how a person came to the muster", () => {
+  test("a spare prints SPARE even holding a unit", () => {
+    /* The allocation at the second finger gives him a unit; it does not turn
+       him into somebody who was on the plan. */
+    const lines = ticketPreview({ ...full, role: "spare" }).split("\n");
+    expect(lines).toContain("JENIS OPERATOR : SPARE");
+    expect(lines).toContain("UNIT           : DT-118");
+  });
+
+  /* Two lines beginning with STATUS would be read as one thing twice. */
+  test("does not collide with the tap's own status line", () => {
+    const lines = ticketPreview(full).split("\n");
+    expect(lines.filter((l) => l.startsWith("STATUS "))).toEqual([
+      "STATUS         : IN",
+      "STATUS FTW     : 8j 05m",
+    ]);
+  });
+});
+
+describe("the hazards and the safety message", () => {
+  test("locations are joined, wrapped at the roll's width", () => {
+    const lines = ticketPreview({
+      ...full,
+      hazards: [
+        "PIT TEMPUDO",
+        "KASTURI ATAS",
+        "RAMP 3",
+        "SIMPANG 4 KM 12",
+        "DISPOSAL UTARA",
+        "JEMBATAN KM 9",
+        "WASHING PAD",
+        "FRONT B2",
+      ],
+    }).split("\n");
+    expect(lines).toContain("LOKASI BERBAHAYA");
+    const start = lines.indexOf("LOKASI BERBAHAYA");
+    const listed = lines.slice(start + 1, lines.indexOf("PESAN SAFETY") - 1);
+    expect(listed.join(" ")).toContain("PIT TEMPUDO, KASTURI ATAS");
+    expect(listed.join(" ")).toContain("FRONT B2");
+    for (const line of listed) expect(line.length).toBeLessThanOrEqual(32);
+  });
+
+  /* Each is an instruction; joined they would read as one long order. */
+  test("safety lines stay separate, with the continuation hanging", () => {
+    const lines = ticketPreview({
+      ...full,
+      safety: [
+        "Patuhi batas kecepatan 40 km/jam di jalan hauling.",
+        "Lapor P5M di front masing-masing.",
+      ],
+    }).split("\n");
+    expect(lines).toContain("- Patuhi batas kecepatan 40");
+    expect(lines).toContain("  km/jam di jalan hauling.");
+    expect(lines).toContain("- Lapor P5M di front");
+    expect(lines).toContain("  masing-masing.");
+  });
+
+  /* A heading with nothing under it reads as a printer that lost a line. */
+  test("a section with nothing set does not print its heading", () => {
+    const lines = ticketPreview({ ...full, hazards: [], safety: [] }).split(
+      "\n"
+    );
+    expect(lines).not.toContain("LOKASI BERBAHAYA");
+    expect(lines).not.toContain("PESAN SAFETY");
+    expect(lines).toContain("BUKTI ABSEN MASUK");
   });
 });
 
