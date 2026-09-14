@@ -91,7 +91,7 @@ export function reduceTaps(taps: ReducibleTap[]): Reading {
 }
 
 /**
- * Rebuild every reading for one date from the taps we hold.
+ * Rebuild every reading for one date from every tap we hold, from either ear.
  *
  * Rebuild, not amend: the taps are the truth and the rows are a view of them,
  * so a row is replaced rather than merged into. That is what makes re-running
@@ -103,20 +103,64 @@ export function reduceTaps(taps: ReducibleTap[]): Reading {
  * into "they never tapped".
  */
 export async function deriveDate(date: string): Promise<number> {
-  const taps = await db
-    .select({
-      nik: schema.deviceTaps.nik,
-      at: schema.deviceTaps.at,
-      direction: schema.deviceTaps.direction,
-      ip: schema.deviceTaps.ip,
-    })
-    .from(schema.deviceTaps)
-    .where(
-      and(
-        gte(schema.deviceTaps.at, `${date} 00:00:00`),
-        lt(schema.deviceTaps.at, `${date} 24:00:00`)
-      )
-    );
+  const [pulled, heard] = await Promise.all([
+    db
+      .select({
+        nik: schema.deviceTaps.nik,
+        at: schema.deviceTaps.at,
+        direction: schema.deviceTaps.direction,
+        ip: schema.deviceTaps.ip,
+      })
+      .from(schema.deviceTaps)
+      .where(
+        and(
+          gte(schema.deviceTaps.at, `${date} 00:00:00`),
+          lt(schema.deviceTaps.at, `${date} 24:00:00`)
+        )
+      ),
+    db
+      .select({
+        nik: schema.deviceLiveEvents.nik,
+        at: schema.deviceLiveEvents.at,
+        ip: schema.deviceLiveEvents.ip,
+      })
+      .from(schema.deviceLiveEvents)
+      .where(
+        and(
+          gte(schema.deviceLiveEvents.at, `${date} 00:00:00`),
+          lt(schema.deviceLiveEvents.at, `${date} 24:00:00`)
+        )
+      ),
+  ]);
+
+  /*
+   * Both readers, with the pull's answer winning where they overlap.
+   *
+   * Two of them hear every tap. The pull asks each machine every thirty
+   * seconds and gets the direction the machine recorded; the live session
+   * hears it in about a second but is told only who and when — the protocol
+   * carries no direction at all. Until 2026-09-14 only the pull reached this
+   * function, which meant a morning where the pull was down produced tickets,
+   * a full live log, and a board that seated nobody.
+   *
+   * A live-only tap is taken as an arrival. It is a guess, and it is the safe
+   * one: the session is only ever open inside a muster window, which is an
+   * arrival window, and the noon split plus the roster is what decides which
+   * shift the arrival belongs to. Where the guess is wrong — somebody tapping
+   * out at ten to six while the pull is down — it is absorbed anyway, because
+   * `reduceTaps` keeps the *earliest* tap in each column and his real arrival
+   * that evening came first.
+   *
+   * Where the pull has the same tap, its direction is the one that counts:
+   * something known beats something assumed.
+   */
+  const seen = new Set(pulled.map((t) => `${t.nik}|${t.at}|${t.ip}`));
+  const taps: ReducibleTap[] = [
+    ...pulled,
+    ...heard
+      .filter((t) => !seen.has(`${t.nik}|${t.at}|${t.ip}`))
+      .map((t) => ({ ...t, direction: "in" as const })),
+  ];
   if (!taps.length) return 0;
 
   const byNik = new Map<string, ReducibleTap[]>();

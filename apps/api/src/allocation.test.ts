@@ -453,22 +453,20 @@ const mine = async (date: string, shift: "day" | "night" = "day") => {
  * Where the board's arrivals actually come from.
  *
  * Every other test in this file writes `finger_readings` directly, which is
- * the right shortcut for testing the engine — but it hides a coupling that a
- * whole-muster simulation found on 2026-09-14, and that nothing on any screen
- * would report.
+ * the right shortcut for testing the engine — but it hides the step that
+ * produces those rows, and that step is the one a whole-muster simulation
+ * found missing on 2026-09-14.
  *
- * Two readers hear a tap. The live session hears it in about a second and is
- * what issues the ticket; the periodic pull writes it to `device_taps`, and
- * only `deriveDate` turns those into the one-arrival-a-person reading the
- * board judges. So if the pull stops while the live session keeps running,
- * tickets go on printing and the wall goes on filling, and at spare-validate
- * the board seats nobody — with nothing anywhere having said a word.
+ * Two readers hear a tap: the periodic pull, which also carries the direction
+ * the machine recorded, and the live session, which hears it in about a second
+ * and is told only who and when. Neither reaches the board on its own.
+ * `deriveDate` is what turns either into the one-arrival-a-person reading the
+ * board judges, and until it has run the board has nothing to seat anybody on.
  *
- * These two tests pin that dependency so it cannot be optimised away by
- * somebody reasoning that the live session already has the taps.
+ * These tests pin that: the reduction is the step, and it is fed by both ears.
  */
 describe("what the board counts as an arrival", () => {
-  test("a tap only the live session heard seats nobody", async () => {
+  test("a tap nobody has reduced yet seats nobody", async () => {
     const date = nextDate();
     const nik = newNik();
     const person = await addEmployee({ nik });
@@ -476,7 +474,7 @@ describe("what the board counts as an arrival", () => {
     await roster(date, person, "D");
     await plan(unit, person);
     await ftwOk(date, nik);
-    /* Heard, ticketed, and invisible to the allocation. */
+    /* Heard, ticketed, and still not an arrival as far as the board knows. */
     await db
       .insert(schema.deviceLiveEvents)
       .values({ ip: liveIp, nik, at: `${date} 05:01:00` });
@@ -486,7 +484,12 @@ describe("what the board counts as an arrival", () => {
     expect(slot?.readiness?.finger).toBe("missing");
   });
 
-  test("the same tap seats him once the pull has been reduced", async () => {
+  /*
+   * And the pull can be dead for this to work. Before 2026-09-14 the reduction
+   * read only `device_taps`, so a morning where the pull was down printed
+   * tickets, filled the live log, and produced a board that seated nobody.
+   */
+  test("the live session alone is enough once the reading is rebuilt", async () => {
     const date = nextDate();
     const nik = newNik();
     const person = await addEmployee({ nik });
@@ -497,17 +500,31 @@ describe("what the board counts as an arrival", () => {
     await db
       .insert(schema.deviceLiveEvents)
       .values({ ip: liveIp, nik, at: `${date} 05:01:00` });
-    /* The other half: what the thirty-second pull writes, and what turns it
-       into a reading. */
-    await db
-      .insert(schema.deviceTaps)
-      .values({ ip: liveIp, nik, at: `${date} 05:01:00`, direction: "in" });
     await deriveDate(date);
 
     const slot = (await mine(date)).find((s) => s.unitId === unit);
     expect(slot?.employeeId).toBe(person);
     expect(slot?.source).toBe("plan");
     expect(slot?.tappedAt).toBe("05:01:00");
+  });
+
+  /* The ordinary path, for completeness: the pull's own tap reduces the same. */
+  test("the pull alone is enough too", async () => {
+    const date = nextDate();
+    const nik = newNik();
+    const person = await addEmployee({ nik });
+    const unit = await addUnit({ code: `${tag}-LIVE3` });
+    await roster(date, person, "D");
+    await plan(unit, person);
+    await ftwOk(date, nik);
+    await db
+      .insert(schema.deviceTaps)
+      .values({ ip: liveIp, nik, at: `${date} 05:02:00`, direction: "in" });
+    await deriveDate(date);
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(person);
+    expect(slot?.tappedAt).toBe("05:02:00");
   });
 });
 

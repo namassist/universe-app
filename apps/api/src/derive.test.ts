@@ -133,6 +133,9 @@ describe("rebuilding a date", () => {
   const wipe = async () => {
     await db.delete(schema.deviceTaps).where(eq(schema.deviceTaps.ip, ip));
     await db
+      .delete(schema.deviceLiveEvents)
+      .where(eq(schema.deviceLiveEvents.ip, ip));
+    await db
       .delete(schema.fingerReadings)
       .where(eq(schema.fingerReadings.nik, nik));
   };
@@ -184,5 +187,101 @@ describe("rebuilding a date", () => {
     await deriveDate(date);
 
     expect((await readingOf())!.firstInAt).toBe(once!.firstInAt);
+  });
+});
+
+/**
+ * Both ears, and which one wins where they disagree.
+ *
+ * The pull carries a direction the machine recorded; the live protocol carries
+ * none. Until 2026-09-14 only the pull reached `deriveDate`, so a morning where
+ * the pull was down printed tickets, filled the live log, and produced a board
+ * that seated nobody — the failure a whole-muster simulation walked into.
+ */
+describe("a tap only the live session heard", () => {
+  const ip = "10.99.99.2";
+  const nik = "999000222";
+  const date = "1999-03-04";
+
+  const wipe = async () => {
+    await db.delete(schema.deviceTaps).where(eq(schema.deviceTaps.ip, ip));
+    await db
+      .delete(schema.deviceLiveEvents)
+      .where(eq(schema.deviceLiveEvents.ip, ip));
+    await db
+      .delete(schema.fingerReadings)
+      .where(eq(schema.fingerReadings.nik, nik));
+  };
+
+  const pull = (at: string, direction: "in" | "out") =>
+    db
+      .insert(schema.deviceTaps)
+      .values({ ip, nik, at, direction, verified: 1 })
+      .onConflictDoNothing();
+  const heard = (at: string) =>
+    db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik, at })
+      .onConflictDoNothing();
+  const readingOf = async () =>
+    (
+      await db
+        .select()
+        .from(schema.fingerReadings)
+        .where(eq(schema.fingerReadings.nik, nik))
+    )[0];
+
+  beforeEach(wipe);
+  afterAll(wipe);
+
+  /* The whole point: attendance and the board survive a dead pull. */
+  test("still becomes an arrival", async () => {
+    await heard(`${date} 04:41:00`);
+    expect(await deriveDate(date)).toBe(1);
+    expect((await readingOf())!.firstInAt).toBe(`${date} 04:41:00`);
+  });
+
+  test("does not double-count the tap the pull also has", async () => {
+    await heard(`${date} 04:41:00`);
+    await pull(`${date} 04:41:00`, "in");
+    await deriveDate(date);
+    expect((await readingOf())!.firstInAt).toBe(`${date} 04:41:00`);
+  });
+
+  /*
+   * Something known beats something assumed. The live session would have
+   * called this an arrival; the machine says he was leaving, and the machine
+   * is the one that knows.
+   */
+  test("yields to the pull's direction on the same tap", async () => {
+    await heard(`${date} 17:55:00`);
+    await pull(`${date} 17:55:00`, "out");
+    await deriveDate(date);
+
+    const reading = (await readingOf())!;
+    expect(reading.firstOutAt).toBe(`${date} 17:55:00`);
+    expect(reading.firstInPmAt).toBeNull();
+  });
+
+  /*
+   * And where the guess is wrong with no pull to correct it, the reduction
+   * absorbs it: he arrived before he left, and the earliest tap keeps the
+   * column.
+   */
+  test("a leaving tap guessed as an arrival cannot displace the real one", async () => {
+    await heard(`${date} 16:45:00`);
+    await heard(`${date} 17:55:00`);
+    await deriveDate(date);
+    expect((await readingOf())!.firstInPmAt).toBe(`${date} 16:45:00`);
+  });
+
+  test("an earlier live tap takes the column from a later pulled one", async () => {
+    await pull(`${date} 04:50:00`, "in");
+    await deriveDate(date);
+    expect((await readingOf())!.firstInAt).toBe(`${date} 04:50:00`);
+
+    await heard(`${date} 04:33:00`);
+    await deriveDate(date);
+    expect((await readingOf())!.firstInAt).toBe(`${date} 04:33:00`);
   });
 });
