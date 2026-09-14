@@ -1293,3 +1293,10 @@ same fields from the plan.
   trial runs on a laptop and production still runs the previous branch against
   Nakula — and it is the reason the machine rollout, not the code, is what
   decides when this can be deployed.
+- **The "Tap mentah" tab stays until the machine rollout is done** (owner,
+  2026-09-14). The Live tab shows only what lands while a listen session is
+  open: no in/out direction, no three-day history, no export. While Universe
+  hears two machines of sixteen, raw taps are the only place a tap outside the
+  scheduled window is visible. When the fleet is fully paired, the tab goes and
+  the Excel export moves to Attendance. `device_taps` itself stays either way —
+  `derive.ts` reads it to build `finger_readings`.
