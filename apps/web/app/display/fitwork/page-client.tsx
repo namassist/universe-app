@@ -156,10 +156,10 @@ export default function DisplayFitworkPage() {
                 label="Operator"
                 className="w-[23%] flex-none"
               >
-                <span className="truncate text-[34px] leading-tight font-bold">
+                <span className="truncate text-[26px] leading-tight font-bold">
                   {r.name}
                 </span>
-                <span className="font-mono text-xl text-(--text-secondary) tabular-nums">
+                <span className="font-mono text-[15px] text-(--text-secondary) tabular-nums">
                   NIK {r.nik}
                 </span>
               </CardField>,
@@ -169,13 +169,13 @@ export default function DisplayFitworkPage() {
                 label="Perusahaan / Posisi / Dept"
                 className="w-[20%] flex-none"
               >
-                <span className="truncate text-xl font-semibold">
+                <span className="truncate text-[16px] font-semibold">
                   {r.company ?? "—"}
                 </span>
-                <span className="truncate text-xl text-(--text-secondary)">
+                <span className="truncate text-[16px] text-(--text-secondary)">
                   {r.position ?? "—"}
                 </span>
-                <span className="truncate text-xl text-(--text-secondary)">
+                <span className="truncate text-[16px] text-(--text-secondary)">
                   {r.department ?? "—"}
                 </span>
               </CardField>,
@@ -184,18 +184,21 @@ export default function DisplayFitworkPage() {
                  things: its category, and the decision it signed — and where
                  those disagree is precisely why the card is on the wall. */
               <CardField key="call" label="Keputusan" className="flex-1">
-                <span className="flex flex-wrap items-center gap-3">
-                  <DisplayBadge tone={FTW_CAT_BADGE[ftwCatOf(r.sleepCategory)]}>
+                <span className="flex flex-wrap items-center gap-2">
+                  <DisplayBadge
+                    size="sm"
+                    tone={FTW_CAT_BADGE[ftwCatOf(r.sleepCategory)]}
+                  >
                     {r.sleepCategory ?? VERDICT[r.verdict].label}
                   </DisplayBadge>
                   {r.sleepCategory ? (
-                    <DisplayBadge tone={VERDICT[r.verdict].tone}>
+                    <DisplayBadge size="sm" tone={VERDICT[r.verdict].tone}>
                       {VERDICT[r.verdict].label}
                     </DisplayBadge>
                   ) : null}
                 </span>
                 {r.ftwDecision ? (
-                  <span className="truncate text-lg text-(--text-secondary)">
+                  <span className="truncate text-[15px] text-(--text-secondary)">
                     {r.ftwDecision}
                   </span>
                 ) : null}
@@ -206,7 +209,7 @@ export default function DisplayFitworkPage() {
                 label="Tidur efektif"
                 className="w-[11%] flex-none"
               >
-                <span className="font-mono text-[30px] leading-tight font-bold tabular-nums">
+                <span className="font-mono text-[22px] leading-tight font-bold tabular-nums">
                   {sleepText(r.sleepMinutes)}
                 </span>
               </CardField>,
@@ -217,16 +220,16 @@ export default function DisplayFitworkPage() {
                  leaving the box empty. */
               <div
                 key="sent"
-                className="w-[180px] flex-none rounded-panel border border-(--divider) bg-(--fill-subtle) px-6 py-4"
+                className="w-[136px] flex-none rounded-card border border-(--divider) bg-(--fill-subtle) px-4 py-2.5"
               >
-                <span className="text-[15px] font-semibold tracking-[.12em] text-(--text-tertiary) uppercase">
+                <span className="text-[12px] font-semibold tracking-[.12em] text-(--text-tertiary) uppercase">
                   Jam Upload
                 </span>
                 <div
                   className={
                     r.sentAt
-                      ? "font-mono text-[38px] leading-tight font-bold text-(--color-primary-bright) tabular-nums"
-                      : "text-[26px] leading-tight font-bold text-(--text-tertiary)"
+                      ? "font-mono text-[28px] leading-tight font-bold text-(--color-primary-bright) tabular-nums"
+                      : "text-[19px] leading-tight font-bold text-(--text-tertiary)"
                   }
                 >
                   {r.sentAt ? r.sentAt.slice(0, 5) : "Belum"}

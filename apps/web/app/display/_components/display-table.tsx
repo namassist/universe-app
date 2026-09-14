@@ -11,10 +11,17 @@ export type DisplayTone = "success" | "warning" | "danger" | "info" | "neutral";
 
 export function DisplayBadge({
   tone,
+  size = "md",
   className,
   children,
 }: {
   tone: DisplayTone;
+  /**
+   * `sm` for the card wall, where two badges share a block and the words are
+   * savera's own — long ones like "Istirahat Minimal 2 Jam". The table's rows
+   * give a badge a column to itself and keep `md`.
+   */
+  size?: "md" | "sm";
   className?: string;
   children: React.ReactNode;
 }) {
@@ -32,12 +39,20 @@ export function DisplayBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-3 rounded-full border-[1.5px] px-5.5 py-2 text-2xl font-semibold whitespace-nowrap",
+        "inline-flex items-center rounded-full border-[1.5px] font-semibold whitespace-nowrap",
+        size === "sm"
+          ? "gap-2 px-3.5 py-1 text-[17px]"
+          : "gap-3 px-5.5 py-2 text-2xl",
         styles[tone],
         className
       )}
     >
-      <span className="size-3 flex-none rounded-full bg-current" />
+      <span
+        className={cn(
+          "flex-none rounded-full bg-current",
+          size === "sm" ? "size-2" : "size-3"
+        )}
+      />
       {children}
     </span>
   );

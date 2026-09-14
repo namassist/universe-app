@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils";
  *
  * The scroll machinery is the table's: the list is rendered twice and the
  * whole stack translated by half its height, so the loop has no seam. Four
- * seconds a card, which is the reading speed the tables were tuned to.
+ * seconds a card, which is the reading speed the tables were tuned to — and
+ * the shorter the card, the more of them stand on the glass at once.
  */
 
 export type CardTone = "danger" | "warning";
@@ -61,8 +62,8 @@ export function CardField({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
-      <span className="text-[15px] font-semibold tracking-[.12em] text-(--text-tertiary) uppercase">
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
+      <span className="text-[12px] font-semibold tracking-[.12em] text-(--text-tertiary) uppercase">
         {label}
       </span>
       {children}
@@ -78,14 +79,14 @@ export function DisplayCards({ items }: { items: DisplayCardItem[] }) {
         className={cn(
           /* The bar is a pseudo-element rather than a border so the card keeps
              one radius: a coloured left border would square that corner off. */
-          "relative flex items-center gap-6 overflow-hidden rounded-panel border px-8 py-6",
+          "relative flex items-center gap-5 overflow-hidden rounded-card border px-6 py-4",
           "before:absolute before:inset-y-0 before:left-0 before:w-1.5 before:content-['']",
           EDGE[item.tone]
         )}
       >
         <span
           className={cn(
-            "flex size-14 flex-none items-center justify-center rounded-full border-2 text-3xl font-bold",
+            "flex size-10 flex-none items-center justify-center rounded-full border-2 text-2xl font-bold",
             MARK[item.tone]
           )}
           aria-hidden
@@ -97,7 +98,7 @@ export function DisplayCards({ items }: { items: DisplayCardItem[] }) {
     ));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel px-9 py-8 glass-panel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel px-7 py-6 glass-panel">
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           className="display-scroller [animation:kscroll_var(--kscroll-dur,30s)_linear_infinite]"
@@ -106,8 +107,8 @@ export function DisplayCards({ items }: { items: DisplayCardItem[] }) {
           }
         >
           {/* Duplicated for the seamless loop, exactly as the table does it. */}
-          <div className="flex flex-col gap-5">{renderList()}</div>
-          <div className="mt-5 flex flex-col gap-5">{renderList()}</div>
+          <div className="flex flex-col gap-3">{renderList()}</div>
+          <div className="mt-3 flex flex-col gap-3">{renderList()}</div>
         </div>
       </div>
     </div>
