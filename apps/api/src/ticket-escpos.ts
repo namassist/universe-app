@@ -39,14 +39,14 @@ export type TicketFields = {
    */
   role: "standing" | "spare";
   /**
-   * Fit to work, as savera judged it — or null when nothing was uploaded.
+   * Fit to work, as savera judged it — null when nothing was uploaded.
    *
-   * Two parts because they answer two questions: how long he slept, and what
-   * the rule made of it. The verdict is the half that decides whether he works
-   * today, so it prints on its own line rather than in a parenthesis nobody
-   * reads at the end of a number.
+   * The verdict alone. The slip carried the hours slept for a day and the
+   * owner took them off again: what an operator and his supervisor act on is
+   * the category, and a number beside it invites arguing with the rule at the
+   * booth rather than reading what it decided.
    */
-  ftw: { minutes: number; verdict: string } | null;
+  ftw: string | null;
   /** Bare place names for this shift, already capped. */
   hazards: string[];
   /** The safety lines for this shift, already capped. */
@@ -78,12 +78,6 @@ function wrapAt(sentence: string, indent = ""): string[] {
   return out;
 }
 
-/** `"8j 05m"` — the shape the yard writes a night's sleep in. */
-function sleepFor(minutes: number): string {
-  const hours = Math.floor(minutes / 60);
-  return `${hours}j ${String(minutes - hours * 60).padStart(2, "0")}m`;
-}
-
 /** TETAP or SPARE, in the words operators use over the radio. */
 const ROLE_WORD: Record<TicketFields["role"], string> = {
   standing: "TETAP",
@@ -106,8 +100,14 @@ const orDash = (value: string | null | undefined) =>
 export function ticketLines(fields: TicketFields): {
   centred: string[];
   body: string[];
-  /** The sleep line, then the verdict that prints bold on its own. */
-  ftw: { line: string; verdict: string };
+  /**
+   * Its own named section, like the two below it.
+   *
+   * Not a `LABEL : value` line: the longest category runs to twenty-three
+   * characters and the field column leaves fifteen, so it would have been
+   * broken mid word on every operator told to rest an hour.
+   */
+  ftw: { heading: string; verdict: string };
   /** Named sections, each already wrapped. Empty when nothing is set. */
   notices: { heading: string; lines: string[] }[];
   footer: string[];
@@ -131,11 +131,8 @@ export function ticketLines(fields: TicketFields): {
       field("STATUS", "IN"),
     ],
     ftw: {
-      line: field(
-        "STATUS FTW",
-        fields.ftw ? sleepFor(fields.ftw.minutes) : "-"
-      ),
-      verdict: fields.ftw ? fields.ftw.verdict : "Belum mengisi FTW",
+      heading: "STATUS FTW",
+      verdict: fields.ftw ?? "Belum mengisi FTW",
     },
     notices: [
       ...(fields.hazards.length
@@ -177,7 +174,7 @@ export function ticketPreview(fields: TicketFields): string {
     RULE,
     ...body,
     RULE,
-    ftw.line,
+    ftw.heading,
     ftw.verdict,
     ...notices.flatMap((section) => [RULE, section.heading, ...section.lines]),
     RULE,
@@ -229,8 +226,10 @@ export function renderTicket(fields: TicketFields): Buffer {
     ALIGN_LEFT,
     ...body.map(text),
     text(RULE),
-    text(ftw.line),
-    /* The verdict is the half that decides whether he works today. */
+    BOLD_ON,
+    text(ftw.heading),
+    BOLD_OFF,
+    /* The half that decides whether he works today. */
     BOLD_ON,
     text(ftw.verdict),
     BOLD_OFF,

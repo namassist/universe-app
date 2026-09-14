@@ -27,7 +27,7 @@ const full: TicketFields = {
   printerName: "MESIN 31 KM 31",
   at: "2026-09-14 05:02:41",
   role: "standing",
-  ftw: { minutes: 485, verdict: "Dapat Bekerja" },
+  ftw: "Dapat Bekerja",
   hazards: ["PIT TEMPUDO", "KASTURI ATAS"],
   safety: ["Wajib P2H sebelum mengoperasikan unit."],
 };
@@ -54,7 +54,7 @@ describe("the slip a person reads", () => {
         "JAM ABSEN      : 2026-09-14 05:02:41",
         "STATUS         : IN",
         "--------------------------------",
-        "STATUS FTW     : 8j 05m",
+        "STATUS FTW",
         "Dapat Bekerja",
         "--------------------------------",
         "LOKASI BERBAHAYA",
@@ -98,37 +98,33 @@ describe("the slip a person reads", () => {
 });
 
 describe("fit to work, on the slip", () => {
-  test("prints the sleep on the field line and the verdict under it", () => {
+  /* The hours slept were on it for a day and the owner took them off: what
+     gets acted on is the category, and a number beside it invites arguing
+     with the rule at the booth. */
+  test("carries the category and no reading behind it", () => {
     const lines = ticketPreview(full).split("\n");
-    expect(lines).toContain("STATUS FTW     : 8j 05m");
+    expect(lines).toContain("STATUS FTW");
     expect(lines).toContain("Dapat Bekerja");
+    for (const line of lines) expect(line).not.toMatch(/\d+j \d+m/);
   });
 
-  /* The label column leaves fifteen characters; the longest verdict is
-     twenty-three. Joining them would hand the printer a mid-word break. */
-  test("the longest verdict still fits the roll on its own line", () => {
+  /* Twenty-three characters against a field column that leaves fifteen: as a
+     `LABEL : value` line this would break mid word every time. */
+  test("the longest category fits the roll whole", () => {
     const lines = ticketPreview({
       ...full,
-      ftw: { minutes: 711, verdict: "Istirahat Minimal 1 Jam" },
+      ftw: "Istirahat Minimal 1 Jam",
     }).split("\n");
-    expect(lines).toContain("STATUS FTW     : 11j 51m");
-    /* Twenty-three characters, so it fits the roll whole. Joined to the field
-       line it would have been thirty-three and broken mid word. */
     expect(lines).toContain("Istirahat Minimal 1 Jam");
+    expect(lines[lines.indexOf("STATUS FTW") + 1]).toBe(
+      "Istirahat Minimal 1 Jam"
+    );
   });
 
-  test("nothing uploaded says so rather than printing a zero", () => {
+  test("nothing uploaded says so rather than leaving a blank", () => {
     const lines = ticketPreview({ ...full, ftw: null }).split("\n");
-    expect(lines).toContain("STATUS FTW     : -");
+    expect(lines).toContain("STATUS FTW");
     expect(lines).toContain("Belum mengisi FTW");
-  });
-
-  test("under an hour of sleep keeps the two-digit minutes", () => {
-    const lines = ticketPreview({
-      ...full,
-      ftw: { minutes: 17, verdict: "Tidak Boleh Bekerja" },
-    }).split("\n");
-    expect(lines).toContain("STATUS FTW     : 0j 17m");
   });
 });
 
@@ -141,12 +137,13 @@ describe("how a person came to the muster", () => {
     expect(lines).toContain("UNIT           : DT-118");
   });
 
-  /* Two lines beginning with STATUS would be read as one thing twice. */
+  /* Two `LABEL : value` lines beginning with STATUS would be read as one
+     thing said twice; the fit-to-work one is a section heading instead. */
   test("does not collide with the tap's own status line", () => {
     const lines = ticketPreview(full).split("\n");
-    expect(lines.filter((l) => l.startsWith("STATUS "))).toEqual([
+    expect(lines.filter((l) => l.startsWith("STATUS"))).toEqual([
       "STATUS         : IN",
-      "STATUS FTW     : 8j 05m",
+      "STATUS FTW",
     ]);
   });
 });

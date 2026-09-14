@@ -347,15 +347,10 @@ export async function issueTicket(
     position: person.position ?? "-",
     department: person.department ?? "-",
     role,
-    /* The reading itself, not the verdict `judge` made of it: the slip states
-       what savera measured, and whether that was enough is said by the unit
-       line above it. */
-    ftw: ftwRow
-      ? {
-          minutes: ftwRow.sleepMinutes,
-          verdict: ftwRow.sleepCategory ?? "Belum mengisi FTW",
-        }
-      : null,
+    /* savera's own category, not the verdict `judge` made of it: the slip
+       states what the rule decided about him, and whether that was enough for
+       a unit is said by the allocation lines above. */
+    ftw: ftwRow ? (ftwRow.sleepCategory ?? "Belum mengisi FTW") : null,
     hazards: notices.hazards,
     safety: notices.safety,
     seat: decision.seat,
