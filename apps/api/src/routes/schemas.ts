@@ -1738,8 +1738,10 @@ export const FitWorkDisplaySchema = t.Object({
   /** Uploaded something, whatever it said. */
   filed: t.Integer(),
   passed: t.Integer(),
-  /** Filed but not accepted: refused, late, or a verdict we cannot read. */
-  refused: t.Integer(),
+  /** Filed, not cleared, told to rest first. */
+  rest: t.Integer(),
+  /** Filed and not cleared for any other reason — forbidden, late, unreadable. */
+  notPassed: t.Integer(),
   missing: t.Integer(),
   rows: t.Array(
     t.Object({

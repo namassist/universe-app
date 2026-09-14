@@ -16,18 +16,13 @@ import {
   fitWorkDisplayQueryOptions,
   type FitWorkDisplayRow,
 } from "@/lib/queries/readiness-display";
-import {
-  FTW_CAT_BADGE,
-  ftwCatOf,
-  type FtwCatKey,
-} from "@/components/menus/fit-to-work-shared";
+import { FTW_CAT_BADGE, ftwCatOf } from "@/components/menus/fit-to-work-shared";
 
 import { DisplayShell } from "../_components/display-shell";
 import {
   DisplayBadge,
   DisplayTable,
   type DisplayTone,
-  type RowTone,
 } from "../_components/display-table";
 
 /**
@@ -42,25 +37,6 @@ import {
  * having reworded a verdict — our problem, not the operator's, and invisible
  * if it were merged into a refusal.
  */
-
-/**
- * Category → the wash behind the row.
- *
- * It follows the row's Status badge, which is the one that names the person's
- * situation: red for a man told not to work and red for one who has not filed
- * at all (owner, 2026-09-14) — with the muster running, an empty filing is as
- * urgent as a refused one. The Kategori badge beside it reads "—" there, which
- * is why the grey it would have implied was the wrong signal.
- *
- * `fit` is absent on purpose: a clearance needs no colour, and leaving it
- * undefined is what keeps the wall quiet enough for the rest to carry.
- */
-const ROW_TONE_OF: Record<FtwCatKey, RowTone | undefined> = {
-  belum: "danger",
-  tidak: "danger",
-  istirahat: "warning",
-  fit: undefined,
-};
 
 const VERDICT: Record<
   FitWorkDisplayRow["verdict"],
@@ -92,6 +68,9 @@ export default function DisplayFitworkPage() {
 
   const rows = data?.rows ?? [];
   const shiftLabel = data?.shift ? SHIFT_KIND_LABELS[data.shift] : null;
+  /* Everyone the wall would show if it had room — the cleared are not among
+     them, so this is not `total - rows.length`. */
+  const exceptions = data ? data.total - data.passed : 0;
 
   return (
     <DisplayShell
@@ -101,13 +80,24 @@ export default function DisplayFitworkPage() {
       disconnected={disconnected}
       staleSince={dataUpdatedAt || null}
       meta={
-        /* "terjadwal" would be a lie now: the roster is larger than this, and
-           the difference is every operator nobody asks for a filing. */
+        /*
+         * Three things this line has to keep straight, because the table now
+         * holds neither the roster nor a simple slice of it.
+         *
+         * "terjadwal" would be a lie: the roster is larger, and the difference
+         * is every operator nobody asks for a filing. "N dari M" would be
+         * another one — the rows left out are not left out for space, they are
+         * the people who are fine. And when nothing needs seeing to, an empty
+         * table with a count above it reads as a screen that failed to load,
+         * so it says so in words.
+         */
         data?.date ? (
           <span className="truncate">
-            {rows.length < data.total
-              ? `${rows.length} dari ${data.total} orang wajib FTW — yang perlu dilihat lebih dulu`
-              : `${data.total} orang wajib FTW`}
+            {exceptions === 0
+              ? `Semua ${data.total} orang wajib FTW sudah lolos`
+              : rows.length < exceptions
+                ? `${rows.length} dari ${exceptions} yang perlu dilihat — dari ${data.total} orang wajib FTW`
+                : `${exceptions} perlu dilihat dari ${data.total} orang wajib FTW`}
           </span>
         ) : (
           <span className="truncate">Menunggu jadwal shift dari timeline</span>
@@ -127,18 +117,22 @@ export default function DisplayFitworkPage() {
           value: String(data?.passed ?? 0),
           label: "Lolos FTW",
         },
+        /* The two halves of "filed but not cleared", kept apart because they
+           send a supervisor to different places: one man waits an hour, the
+           other does not work today. Together with Lolos FTW they add up to
+           Sudah Lapor exactly. */
         {
           icon: <Clock className="text-(--badge-warning-text)" />,
           iconClass:
             "bg-(--badge-warning-fill) border-(--badge-warning-border)",
-          value: String(data?.refused ?? 0),
-          label: "Perlu Tindak Lanjut",
+          value: String(data?.rest ?? 0),
+          label: "Istirahat",
         },
         {
           icon: <AlertTriangle className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
-          value: String(data?.missing ?? 0),
-          label: "Belum Lapor",
+          value: String(data?.notPassed ?? 0),
+          label: "Tidak Lolos",
         },
       ]}
     >
@@ -154,11 +148,14 @@ export default function DisplayFitworkPage() {
         ]}
         rows={rows.map((r) => ({
           key: r.nik,
-          /* The row wears its own badge's colour: yellow behind a man told to
-             rest, red behind one told not to work, grey behind one who has not
-             filed. Nothing behind the rows that need nothing doing — a wall
-             where every line is shaded is a wall with no signal on it. */
-          tone: ROW_TONE_OF[ftwCatOf(r.sleepCategory)],
+          /* Yellow behind a man told to rest, red behind everybody else on
+             the wall. Every row here is an exception now — the cleared are
+             counted in the tile above and never rendered — so the question is
+             only which kind, and "wait an hour" is not "do not work". */
+          tone:
+            ftwCatOf(r.sleepCategory) === "istirahat"
+              ? ("warning" as const)
+              : ("danger" as const),
           cells: [
             <span
               key="k"

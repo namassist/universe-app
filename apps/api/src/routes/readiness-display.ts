@@ -332,15 +332,21 @@ type FtwGroup = (typeof FTW_ORDER)[number];
  * `missing` is the verdict, not the category, because a person with no filing
  * at all and a person whose filing carries no category are different mornings
  * — the first has not been to the clinic.
+ *
+ * Only a `pass` is `fit`, and that is what keeps anybody from vanishing. The
+ * group decides both the order and whether the row is shown at all, so keying
+ * `fit` off the category would have dropped every filing that reads "Dapat
+ * Bekerja" but was refused for another reason — a late upload, a decision
+ * savera would not sign. Those are not clearances, and they stay on the wall.
  */
 function ftwGroup(row: {
   verdict: FtwVerdict;
   sleepCategory: string | null;
 }): FtwGroup {
   if (row.verdict === "missing" || !row.sleepCategory) return "none";
-  if (/^dapat/i.test(row.sleepCategory)) return "fit";
-  if (/^tidak/i.test(row.sleepCategory)) return "forbidden";
-  return "rest";
+  if (row.verdict === "pass") return "fit";
+  if (/^istirahat/i.test(row.sleepCategory)) return "rest";
+  return "forbidden";
 }
 
 /** The fit-to-work wall's rows and counts. Pure, for the reasons above. */
@@ -368,24 +374,38 @@ export function fitWorkBoard(
   const count = (...v: FtwVerdict[]) =>
     judged.filter((r) => v.includes(r.verdict)).length;
 
-  const rows = [...judged]
+  const grouped = judged.map((row) => ({ row, group: ftwGroup(row) }));
+  const inGroup = (...g: FtwGroup[]) =>
+    grouped.filter((r) => g.includes(r.group)).length;
+
+  /*
+   * The cleared are counted but not shown (owner, 2026-09-14).
+   *
+   * They are most of the shift on a good morning — several hundred rows that
+   * scroll past for an hour saying nothing needs doing, while the forty-row
+   * cut spends itself on them. The wall is for the exceptions; the tile above
+   * it is where "everyone else is fine" belongs.
+   */
+  const rows = grouped
+    .filter((r) => r.group !== "fit")
     .sort(
       (a, b) =>
-        rank(FTW_ORDER, ftwGroup(a)) - rank(FTW_ORDER, ftwGroup(b)) ||
-        (a.verdict === "pass"
-          ? (b.sentAt ?? "").localeCompare(a.sentAt ?? "")
-          : byName(a, b))
+        rank(FTW_ORDER, a.group) - rank(FTW_ORDER, b.group) ||
+        byName(a.row, b.row)
     )
-    .slice(0, WALL_ROWS);
+    .slice(0, WALL_ROWS)
+    .map((r) => r.row);
 
   return {
     total: judged.length,
     filed: judged.length - count("missing"),
     passed: count("pass"),
-    // Everything filed that the board will not accept — a refusal, a late
-    // upload, or a verdict savera reworded. One number, because from a wall
-    // they are the same instruction: this person needs seeing to.
-    refused: count("fail", "late", "unreadable"),
+    rest: inGroup("rest"),
+    /* Filed and not cleared for any reason other than being told to rest:
+       forbidden, late, or a verdict we could not read. They add up with the
+       two above to exactly `filed`, so the four tiles never double-count and
+       never lose anybody between them. */
+    notPassed: inGroup("forbidden"),
     missing: count("missing"),
     rows,
   };
@@ -417,7 +437,8 @@ export const fitWorkDisplayRoutes = new Elysia({
         total: 0,
         filed: 0,
         passed: 0,
-        refused: 0,
+        rest: 0,
+        notPassed: 0,
         missing: 0,
         rows: [],
       };

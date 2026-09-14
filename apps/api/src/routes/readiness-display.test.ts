@@ -157,22 +157,48 @@ describe("the fit-to-work wall", () => {
       GATE
     );
 
+    /* LOLOS is counted and not shown: the cleared are most of a good morning,
+       and they would spend the whole cut saying nothing needs doing. */
     expect(board.rows.map((r) => r.name)).toEqual([
       "BELUM",
-      "TOLAK",
-      /* A category we cannot place sits with the rest: not a refusal, not a
-         clearance, and the badge beside it shows savera's own words. */
+      /* ANEH is filed, not cleared, and not told to rest, so it shares TOLAK's
+         group and its instruction; within a group the tiebreak is the name. */
       "ANEH",
+      "TOLAK",
       "ISTIRAHAT",
-      "LOLOS",
     ]);
     expect(board.total).toBe(5);
     expect(board.filed).toBe(4);
     expect(board.passed).toBe(1);
-    // Refused, late and unreadable are one number: all three mean "see to
-    // this person", and a wall has no room to split an instruction three ways.
-    expect(board.refused).toBe(3);
+    expect(board.rest).toBe(1);
+    expect(board.notPassed).toBe(2);
     expect(board.missing).toBe(1);
+    /* The three add up to what was filed: four tiles, nobody counted twice
+       and nobody lost between them. */
+    expect(board.passed + board.rest + board.notPassed).toBe(board.filed);
+  });
+
+  /*
+   * A filing that reads "Dapat Bekerja" but was refused for another reason —
+   * uploaded late, or a decision savera would not sign — is not a clearance.
+   * Keying the group off the category would have dropped it from a wall that
+   * now shows only the exceptions, and it is one of them.
+   */
+  test("a fit category that did not pass stays on the wall", () => {
+    const board = fitWorkBoard(
+      [person("1", "TELAT FIT"), person("2", "TOLAK KEPUTUSAN")],
+      [
+        filing("1", "FTW aman", "Dapat Bekerja", "05:31:00"),
+        filing("2", "FTW Perlu Tindak Lanjut", "Dapat Bekerja", "04:50:00"),
+      ],
+      GATE
+    );
+    expect(board.rows.map((r) => r.name)).toEqual([
+      "TELAT FIT",
+      "TOLAK KEPUTUSAN",
+    ]);
+    expect(board.passed).toBe(0);
+    expect(board.notPassed).toBe(2);
   });
 
   /* A late upload still says something about the person, and that is what
@@ -217,17 +243,30 @@ describe("the fit-to-work wall", () => {
     expect(board.rows[0]!.verdict).toBe("fail");
   });
 
+  /* On a row the wall still shows — a clearance is counted, never rendered. */
   test("what was filed is carried through for the screen to render", () => {
+    const board = fitWorkBoard(
+      [person("1", "SATU")],
+      [filing("1", "FTW aman", "Istirahat Minimal 1 Jam", "04:50:00")],
+      GATE
+    );
+    expect(board.rows[0]).toMatchObject({
+      sleepMinutes: 445,
+      sleepCategory: "Istirahat Minimal 1 Jam",
+      sentAt: "04:50:00",
+    });
+  });
+
+  /* The wall would otherwise spend its forty rows on people who are fine. */
+  test("a cleared filing is counted and never rendered", () => {
     const board = fitWorkBoard(
       [person("1", "SATU")],
       [filing("1", "FTW aman", "Dapat Bekerja", "04:50:00")],
       GATE
     );
-    expect(board.rows[0]).toMatchObject({
-      sleepMinutes: 445,
-      sleepCategory: "Dapat Bekerja",
-      sentAt: "04:50:00",
-    });
+    expect(board.rows).toEqual([]);
+    expect(board.passed).toBe(1);
+    expect(board.filed).toBe(1);
   });
 });
 
