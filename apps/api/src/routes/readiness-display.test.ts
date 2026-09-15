@@ -467,7 +467,8 @@ describe("who owes a filing", () => {
   const operator = async (
     nik: string,
     codes: string[],
-    fleetAllocation = true
+    fleetAllocation = true,
+    status: "aktif" | "standby" | "nonaktif" = "aktif"
   ) => {
     const [dept] = await db
       .select({
@@ -494,6 +495,7 @@ describe("who owes a filing", () => {
         departmentId: dept!.id,
         companyId: dept!.companyId,
         positionId: pos!.id,
+        status,
       })
       .returning({ id: schema.employees.id });
     fixture.employees.push(emp!.id);
@@ -556,6 +558,14 @@ describe("who owes a filing", () => {
 
   test("somebody with no licence at all is left out", async () => {
     const nik = await operator("ZZ90000007", []);
+    expect(await ftwObliged([nik])).not.toContain(nik);
+  });
+
+  /* Standby is given no unit (owner, 2026-09-03), so he owes no filing and
+     would otherwise stand on the wall as "Belum upload FTW" all muster. */
+  test("an employee on standby is left out", async () => {
+    const dt = await code("DT5", true);
+    const nik = await operator("ZZ90000008", [dt], true, "standby");
     expect(await ftwObliged([nik])).not.toContain(nik);
   });
 });

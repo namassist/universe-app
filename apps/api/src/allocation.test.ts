@@ -318,11 +318,12 @@ beforeAll(async () => {
       typeId: typ,
       modelId: mdl,
       brandId: brd,
-      /* Standby, so the scaffolding never becomes a competitor: the engine
-         skips standby units, and without this the digger is an unplanned
+      /* Broken down, so the scaffolding never becomes a competitor: the
+         engine skips broken units, and without this the digger is an unplanned
          vacancy that sorts ahead of `-U1` by code and takes the spare the test
-         is actually about. */
-      standby: true,
+         is actually about. (It was standby until 2026-09-15, when standby
+         units started being allocated.) */
+      breakdown: true,
     })
     .returning({ id: schema.units.id });
   fleetLeader = digger!.id;
@@ -800,8 +801,15 @@ describe("units that need no operator", () => {
 
     expect((await mine(date)).find((s) => s.unitId === unit)).toBeUndefined();
   });
+});
 
-  test("nor a unit on standby", async () => {
+/*
+ * Standby marks a unit, it does not stand it down (owner, 2026-09-15). The
+ * board skipped standby units until then, and their operators went looking
+ * for a spare seat while the unit sat in its formation uncrewed.
+ */
+describe("a unit on standby", () => {
+  test("is on the board and seats its own operator", async () => {
     const date = nextDate();
     const nik = newNik();
     const person = await addEmployee({ nik });
@@ -810,7 +818,9 @@ describe("units that need no operator", () => {
     await plan(unit, person);
     await tapAt(date, nik, "05:01:00");
 
-    expect((await mine(date)).find((s) => s.unitId === unit)).toBeUndefined();
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(person);
+    expect(slot?.source).toBe("plan");
   });
 });
 

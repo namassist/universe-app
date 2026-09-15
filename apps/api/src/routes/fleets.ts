@@ -34,6 +34,7 @@ import {
   FLEET_MIN_UNITS,
   FLEET_TRANSPORT_TYPES_TEXT,
   isFleetTransportType,
+  isStandbyArea,
   type FleetImportPreview,
 } from "@universe/contracts";
 
@@ -284,12 +285,10 @@ async function applyUnitFacts(
            while Fleet Setting listed it under its fleet. Nothing reported
            that: it was simply absent from the board. */
         breakdown: false,
-        /* And the standby, for the same reason and with the same teeth:
-           allocation skips standby units (`fleet-actual.ts`), so a truck
-           parked yesterday because its digger was down would go on being
-           skipped once the digger was repaired and the file seated it again.
-           Every flag this import can set, it must also be able to clear. */
-        standby: false,
+        /* And the standby, read from the area every time: the file is the
+           unit's whole answer for the day, so a formation written STANDBY sets
+           it and the same formation written anywhere else clears it. */
+        standby: isStandbyArea(input.workArea),
       })
       .where(inArray(schema.units.id, input.unitIds));
 
@@ -753,28 +752,10 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
                 fleetSupport: !unit.breakdown,
                 breakdown: unit.breakdown,
                 /* Written every time, like the other two: the file is this
-                   unit's whole answer for the day, and a machine it puts back
-                   to work must not carry yesterday's parking. */
-                standby: false,
+                   unit's whole answer for the day. */
+                standby: !unit.breakdown && isStandbyArea(unit.workArea ?? ""),
                 workArea: unit.workArea,
                 transportUnitId: unit.transportUnitId,
-              })
-              .where(eq(schema.units.id, unit.unitId));
-
-          /* Last, so nothing above can undo it: a truck whose digger is down
-             takes no part today. It keeps no area and no vehicle — both would
-             be describing a shift it is not working — and it belongs to no
-             formation, because the one it named was disbanded with its
-             leader. */
-          for (const unit of outcome.standby)
-            await tx
-              .update(schema.units)
-              .set({
-                standby: true,
-                breakdown: false,
-                fleetSupport: false,
-                workArea: null,
-                transportUnitId: null,
               })
               .where(eq(schema.units.id, unit.unitId));
         });

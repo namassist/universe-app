@@ -29,6 +29,7 @@ import {
   FLEET_TRANSPORT_TYPES_TEXT,
   isBreakdownArea,
   isFleetTransportType,
+  isStandbyArea,
   type FleetImportChange,
   type FleetImportColumn,
   type FleetImportPreviewRow,
@@ -575,9 +576,7 @@ export async function validateFleetWorkbook(
    * file*, so a truck still naming the broken digger is a file nobody
    * finished, and it is refused rather than quietly taken off the board.
    *
-   * Nothing on this path parks a unit any more, so `standby` stays empty.
    */
-  const standby: ParsedStandbyUnit[] = [];
   for (const row of resolved) {
     if (!row.idle || row.bad) continue;
     const leader = byCode.get(row.fleet.toLowerCase());
@@ -612,6 +611,21 @@ export async function validateFleetWorkbook(
       )
     );
   }
+
+  /* ---- pass 5b: the units the file marks STANDBY ------------------------- */
+
+  /*
+   * Listed for the preview only. A standby unit is otherwise an ordinary row —
+   * it leads, hauls or supports as the file says, keeps its area and its ride,
+   * and is allocated — so the formation and support passes handle it and the
+   * commit sets the flag from the area it writes.
+   */
+  const standby: ParsedStandbyUnit[] = resolved
+    .filter((row) => !row.bad && isStandbyArea(row.area))
+    .map((row) => ({
+      preview: { row: row.n, unit: row.unit, fleet: row.fleet },
+      unitId: row.unitRow.id,
+    }));
 
   /* ---- pass 6: the support units ---------------------------------------- */
 

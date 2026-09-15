@@ -312,9 +312,10 @@ export async function buildBoard(
     .where(
       and(
         eq(schema.units.active, true),
-        // Neither needs an operator, so neither is a vacancy (owner).
+        /* A broken unit needs no operator, so it is no vacancy (owner). A
+           standby unit still does: it keeps its formation and is allocated
+           like any other (owner, 2026-09-15, reversing the earlier rule). */
         eq(schema.units.breakdown, false),
-        eq(schema.units.standby, false),
         /*
          * And somebody configured it in Fleet Setting (owner, 2026-08-31).
          *

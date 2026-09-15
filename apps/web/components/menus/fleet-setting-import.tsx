@@ -236,20 +236,11 @@ export function FleetImport() {
      one the yard has disbanded — but a wrong file says the same thing, and the
      difference is only visible to the person holding it. */
   const removals =
-    preview &&
-    (preview.disband.length ||
-      preview.released.length ||
-      preview.standby.length)
+    preview && (preview.disband.length || preview.released.length)
       ? [
+          /* Standby is not listed here since 2026-09-15: a standby unit keeps
+             its formation and is still crewed, so it is not leaving. */
           { label: t.flImpDisband, codes: preview.disband },
-          /* Beside the two other kinds of leaving, because that is what it is
-             — a truck that will not be crewed today. Each is named with the
-             digger that parked it, so the reader can check the one fact this
-             rests on instead of taking the count on trust. */
-          {
-            label: t.flImpStandby,
-            codes: preview.standby.map((u) => `${u.unit} → ${u.fleet}`),
-          },
           { label: t.flImpReleased, codes: preview.released },
         ].filter((g) => g.codes.length)
       : [];

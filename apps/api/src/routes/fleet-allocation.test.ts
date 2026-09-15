@@ -277,7 +277,7 @@ beforeAll(async () => {
     extra: Partial<{
       simperCodeId: string;
       departmentId: string;
-      standby: boolean;
+      breakdown: boolean;
     }>
   ) => {
     const [row] = await db
@@ -295,9 +295,10 @@ beforeAll(async () => {
     return { id: row!.id, code: row!.code };
   };
 
-  /* The suite's formation. Its digger is standby so it never occupies a slot
-     of its own; it exists only to give `fleet_units` something to point at. */
-  fleetLeader = (await unitRow({ standby: true })).id;
+  /* The suite's formation. Its digger is broken down so it never occupies a
+     slot of its own; it exists only to give `fleet_units` something to point
+     at. (Standby until 2026-09-15, when standby units became allocated.) */
+  fleetLeader = (await unitRow({ breakdown: true })).id;
   const [fleet] = await db
     .insert(schema.fleets)
     .values({ leaderUnitId: fleetLeader })

@@ -24,6 +24,7 @@ import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
 import { env } from "./env";
+import { takesPartInAllocation } from "./fleet-scope";
 import { fingerInDeadline, ftwDeadline, judge } from "./readiness";
 import { activeNotices } from "./safety-notices";
 import { stageTimeOf } from "./stage-time";
@@ -82,7 +83,10 @@ export async function seatOf(
       and(
         eq(schema.fleetActualDocuments.date, date),
         eq(schema.fleetActualDocuments.shift, shift),
-        eq(schema.employees.nik, nik)
+        eq(schema.employees.nik, nik),
+        /* The board never seats a standby employee, but one generated before
+           the status changed still holds the old seat. */
+        eq(schema.employees.status, "aktif")
       )
     )
     .limit(1);
@@ -132,7 +136,13 @@ export async function seatOf(
       sql`transport.id = ${schema.units.transportUnitId}`
     )
     .leftJoin(leader, eq(leader.unitId, schema.units.id))
-    .where(eq(schema.employees.nik, nik))
+    .where(
+      and(
+        eq(schema.employees.nik, nik),
+        eq(schema.employees.status, "aktif"),
+        seatable()
+      )
+    )
     .limit(1);
 
   if (!fromPlan) return null;
@@ -147,7 +157,31 @@ export async function seatOf(
   };
 }
 
-/** Standing operators hold a unit in the plan. Everybody else is a spare. */
+/**
+ * The units a plan seat may still name on paper: the ones the board is about.
+ *
+ * The plan remembers a standing operator's unit whatever became of it, so read
+ * alone it printed DT4084 for Alif Zainuddin while DT4084 was broken down and
+ * in no formation. Holding the plan to the board's own scope keeps the slip
+ * and the board from disagreeing. Standby units are in scope (owner,
+ * 2026-09-15).
+ */
+const seatable = () =>
+  and(
+    eq(schema.units.active, true),
+    eq(schema.units.breakdown, false),
+    takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
+  );
+
+/**
+ * Standing operators hold a unit in the plan that is still allocated.
+ * Everybody else is a spare.
+ *
+ * An operator whose unit is broken down, inactive or in no formation is
+ * therefore a spare here, as the board already treats him: his first finger
+ * prints nothing and the second prints whatever the board found him (owner,
+ * 2026-09-15).
+ */
 export async function roleOf(nik: string): Promise<TicketRole> {
   const [held] = await db
     .select({ id: schema.fleetPlanSlots.id })
@@ -156,7 +190,8 @@ export async function roleOf(nik: string): Promise<TicketRole> {
       schema.employees,
       eq(schema.employees.id, schema.fleetPlanSlots.employeeId)
     )
-    .where(eq(schema.employees.nik, nik))
+    .innerJoin(schema.units, eq(schema.units.id, schema.fleetPlanSlots.unitId))
+    .where(and(eq(schema.employees.nik, nik), seatable()))
     .limit(1);
   return held ? "standing" : "spare";
 }

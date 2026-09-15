@@ -468,6 +468,37 @@ describe("a truck left behind a broken digger is refused", () => {
     expect(preview.breakdownCount).toBe(1);
     expect(preview.rows).toHaveLength(1);
   });
+});
+
+/* ---------------------------------------------------- STANDBY in the area */
+
+/*
+ * The second status the area cell carries (owner, 2026-09-15). Unlike
+ * BREAKDOWN it takes nothing away: the formation stands, its members haul for
+ * it, and allocation crews it. Every other text is a work area.
+ */
+describe("an area reading STANDBY", () => {
+  test("keeps the formation and lists every unit it marks", async () => {
+    const preview = await validate(
+      fleetRows(digger1.code, [hauler1.code, hauler2.code], "STANDBY")
+    );
+    expect(preview.errorCount).toBe(0);
+    expect(preview.rows).toHaveLength(1);
+    expect(preview.standbyCount).toBe(3);
+    expect(preview.standby.map((u) => u.unit)).toEqual([
+      digger1.code,
+      hauler1.code,
+      hauler2.code,
+    ]);
+  });
+
+  test("any other text, the yard's old STBY TUNGGU INFO included, is a place", async () => {
+    const preview = await validate(
+      fleetRows(digger1.code, [hauler1.code], "STBY TUNGGU INFO")
+    );
+    expect(preview.errorCount).toBe(0);
+    expect(preview.standbyCount).toBe(0);
+  });
 
   test("the digger must actually be broken in this same file", async () => {
     const preview = await validate([
@@ -800,6 +831,57 @@ describe("the commit writes the unit facts, not just the formation", () => {
       .from(schema.fleets)
       .where(eq(schema.fleets.leaderUnitId, digger1.id));
     expect(fleet).toBeDefined();
+  });
+
+  test("STANDBY sets the flag and keeps the formation, area and ride", async () => {
+    const parked = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file(
+          fleetRows(digger1.code, [hauler1.code], "STANDBY", busUnit.code)
+        )
+      )
+    );
+    expect(parked.status).toBe(200);
+    expect(await parked.json()).toMatchObject({ standby: 2 });
+
+    const flagged = await db
+      .select({
+        standby: schema.units.standby,
+        breakdown: schema.units.breakdown,
+        workArea: schema.units.workArea,
+        transportUnitId: schema.units.transportUnitId,
+      })
+      .from(schema.units)
+      .where(inArray(schema.units.id, [digger1.id, hauler1.id]));
+    expect(flagged).toHaveLength(2);
+    for (const unit of flagged)
+      expect(unit).toMatchObject({
+        standby: true,
+        breakdown: false,
+        workArea: "STANDBY",
+        transportUnitId: busUnit.id,
+      });
+
+    const [fleet] = await db
+      .select({ id: schema.fleets.id })
+      .from(schema.fleets)
+      .where(eq(schema.fleets.leaderUnitId, digger1.id));
+    expect(fleet).toBeDefined();
+
+    // The next file that writes a place clears it.
+    const working = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(await file(fleetRows(digger1.code, [hauler1.code], miningName)))
+    );
+    expect(working.status).toBe(200);
+    const cleared = await db
+      .select({ standby: schema.units.standby })
+      .from(schema.units)
+      .where(inArray(schema.units.id, [digger1.id, hauler1.id]));
+    expect(cleared).toEqual([{ standby: false }, { standby: false }]);
   });
 
   test("a re-upload updates in place and moves a hauler between formations", async () => {

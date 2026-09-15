@@ -83,9 +83,14 @@ fill the gap from the spare pool.
   trucks in another formation in the same file. A truck row that still names
   the broken digger is refused — with a blank area ("Fleet EX4001 breakdown —
   pindahkan DT4027 ke fleet lain") or with one — and the import cannot be
-  committed until it is fixed. The import no longer sets any unit standby. A
-  blank area on a row that names no formation stays what it always was: an
-  error.
+  committed until it is fixed. A blank area on a row that names no formation
+  stays what it always was: an error.
+- **`STANDBY` in `area` marks a unit standby and changes nothing else** (owner,
+  2026-09-15). The unit leads, hauls or supports exactly as its row says,
+  keeps the ride the file gives it, and is **still allocated**. Matched like
+  BREAKDOWN, spaces removed and case folded; the word is kept as the unit's
+  area. Any other text is a work area — the yard's older `STBY TUNGGU INFO`
+  included. Every row the file writes sets or clears the flag from its area.
 - A formation whose digger is down **does not survive the day**. The digger
   files as a broken machine in no formation, and the formation is disbanded —
   to be recreated by the next file that seats it.
@@ -648,8 +653,9 @@ fill the gap from the spare pool.
 ### The allocation engine — shipped
 
 - `spare-validate` is no longer a no-op. It builds and stores one shift's
-  board: **every active unit** (minus `breakdown` and `standby`, which need no
-  operator), its planned operator kept if they pass, and every vacancy offered
+  board: **every active unit** (minus `breakdown`, which needs no operator;
+  `standby` units are allocated since 2026-09-15), its planned operator kept if
+  they pass, and every vacancy offered
   to the spare pool **first come first served by `first_in_at`**, subject to
   the same SIMPER and department rules PLAN enforces.
 - **The board is driven by `units`, not by `fleet_plan_slots`.** It was the
@@ -830,8 +836,8 @@ fill the gap from the spare pool.
   - The wall says "absen"; the audit table says "tap". A deliberate split — one
     is read by people standing in the yard, the other afterwards by someone
     asking a different question.
-- Breakdown and standby units do not appear: the board excludes them by
-  design, and the wall shows the board.
+- Breakdown units do not appear: the board excludes them by design, and the
+  wall shows the board. Standby units appear like any other (2026-09-15).
 - Readable by a paired `fleet` device or by a signed-in holder of
   `display-fleet`, the same `allowDevice` shape as the other kiosks. Polled
   once a minute — the board only moves when someone corrects it.
@@ -1200,18 +1206,30 @@ allocation has already finished (owner, 2026-09-13).
 fleet, unit, bus, area — are filled only for a person who has a unit
 (owner, 2026-09-13).
 
-| Person                                       | When          | Ticket                                |
-| -------------------------------------------- | ------------- | ------------------------------------- |
-| Standing operator, FTW passed, on time       | first finger  | Full                                  |
-| Standing operator, FTW not yet in, on time   | first finger  | No allocation fields                  |
-| Standing operator, FTW failed or late upload | any tap       | No allocation fields; never allocated |
-| Standing operator, unit on a non-FTW unit    | first finger  | Not judged on FTW                     |
-| Standing operator, tapped after 05:25        | any tap       | No allocation fields; not allocated   |
-| Fleet setting not filled when they tap       | any tap       | No allocation fields                  |
-| Spare                                        | first finger  | **No ticket**; tap recorded           |
-| Spare, allocated                             | second finger | Full; time is the **first** tap       |
-| Spare, not allocated                         | second finger | No allocation fields                  |
-| Spare who skipped first finger               | any tap       | No allocation fields; not allocated   |
+| Person                                        | When          | Ticket                                |
+| --------------------------------------------- | ------------- | ------------------------------------- |
+| Standing operator, FTW passed, on time        | first finger  | Full                                  |
+| Standing operator, FTW not yet in, on time    | first finger  | No allocation fields                  |
+| Standing operator, FTW failed or late upload  | any tap       | No allocation fields; never allocated |
+| Standing operator, unit on a non-FTW unit     | first finger  | Not judged on FTW                     |
+| Standing operator, tapped after 05:25         | any tap       | No allocation fields; not allocated   |
+| Fleet setting not filled when they tap        | any tap       | No allocation fields                  |
+| Spare                                         | first finger  | **No ticket**; tap recorded           |
+| Spare, allocated                              | second finger | Full; time is the **first** tap       |
+| Spare, not allocated                          | second finger | No allocation fields                  |
+| Spare who skipped first finger                | any tap       | No allocation fields; not allocated   |
+| Standing operator whose unit is not allocated | as a spare    | As a spare: waits for second finger   |
+| Employee whose status is not `aktif`          | any tap       | No allocation fields; never allocated |
+
+- **A plan seat reaches paper only if the board is about that unit** (owner,
+  2026-09-15): active, not broken down, and in a formation or crewed as
+  support. Standby units qualify. An operator whose unit does not is a spare
+  for the ticket, as he already is for the board — Alif Zainuddin's slip read
+  DT4084 while DT4084 was broken down and in no formation.
+- **An employee who is not `aktif` gets no allocation fields** from the plan or
+  from a board generated before the status changed. The wall of people owing
+  FTW leaves them out too. Their JENIS OPERATOR label waits on the coming
+  ticket format change.
 
 - **FTW passes only on `FTW aman` and `Dapat Bekerja` together** (≥ 330 minutes
   of sleep, the category savera assigns), uploaded before `ftw-deadline`. This

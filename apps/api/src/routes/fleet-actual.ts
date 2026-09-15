@@ -232,9 +232,9 @@ export async function planSlots(date: string, shift: ShiftKind) {
     .where(
       and(
         eq(schema.units.active, true),
-        // The same two exclusions the board makes: neither needs an operator.
+        // The same exclusion the board makes: a broken unit needs no operator.
+        // Standby units are allocated (owner, 2026-09-15).
         eq(schema.units.breakdown, false),
-        eq(schema.units.standby, false),
         /* And the same scope. Without it the provisional wall showed a
            different set of machines from the board that replaces it ten
            minutes later — every forklift and ambulance among them. */

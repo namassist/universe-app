@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { firstTapOf, issueTicket } from "./ticket-issue";
+import { firstTapOf, issueTicket, roleOf, seatOf } from "./ticket-issue";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Tiket ${uid()}`;
@@ -243,5 +243,138 @@ describe("the first tap of the shift", () => {
 
     expect(await firstTapOf(nik, day, "day")).toBe(`${day} 04:39:00`);
     expect(await firstTapOf(nik, day, "night")).toBe(`${day} 17:05:00`);
+  });
+});
+
+/*
+ * Which plan seat reaches the paper (owner, 2026-09-15).
+ *
+ * The plan remembers a standing operator's unit whatever became of it. Read
+ * alone it printed DT4084 for Alif Zainuddin while DT4084 was broken down and
+ * in no formation, and it would print a unit for an employee the board never
+ * allocates. The slip now asks what the board asks.
+ */
+describe("which plan seat reaches the paper", () => {
+  const fixture = {
+    slots: [] as string[],
+    units: [] as string[],
+    employees: [] as string[],
+  };
+  const day = "2026-01-09";
+
+  afterAll(async () => {
+    if (fixture.slots.length)
+      await db
+        .delete(schema.fleetPlanSlots)
+        .where(inArray(schema.fleetPlanSlots.id, fixture.slots));
+    if (fixture.units.length)
+      await db
+        .delete(schema.units)
+        .where(inArray(schema.units.id, fixture.units));
+    if (fixture.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees));
+  });
+
+  /** A standing operator on one support unit, in whatever state is asked. */
+  const standing = async (opts: {
+    unit?: { breakdown?: boolean; standby?: boolean; active?: boolean };
+    status?: "aktif" | "standby" | "nonaktif";
+  }) => {
+    const [dept] = await db
+      .select({
+        id: schema.departments.id,
+        companyId: schema.departments.companyId,
+      })
+      .from(schema.departments)
+      .limit(1);
+    const [position] = await db
+      .select({ id: schema.positions.id })
+      .from(schema.positions)
+      .limit(1);
+    const personNik = `97${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: personNik,
+        name: `${tag} ${personNik}`,
+        departmentId: dept!.id,
+        companyId: dept!.companyId,
+        positionId: position!.id,
+        status: opts.status ?? "aktif",
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(employee!.id);
+
+    /* The catalogue keys a unit cannot exist without; any row will do. */
+    const [[cls], [type], [model], [brand]] = await Promise.all([
+      db
+        .select({ id: schema.unitClasses.id })
+        .from(schema.unitClasses)
+        .limit(1),
+      db.select({ id: schema.unitTypes.id }).from(schema.unitTypes).limit(1),
+      db.select({ id: schema.unitModels.id }).from(schema.unitModels).limit(1),
+      db.select({ id: schema.unitBrands.id }).from(schema.unitBrands).limit(1),
+    ]);
+    const [unit] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZTK${uid()}`,
+        classId: cls!.id,
+        typeId: type!.id,
+        modelId: model!.id,
+        brandId: brand!.id,
+        /* Crewed as support, so it takes part in allocation without a
+           formation to build around it. */
+        fleetSupport: true,
+        workArea: `${tag} Pit`,
+        breakdown: opts.unit?.breakdown ?? false,
+        standby: opts.unit?.standby ?? false,
+        active: opts.unit?.active ?? true,
+      })
+      .returning({ id: schema.units.id, code: schema.units.code });
+    fixture.units.push(unit!.id);
+
+    const [slot] = await db
+      .insert(schema.fleetPlanSlots)
+      .values({ unitId: unit!.id, employeeId: employee!.id })
+      .returning({ id: schema.fleetPlanSlots.id });
+    fixture.slots.push(slot!.id);
+
+    return { nik: personNik, unit: unit!.code };
+  };
+
+  test("a unit the board is about prints, and its operator is standing", async () => {
+    const op = await standing({});
+    expect(await roleOf(op.nik)).toBe("standing");
+    expect((await seatOf(op.nik, day, "day"))?.seat.unit).toBe(op.unit);
+  });
+
+  test("a unit on standby is still allocated, so it still prints", async () => {
+    const op = await standing({ unit: { standby: true } });
+    expect(await roleOf(op.nik)).toBe("standing");
+    expect((await seatOf(op.nik, day, "day"))?.seat.unit).toBe(op.unit);
+  });
+
+  /* He waits for the second finger like a spare, as the board treats him. */
+  test("a broken-down unit prints nothing, and its operator is a spare", async () => {
+    const op = await standing({ unit: { breakdown: true } });
+    expect(await roleOf(op.nik)).toBe("spare");
+    expect(await seatOf(op.nik, day, "day")).toBeNull();
+  });
+
+  test("an inactive unit prints nothing either", async () => {
+    const op = await standing({ unit: { active: false } });
+    expect(await roleOf(op.nik)).toBe("spare");
+    expect(await seatOf(op.nik, day, "day")).toBeNull();
+  });
+
+  /* The unit is fine; it is the person the board will not allocate. */
+  test("an employee on standby gets no unit from the plan", async () => {
+    const op = await standing({ status: "standby" });
+    expect(await seatOf(op.nik, day, "day")).toBeNull();
   });
 });

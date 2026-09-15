@@ -727,7 +727,7 @@ export const id = {
   flImpFleets: "fleet",
   flImpSupport: "Unit support",
   flImpBreakdown: "Breakdown",
-  flImpStandby: "Standby (digger breakdown)",
+  flImpStandby: "Standby",
   flImpDisband: "Fleet dibubarkan",
   flImpReleased: "Unit keluar dari operasi",
   flImpRemoveT: "Yang akan dihapus file ini",

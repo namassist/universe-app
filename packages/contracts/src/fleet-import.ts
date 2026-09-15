@@ -54,6 +54,18 @@ export const BREAKDOWN_AREA = "BREAKDOWN";
 export const isBreakdownArea = (area: string) =>
   area.replace(/\s+/g, "").toUpperCase() === BREAKDOWN_AREA;
 
+/**
+ * The other status the `area` cell can carry (owner, 2026-09-15).
+ *
+ * Unlike BREAKDOWN, a standby unit is still allocated and keeps its formation
+ * and ride — the word marks it, it does not take it out of the day. Any other
+ * text in the cell is a work area, including the yard's older "STBY TUNGGU
+ * INFO", which the owner did not name as a status.
+ */
+export const STANDBY_AREA = "STANDBY";
+export const isStandbyArea = (area: string) =>
+  area.replace(/\s+/g, "").toUpperCase() === STANDBY_AREA;
+
 /** Which composition fields an update would overwrite. */
 export const FLEET_IMPORT_FIELDS = ["area", "units", "transport"] as const;
 export type FleetImportField = (typeof FLEET_IMPORT_FIELDS)[number];
@@ -106,7 +118,7 @@ export type FleetImportSupportRow = {
 export type FleetImportStandbyRow = {
   row: number;
   unit: string;
-  /** The broken digger this unit would have hauled for. */
+  /** The formation it hauls for; empty for a leader or a support unit. */
   fleet: string;
 };
 

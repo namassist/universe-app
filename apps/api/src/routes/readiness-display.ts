@@ -126,7 +126,15 @@ export async function ftwObliged(niks: string[]): Promise<Set<string>> {
         eq(schema.units.ftw, true)
       )
     )
-    .where(inArray(schema.employees.nik, niks));
+    .where(
+      and(
+        inArray(schema.employees.nik, niks),
+        /* Only `aktif` is allocated, so only `aktif` owes an upload. A standby
+           employee is given no unit and would stand on the wall forever as
+           "Belum upload FTW" for a unit nobody will hand him. */
+        eq(schema.employees.status, "aktif")
+      )
+    );
   return new Set(rows.map((r) => r.nik));
 }
 
