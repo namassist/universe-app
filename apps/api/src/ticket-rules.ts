@@ -9,8 +9,8 @@
  *
  * Two rules carry the rest:
  *
- * 1. **Everyone who taps gets a ticket**, because its title is BUKTI ABSEN
- *    MASUK and attendance is what it proves. The one exception is a spare at
+ * 1. **Everyone who taps gets a ticket**, because attendance is what it
+ *    proves. The one exception is a spare at
  *    the first finger, who is recorded and printed for at the second finger,
  *    once the allocation exists.
  * 2. **Allocation fields are filled only for somebody entitled to the seat.**
@@ -81,7 +81,16 @@ export function ticketFor(input: TicketInput): TicketDecision {
    * a spare, at the second finger, carrying the first tap's time. Until then
    * the tap is recorded and nothing prints.
    */
-  if (input.role === "spare" && input.tappedAt < input.secondFingerAt)
+  /*
+   * Unless his first finger was already late (owner, 2026-09-15). There is no
+   * late tolerance, so the board will not seat him whatever he waits for, and
+   * holding the slip only made him tap twice for the same "SPARE".
+   */
+  if (
+    input.role === "spare" &&
+    input.readiness.finger !== "late" &&
+    input.tappedAt < input.secondFingerAt
+  )
     return { print: false, reason: "spare-waits-for-allocation" };
 
   /*

@@ -26,6 +26,16 @@ export type TicketFields = {
     fleet: string | null;
     area: string | null;
   } | null;
+  /**
+   * What UNIT says when `seat` is null (owner, 2026-09-15).
+   *
+   * `"spare"` for an operator the board could have used — aktif, in a position
+   * that is allocated — whatever kept him off a unit: FTW, a late tap, no
+   * vacancy, no matching SIMPER. His FTW line says which. Absent for everybody
+   * else (a standby employee, a mechanic who tapped), and on slips stored
+   * before the field existed, which then reprint as they were: "-".
+   */
+  withoutUnit?: "spare";
   /** The booth's paired printer, named on the slip as ShiftCorner names it. */
   printerName: string;
   /** `"YYYY-MM-DD HH:MM:SS"` — the first tap of the shift. */
@@ -33,9 +43,8 @@ export type TicketFields = {
   /**
    * How this person came to the muster: holding a unit in the plan, or not.
    *
-   * Printed even for a spare who is given a unit at the second finger. The
-   * line says how he arrived; the UNIT line says where he ended up, and the
-   * two together are what a supervisor needs to read off one slip.
+   * Stored with the slip for the Tiket menu's filter, but no longer printed:
+   * the owner took JENIS OPERATOR off the paper on 2026-09-15.
    */
   role: "standing" | "spare";
   /**
@@ -78,21 +87,45 @@ function wrapAt(sentence: string, indent = ""): string[] {
   return out;
 }
 
-/** TETAP or SPARE, in the words operators use over the radio. */
-const ROLE_WORD: Record<TicketFields["role"], string> = {
-  standing: "TETAP",
-  spare: "SPARE",
-};
+/** The owner's words for no FTW on file (2026-09-15). */
+export const NOT_UPLOADED = "Belum Upload";
+
+/** The width of `"NIK            : "` — where every value starts. */
+const LABEL_WIDTH = 17;
 
 /** `"NIK            : 5062..."` — the column ShiftCorner has always used. */
 const field = (label: string, value: string) => `${label.padEnd(15)}: ${value}`;
+
+/**
+ * A field whose value may not fit, broken at a word and hung under the value.
+ *
+ * Not `wrapAt(field(...))`: that splits on whitespace and would fold the
+ * label's own padding down to one space, so "FTW            :" printed as
+ * "FTW :". Only the value is wrapped; the label is laid down once.
+ */
+function wrapField(label: string, value: string): string[] {
+  const hang = " ".repeat(LABEL_WIDTH);
+  const out: string[] = [];
+  let line = field(label, "");
+  let bare = true;
+  for (const word of value.split(/\s+/).filter(Boolean)) {
+    const candidate = bare ? `${line}${word}` : `${line} ${word}`;
+    if (candidate.length > WIDTH && !bare) {
+      out.push(line);
+      line = `${hang}${word}`;
+    } else line = candidate;
+    bare = false;
+  }
+  out.push(line);
+  return out;
+}
 
 /** Empty reads as "-", never as a blank the eye slides over. */
 const orDash = (value: string | null | undefined) =>
   value && value.trim() ? value.trim() : "-";
 
 /**
- * The ticket as text, in print order.
+ * The ticket as text, in print order (owner's format, 2026-09-15).
  *
  * Centred lines are marked rather than padded: the printer centres them, and
  * padding here would centre them twice on a 58 mm roll.
@@ -101,18 +134,21 @@ export function ticketLines(fields: TicketFields): {
   centred: string[];
   body: string[];
   /**
-   * One line, and the only shape that is one.
+   * In the slip's own column, like every other field, and bold.
    *
-   * The slip's own `LABEL : value` column leaves fifteen characters and the
-   * longest category runs to twenty-three, so the aligned form breaks mid word
-   * on every operator told to rest an hour — forty columns against a roll that
-   * holds thirty-two. A short label outside the column fits all five: "FTW:
-   * Istirahat Minimal 1 Jam" is twenty-eight. Losing the alignment is what
-   * buys the single line.
+   * The longest categories do not fit: "Istirahat Minimal 1 Jam" after the
+   * seventeen-character label is forty columns on a roll of thirty-two. The
+   * continuation is broken at a word and hung under the value, so it reads as
+   * one field rather than as the printer cutting a word in half.
    */
-  ftw: string;
+  ftw: string[];
   /** Named sections, each already wrapped. Empty when nothing is set. */
   notices: { heading: string; lines: string[] }[];
+  /**
+   * The safety messages, centred where the thank-you lines used to be, with no
+   * heading and no bullets. Each is wrapped on its own so two instructions
+   * never run into one line.
+   */
   footer: string[];
 } {
   return {
@@ -122,10 +158,14 @@ export function ticketLines(fields: TicketFields): {
       field("NAMA", orDash(fields.name)),
       field("JABATAN", orDash(fields.position)),
       field("DEPARTEMEN", orDash(fields.department)),
-      /* Above UNIT on purpose: somebody reading a dash there finds the reason
-         for it on the line before. */
-      field("JENIS OPERATOR", ROLE_WORD[fields.role]),
-      field("UNIT", orDash(fields.seat?.unit)),
+      field(
+        "UNIT",
+        fields.seat
+          ? orDash(fields.seat.unit)
+          : fields.withoutUnit === "spare"
+            ? "SPARE"
+            : "-"
+      ),
       field("NO BUS", orDash(fields.seat?.bus)),
       field("FLEET", orDash(fields.seat?.fleet)),
       field("AREA", orDash(fields.seat?.area)),
@@ -133,34 +173,18 @@ export function ticketLines(fields: TicketFields): {
       field("JAM ABSEN", fields.at),
       field("STATUS", "IN"),
     ],
-    ftw: `FTW: ${fields.ftw ?? "Belum mengisi FTW"}`,
-    notices: [
-      ...(fields.hazards.length
-        ? [
-            {
-              heading: "LOKASI BERBAHAYA",
-              /* Joined, not listed: they are place names without detail, and a
-                 dash in front of each would cost a line apiece. */
-              lines: wrapAt(fields.hazards.join(", ")),
-            },
-          ]
-        : []),
-      ...(fields.safety.length
-        ? [
-            {
-              heading: "PESAN SAFETY",
-              /* Listed, not joined: each is an instruction, and running them
-                 together would make one sentence out of three orders. */
-              lines: fields.safety.flatMap((line) => wrapAt(`- ${line}`, "  ")),
-            },
-          ]
-        : []),
-    ],
-    footer: [
-      "Terima kasih sudah disiplin absensi",
-      "Utamakan keselamatan kerja",
-      "Ingat keluarga menunggu di rumah",
-    ],
+    ftw: wrapField("FTW", fields.ftw ?? NOT_UPLOADED),
+    notices: fields.hazards.length
+      ? [
+          {
+            heading: "LOKASI BERBAHAYA",
+            /* Joined, not listed: they are place names without detail, and a
+               dash in front of each would cost a line apiece. */
+            lines: wrapAt(fields.hazards.join(", ")),
+          },
+        ]
+      : [],
+    footer: fields.safety.flatMap((line) => wrapAt(line)),
   };
 }
 
@@ -170,15 +194,11 @@ export function ticketPreview(fields: TicketFields): string {
   return [
     ...centred,
     RULE,
-    "BUKTI ABSEN MASUK",
-    RULE,
     ...body,
-    RULE,
-    ftw,
+    ...ftw,
     ...notices.flatMap((section) => [RULE, section.heading, ...section.lines]),
     RULE,
-    ...footer,
-    RULE,
+    ...(footer.length ? [...footer, RULE] : []),
   ].join("\n");
 }
 
@@ -218,16 +238,11 @@ export function renderTicket(fields: TicketFields): Buffer {
     text(centred[1]!),
     BOLD_OFF,
     text(RULE),
-    BOLD_ON,
-    text("BUKTI ABSEN MASUK"),
-    BOLD_OFF,
-    text(RULE),
     ALIGN_LEFT,
     ...body.map(text),
-    text(RULE),
     /* Bold: it is the line that decides whether he works today. */
     BOLD_ON,
-    text(ftw),
+    ...ftw.map(text),
     BOLD_OFF,
     ...notices.flatMap((section) => [
       text(RULE),
@@ -237,12 +252,7 @@ export function renderTicket(fields: TicketFields): Buffer {
       ...section.lines.map(text),
     ]),
     text(RULE),
-    ALIGN_CENTRE,
-    BOLD_ON,
-    text(footer[0]!),
-    BOLD_OFF,
-    ...footer.slice(1).map(text),
-    text(RULE),
+    ...(footer.length ? [ALIGN_CENTRE, ...footer.map(text), text(RULE)] : []),
     Buffer.from("\r\n", "latin1"),
     FEED,
     CUT,

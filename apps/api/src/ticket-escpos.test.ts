@@ -19,56 +19,64 @@ import {
 } from "./ticket-escpos";
 
 const full: TicketFields = {
-  nik: "506264337",
-  name: "CHAIRUL ANAAM MAULIDIN",
-  position: "OPERATOR",
-  department: "PRODUCTION",
-  seat: { unit: "DT-118", bus: "BUS 07", fleet: "EX-204", area: "PIT 3" },
+  nik: "501241775",
+  name: "Ruben Lottong",
+  position: "Operator OHT",
+  department: "MINING OPERATION",
+  seat: {
+    unit: "DT4027",
+    bus: "RBU26",
+    fleet: "EX4012",
+    area: "PANEL EAST - UTARA BAWAH",
+  },
   printerName: "MESIN 31 KM 31",
-  at: "2026-09-14 05:02:41",
+  at: "2026-09-15 17:12:04",
   role: "standing",
   ftw: "Dapat Bekerja",
-  hazards: ["PIT TEMPUDO", "KASTURI ATAS"],
-  safety: ["Wajib P2H sebelum mengoperasikan unit."],
+  hazards: ["KASTURI BAWAH", "KASTURI ATAS"],
+  safety: ["BAHAYA FATIGUE MENULAR", "SESUAI APLIKASI"],
 };
 
 describe("the slip a person reads", () => {
-  test("carries every field, in ShiftCorner's order", () => {
+  /* The owner's format of 2026-09-15, line for line. */
+  test("carries every field in the owner's order", () => {
     expect(ticketPreview(full)).toBe(
       [
         "PT UNGGUL DINAMIKA UTAMA",
         "SITE PROJECT INDEXIM",
         "--------------------------------",
-        "BUKTI ABSEN MASUK",
-        "--------------------------------",
-        "NIK            : 506264337",
-        "NAMA           : CHAIRUL ANAAM MAULIDIN",
-        "JABATAN        : OPERATOR",
-        "DEPARTEMEN     : PRODUCTION",
-        "JENIS OPERATOR : TETAP",
-        "UNIT           : DT-118",
-        "NO BUS         : BUS 07",
-        "FLEET          : EX-204",
-        "AREA           : PIT 3",
+        "NIK            : 501241775",
+        "NAMA           : Ruben Lottong",
+        "JABATAN        : Operator OHT",
+        "DEPARTEMEN     : MINING OPERATION",
+        "UNIT           : DT4027",
+        "NO BUS         : RBU26",
+        "FLEET          : EX4012",
+        "AREA           : PANEL EAST - UTARA BAWAH",
         "NAMA PRINTER   : MESIN 31 KM 31",
-        "JAM ABSEN      : 2026-09-14 05:02:41",
+        "JAM ABSEN      : 2026-09-15 17:12:04",
         "STATUS         : IN",
-        "--------------------------------",
-        "FTW: Dapat Bekerja",
+        "FTW            : Dapat Bekerja",
         "--------------------------------",
         "LOKASI BERBAHAYA",
-        "PIT TEMPUDO, KASTURI ATAS",
+        "KASTURI BAWAH, KASTURI ATAS",
         "--------------------------------",
-        "PESAN SAFETY",
-        "- Wajib P2H sebelum",
-        "  mengoperasikan unit.",
-        "--------------------------------",
-        "Terima kasih sudah disiplin absensi",
-        "Utamakan keselamatan kerja",
-        "Ingat keluarga menunggu di rumah",
+        "BAHAYA FATIGUE MENULAR",
+        "SESUAI APLIKASI",
         "--------------------------------",
       ].join("\n")
     );
+  });
+
+  /* Taken off the paper by the owner; the slip still stores the kind for the
+     Tiket menu's filter. */
+  test("prints no title, no operator kind and no thank-you lines", () => {
+    const text = ticketPreview({ ...full, role: "spare" });
+    expect(text).not.toContain("BUKTI ABSEN MASUK");
+    expect(text).not.toContain("JENIS OPERATOR");
+    expect(text).not.toContain("SPARE");
+    expect(text).not.toContain("PESAN SAFETY");
+    expect(text).not.toContain("Terima kasih");
   });
 
   /*
@@ -82,64 +90,78 @@ describe("the slip a person reads", () => {
     expect(lines).toContain("FLEET          : -");
     expect(lines).toContain("AREA           : -");
     // Still proof of attendance, with the arrival on it.
-    expect(lines).toContain("JAM ABSEN      : 2026-09-14 05:02:41");
-    expect(lines).toContain("BUKTI ABSEN MASUK");
+    expect(lines).toContain("JAM ABSEN      : 2026-09-15 17:12:04");
+  });
+
+  /* The owner's scenarios of 2026-09-15: an operator without a unit reads
+     SPARE whatever the reason, and his FTW line says which. */
+  test("an operator without a unit reads SPARE, the other three dashes", () => {
+    const lines = ticketPreview({
+      ...full,
+      seat: null,
+      withoutUnit: "spare",
+    }).split("\n");
+    expect(lines).toContain("UNIT           : SPARE");
+    expect(lines).toContain("NO BUS         : -");
+    expect(lines).toContain("FLEET          : -");
+    expect(lines).toContain("AREA           : -");
+  });
+
+  /* A standby employee, a mechanic who tapped, a slip stored before. */
+  test("anybody the board never considers keeps the dash", () => {
+    const lines = ticketPreview({ ...full, seat: null }).split("\n");
+    expect(lines).toContain("UNIT           : -");
+  });
+
+  test("a seat always wins over SPARE", () => {
+    const lines = ticketPreview({ ...full, withoutUnit: "spare" }).split("\n");
+    expect(lines).toContain("UNIT           : DT4027");
   });
 
   test("a unit with no bus or area shows dashes for those alone", () => {
     const lines = ticketPreview({
       ...full,
-      seat: { unit: "DT-118", bus: null, fleet: null, area: null },
+      seat: { unit: "DT4027", bus: null, fleet: null, area: null },
     }).split("\n");
-    expect(lines).toContain("UNIT           : DT-118");
+    expect(lines).toContain("UNIT           : DT4027");
     expect(lines).toContain("NO BUS         : -");
   });
 });
 
 describe("fit to work, on the slip", () => {
-  /* The hours slept were on it for a day and the owner took them off: what
-     gets acted on is the category, and a number beside it invites arguing
-     with the rule at the booth. */
-  test("carries the category and no reading behind it", () => {
+  test("sits in the field column, right under STATUS", () => {
     const lines = ticketPreview(full).split("\n");
-    expect(lines).toContain("FTW: Dapat Bekerja");
-    for (const line of lines) expect(line).not.toMatch(/\d+j \d+m/);
+    const status = lines.indexOf("STATUS         : IN");
+    expect(lines[status + 1]).toBe("FTW            : Dapat Bekerja");
   });
 
-  /* Every category on one line, which is the whole reason the label sits
-     outside the slip's aligned column. The aligned form runs to forty. */
-  test("every category fits the roll on one line", () => {
-    for (const category of [
-      "Dapat Bekerja",
-      "Istirahat Minimal 1 Jam",
-      "Istirahat Minimal 2 Jam",
-      "Tidak Boleh Bekerja",
-    ]) {
-      const line = ticketPreview({ ...full, ftw: category })
-        .split("\n")
-        .find((l) => l.startsWith("FTW: "));
-      expect(line).toBe(`FTW: ${category}`);
-      expect(line!.length).toBeLessThanOrEqual(32);
+  /* The column costs the longest categories a second line. Broken at a word
+     and hung under the value, never cut mid word by the printer. */
+  test("a long category wraps under its value, inside the roll", () => {
+    const cases: Record<string, string[]> = {
+      "Istirahat Minimal 1 Jam": [
+        "FTW            : Istirahat",
+        "                 Minimal 1 Jam",
+      ],
+      "Tidak Boleh Bekerja": [
+        "FTW            : Tidak Boleh",
+        "                 Bekerja",
+      ],
+    };
+    for (const [category, expected] of Object.entries(cases)) {
+      const lines = ticketPreview({ ...full, ftw: category }).split("\n");
+      const at = lines.findIndex((l) => l.startsWith("FTW "));
+      expect(lines.slice(at, at + 2)).toEqual(expected);
+      for (const line of expected) expect(line.length).toBeLessThanOrEqual(32);
     }
   });
 
   test("nothing uploaded says so rather than leaving a blank", () => {
     const lines = ticketPreview({ ...full, ftw: null }).split("\n");
-    expect(lines).toContain("FTW: Belum mengisi FTW");
-  });
-});
-
-describe("how a person came to the muster", () => {
-  test("a spare prints SPARE even holding a unit", () => {
-    /* The allocation at the second finger gives him a unit; it does not turn
-       him into somebody who was on the plan. */
-    const lines = ticketPreview({ ...full, role: "spare" }).split("\n");
-    expect(lines).toContain("JENIS OPERATOR : SPARE");
-    expect(lines).toContain("UNIT           : DT-118");
+    expect(lines).toContain("FTW            : Belum Upload");
   });
 
-  /* Two lines beginning with STATUS would be read as one thing said twice.
-     The fit-to-work line is labelled FTW, so there is only ever one. */
+  /* Two lines beginning with STATUS would be read as one thing said twice. */
   test("does not collide with the tap's own status line", () => {
     const lines = ticketPreview(full).split("\n");
     expect(lines.filter((l) => l.startsWith("STATUS"))).toEqual([
@@ -148,7 +170,7 @@ describe("how a person came to the muster", () => {
   });
 });
 
-describe("the hazards and the safety message", () => {
+describe("the hazards and the safety messages", () => {
   test("locations are joined, wrapped at the roll's width", () => {
     const lines = ticketPreview({
       ...full,
@@ -163,16 +185,19 @@ describe("the hazards and the safety message", () => {
         "FRONT B2",
       ],
     }).split("\n");
-    expect(lines).toContain("LOKASI BERBAHAYA");
     const start = lines.indexOf("LOKASI BERBAHAYA");
-    const listed = lines.slice(start + 1, lines.indexOf("PESAN SAFETY") - 1);
+    expect(start).toBeGreaterThan(-1);
+    const listed = lines.slice(
+      start + 1,
+      lines.indexOf(lines[start - 1]!, start)
+    );
     expect(listed.join(" ")).toContain("PIT TEMPUDO, KASTURI ATAS");
     expect(listed.join(" ")).toContain("FRONT B2");
     for (const line of listed) expect(line.length).toBeLessThanOrEqual(32);
   });
 
   /* Each is an instruction; joined they would read as one long order. */
-  test("safety lines stay separate, with the continuation hanging", () => {
+  test("each safety message wraps on its own, with no bullet", () => {
     const lines = ticketPreview({
       ...full,
       safety: [
@@ -180,24 +205,33 @@ describe("the hazards and the safety message", () => {
         "Lapor P5M di front masing-masing.",
       ],
     }).split("\n");
-    expect(lines).toContain("- Patuhi batas kecepatan 40");
-    expect(lines).toContain("  km/jam di jalan hauling.");
-    expect(lines).toContain("- Lapor P5M di front");
-    expect(lines).toContain("  masing-masing.");
+    expect(lines.slice(-5)).toEqual([
+      "Patuhi batas kecepatan 40 km/jam",
+      "di jalan hauling.",
+      "Lapor P5M di front",
+      "masing-masing.",
+      "--------------------------------",
+    ]);
   });
 
-  /* A heading with nothing under it reads as a printer that lost a line. */
-  test("a section with nothing set does not print its heading", () => {
+  /* A heading or a rule with nothing under it reads as a lost line. */
+  test("a section with nothing set leaves no trace", () => {
     const lines = ticketPreview({ ...full, hazards: [], safety: [] }).split(
       "\n"
     );
     expect(lines).not.toContain("LOKASI BERBAHAYA");
-    expect(lines).not.toContain("PESAN SAFETY");
-    expect(lines).toContain("BUKTI ABSEN MASUK");
+    expect(lines.slice(-2)).toEqual([
+      "FTW            : Dapat Bekerja",
+      "--------------------------------",
+    ]);
   });
 });
 
 describe("the bytes a printer takes", () => {
+  const BOLD_ON = "\x1b\x45\x01";
+  const BOLD_OFF = "\x1b\x45\x00";
+  const CENTRE = "\x1b\x61\x01";
+
   test("opens with a reset and ends with a cut", () => {
     const bytes = renderTicket(full);
     expect([...bytes.subarray(0, 2)]).toEqual([0x1b, 0x40]);
@@ -209,12 +243,17 @@ describe("the bytes a printer takes", () => {
     expect([...bytes.subarray(2, 5)]).toEqual([0x1b, 0x74, 0x02]);
   });
 
-  /* Every line the reader sees survives the encoding. */
-  test("carries the fields as printable text", () => {
-    const printed = renderTicket(full).toString("latin1");
-    expect(printed).toContain("NIK            : 506264337");
-    expect(printed).toContain("UNIT           : DT-118");
-    expect(printed).toContain("BUKTI ABSEN MASUK");
+  /* Bold: it is the line that decides whether he works today. */
+  test("prints the fit-to-work line in bold", () => {
+    expect(renderTicket(full).toString("latin1")).toContain(
+      `${BOLD_ON}FTW            : Dapat Bekerja\r\n${BOLD_OFF}`
+    );
+  });
+
+  test("centres the safety messages", () => {
+    expect(renderTicket(full).toString("latin1")).toContain(
+      `${CENTRE}BAHAYA FATIGUE MENULAR\r\nSESUAI APLIKASI\r\n`
+    );
   });
 
   test("ends every line the way a printer expects", () => {

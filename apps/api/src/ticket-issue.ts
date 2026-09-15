@@ -19,17 +19,34 @@
  * waiting for somebody to press it.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
 import { env } from "./env";
 import { takesPartInAllocation } from "./fleet-scope";
-import { fingerInDeadline, ftwDeadline, judge } from "./readiness";
+import { rosterDayInForce } from "./roster-in-force";
+import {
+  pairingRefusal,
+  personByNik,
+  unitByCode,
+  type AllocPerson,
+} from "./routes/fleet-allocation";
+import { ftwObliged } from "./routes/readiness-display";
+// Circular on paper (scheduler → live-listener → here), harmless for the
+// same reason `allocation.ts` gives: only reached inside a function body.
+import { localDate } from "./scheduler";
+import {
+  fingerInDeadline,
+  ftwDeadline,
+  judge,
+  type Readiness,
+} from "./readiness";
 import { activeNotices } from "./safety-notices";
 import { stageTimeOf } from "./stage-time";
 import { ticketFor, type Seat, type TicketRole } from "./ticket-rules";
 import {
+  NOT_UPLOADED,
   renderTicket,
   ticketPreview,
   type TicketFields,
@@ -53,7 +70,12 @@ export async function seatOf(
   nik: string,
   date: string,
   shift: ShiftKind
-): Promise<{ seat: Seat; requiresFtw: boolean } | null> {
+): Promise<{
+  seat: Seat;
+  requiresFtw: boolean;
+  /** The board has decided; the plan is only what it would decide. */
+  source: "board" | "plan";
+} | null> {
   const [fromBoard] = await db
     .select({
       unit: schema.units.code,
@@ -100,6 +122,7 @@ export async function seatOf(
         area: fromBoard.area,
       },
       requiresFtw: fromBoard.requiresFtw,
+      source: "board",
     };
 
   /* The plan: their standing unit, its transport and area, and the formation
@@ -154,7 +177,133 @@ export async function seatOf(
       area: fromPlan.area ?? null,
     },
     requiresFtw: fromPlan.requiresFtw,
+    source: "plan",
   };
+}
+
+/**
+ * Whether the plan's seat is the one the board will give him.
+ *
+ * Before the board exists the slip prints the standing unit, and it used to
+ * print it on the plan's word alone. The board then asks two more things, and
+ * the slip disagreed with the board whenever either said no (2026-09-15):
+ *
+ * - **Eligibility** — the unit's SIMPER held and in date, the department
+ *   matching. `pairingRefusal` is the board's own sentence for it, so the two
+ *   cannot drift.
+ * - **A partner on the same shift.** Two standing operators on one unit, both
+ *   rostered today, both got the unit on paper; the board gives it to one —
+ *   ready and eligible first, then the earlier tap, then NIK — and this is
+ *   that same order.
+ *
+ * Called only when he has passed for the unit; a refusal prints SPARE.
+ */
+export async function planSeatHolds(input: {
+  nik: string;
+  unitCode: string;
+  requiresFtw: boolean;
+  readiness: Readiness;
+  date: string;
+  shift: ShiftKind;
+  deadline: string;
+  ftwDeadline: string;
+}): Promise<boolean> {
+  const [unit, me] = await Promise.all([
+    unitByCode(input.unitCode),
+    personByNik(input.nik),
+  ]);
+  if (!unit || !me) return false;
+
+  const today = localDate(new Date());
+  const eligible = async (person: AllocPerson) => {
+    const holdsCode = unit.simperCodeId
+      ? (
+          await db
+            .select({ id: schema.employeeSkills.employeeId })
+            .from(schema.employeeSkills)
+            .where(
+              and(
+                eq(schema.employeeSkills.employeeId, person.id),
+                eq(schema.employeeSkills.simperCodeId, unit.simperCodeId)
+              )
+            )
+            .limit(1)
+        ).length > 0
+      : false;
+    return pairingRefusal(unit, person, { holdsCode, today }) === null;
+  };
+  if (!(await eligible(me))) return false;
+
+  const partners = await db
+    .select({ nik: schema.employees.nik })
+    .from(schema.fleetPlanSlots)
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.fleetPlanSlots.employeeId)
+    )
+    .innerJoin(
+      schema.rosterDays,
+      and(
+        eq(schema.rosterDays.employeeId, schema.employees.id),
+        eq(schema.rosterDays.date, input.date),
+        eq(schema.rosterDays.code, input.shift === "day" ? "D" : "N"),
+        rosterDayInForce
+      )
+    )
+    .where(
+      and(
+        eq(schema.fleetPlanSlots.unitId, unit.id),
+        ne(schema.employees.nik, input.nik),
+        eq(schema.employees.status, "aktif")
+      )
+    );
+  if (!partners.length) return true;
+
+  /* Each partner judged the way this tap judged him: his own first tap, his
+     own FTW, against this unit. */
+  const rivals = await Promise.all(
+    partners.map(async ({ nik }) => {
+      const [person, tap, ftw] = await Promise.all([
+        personByNik(nik),
+        firstTapOf(nik, input.date, input.shift),
+        db
+          .select()
+          .from(schema.ftwReadings)
+          .where(
+            and(
+              eq(schema.ftwReadings.nik, nik),
+              eq(schema.ftwReadings.date, input.date)
+            )
+          )
+          .limit(1)
+          .then((rows) => rows[0] ?? null),
+      ]);
+      const readiness = judge({
+        ftw,
+        finger: { firstInAt: tap },
+        requiresFtw: input.requiresFtw,
+        deadline: input.deadline,
+        ftwDeadline: input.ftwDeadline,
+      });
+      return {
+        nik,
+        fit: readiness.passed && !!person && (await eligible(person)),
+        tappedAt: readiness.tappedAt,
+      };
+    })
+  );
+
+  const [winner] = [
+    { nik: input.nik, fit: true, tappedAt: input.readiness.tappedAt },
+    ...rivals,
+  ].sort(
+    (a, b) =>
+      Number(b.fit) - Number(a.fit) ||
+      // Nulls last: somebody who never tapped cannot win on the clock.
+      (a.tappedAt ?? "￿").localeCompare(b.tappedAt ?? "￿") ||
+      a.nik.localeCompare(b.nik)
+  );
+  return winner!.nik === input.nik;
 }
 
 /**
@@ -290,6 +439,8 @@ export async function issueTicket(
       name: schema.employees.name,
       position: schema.positions.name,
       department: schema.departments.name,
+      fleetAllocation: schema.positions.fleetAllocation,
+      status: schema.employees.status,
     })
     .from(schema.employees)
     .leftJoin(
@@ -349,7 +500,24 @@ export async function issueTicket(
   const decision = ticketFor({
     role,
     readiness,
-    seat: held?.seat ?? null,
+    /* A plan seat is checked against what the board will ask; a board seat
+       is already the board's answer. Only worth asking when he passed —
+       otherwise `ticketFor` drops the seat anyway. */
+    seat:
+      held?.source === "plan" &&
+      readiness.passed &&
+      !(await planSeatHolds({
+        nik: tap.nik,
+        unitCode: held.seat.unit,
+        requiresFtw: held.requiresFtw,
+        readiness,
+        date: tap.date,
+        shift: tap.shift,
+        deadline,
+        ftwDeadline: uploadClose,
+      }))
+        ? null
+        : (held?.seat ?? null),
     tappedAt: tap.at.slice(11, 19),
     firstTapAt: firstAt.slice(11, 19),
     secondFingerAt,
@@ -385,7 +553,19 @@ export async function issueTicket(
     /* savera's own category, not the verdict `judge` made of it: the slip
        states what the rule decided about him, and whether that was enough for
        a unit is said by the allocation lines above. */
-    ftw: ftwRow ? (ftwRow.sleepCategory ?? "Belum mengisi FTW") : null,
+    /* No filing reads "Belum Upload" only for somebody who owes one — the
+       fit-to-work wall's own test. Everybody else reads a dash, as the wall
+       leaves them off entirely (2026-09-15). */
+    ftw: ftwRow
+      ? (ftwRow.sleepCategory ?? NOT_UPLOADED)
+      : (await ftwObliged([person.nik])).has(person.nik)
+        ? null
+        : "-",
+    /* An operator the board could have used reads SPARE when he got no unit;
+       anybody the board never considers keeps the dash (owner, 2026-09-15). */
+    ...(person.status === "aktif" && person.fleetAllocation
+      ? { withoutUnit: "spare" as const }
+      : {}),
     hazards: notices.hazards,
     safety: notices.safety,
     seat: decision.seat,

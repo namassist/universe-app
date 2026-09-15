@@ -12,7 +12,7 @@
  * the same morning rather than filing a second opinion about it.
  */
 
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
@@ -216,7 +216,15 @@ export async function planSlots(date: string, shift: ShiftKind) {
         // In the ON clause, not the WHERE: this is a left join, and a
         // condition on its right-hand table moved to the WHERE would quietly
         // turn it into an inner one and drop every unplanned unit.
-        rosterDayInForce
+        rosterDayInForce,
+        /* Only `aktif` is allocated, so a standby employee is not shown on
+           his standing unit either — the board that replaces this line-up
+           would not seat him, and neither would his slip (2026-09-15). */
+        sql`exists (
+          select 1 from ${schema.employees}
+          where ${schema.employees.id} = ${schema.fleetPlanSlots.employeeId}
+            and ${schema.employees.status} = 'aktif'
+        )`
       )
     )
     .leftJoin(schema.fleetUnits, eq(schema.fleetUnits.unitId, schema.units.id))

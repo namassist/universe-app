@@ -24,7 +24,8 @@ import { db, schema } from "./db";
  * being read — eight locations already take four lines of it.
  */
 export const MAX_HAZARDS = 8;
-export const MAX_SAFETY = 3;
+/* Two since 2026-09-15, when the messages moved into the slip's closing lines. */
+export const MAX_SAFETY = 2;
 
 export type SafetyNotices = {
   /** Bare place names, no detail — they are read as a list, not a briefing. */

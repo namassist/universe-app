@@ -100,7 +100,7 @@ describe("issuing", () => {
     expect(result.issued).toBe(true);
     if (!result.issued) return;
     expect(result.status).toBe("dry");
-    expect(result.preview).toContain("BUKTI ABSEN MASUK");
+    expect(result.preview).toContain("PT UNGGUL DINAMIKA UTAMA");
     expect(result.preview).toContain(nik);
     /* The arrival is on the slip whether or not a unit is. */
     expect(result.preview).toContain("JAM ABSEN      : 2026-01-02 05:40:00");
@@ -376,5 +376,379 @@ describe("which plan seat reaches the paper", () => {
   test("an employee on standby gets no unit from the plan", async () => {
     const op = await standing({ status: "standby" });
     expect(await seatOf(op.nik, day, "day")).toBeNull();
+  });
+});
+
+/*
+ * What UNIT says when nobody seated him (owner, 2026-09-15).
+ *
+ * SPARE for an operator the board could have used, whatever kept him off a
+ * unit; a dash for anybody the board never considers. Decided from the
+ * register at the tap, because the slip is printed there.
+ */
+describe("what UNIT says without a seat", () => {
+  const fixture = {
+    niks: [] as string[],
+    employees: [] as string[],
+    positions: [] as string[],
+  };
+  const day = "2026-01-10";
+
+  afterAll(async () => {
+    if (fixture.niks.length)
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, fixture.niks));
+    if (fixture.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees));
+    if (fixture.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, fixture.positions));
+  });
+
+  /** Somebody holding no unit, in an allocated position or not. */
+  const person = async (opts: {
+    fleetAllocation: boolean;
+    status?: "aktif" | "standby" | "nonaktif";
+  }) => {
+    const [dept] = await db
+      .select({
+        id: schema.departments.id,
+        companyId: schema.departments.companyId,
+      })
+      .from(schema.departments)
+      .limit(1);
+    const personNik = `96${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} POS ${personNik}`,
+        departmentId: dept!.id,
+        fleetAllocation: opts.fleetAllocation,
+      })
+      .returning({ id: schema.positions.id });
+    fixture.positions.push(position!.id);
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: personNik,
+        name: `${tag} ${personNik}`,
+        departmentId: dept!.id,
+        companyId: dept!.companyId,
+        positionId: position!.id,
+        status: opts.status ?? "aktif",
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(employee!.id);
+    fixture.niks.push(personNik);
+    return personNik;
+  };
+
+  const unitLine = async (who: string) => {
+    const result = await issueTicket(
+      { ...tapOn(day), nik: who },
+      { printingEnabled: false }
+    );
+    expect(result.issued).toBe(true);
+    if (!result.issued) return null;
+    return result.preview.split("\n").find((l) => l.startsWith("UNIT "));
+  };
+
+  test("an operator with no unit reads SPARE", async () => {
+    const who = await person({ fleetAllocation: true });
+    expect(await unitLine(who)).toBe("UNIT           : SPARE");
+  });
+
+  test("an employee on standby keeps the dash", async () => {
+    const who = await person({ fleetAllocation: true, status: "standby" });
+    expect(await unitLine(who)).toBe("UNIT           : -");
+  });
+
+  test("somebody whose position is never allocated keeps the dash", async () => {
+    const who = await person({ fleetAllocation: false });
+    expect(await unitLine(who)).toBe("UNIT           : -");
+  });
+
+  /* Holds no SIMPER on a unit that asks for FTW, so owes no filing. */
+  test("no FTW on file, owing none, reads a dash", async () => {
+    const who = await person({ fleetAllocation: true });
+    const result = await issueTicket(
+      { ...tapOn("2026-01-11"), nik: who },
+      { printingEnabled: false }
+    );
+    expect(result.issued && result.preview).toContain("FTW            : -\n");
+  });
+});
+
+/*
+ * The slip before the board, held to what the board will ask (2026-09-15).
+ *
+ * A standing operator's first-finger slip printed his plan unit on the plan's
+ * word alone; the board then refused an expired or missing SIMPER, or gave the
+ * unit to a partner on the same shift, and the paper disagreed with the wall.
+ */
+describe("a plan seat on the first-finger slip", () => {
+  const fixture = {
+    niks: [] as string[],
+    slots: [] as string[],
+    skills: [] as string[],
+    units: [] as string[],
+    codes: [] as string[],
+    employees: [] as string[],
+    positions: [] as string[],
+    docs: [] as string[],
+    departments: [] as string[],
+  };
+  const day = "2026-01-12";
+
+  afterAll(async () => {
+    const del = async (ids: string[], run: () => Promise<unknown>) => {
+      if (ids.length) await run();
+    };
+    await del(fixture.niks, () =>
+      db.delete(schema.tickets).where(inArray(schema.tickets.nik, fixture.niks))
+    );
+    await del(fixture.niks, () =>
+      db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.nik, fixture.niks))
+    );
+    await del(fixture.slots, () =>
+      db
+        .delete(schema.fleetPlanSlots)
+        .where(inArray(schema.fleetPlanSlots.id, fixture.slots))
+    );
+    await del(fixture.employees, () =>
+      db
+        .delete(schema.employeeSkills)
+        .where(inArray(schema.employeeSkills.employeeId, fixture.employees))
+    );
+    await del(fixture.employees, () =>
+      db
+        .delete(schema.rosterDays)
+        .where(inArray(schema.rosterDays.employeeId, fixture.employees))
+    );
+    await del(fixture.docs, () =>
+      db
+        .delete(schema.rosterDocuments)
+        .where(inArray(schema.rosterDocuments.id, fixture.docs))
+    );
+    await del(fixture.units, () =>
+      db.delete(schema.units).where(inArray(schema.units.id, fixture.units))
+    );
+    await del(fixture.codes, () =>
+      db
+        .delete(schema.simperCodes)
+        .where(inArray(schema.simperCodes.id, fixture.codes))
+    );
+    await del(fixture.employees, () =>
+      db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees))
+    );
+    await del(fixture.positions, () =>
+      db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, fixture.positions))
+    );
+    await del(fixture.departments, () =>
+      db
+        .delete(schema.departments)
+        .where(inArray(schema.departments.id, fixture.departments))
+    );
+  });
+
+  /*
+   * One department of its own, and one roster document for it.
+   *
+   * A department holds a single active document per month, so a document per
+   * operator was refused from the second one on — and borrowing a real
+   * department would collide with whatever roster the register already holds.
+   */
+  let shared: { id: string; companyId: string; docId: string } | null = null;
+  const deptOf = async () => {
+    if (shared) return shared;
+    const [company] = await db
+      .select({ id: schema.companies.id })
+      .from(schema.companies)
+      .limit(1);
+    const [dept] = await db
+      .insert(schema.departments)
+      .values({ name: `${tag} DEPT`, companyId: company!.id })
+      .returning({ id: schema.departments.id });
+    fixture.departments.push(dept!.id);
+    const [doc] = await db
+      .insert(schema.rosterDocuments)
+      .values({
+        departmentId: dept!.id,
+        month: "2026-01-01",
+        fileName: `${tag}.xlsx`,
+      })
+      .returning({ id: schema.rosterDocuments.id });
+    fixture.docs.push(doc!.id);
+    shared = { id: dept!.id, companyId: company!.id, docId: doc!.id };
+    return shared;
+  };
+
+  /** A support unit, optionally asking for a SIMPER. */
+  const unit = async (simperCodeId: string | null = null) => {
+    const [[cls], [type], [model], [brand]] = await Promise.all([
+      db
+        .select({ id: schema.unitClasses.id })
+        .from(schema.unitClasses)
+        .limit(1),
+      db.select({ id: schema.unitTypes.id }).from(schema.unitTypes).limit(1),
+      db.select({ id: schema.unitModels.id }).from(schema.unitModels).limit(1),
+      db.select({ id: schema.unitBrands.id }).from(schema.unitBrands).limit(1),
+    ]);
+    const [row] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZPS${uid()}`,
+        classId: cls!.id,
+        typeId: type!.id,
+        modelId: model!.id,
+        brandId: brand!.id,
+        fleetSupport: true,
+        workArea: `${tag} Pit`,
+        simperCodeId,
+      })
+      .returning({ id: schema.units.id, code: schema.units.code });
+    fixture.units.push(row!.id);
+    return row!;
+  };
+
+  const simper = async () => {
+    const [row] = await db
+      .insert(schema.simperCodes)
+      .values({ name: `${tag} SIM ${uid()}` })
+      .returning({ id: schema.simperCodes.id });
+    fixture.codes.push(row!.id);
+    return row!.id;
+  };
+
+  /** A standing operator on `unitId`, rostered to this day shift. */
+  const operator = async (
+    unitId: string,
+    opts: { skill?: string; simperExp?: string } = {}
+  ) => {
+    const dept = await deptOf();
+    const personNik = `95${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} OP ${personNik}`,
+        departmentId: dept.id,
+        fleetAllocation: true,
+      })
+      .returning({ id: schema.positions.id });
+    fixture.positions.push(position!.id);
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: personNik,
+        name: `${tag} ${personNik}`,
+        departmentId: dept.id,
+        companyId: dept.companyId,
+        positionId: position!.id,
+        simperExp: opts.simperExp ?? null,
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(employee!.id);
+    fixture.niks.push(personNik);
+    if (opts.skill)
+      await db
+        .insert(schema.employeeSkills)
+        .values({ employeeId: employee!.id, simperCodeId: opts.skill });
+
+    const [slot] = await db
+      .insert(schema.fleetPlanSlots)
+      .values({ unitId, employeeId: employee!.id })
+      .returning({ id: schema.fleetPlanSlots.id });
+    fixture.slots.push(slot!.id);
+
+    await db.insert(schema.rosterDays).values({
+      documentId: dept.docId,
+      employeeId: employee!.id,
+      date: day,
+      code: "D",
+    });
+    return personNik;
+  };
+
+  /** In time for the 05:25 gate, heard by the live session as it is at a booth. */
+  const tapAt = async (who: string, clock: string) => {
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who, at: `${day} ${clock}` });
+    return {
+      ip,
+      nik: who,
+      at: `${day} ${clock}`,
+      date: day,
+      shift: "day" as const,
+    };
+  };
+
+  const unitLine = async (tapped: Awaited<ReturnType<typeof tapAt>>) => {
+    const result = await issueTicket(tapped, { printingEnabled: false });
+    expect(result.issued).toBe(true);
+    return result.issued
+      ? result.preview.split("\n").find((l) => l.startsWith("UNIT "))
+      : null;
+  };
+
+  test("prints the unit when he holds its SIMPER", async () => {
+    const code = await simper();
+    const u = await unit(code);
+    const who = await operator(u.id, { skill: code });
+    expect(await unitLine(await tapAt(who, "05:00:00"))).toBe(
+      `UNIT           : ${u.code}`
+    );
+  });
+
+  test("prints SPARE when he does not hold the unit's SIMPER", async () => {
+    const u = await unit(await simper());
+    const who = await operator(u.id);
+    expect(await unitLine(await tapAt(who, "05:00:00"))).toBe(
+      "UNIT           : SPARE"
+    );
+  });
+
+  test("prints SPARE when his SIMPER has expired", async () => {
+    const code = await simper();
+    const u = await unit(code);
+    const who = await operator(u.id, { skill: code, simperExp: "2000-01-01" });
+    expect(await unitLine(await tapAt(who, "05:00:00"))).toBe(
+      "UNIT           : SPARE"
+    );
+  });
+
+  /* The board's order: both ready and eligible, so the earlier tap wins. */
+  test("of two partners on one shift, only the earlier tap gets the unit", async () => {
+    const u = await unit();
+    const early = await operator(u.id);
+    const late = await operator(u.id);
+    const earlyTap = await tapAt(early, "04:50:00");
+    const lateTap = await tapAt(late, "05:05:00");
+    expect(await unitLine(lateTap)).toBe("UNIT           : SPARE");
+    expect(await unitLine(earlyTap)).toBe(`UNIT           : ${u.code}`);
+  });
+
+  /* A partner who has not tapped cannot win on the clock. */
+  test("a partner who has not tapped yet does not take it", async () => {
+    const u = await unit();
+    const here = await operator(u.id);
+    await operator(u.id);
+    expect(await unitLine(await tapAt(here, "05:00:00"))).toBe(
+      `UNIT           : ${u.code}`
+    );
   });
 });

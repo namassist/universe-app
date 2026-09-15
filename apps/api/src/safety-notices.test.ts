@@ -13,7 +13,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { activeNotices, hazardSentence, MAX_HAZARDS } from "./safety-notices";
+import {
+  activeNotices,
+  hazardSentence,
+  MAX_HAZARDS,
+  MAX_SAFETY,
+} from "./safety-notices";
 
 const tag = `ZZ ${crypto.randomUUID().slice(0, 8)}`;
 const made: string[] = [];
@@ -61,10 +66,12 @@ describe("what reaches the paper", () => {
     );
   });
 
-  test("stops at three safety lines", async () => {
+  /* Two since 2026-09-15, when they became the slip's closing lines. */
+  test("stops at two safety lines", async () => {
     const { safety } = await activeNotices();
-    expect(safety.length).toBeLessThanOrEqual(3);
-    expect(mine(safety, before.safety)).not.toContain(`${tag} pesan empat`);
+    expect(safety.length).toBeLessThanOrEqual(MAX_SAFETY);
+    expect(MAX_SAFETY).toBe(2);
+    expect(mine(safety, before.safety)).not.toContain(`${tag} pesan tiga`);
   });
 
   /* The ticker's own announcements have no business lengthening a roll. */

@@ -163,6 +163,19 @@ describe("a spare", () => {
     expect(out).toMatchObject({ print: true, reason: "attendance-only" });
     expect(out.print && out.at).toBe("05:29:00");
   });
+
+  /* No late tolerance (owner, 2026-09-15): the board will not seat him
+     whatever he waits for, so one tap is enough. */
+  test("whose first finger was late: printed at once, no second tap", () => {
+    const out = ask({
+      role: "spare",
+      readiness: readiness("pass", "late"),
+      seat: null,
+      tappedAt: "05:25:30",
+      firstTapAt: "05:25:30",
+    });
+    expect(out).toMatchObject({ print: true, reason: "attendance-only" });
+  });
 });
 
 describe("the boundary at the second finger", () => {

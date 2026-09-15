@@ -1228,14 +1228,78 @@ fleet, unit, bus, area — are filled only for a person who has a unit
   DT4084 while DT4084 was broken down and in no formation.
 - **An employee who is not `aktif` gets no allocation fields** from the plan or
   from a board generated before the status changed. The wall of people owing
-  FTW leaves them out too. Their JENIS OPERATOR label waits on the coming
-  ticket format change.
+  FTW leaves them out too. The slip carries no operator kind at all since the
+  format change of 2026-09-15.
 
 - **FTW passes only on `FTW aman` and `Dapat Bekerja` together** (≥ 330 minutes
   of sleep, the category savera assigns), uploaded before `ftw-deadline`. This
   is the rule `readiness.ts` already enforces; unchanged.
 - **The attendance time is always the person's first tap of the shift.** That is
   why a spare taps twice.
+
+### What the slip says
+
+The owner's format of 2026-09-15, on a 32-column roll:
+
+```
+PT UNGGUL DINAMIKA UTAMA            (centred, bold)
+SITE PROJECT INDEXIM                (centred, bold)
+--------------------------------
+NIK            : 501241775
+NAMA           : Ruben Lottong
+JABATAN        : Operator OHT
+DEPARTEMEN     : MINING OPERATION
+UNIT           : DT4027
+NO BUS         : RBU26
+FLEET          : EX4012
+AREA           : PANEL EAST - UTARA BAWAH
+NAMA PRINTER   : MESIN 31 KM 31
+JAM ABSEN      : 2026-09-15 17:12:04
+STATUS         : IN
+FTW            : Dapat Bekerja      (bold)
+--------------------------------
+LOKASI BERBAHAYA                    (bold)
+KASTURI BAWAH, KASTURI ATAS
+--------------------------------
+BAHAYA FATIGUE MENULAR              (centred)
+SESUAI APLIKASI                     (centred)
+--------------------------------
+```
+
+- **No title, no operator kind, no thank-you lines.** BUKTI ABSEN MASUK,
+  JENIS OPERATOR and the three closing sentences were removed. The kind is
+  still stored with the slip, for the Tiket menu's filter.
+- **FTW sits in the field column, bold.** A category too long for the roll
+  ("Istirahat Minimal 1 Jam") breaks at a word and hangs under the value.
+  Nothing uploaded reads "Belum Upload".
+- **UNIT reads SPARE for an operator who got no unit** (owner, 2026-09-15),
+  standing or spare, whatever the reason: FTW not yet uploaded, failed or
+  rest, a late upload or tap, no vacancy, no matching SIMPER. The FTW line
+  says which. An operator here is an `aktif` employee in a position that is
+  allocated. Everybody else — a standby employee, a mechanic who tapped —
+  reads `-`, as does a slip stored before the rule. NO BUS, FLEET and AREA
+  stay `-` either way.
+- **There is no late tolerance** (owner, 2026-09-15). A tap after the
+  finger-in deadline or an upload after the FTW deadline is not allocated by
+  the board; an admin places the person by hand.
+- **A spare whose first finger is late prints at once** (2026-09-15). The
+  board will not seat him, so waiting for the second finger only made him tap
+  twice for the same SPARE.
+- **A plan seat on a slip printed before the board asks what the board will
+  ask** (2026-09-15): the unit's SIMPER held and in date, the department
+  matching (`pairingRefusal`), and — when a partner on the same unit is
+  rostered to the same shift — the board's own order: ready and eligible
+  first, then the earlier tap, then NIK. A refusal prints SPARE.
+- **FTW reads `-` for somebody who owes no filing** and has none: the
+  fit-to-work wall's own test (aktif, allocated position, a SIMPER on a unit
+  that asks for FTW). An upload is printed whoever made it. An upload that
+  arrived late still prints its category; the UNIT line says SPARE.
+- **The provisional fleet wall shows `aktif` employees only**, as the board
+  and the slip do.
+- **Safety messages close the slip, centred, at most two**, each wrapped on its
+  own. The wall still shows every active one. Locations stay capped at eight.
+- A section with nothing set prints neither its heading nor its rule.
+- A reprint renders the stored fields in the current format.
 
 ### Filling in a unit later
 

@@ -800,6 +800,23 @@ describe("the provisional line-up, before a board exists", () => {
     // replaces it ten minutes later are about the same machines.
     expect(rows.some((r) => r.unitId === unitA)).toBe(true);
   });
+
+  /* The board would not seat him and his slip reads "-", so the wall that
+     stands in for the board does not show him either (2026-09-15). */
+  test("does not show a standby employee on his standing unit", async () => {
+    await db
+      .update(schema.employees)
+      .set({ status: "standby" })
+      .where(eq(schema.employees.id, opOne));
+    try {
+      expect((await mine("day")).get(unitA)).toBeNull();
+    } finally {
+      await db
+        .update(schema.employees)
+        .set({ status: "aktif" })
+        .where(eq(schema.employees.id, opOne));
+    }
+  });
 });
 
 describe("a screen scoped to its own formations", () => {
