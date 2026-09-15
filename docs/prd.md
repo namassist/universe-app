@@ -1286,6 +1286,13 @@ SESUAI APLIKASI                     (centred)
   mechanic, a standby employee, anybody not `aktif` in an allocated
   position. The full-scenario print test found them held to the second
   finger, waiting for an allocation that is never made for them.
+- **A seat an admin placed by hand always prints** (owner, 2026-09-15),
+  whatever readiness says — even over a failed FTW. A hand placement is how a
+  late person reaches a unit at all; judging it again printed SPARE while the
+  wall showed him on the unit.
+- **A plan seat needs the roster** (2026-09-15). An operator not rostered to
+  the shift prints SPARE before the board as after it, since the board never
+  considers him; and nothing holds his slip for the second finger.
 - **Once the board exists, only the board seats anybody** (2026-09-15).
   Somebody it did not seat prints SPARE, whatever his plan says; the print
   test found a tap heard too late for the board printing a standing unit the

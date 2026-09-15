@@ -222,3 +222,30 @@ describe("somebody the board never considers", () => {
     ).toMatchObject({ print: false });
   });
 });
+
+/* The admin's placement on the board is how a late person reaches a unit at
+   all; judging it again threw it away (owner, 2026-09-15). */
+describe("a seat an admin placed by hand", () => {
+  test("prints for somebody who tapped late", () => {
+    const out = ask({
+      readiness: readiness("pass", "late"),
+      tappedAt: "05:40:00",
+      firstTapAt: "05:40:00",
+      placedByHand: true,
+    });
+    expect(out).toMatchObject({ print: true, reason: "full" });
+  });
+
+  test("prints even over a failed FTW — the admin decided", () => {
+    const out = ask({
+      readiness: readiness("fail", "pass"),
+      placedByHand: true,
+    });
+    expect(out.print && out.seat?.unit).toBe("DT-118");
+  });
+
+  test("the engine's own seat is still judged", () => {
+    const out = ask({ readiness: readiness("fail", "pass") });
+    expect(out.print && out.seat).toBeNull();
+  });
+});

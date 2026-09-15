@@ -56,6 +56,15 @@ export type TicketInput = {
    * employee — waits for nothing, so nothing holds his slip (2026-09-15).
    */
   awaitsAllocation: boolean;
+  /**
+   * The seat is an admin's placement on the board, not the engine's.
+   *
+   * Printed whatever readiness says (owner, 2026-09-15): a hand placement is
+   * how a late person reaches a unit at all, and judging it again here threw
+   * the placement away — the wall showed him on the unit, the slip said SPARE.
+   * The admin's decision stands even over a failed FTW.
+   */
+  placedByHand?: boolean;
 };
 
 export type TicketDecision =
@@ -106,7 +115,7 @@ export function ticketFor(input: TicketInput): TicketDecision {
    * "entitled" would be a second answer to the same question, and the paper
    * would disagree with the board.
    */
-  const seat = input.readiness.passed ? input.seat : null;
+  const seat = input.readiness.passed || input.placedByHand ? input.seat : null;
 
   return {
     print: true,

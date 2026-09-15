@@ -57,6 +57,41 @@ import { printWithRetry, sendToPrinter } from "./ticket-printer";
 const inShift = (clock: string, shift: ShiftKind) =>
   shift === "night" ? clock >= "12:00:00" : clock < "12:00:00";
 
+/** A `where` fragment: the employee row is rostered to this shift, in force. */
+const rosteredTo = (date: string, shift: ShiftKind) =>
+  sql`exists (
+    select 1 from ${schema.rosterDays}
+    where ${schema.rosterDays.employeeId} = ${schema.employees.id}
+      and ${schema.rosterDays.date} = ${date}
+      and ${schema.rosterDays.code} = ${shift === "day" ? "D" : "N"}
+      and ${rosterDayInForce}
+  )`;
+
+/** Whether the board would consider this person for this shift at all. */
+export async function awaitsAllocation(
+  nik: string,
+  date: string,
+  shift: ShiftKind
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.employees.id })
+    .from(schema.employees)
+    .innerJoin(
+      schema.positions,
+      eq(schema.positions.id, schema.employees.positionId)
+    )
+    .where(
+      and(
+        eq(schema.employees.nik, nik),
+        eq(schema.employees.status, "aktif"),
+        eq(schema.positions.fleetAllocation, true),
+        rosteredTo(date, shift)
+      )
+    )
+    .limit(1);
+  return !!row;
+}
+
 /**
  * The seat the paper should name, and whether FTW is asked for it.
  *
@@ -73,8 +108,11 @@ export async function seatOf(
 ): Promise<{
   seat: Seat;
   requiresFtw: boolean;
-  /** The board has decided; the plan is only what it would decide. */
-  source: "board" | "plan";
+  /**
+   * The board has decided; the plan is only what it would decide. `manual`
+   * is a board seat an admin placed by hand.
+   */
+  source: "board" | "manual" | "plan";
 } | null> {
   const [fromBoard] = await db
     .select({
@@ -83,6 +121,7 @@ export async function seatOf(
       area: schema.fleetActualSlots.workArea,
       fleet: schema.fleetActualFleets.leaderCode,
       requiresFtw: schema.units.ftw,
+      slotSource: schema.fleetActualSlots.source,
     })
     .from(schema.fleetActualSlots)
     .innerJoin(
@@ -122,7 +161,7 @@ export async function seatOf(
         area: fromBoard.area,
       },
       requiresFtw: fromBoard.requiresFtw,
-      source: "board",
+      source: fromBoard.slotSource === "manual" ? "manual" : "board",
     };
 
   /*
@@ -183,7 +222,11 @@ export async function seatOf(
       and(
         eq(schema.employees.nik, nik),
         eq(schema.employees.status, "aktif"),
-        seatable()
+        seatable(),
+        /* Rostered to this shift, as the board requires (2026-09-15). An
+           operator off today, or on the other shift, printed his standing unit
+           while the board gave it to a spare. */
+        rosteredTo(date, shift)
       )
     )
     .limit(1);
@@ -564,7 +607,10 @@ export async function issueTicket(
     tappedAt: tap.at.slice(11, 19),
     firstTapAt: firstAt.slice(11, 19),
     secondFingerAt,
-    awaitsAllocation: person.status === "aktif" && !!person.fleetAllocation,
+    /* Not rostered to this shift is somebody the board never considers too:
+       nothing to wait for (2026-09-15). */
+    awaitsAllocation: await awaitsAllocation(tap.nik, tap.date, tap.shift),
+    placedByHand: held?.source === "manual",
   });
   if (!decision.print) return { issued: false, reason: "held-back" };
 
