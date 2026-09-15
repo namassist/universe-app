@@ -78,24 +78,22 @@ fill the gap from the spare pool.
 - `area` doubles as the status marker: BREAKDOWN (either spelling) records the
   unit as broken down. The word is not kept as a location, because it is not
   one, and a broken unit is not put in a formation.
-- **An empty `area` parks a truck behind its broken digger** (owner,
-  2026-09-08). On a row that names a formation, a blank area says the digger
-  that formation is named after is down, so this truck has nowhere to work
-  today and is set **standby**. The file has to prove it — the named leader's
-  own row must read BREAKDOWN — because a blank cell is also exactly what a
-  half-filled file looks like, and refusing to tell the two apart would let a
-  forgotten column park a working machine. A blank area on a row that names no
-  formation stays what it always was: an error.
-- A formation whose digger is down **does not survive the day**. Its trucks
-  leave it, the digger files as a broken machine in no formation, and the
-  formation is disbanded — to be recreated by the next file that seats it.
-  Keeping it would mean a formation with no location and a leader marked
-  broken, and both contradict rules this import already enforces.
-- **Every flag the import can set, it can clear.** A truck parked because its
-  digger was down stops being standby the moment a file seats it in a
-  formation or crews it as support. Allocation skips standby units, so a flag
-  left standing would keep a repaired machine off the board with nothing
-  reporting it — the same failure `breakdown` had until 2026-09-05.
+- **A broken digger's trucks must be moved, not parked** (owner, 2026-09-15,
+  reversing 2026-09-08). When a digger reads BREAKDOWN, the admin seats its
+  trucks in another formation in the same file. A truck row that still names
+  the broken digger is refused — with a blank area ("Fleet EX4001 breakdown —
+  pindahkan DT4027 ke fleet lain") or with one — and the import cannot be
+  committed until it is fixed. The import no longer sets any unit standby. A
+  blank area on a row that names no formation stays what it always was: an
+  error.
+- A formation whose digger is down **does not survive the day**. The digger
+  files as a broken machine in no formation, and the formation is disbanded —
+  to be recreated by the next file that seats it.
+- **Every flag the import can set, it can clear.** Seating a unit in a
+  formation or crewing it as support clears `breakdown` and `standby` alike.
+  Allocation skips both, so a flag left standing would keep a working machine
+  off the board with nothing reporting it — the same failure `breakdown` had
+  until 2026-09-05.
 - Vehicle codes are matched with spaces and dashes removed — the same bus is
   written "UDBU 09", "UDBU09" and "UD-BU09" by three different people, and
   master holds `UD-BU09`. A genuinely unknown vehicle is still refused, by name

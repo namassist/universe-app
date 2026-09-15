@@ -7,11 +7,10 @@
  * means "leads a formation" when some other row named it, and blank-and-unnamed
  * means a support unit that is crewed without belonging to one.
  *
- * An empty `area` is the one exception to "every unit says where it works",
- * and it is only readable on a row that names a formation: it means the digger
- * that formation is named after is down, so this truck stands by. The file has
- * to prove that — the leader's own row must read BREAKDOWN — and the formation
- * dissolves for the day rather than surviving with no location.
+ * Every unit says where it works. A digger reading BREAKDOWN takes no
+ * formation, and its trucks must be seated in another one in the same file —
+ * a truck still naming the broken digger is refused, not parked (owner,
+ * 2026-09-15).
  *
  * This module parses and checks what a file can prove about itself: the
  * columns, the codes it names, and its own internal consistency — a unit listed
@@ -466,7 +465,7 @@ export async function validateFleetWorkbook(
           leader.n,
           leader.unit,
           members.map((m) => m.unit).join(", "),
-          `Fleet ${leader.unit} breakdown, tapi anggotanya masih mengisi area — kosongkan areanya agar unit ini standby`
+          `Fleet ${leader.unit} breakdown — pindahkan anggotanya ke fleet lain`
         )
       );
       continue;
@@ -567,14 +566,16 @@ export async function validateFleetWorkbook(
     });
   }
 
-  /* ---- pass 5: the units standing by behind a broken digger -------------- */
+  /* ---- pass 5: trucks left behind a broken digger ----------------------- */
 
   /*
-   * Each of these claimed a blank area, which is only a sentence when the
-   * digger it names is down. The file has to say so itself: taking the word
-   * of the database instead would let a file that simply forgot a column
-   * park a working truck for the day, and a forgotten column is the far more
-   * common accident.
+   * A blank area naming a formation used to park the truck as standby when
+   * its digger was down. The owner reversed that on 2026-09-15: a digger going
+   * down is the admin's cue to seat its trucks in another formation *in this
+   * file*, so a truck still naming the broken digger is a file nobody
+   * finished, and it is refused rather than quietly taken off the board.
+   *
+   * Nothing on this path parks a unit any more, so `standby` stays empty.
    */
   const standby: ParsedStandbyUnit[] = [];
   for (const row of resolved) {
@@ -602,10 +603,14 @@ export async function validateFleetWorkbook(
       );
       continue;
     }
-    standby.push({
-      preview: { row: row.n, unit: row.unit, fleet: leader.unit },
-      unitId: row.unitRow.id,
-    });
+    errors.push(
+      danger(
+        row.n,
+        row.unit,
+        leader.unit,
+        `Fleet ${leader.unit} breakdown — pindahkan ${row.unit} ke fleet lain`
+      )
+    );
   }
 
   /* ---- pass 6: the support units ---------------------------------------- */
