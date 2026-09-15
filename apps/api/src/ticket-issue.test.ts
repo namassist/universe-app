@@ -518,6 +518,11 @@ describe("a plan seat on the first-finger slip", () => {
         .delete(schema.deviceLiveEvents)
         .where(inArray(schema.deviceLiveEvents.nik, fixture.niks))
     );
+    await del(fixture.niks, () =>
+      db
+        .delete(schema.ftwReadings)
+        .where(inArray(schema.ftwReadings.nik, fixture.niks))
+    );
     await del(fixture.slots, () =>
       db
         .delete(schema.fleetPlanSlots)
@@ -595,8 +600,8 @@ describe("a plan seat on the first-finger slip", () => {
     return shared;
   };
 
-  /** A support unit, optionally asking for a SIMPER. */
-  const unit = async (simperCodeId: string | null = null) => {
+  /** A support unit, optionally asking for a SIMPER and for FTW. */
+  const unit = async (simperCodeId: string | null = null, ftw = false) => {
     const [[cls], [type], [model], [brand]] = await Promise.all([
       db
         .select({ id: schema.unitClasses.id })
@@ -617,6 +622,7 @@ describe("a plan seat on the first-finger slip", () => {
         fleetSupport: true,
         workArea: `${tag} Pit`,
         simperCodeId,
+        ftw,
       })
       .returning({ id: schema.units.id, code: schema.units.code });
     fixture.units.push(row!.id);
@@ -749,6 +755,40 @@ describe("a plan seat on the first-finger slip", () => {
     await operator(u.id);
     expect(await unitLine(await tapAt(here, "05:00:00"))).toBe(
       `UNIT           : ${u.code}`
+    );
+  });
+
+  /*
+   * The owner's case (2026-09-15). B taps first with no FTW and is handed
+   * SPARE; A taps ready and is handed the unit; B's FTW arrives and he taps
+   * again. His tap is still the earlier one, but the unit is in A's hand.
+   */
+  test("a partner ready only later does not take a unit already handed out", async () => {
+    const u = await unit(null, true);
+    const a = await operator(u.id);
+    const b = await operator(u.id);
+    const fit = (who: string) =>
+      db.insert(schema.ftwReadings).values({
+        nik: who,
+        date: day,
+        name: tag,
+        sleepMinutes: 400,
+        sleepCategory: "Dapat Bekerja",
+        ftwDecision: "FTW aman",
+      });
+
+    expect(await unitLine(await tapAt(b, "04:50:00"))).toBe(
+      "UNIT           : SPARE"
+    );
+
+    await fit(a);
+    expect(await unitLine(await tapAt(a, "05:00:00"))).toBe(
+      `UNIT           : ${u.code}`
+    );
+
+    await fit(b);
+    expect(await unitLine(await tapAt(b, "05:10:00"))).toBe(
+      "UNIT           : SPARE"
     );
   });
 });

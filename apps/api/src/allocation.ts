@@ -22,7 +22,7 @@
  * by the ingest stages; nothing here opens a socket to an external source.
  */
 
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { ShiftKind } from "@universe/contracts";
 
@@ -207,6 +207,26 @@ async function skillsByEmployee(
   return map;
 }
 
+/**
+ * `"nik|unit"` for every slip of this shift that named a unit.
+ *
+ * Failed prints count: the row is the claim, and the paper can be printed
+ * again from the Tiket menu.
+ */
+export async function ticketedSeats(
+  date: string,
+  shift: ShiftKind
+): Promise<Set<string>> {
+  const rows = await db
+    .select({
+      nik: schema.tickets.nik,
+      unit: sql<string | null>`${schema.tickets.fields}->'seat'->>'unit'`,
+    })
+    .from(schema.tickets)
+    .where(and(eq(schema.tickets.date, date), eq(schema.tickets.shift, shift)));
+  return new Set(rows.filter((r) => r.unit).map((r) => `${r.nik}|${r.unit}`));
+}
+
 /* -------------------------------------------------------------- the board */
 
 /** The unit a formation is named by, and the vehicle a unit's crew rides. */
@@ -343,6 +363,7 @@ export async function buildBoard(
 
   const pool = await candidates(date, shift, deadline, ftwDeadlineAt);
   const skills = await skillsByEmployee([...pool.keys()]);
+  const ticketed = await ticketedSeats(date, shift);
   const today = localDate(new Date());
 
   // Deliberately not cast: `AllocUnit` is what `unitByCode` returns, and
@@ -448,12 +469,24 @@ export async function buildBoard(
       c.readiness.tappedAt ?? "\uffff";
     const fit = (c: Candidate) =>
       Number(readyFor(first.requiresFtw, c).passed && eligible(unit, c));
+    /*
+     * Already handed this unit on paper (owner, 2026-09-15).
+     *
+     * Before the board exists, a partner's first-finger slip names the unit
+     * if he was ready when he tapped. A partner who tapped earlier but was
+     * ready only later — his FTW arrived after — used to outrank him here on
+     * the clock, and the man holding a slip for the unit found it given away.
+     * The slip already in somebody's hand wins among the ready.
+     */
+    const held = (c: Candidate) =>
+      Number(ticketed.has(`${c.person.nik}|${first.unitCode}`));
     const holder = rows
       .map((r) => (r.employeeId ? pool.get(r.employeeId) : undefined))
       .filter((c): c is Candidate => c !== undefined)
       .sort(
         (a, b) =>
           fit(b) - fit(a) ||
+          held(b) - held(a) ||
           tap(a).localeCompare(tap(b)) ||
           a.person.nik.localeCompare(b.person.nik)
       )[0];

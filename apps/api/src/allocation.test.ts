@@ -1353,3 +1353,70 @@ describe("storing it", () => {
     );
   });
 });
+
+/*
+ * Two standing partners, and the slip one of them already holds (2026-09-15).
+ *
+ * The earlier tap no longer wins on its own: a partner whose first-finger
+ * slip named the unit keeps it against one who tapped first but was ready
+ * only later.
+ */
+describe("a partner already holding a slip for the unit", () => {
+  const ticketNiks: string[] = [];
+
+  afterAll(async () => {
+    if (ticketNiks.length)
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, ticketNiks));
+  });
+
+  test("keeps the unit against an earlier tap", async () => {
+    const date = nextDate();
+    const earlyNik = newNik();
+    const slipNik = newNik();
+    const early = await addEmployee({ nik: earlyNik });
+    const slip = await addEmployee({ nik: slipNik });
+    const code = `${tag}-TK1`;
+    const unit = await addUnit({ code });
+    await roster(date, early, "D");
+    await roster(date, slip, "D");
+    await plan(unit, early);
+    await plan(unit, slip);
+    await tapAt(date, earlyNik, "05:01:00");
+    await tapAt(date, slipNik, "05:05:00");
+
+    await db.insert(schema.tickets).values({
+      nik: slipNik,
+      date,
+      shift: "day",
+      ip: liveIp,
+      status: "printed",
+      contentHash: uid(),
+      preview: "x",
+      fields: { at: `${date} 05:05:00`, seat: { unit: code } },
+    });
+    ticketNiks.push(slipNik);
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(slip);
+  });
+
+  test("without a slip, the earlier tap still wins", async () => {
+    const date = nextDate();
+    const earlyNik = newNik();
+    const lateNik = newNik();
+    const early = await addEmployee({ nik: earlyNik });
+    const late = await addEmployee({ nik: lateNik });
+    const unit = await addUnit({ code: `${tag}-TK2` });
+    await roster(date, early, "D");
+    await roster(date, late, "D");
+    await plan(unit, early);
+    await plan(unit, late);
+    await tapAt(date, earlyNik, "05:01:00");
+    await tapAt(date, lateNik, "05:05:00");
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(early);
+  });
+});

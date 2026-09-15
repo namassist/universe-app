@@ -1289,7 +1289,11 @@ SESUAI APLIKASI                     (centred)
   ask** (2026-09-15): the unit's SIMPER held and in date, the department
   matching (`pairingRefusal`), and — when a partner on the same unit is
   rostered to the same shift — the board's own order: ready and eligible
-  first, then the earlier tap, then NIK. A refusal prints SPARE.
+  first, then **whoever already holds a slip naming the unit**, then the
+  earlier tap, then NIK. A refusal prints SPARE. The slip rule is the owner's
+  (2026-09-15): a partner who tapped first but was ready only later (his FTW
+  arrived after) does not take a unit already handed to the other on paper,
+  on the slip or on the board. A failed print counts as handed.
 - **FTW reads `-` for somebody who owes no filing** and has none: the
   fit-to-work wall's own test (aktif, allocated position, a SIMPER on a unit
   that asks for FTW). An upload is printed whoever made it. An upload that

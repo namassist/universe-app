@@ -19,7 +19,7 @@
  * waiting for somebody to press it.
  */
 
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "./db";
@@ -193,8 +193,8 @@ export async function seatOf(
  *   cannot drift.
  * - **A partner on the same shift.** Two standing operators on one unit, both
  *   rostered today, both got the unit on paper; the board gives it to one —
- *   ready and eligible first, then the earlier tap, then NIK — and this is
- *   that same order.
+ *   ready and eligible first, then whoever already holds a slip for it, then
+ *   the earlier tap, then NIK — and this is that same order.
  *
  * Called only when he has passed for the unit; a refusal prints SPARE.
  */
@@ -258,6 +258,29 @@ export async function planSeatHolds(input: {
       )
     );
   if (!partners.length) return true;
+
+  /*
+   * The slip already in somebody's hand decides first (owner, 2026-09-15).
+   *
+   * A partner who tapped earlier but was ready only later — his FTW arrived
+   * after — used to take the unit on his second tap, and the man already
+   * holding a slip for it was left with paper that named a unit given away.
+   * Whoever was handed the unit first keeps it; the board orders the same
+   * way (`allocation.ts`). A failed print counts: the row is the claim.
+   */
+  const slips = await db
+    .select({ nik: schema.tickets.nik })
+    .from(schema.tickets)
+    .where(
+      and(
+        eq(schema.tickets.date, input.date),
+        eq(schema.tickets.shift, input.shift),
+        inArray(schema.tickets.nik, [input.nik, ...partners.map((p) => p.nik)]),
+        sql`${schema.tickets.fields}->'seat'->>'unit' = ${unit.code}`
+      )
+    );
+  if (slips.some((s) => s.nik === input.nik)) return true;
+  if (slips.length) return false;
 
   /* Each partner judged the way this tap judged him: his own first tap, his
      own FTW, against this unit. */
