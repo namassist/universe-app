@@ -50,6 +50,12 @@ export type TicketInput = {
   firstTapAt: string;
   /** When the second finger opens, `"HH:MM:SS"`, from the timeline. */
   secondFingerAt: string;
+  /**
+   * Whether the board could seat this person at all: `aktif`, in a position
+   * that is allocated. Somebody it never considers — a mechanic, a standby
+   * employee — waits for nothing, so nothing holds his slip (2026-09-15).
+   */
+  awaitsAllocation: boolean;
 };
 
 export type TicketDecision =
@@ -88,6 +94,7 @@ export function ticketFor(input: TicketInput): TicketDecision {
    */
   if (
     input.role === "spare" &&
+    input.awaitsAllocation &&
     input.readiness.finger !== "late" &&
     input.tappedAt < input.secondFingerAt
   )

@@ -125,6 +125,26 @@ export async function seatOf(
       source: "board",
     };
 
+  /*
+   * Once the board exists, it is the only answer (2026-09-15).
+   *
+   * Somebody it did not seat has no seat, whatever the plan says. Falling
+   * back to the plan printed his standing unit after the board had given it
+   * to a spare — a tap heard too late for the board, or a hand edit moving
+   * him off it — and two people walked out holding the same unit.
+   */
+  const [board] = await db
+    .select({ id: schema.fleetActualDocuments.id })
+    .from(schema.fleetActualDocuments)
+    .where(
+      and(
+        eq(schema.fleetActualDocuments.date, date),
+        eq(schema.fleetActualDocuments.shift, shift)
+      )
+    )
+    .limit(1);
+  if (board) return null;
+
   /* The plan: their standing unit, its transport and area, and the formation
      it belongs to, named by its leader unit the way the board names one. */
   const leader = db
@@ -544,6 +564,7 @@ export async function issueTicket(
     tappedAt: tap.at.slice(11, 19),
     firstTapAt: firstAt.slice(11, 19),
     secondFingerAt,
+    awaitsAllocation: person.status === "aktif" && !!person.fleetAllocation,
   });
   if (!decision.print) return { issued: false, reason: "held-back" };
 

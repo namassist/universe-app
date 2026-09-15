@@ -792,3 +792,164 @@ describe("a plan seat on the first-finger slip", () => {
     );
   });
 });
+
+/*
+ * Two gaps the full-scenario print test found (2026-09-15).
+ *
+ * A mechanic and a standby employee waited until the second finger for a
+ * slip; and once the board existed, an operator it had not seated — his tap
+ * heard too late — got his standing unit on paper while the board had given
+ * it to a spare who already held a slip for it.
+ */
+describe("what the print test found", () => {
+  const fixture = {
+    niks: [] as string[],
+    slots: [] as string[],
+    units: [] as string[],
+    employees: [] as string[],
+    positions: [] as string[],
+    docs: [] as string[],
+  };
+  const day = "2026-01-14";
+
+  afterAll(async () => {
+    if (fixture.niks.length) {
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, fixture.niks));
+      await db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.nik, fixture.niks));
+    }
+    if (fixture.docs.length)
+      await db
+        .delete(schema.fleetActualDocuments)
+        .where(inArray(schema.fleetActualDocuments.id, fixture.docs));
+    if (fixture.slots.length)
+      await db
+        .delete(schema.fleetPlanSlots)
+        .where(inArray(schema.fleetPlanSlots.id, fixture.slots));
+    if (fixture.units.length)
+      await db
+        .delete(schema.units)
+        .where(inArray(schema.units.id, fixture.units));
+    if (fixture.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees));
+    if (fixture.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, fixture.positions));
+  });
+
+  const someone = async (opts: {
+    fleetAllocation: boolean;
+    status?: "aktif" | "standby";
+  }) => {
+    const [dept] = await db
+      .select({
+        id: schema.departments.id,
+        companyId: schema.departments.companyId,
+      })
+      .from(schema.departments)
+      .limit(1);
+    const who = `94${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} FOUND ${who}`,
+        departmentId: dept!.id,
+        fleetAllocation: opts.fleetAllocation,
+      })
+      .returning({ id: schema.positions.id });
+    fixture.positions.push(position!.id);
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: who,
+        name: `${tag} ${who}`,
+        departmentId: dept!.id,
+        companyId: dept!.companyId,
+        positionId: position!.id,
+        status: opts.status ?? "aktif",
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(employee!.id);
+    fixture.niks.push(who);
+    return { nik: who, id: employee!.id };
+  };
+
+  const tapAt = async (who: string, clock: string) => {
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who, at: `${day} ${clock}` });
+    return issueTicket(
+      { ip, nik: who, at: `${day} ${clock}`, date: day, shift: "day" },
+      { printingEnabled: false }
+    );
+  };
+
+  const unitOf = (result: Awaited<ReturnType<typeof issueTicket>>) =>
+    result.issued
+      ? result.preview.split("\n").find((l) => l.startsWith("UNIT "))
+      : null;
+
+  test("a mechanic gets his slip at the first finger", async () => {
+    const mechanic = await someone({ fleetAllocation: false });
+    const result = await tapAt(mechanic.nik, "05:00:00");
+    expect(result.issued).toBe(true);
+    expect(unitOf(result)).toBe("UNIT           : -");
+  });
+
+  test("a standby employee gets his slip at the first finger", async () => {
+    const standby = await someone({ fleetAllocation: true, status: "standby" });
+    const result = await tapAt(standby.nik, "05:00:00");
+    expect(result.issued).toBe(true);
+    expect(unitOf(result)).toBe("UNIT           : -");
+  });
+
+  test("once the board exists, a plan unit it did not give him prints SPARE", async () => {
+    const [[cls], [type], [model], [brand]] = await Promise.all([
+      db
+        .select({ id: schema.unitClasses.id })
+        .from(schema.unitClasses)
+        .limit(1),
+      db.select({ id: schema.unitTypes.id }).from(schema.unitTypes).limit(1),
+      db.select({ id: schema.unitModels.id }).from(schema.unitModels).limit(1),
+      db.select({ id: schema.unitBrands.id }).from(schema.unitBrands).limit(1),
+    ]);
+    const [unit] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZFD${uid()}`,
+        classId: cls!.id,
+        typeId: type!.id,
+        modelId: model!.id,
+        brandId: brand!.id,
+        fleetSupport: true,
+        workArea: `${tag} Pit`,
+      })
+      .returning({ id: schema.units.id, code: schema.units.code });
+    fixture.units.push(unit!.id);
+    const operator = await someone({ fleetAllocation: true });
+    const [slot] = await db
+      .insert(schema.fleetPlanSlots)
+      .values({ unitId: unit!.id, employeeId: operator.id })
+      .returning({ id: schema.fleetPlanSlots.id });
+    fixture.slots.push(slot!.id);
+
+    /* A board for the shift that does not seat him. */
+    const [doc] = await db
+      .insert(schema.fleetActualDocuments)
+      .values({ date: day, shift: "day" })
+      .returning({ id: schema.fleetActualDocuments.id });
+    fixture.docs.push(doc!.id);
+
+    expect(unitOf(await tapAt(operator.nik, "05:00:00"))).toBe(
+      "UNIT           : SPARE"
+    );
+  });
+});

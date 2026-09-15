@@ -40,6 +40,7 @@ const ask = (over: Partial<TicketInput>): ReturnType<typeof ticketFor> =>
     tappedAt: "04:35:00",
     firstTapAt: "04:35:00",
     secondFingerAt: SECOND_FINGER,
+    awaitsAllocation: true,
     ...over,
   });
 
@@ -190,6 +191,34 @@ describe("the boundary at the second finger", () => {
   test("a second before it does not", () => {
     expect(
       ask({ role: "spare", tappedAt: "05:27:59", firstTapAt: "04:50:00" })
+    ).toMatchObject({ print: false });
+  });
+});
+
+/* The full-scenario print test of 2026-09-15: a mechanic and a standby
+   employee tapped at 05:00 and got nothing until 05:28, waiting for an
+   allocation the board never makes for them. */
+describe("somebody the board never considers", () => {
+  test("gets his slip at the first finger", () => {
+    expect(
+      ask({
+        role: "spare",
+        seat: null,
+        tappedAt: "05:00:00",
+        firstTapAt: "05:00:00",
+        awaitsAllocation: false,
+      })
+    ).toMatchObject({ print: true, reason: "attendance-only" });
+  });
+
+  test("an operator without a unit still waits", () => {
+    expect(
+      ask({
+        role: "spare",
+        seat: null,
+        tappedAt: "05:00:00",
+        firstTapAt: "05:00:00",
+      })
     ).toMatchObject({ print: false });
   });
 });

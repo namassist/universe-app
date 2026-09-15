@@ -1282,6 +1282,15 @@ SESUAI APLIKASI                     (centred)
 - **There is no late tolerance** (owner, 2026-09-15). A tap after the
   finger-in deadline or an upload after the FTW deadline is not allocated by
   the board; an admin places the person by hand.
+- **Somebody the board never considers prints at once** (2026-09-15) — a
+  mechanic, a standby employee, anybody not `aktif` in an allocated
+  position. The full-scenario print test found them held to the second
+  finger, waiting for an allocation that is never made for them.
+- **Once the board exists, only the board seats anybody** (2026-09-15).
+  Somebody it did not seat prints SPARE, whatever his plan says; the print
+  test found a tap heard too late for the board printing a standing unit the
+  board had already given to a spare holding a slip for it. An admin places
+  him by hand.
 - **A spare whose first finger is late prints at once** (2026-09-15). The
   board will not seat him, so waiting for the second finger only made him tap
   twice for the same SPARE.
