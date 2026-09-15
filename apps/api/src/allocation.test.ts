@@ -1420,3 +1420,49 @@ describe("a partner already holding a slip for the unit", () => {
     expect(slot?.employeeId).toBe(early);
   });
 });
+
+/*
+ * A board regenerated after the second finger (2026-09-15). The spare already
+ * holding a slip for a vacancy keeps it, instead of the tap order handing it
+ * to somebody else while his paper still names it.
+ */
+describe("a spare already holding a slip for a vacancy", () => {
+  const ticketNiks: string[] = [];
+
+  afterAll(async () => {
+    if (ticketNiks.length)
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, ticketNiks));
+  });
+
+  test("keeps it against a spare who tapped earlier", async () => {
+    const date = nextDate();
+    const earlyNik = newNik();
+    const slipNik = newNik();
+    const early = await addEmployee({ nik: earlyNik });
+    const slip = await addEmployee({ nik: slipNik });
+    const code = `${tag}-SS1`;
+    const unit = await addUnit({ code });
+    await roster(date, early, "D");
+    await roster(date, slip, "D");
+    await tapAt(date, earlyNik, "05:01:00");
+    await tapAt(date, slipNik, "05:05:00");
+
+    await db.insert(schema.tickets).values({
+      nik: slipNik,
+      date,
+      shift: "day",
+      ip: liveIp,
+      status: "printed",
+      contentHash: uid(),
+      preview: "x",
+      fields: { at: `${date} 05:05:00`, seat: { unit: code } },
+    });
+    ticketNiks.push(slipNik);
+
+    const slot = (await mine(date)).find((s) => s.unitId === unit);
+    expect(slot?.employeeId).toBe(slip);
+    expect(slot?.source).toBe("spare");
+  });
+});

@@ -202,3 +202,30 @@ export async function deriveDate(date: string): Promise<number> {
     });
   return rows.length;
 }
+
+/**
+ * Rebuild one date's readings shortly, however many taps arrive meanwhile.
+ *
+ * The walls and the board read `finger_readings`, which only the pull used to
+ * rebuild — so a tap heard live waited up to half a minute to show, and a
+ * morning with the pull down never showed at all (2026-09-15). The live
+ * session calls this on every tap; the delay folds a queue at a booth into
+ * one rebuild rather than one per finger.
+ *
+ * The date is removed from the queue *before* the rebuild runs, so a tap that
+ * lands during it schedules another instead of being lost to one that had
+ * already read the taps.
+ */
+const pendingDerive = new Map<string, Promise<number>>();
+
+export function deriveSoon(date: string, delayMs = 2_000): Promise<number> {
+  const queued = pendingDerive.get(date);
+  if (queued) return queued;
+  const run = (async () => {
+    await Bun.sleep(delayMs);
+    pendingDerive.delete(date);
+    return deriveDate(date);
+  })();
+  pendingDerive.set(date, run);
+  return run;
+}

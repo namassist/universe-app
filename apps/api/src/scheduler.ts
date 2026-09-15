@@ -222,6 +222,11 @@ const allocate: Hook = async (dispatch) => {
    * whose silence is hardest to notice.
    */
   try {
+    /* The readings rebuilt from every tap first (2026-09-15). They were only
+       rebuilt when a pull stored something new, so a tap heard live seconds
+       before the gate — or a whole morning with the pull down — was on the
+       slip and missing from the board. */
+    await deriveDate(dispatch.date);
     const board = await buildBoard(dispatch.date, shift, deadline, uploadClose);
     await storeBoard(board);
     const crewed = board.slots.filter((s) => s.employeeId).length;

@@ -623,6 +623,35 @@ export async function buildBoard(
     );
   });
 
+  const sit = (slot: BoardSlot, spare: Candidate, requiresFtw: boolean) => {
+    taken.add(spare.person.id);
+    slot.employeeId = spare.person.id;
+    slot.source = "spare";
+    slot.tappedAt = spare.readiness.tappedAt;
+    slot.readiness = readyFor(requiresFtw, spare);
+  };
+
+  /*
+   * First, the spares already holding a slip for a vacancy keep it
+   * (2026-09-15). A board regenerated after the second finger used to refill
+   * from the tap order again, and could hand a unit to a second spare while
+   * the first walked around with paper naming it. Still subject to being
+   * ready and eligible — a slip does not waive the rules that seated him.
+   */
+  for (const slot of vacancies) {
+    if (slot.employeeId) continue;
+    const row = byUnit.get(slot.unitId)![0]!;
+    const unit = unitOf(row);
+    const holder = spares.find(
+      (c) =>
+        !taken.has(c.person.id) &&
+        ticketed.has(`${c.person.nik}|${slot.unitCode}`) &&
+        readyFor(row.requiresFtw, c).passed &&
+        eligible(unit, c)
+    );
+    if (holder) sit(slot, holder, row.requiresFtw);
+  }
+
   for (const slot of vacancies) {
     if (slot.employeeId) continue;
     const row = byUnit.get(slot.unitId)![0]!;
@@ -632,12 +661,7 @@ export async function buildBoard(
       if (!readyFor(row.requiresFtw, c).passed) return false;
       return eligible(unit, c);
     });
-    if (!spare) continue;
-    taken.add(spare.person.id);
-    slot.employeeId = spare.person.id;
-    slot.source = "spare";
-    slot.tappedAt = spare.readiness.tappedAt;
-    slot.readiness = readyFor(row.requiresFtw, spare);
+    if (spare) sit(slot, spare, row.requiresFtw);
   }
 
   return { date, shift, fleets: [...fleets.values()], slots };

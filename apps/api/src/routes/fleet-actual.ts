@@ -22,6 +22,7 @@ import {
 } from "@universe/contracts";
 
 import { buildBoard, candidates, storeBoard } from "../allocation";
+import { deriveDate } from "../derive";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
@@ -1331,6 +1332,8 @@ export const fleetActualRoutes = new Elysia({
           code: "no_deadline",
           message: `Tahap "Batas Upload FTW" untuk shift ${params.shift === "day" ? "siang" : "malam"} tidak aktif — atur dulu di menu Timeline`,
         });
+      /* From every tap we hold, as the scheduled generation reads them. */
+      await deriveDate(params.date);
       const board = await buildBoard(
         params.date,
         params.shift,

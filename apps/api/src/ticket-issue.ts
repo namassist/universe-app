@@ -456,7 +456,10 @@ export async function firstTapOf(
 ): Promise<string | null> {
   const [live, pulled] = await Promise.all([
     db
-      .select({ at: schema.deviceLiveEvents.at })
+      .select({
+        at: schema.deviceLiveEvents.at,
+        ip: schema.deviceLiveEvents.ip,
+      })
       .from(schema.deviceLiveEvents)
       .where(
         and(
@@ -465,7 +468,11 @@ export async function firstTapOf(
         )
       ),
     db
-      .select({ at: schema.deviceTaps.at })
+      .select({
+        at: schema.deviceTaps.at,
+        ip: schema.deviceTaps.ip,
+        direction: schema.deviceTaps.direction,
+      })
       .from(schema.deviceTaps)
       .where(
         and(
@@ -477,7 +484,17 @@ export async function firstTapOf(
 
   /* Sorted here rather than in two queries: the union is what has to be
      ordered, and both halves are a handful of rows for one person on one day. */
-  const mine = [...live, ...pulled]
+  /* The board's own reading of the same taps (`deriveDate`, 2026-09-15): an
+     OUT the pull recorded is not an arrival, and a live tap the pull also
+     holds takes the pull's direction. Counting every tap let a wrong-button
+     OUT at 04:50 print a unit for a man whose IN came at 05:30. */
+  const outs = new Set(
+    pulled.filter((t) => t.direction === "out").map((t) => `${t.at}|${t.ip}`)
+  );
+  const mine = [
+    ...pulled.filter((t) => t.direction === "in"),
+    ...live.filter((t) => !outs.has(`${t.at}|${t.ip}`)),
+  ]
     .map((r) => r.at)
     .filter((at) => inShift(at.slice(11, 19), shift))
     .sort();
@@ -610,7 +627,7 @@ export async function issueTicket(
     /* Not rostered to this shift is somebody the board never considers too:
        nothing to wait for (2026-09-15). */
     awaitsAllocation: await awaitsAllocation(tap.nik, tap.date, tap.shift),
-    placedByHand: held?.source === "manual",
+    boardDecided: held?.source === "manual" || held?.source === "board",
   });
   if (!decision.print) return { issued: false, reason: "held-back" };
 

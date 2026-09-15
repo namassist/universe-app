@@ -1190,3 +1190,172 @@ describe("hand placements and the roster", () => {
     expect(unitOf(result)).toBe("UNIT           : SPARE");
   });
 });
+
+/*
+ * The slip reading taps and seats the way the board does (2026-09-15).
+ */
+describe("reading taps and seats the board's way", () => {
+  const fixture = {
+    niks: [] as string[],
+    units: [] as string[],
+    employees: [] as string[],
+    positions: [] as string[],
+    docs: [] as string[],
+  };
+
+  afterAll(async () => {
+    if (fixture.niks.length) {
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, fixture.niks));
+      await db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.nik, fixture.niks));
+      await db
+        .delete(schema.deviceTaps)
+        .where(inArray(schema.deviceTaps.nik, fixture.niks));
+      await db
+        .delete(schema.ftwReadings)
+        .where(inArray(schema.ftwReadings.nik, fixture.niks));
+    }
+    if (fixture.docs.length)
+      await db
+        .delete(schema.fleetActualDocuments)
+        .where(inArray(schema.fleetActualDocuments.id, fixture.docs));
+    if (fixture.units.length)
+      await db
+        .delete(schema.units)
+        .where(inArray(schema.units.id, fixture.units));
+    if (fixture.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees));
+    if (fixture.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, fixture.positions));
+  });
+
+  const operator = async () => {
+    const [dept] = await db
+      .select({
+        id: schema.departments.id,
+        companyId: schema.departments.companyId,
+      })
+      .from(schema.departments)
+      .limit(1);
+    const who = `92${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} WAY ${who}`,
+        departmentId: dept!.id,
+        fleetAllocation: true,
+      })
+      .returning({ id: schema.positions.id });
+    fixture.positions.push(position!.id);
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: who,
+        name: `${tag} ${who}`,
+        departmentId: dept!.id,
+        companyId: dept!.companyId,
+        positionId: position!.id,
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(employee!.id);
+    fixture.niks.push(who);
+    return { nik: who, id: employee!.id };
+  };
+
+  test("an OUT the pull recorded is not the arrival", async () => {
+    const day = "2026-01-18";
+    const who = await operator();
+    await db.insert(schema.deviceTaps).values([
+      { ip, nik: who.nik, at: `${day} 04:50:00`, direction: "out" },
+      { ip, nik: who.nik, at: `${day} 05:30:00`, direction: "in" },
+    ]);
+    /* The live session heard the OUT too, without a direction. */
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who.nik, at: `${day} 04:50:00` });
+    expect(await firstTapOf(who.nik, day, "day")).toBe(`${day} 05:30:00`);
+  });
+
+  test("a tap only the live session heard still counts", async () => {
+    const day = "2026-01-19";
+    const who = await operator();
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who.nik, at: `${day} 04:45:00` });
+    await db
+      .insert(schema.deviceTaps)
+      .values({ ip, nik: who.nik, at: `${day} 05:10:00`, direction: "in" });
+    expect(await firstTapOf(who.nik, day, "day")).toBe(`${day} 04:45:00`);
+  });
+
+  /* The board judged him when it seated him; a reading that changed since
+     must not turn the wall's unit into SPARE on paper. */
+  test("an engine seat on the board prints even if his FTW changed since", async () => {
+    const day = "2026-01-22";
+    const who = await operator();
+    const [[cls], [type], [model], [brand]] = await Promise.all([
+      db
+        .select({ id: schema.unitClasses.id })
+        .from(schema.unitClasses)
+        .limit(1),
+      db.select({ id: schema.unitTypes.id }).from(schema.unitTypes).limit(1),
+      db.select({ id: schema.unitModels.id }).from(schema.unitModels).limit(1),
+      db.select({ id: schema.unitBrands.id }).from(schema.unitBrands).limit(1),
+    ]);
+    const [unit] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZBW${uid()}`,
+        classId: cls!.id,
+        typeId: type!.id,
+        modelId: model!.id,
+        brandId: brand!.id,
+        fleetSupport: true,
+        workArea: `${tag} Pit`,
+        ftw: true,
+      })
+      .returning({ id: schema.units.id, code: schema.units.code });
+    fixture.units.push(unit!.id);
+    const [doc] = await db
+      .insert(schema.fleetActualDocuments)
+      .values({ date: day, shift: "day" })
+      .returning({ id: schema.fleetActualDocuments.id });
+    fixture.docs.push(doc!.id);
+    await db.insert(schema.fleetActualSlots).values({
+      documentId: doc!.id,
+      unitId: unit!.id,
+      employeeId: who.id,
+      source: "spare",
+      workArea: `${tag} Pit`,
+    });
+    await db.insert(schema.ftwReadings).values({
+      nik: who.nik,
+      date: day,
+      name: tag,
+      sleepMinutes: 200,
+      sleepCategory: "Tidak Boleh Bekerja",
+      ftwDecision: "FTW perlu tindak lanjut",
+    });
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who.nik, at: `${day} 05:00:00` });
+
+    const result = await issueTicket(
+      { ip, nik: who.nik, at: `${day} 05:30:00`, date: day, shift: "day" },
+      { printingEnabled: false }
+    );
+    expect(
+      result.issued &&
+        result.preview.split("\n").find((l) => l.startsWith("UNIT "))
+    ).toBe(`UNIT           : ${unit!.code}`);
+  });
+});

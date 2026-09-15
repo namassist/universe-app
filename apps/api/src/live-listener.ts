@@ -18,6 +18,7 @@ import { and, eq, lt, sql } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import { env } from "./env";
+import { deriveSoon } from "./derive";
 import { issueTicket } from "./ticket-issue";
 import {
   openLiveSession,
@@ -167,7 +168,15 @@ export async function startListening(input: {
       /* Never awaited into the socket's path: a slow write must not stall the
          next tap, and a failed one must not kill the session. */
       void recordTap(machine.ip, tap.nik, tap.at)
-        .then(() => issueTicket(ticketTapOf(machine.ip, tap)))
+        .then(() => {
+          /* The walls and the board read the derived reading; without this a
+             live tap reached it only when a pull happened to store something
+             (2026-09-15). Fired, not awaited: the slip must not wait on it. */
+          deriveSoon(tap.at.slice(0, 10)).catch((error) =>
+            console.error("[taps] bacaan gagal diturunkan ulang", error)
+          );
+          return issueTicket(ticketTapOf(machine.ip, tap));
+        })
         .then((result) => {
           if (result.issued)
             console.log(

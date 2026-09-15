@@ -223,28 +223,31 @@ describe("somebody the board never considers", () => {
   });
 });
 
-/* The admin's placement on the board is how a late person reaches a unit at
-   all; judging it again threw it away (owner, 2026-09-15). */
-describe("a seat an admin placed by hand", () => {
+/* A board seat — the engine's or an admin's hand placement — prints as the
+   board has it (2026-09-15). The admin's placement is how a late person
+   reaches a unit at all, and the owner lets it stand over a failed FTW. */
+describe("a seat the board decided", () => {
   test("prints for somebody who tapped late", () => {
     const out = ask({
       readiness: readiness("pass", "late"),
       tappedAt: "05:40:00",
       firstTapAt: "05:40:00",
-      placedByHand: true,
+      boardDecided: true,
     });
     expect(out).toMatchObject({ print: true, reason: "full" });
   });
 
-  test("prints even over a failed FTW — the admin decided", () => {
+  test("prints even over a failed FTW", () => {
     const out = ask({
       readiness: readiness("fail", "pass"),
-      placedByHand: true,
+      boardDecided: true,
     });
     expect(out.print && out.seat?.unit).toBe("DT-118");
   });
 
-  test("the engine's own seat is still judged", () => {
+  /* Before any board the plan's seat is only what the board would decide,
+     so it is still judged at the booth. */
+  test("a plan seat is still judged", () => {
     const out = ask({ readiness: readiness("fail", "pass") });
     expect(out.print && out.seat).toBeNull();
   });

@@ -57,14 +57,15 @@ export type TicketInput = {
    */
   awaitsAllocation: boolean;
   /**
-   * The seat is an admin's placement on the board, not the engine's.
+   * The seat is the board's — the engine's or an admin's hand placement.
    *
-   * Printed whatever readiness says (owner, 2026-09-15): a hand placement is
-   * how a late person reaches a unit at all, and judging it again here threw
-   * the placement away — the wall showed him on the unit, the slip said SPARE.
-   * The admin's decision stands even over a failed FTW.
+   * Printed whatever readiness says (2026-09-15). The board judged when it
+   * was built, and an admin decided when he placed somebody by hand — even
+   * over a failed FTW (owner). Judging again here could only disagree with
+   * the wall: a reading that changed afterwards printed SPARE for a man the
+   * board had on a unit. Only a plan seat, before any board, is judged here.
    */
-  placedByHand?: boolean;
+  boardDecided?: boolean;
 };
 
 export type TicketDecision =
@@ -115,7 +116,7 @@ export function ticketFor(input: TicketInput): TicketDecision {
    * "entitled" would be a second answer to the same question, and the paper
    * would disagree with the board.
    */
-  const seat = input.readiness.passed || input.placedByHand ? input.seat : null;
+  const seat = input.readiness.passed || input.boardDecided ? input.seat : null;
 
   return {
     print: true,

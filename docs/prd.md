@@ -1286,6 +1286,21 @@ SESUAI APLIKASI                     (centred)
   mechanic, a standby employee, anybody not `aktif` in an allocated
   position. The full-scenario print test found them held to the second
   finger, waiting for an allocation that is never made for them.
+- **The slip reads taps and seats the way the board does** (2026-09-15):
+  - **Every board is built from freshly derived readings.** `spare-validate`
+    and the Actual tab's regenerate rebuild `finger_readings` from every tap
+    first, and a tap heard live triggers a rebuild within seconds. Readings
+    used to be rebuilt only when a pull stored something new, so a tap heard
+    live just before the gate — or a whole morning with the pull down — was on
+    the slip and missing from the board.
+  - **An OUT the pull recorded is not an arrival** on the slip either, as it
+    is not in the reading; a live-only tap still counts as one.
+  - **A board seat prints as the board has it**, the engine's and an admin's
+    alike. The board judged when it was built; judging again at the booth
+    could only disagree with the wall. Only a plan seat, before any board, is
+    judged at the booth.
+  - **A regenerated board keeps a spare on the vacancy his slip names**, if
+    he is still ready and eligible, before refilling by tap order.
 - **A seat an admin placed by hand always prints** (owner, 2026-09-15),
   whatever readiness says — even over a failed FTW. A hand placement is how a
   late person reaches a unit at all; judging it again printed SPARE while the

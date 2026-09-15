@@ -18,7 +18,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { deriveDate, reduceTaps } from "./derive";
+import { deriveDate, deriveSoon, reduceTaps } from "./derive";
 
 const tap = (at: string, direction: "in" | "out" = "in", ip = "10.0.0.1") => ({
   nik: "123",
@@ -283,5 +283,42 @@ describe("a tap only the live session heard", () => {
     await heard(`${date} 04:33:00`);
     await deriveDate(date);
     expect((await readingOf())!.firstInAt).toBe(`${date} 04:33:00`);
+  });
+});
+
+/*
+ * A live tap reaching the reading without waiting for a pull (2026-09-15).
+ * Until then only a pull that stored something rebuilt the readings, so the
+ * board could be built blind to taps already on people's slips.
+ */
+describe("rebuilding soon after a live tap", () => {
+  const nik = `91${Math.floor(Math.random() * 1e7)
+    .toString()
+    .padStart(7, "0")}`;
+  const day = "2026-01-23";
+
+  afterAll(async () => {
+    await db
+      .delete(schema.deviceLiveEvents)
+      .where(eq(schema.deviceLiveEvents.nik, nik));
+    await db
+      .delete(schema.fingerReadings)
+      .where(eq(schema.fingerReadings.nik, nik));
+  });
+
+  test("a tap heard live reaches the reading, one rebuild for a burst", async () => {
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip: "203.0.113.181", nik, at: `${day} 04:55:00` });
+
+    const burst = [deriveSoon(day, 10), deriveSoon(day, 10)];
+    expect(burst[0]).toBe(burst[1]);
+    await Promise.all(burst);
+
+    const [row] = await db
+      .select({ firstInAt: schema.fingerReadings.firstInAt })
+      .from(schema.fingerReadings)
+      .where(eq(schema.fingerReadings.nik, nik));
+    expect(row?.firstInAt).toBe(`${day} 04:55:00`);
   });
 });
