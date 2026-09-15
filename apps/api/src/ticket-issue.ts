@@ -358,7 +358,12 @@ export async function issueTicket(
     at: `${tap.date} ${decision.at}`,
   };
   const preview = ticketPreview(fields);
-  const contentHash = Bun.hash(preview).toString(16);
+  /* Hashed without the printer's name: the booth that printed a slip is not
+     something that changed about the person, and counting it let a tap at a
+     second booth print the same slip again (trial, 2026-09-14). */
+  const contentHash = Bun.hash(
+    ticketPreview({ ...fields, printerName: "" })
+  ).toString(16);
 
   /* The claim. A second tap carrying the same slip loses here, which is the
      dedup rule: a repeat prints only when something on it changed. */

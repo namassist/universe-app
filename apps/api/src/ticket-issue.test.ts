@@ -19,6 +19,8 @@ import { firstTapOf, issueTicket } from "./ticket-issue";
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Tiket ${uid()}`;
 const ip = `203.0.113.${90 + Math.floor(Math.random() * 8)}`;
+/* A second booth on the same site, with its own printer. */
+const otherIp = `203.0.113.${100 + Math.floor(Math.random() * 8)}`;
 
 const made = {
   machines: [] as string[],
@@ -47,6 +49,23 @@ beforeAll(async () => {
     .values({ name: tag, ip, printerId: printer!.id, universeOnly: true })
     .returning({ id: schema.fingerprintMachines.id });
   made.machines.push(machine!.id);
+
+  const [otherPrinter] = await db
+    .insert(schema.printers)
+    .values({ name: `${tag} PRINTER LAIN`, ip: "203.0.113.201" })
+    .returning({ id: schema.printers.id });
+  made.printers.push(otherPrinter!.id);
+
+  const [otherMachine] = await db
+    .insert(schema.fingerprintMachines)
+    .values({
+      name: `${tag} LAIN`,
+      ip: otherIp,
+      printerId: otherPrinter!.id,
+      universeOnly: true,
+    })
+    .returning({ id: schema.fingerprintMachines.id });
+  made.machines.push(otherMachine!.id);
 });
 
 afterAll(async () => {
@@ -97,6 +116,36 @@ describe("issuing", () => {
       printingEnabled: false,
     });
     expect(again).toEqual({ issued: false, reason: "duplicate" });
+  });
+
+  /*
+   * The trial of 2026-09-14: Ruben Lottong tapped Mesin 31, walked to Mesin 33
+   * and tapped again nine seconds later, and got a second slip — identical but
+   * for NAMA PRINTER. Which booth printed it is not something that changed
+   * about him.
+   */
+  test("the same slip is not issued again at another booth", async () => {
+    /* Both taps are heard before either slip is issued, as they are at the
+       booth — so the second slip reads the same arrival as the first. */
+    const day = "2026-01-07";
+    await db.insert(schema.deviceLiveEvents).values([
+      { ip, nik, at: `${day} 05:40:00` },
+      { ip: otherIp, nik, at: `${day} 05:40:09` },
+    ]);
+    try {
+      const first = await issueTicket(tapOn(day), { printingEnabled: false });
+      expect(first.issued).toBe(true);
+
+      const elsewhere = await issueTicket(
+        { ...tapOn(day), ip: otherIp, at: `${day} 05:40:09` },
+        { printingEnabled: false }
+      );
+      expect(elsewhere).toEqual({ issued: false, reason: "duplicate" });
+    } finally {
+      await db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.ip, [ip, otherIp]));
+    }
   });
 
   test("a nik the register does not carry is refused", async () => {
