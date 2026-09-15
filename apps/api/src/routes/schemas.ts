@@ -624,6 +624,12 @@ const FleetImportStandbyRowSchema = t.Object({
   fleet: t.String(),
 });
 
+const FleetImportSpareRowSchema = t.Object({
+  row: t.Integer(),
+  transport: t.String(),
+  area: t.String(),
+});
+
 export const FleetImportPreviewSchema = t.Object({
   fileName: t.String(),
   newCount: t.Integer(),
@@ -637,6 +643,8 @@ export const FleetImportPreviewSchema = t.Object({
   support: t.Array(FleetImportSupportRowSchema),
   /** Units this file sets standby, with the broken digger behind each. */
   standby: t.Array(FleetImportStandbyRowSchema),
+  /** The spare pool's buses and where they wait. */
+  spare: t.Array(FleetImportSpareRowSchema),
   /** Leader codes of formations this file would disband. */
   disband: t.Array(t.String()),
   /** Codes of units this file drops out of today's operation. */
@@ -651,6 +659,7 @@ export const FleetImportResultSchema = t.Object({
   disbanded: t.Integer(),
   support: t.Integer(),
   standby: t.Integer(),
+  spare: t.Integer(),
   released: t.Integer(),
 });
 
@@ -1405,6 +1414,13 @@ export const FleetDisplaySchema = t.Object({
    * person previewing the site-wide board. A monitor heads itself with it.
    */
   deviceName: t.Nullable(t.String()),
+  /**
+   * The spare pool's buses and where they wait (owner, 2026-09-15) — the
+   * board's copy once it exists, Fleet Setting's before. Null when none set.
+   */
+  spare: t.Nullable(
+    t.Object({ buses: t.Array(t.String()), area: t.Nullable(t.String()) })
+  ),
   /**
    * The formations, then the support group.
    *

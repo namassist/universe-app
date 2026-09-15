@@ -1466,3 +1466,52 @@ describe("a spare already holding a slip for a vacancy", () => {
     expect(slot?.source).toBe("spare");
   });
 });
+
+/*
+ * The spare pool's ride, copied onto the board when it is stored
+ * (2026-09-15), so a Fleet Setting import for the next shift cannot change
+ * what this shift's slips and wall say.
+ */
+describe("storing a board copies the spare bus", () => {
+  let saved: (typeof schema.fleetSpareTransports.$inferSelect)[] = [];
+  const docs: string[] = [];
+
+  afterAll(async () => {
+    await db.delete(schema.fleetSpareTransports);
+    if (saved.length)
+      await db.insert(schema.fleetSpareTransports).values(saved);
+    if (docs.length)
+      await db
+        .delete(schema.fleetActualDocuments)
+        .where(inArray(schema.fleetActualDocuments.id, docs));
+  });
+
+  test("the buses in order, and their area", async () => {
+    saved = await db.select().from(schema.fleetSpareTransports);
+    await db.delete(schema.fleetSpareTransports);
+    const first = await addLooseUnit(`${tag}-SB1`);
+    const second = await addLooseUnit(`${tag}-SB2`);
+    await db.insert(schema.fleetSpareTransports).values([
+      { transportUnitId: second, workArea: "PARKIRAN UJI", position: 1 },
+      { transportUnitId: first, workArea: "PARKIRAN UJI", position: 0 },
+    ]);
+
+    const date = nextDate();
+    const id = await storeBoard({ date, shift: "day", fleets: [], slots: [] });
+    docs.push(id);
+    /* Cleared before the fixture units go, so their deletion is not blocked. */
+    await db.delete(schema.fleetSpareTransports);
+
+    const [doc] = await db
+      .select({
+        area: schema.fleetActualDocuments.spareArea,
+        buses: schema.fleetActualDocuments.spareBusCodes,
+      })
+      .from(schema.fleetActualDocuments)
+      .where(eq(schema.fleetActualDocuments.id, id));
+    expect(doc).toEqual({
+      area: "PARKIRAN UJI",
+      buses: [`${tag}-SB1`, `${tag}-SB2`],
+    });
+  });
+});

@@ -853,6 +853,19 @@ export default function DisplayFleetPage() {
               Line-up sementara — belum digenerate
             </span>
           ) : null}
+          {/* The spare pool's ride, on every page (owner, 2026-09-15): a
+              spare reads it off his slip, and a supervisor off the wall. */}
+          {data?.spare?.buses.length ? (
+            <span className="inline-flex flex-none items-center gap-2.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-4.5 py-1 font-bold text-(--color-primary-bright)">
+              <Bus className="size-6" />
+              Spare {data.spare.buses.join("/")}
+              {data.spare.area ? (
+                <span className="font-medium text-(--text-secondary)">
+                  · {data.spare.area}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
 
           {/* A monitor heads itself with where it is and which turn it is on.
               From a distance the page counter is what tells a crew their fleet

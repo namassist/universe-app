@@ -29,7 +29,10 @@ import {
   FLEET_TRANSPORT_TYPES_TEXT,
   isBreakdownArea,
   isFleetTransportType,
+  isSpareUnit,
   isStandbyArea,
+  MAX_SPARE_TRANSPORTS,
+  type FleetImportSpareRow,
   type FleetImportChange,
   type FleetImportColumn,
   type FleetImportPreviewRow,
@@ -106,6 +109,13 @@ export type ParsedStandbyUnit = {
   unitId: string;
 };
 
+/** One bus the spare pool rides, from a SPARE row. */
+export type ParsedSpareTransport = {
+  preview: FleetImportSpareRow;
+  transportUnitId: string;
+  workArea: string;
+};
+
 /** One crewed unit outside every formation. */
 export type ParsedSupportUnit = {
   preview: FleetImportSupportRow;
@@ -119,6 +129,7 @@ export type FleetParseResult = {
   rows: ParsedFleetRow[];
   support: ParsedSupportUnit[];
   standby: ParsedStandbyUnit[];
+  spare: ParsedSpareTransport[];
   /** Leader codes of formations the file never mentions. */
   disband: { id: string; leaderCode: string }[];
   /** Codes of units in operation the file no longer names. */
@@ -169,6 +180,8 @@ export async function buildTemplate(): Promise<Buffer> {
     { unit: "DZ6002", area: "DISPOSAL T4", fleet: "", bus: "UD-BU08" },
     { unit: "EX7005", area: "BREAKDOWN", fleet: "", bus: "" },
     { unit: "DT4081", area: "", fleet: "EX7005", bus: "" },
+    /* The spare pool's ride: up to two rows, one area. */
+    { unit: "SPARE", area: "PARKIRAN KASTURI", fleet: "SPARE", bus: "UD-BU10" },
   ]);
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
@@ -251,6 +264,8 @@ export async function validateFleetWorkbook(
   /* ---- pass 1: read the sheet, and refuse a unit that appears twice ------ */
 
   const raw: RawRow[] = [];
+  /* SPARE rows name a ride, not a unit, and repeat by design (one per bus). */
+  const spareRaw: RawRow[] = [];
   const seen = new Map<string, number>();
   for (let n = HEADER_ROW + 1; n <= ws.rowCount; n++) {
     const r = ws.getRow(n);
@@ -264,6 +279,10 @@ export async function validateFleetWorkbook(
     if (!row.unit && !row.area && !row.fleet && !row.bus) continue;
     if (!row.unit) {
       errors.push(danger(n, "—", row.area || "—", "Kolom unit kosong"));
+      continue;
+    }
+    if (isSpareUnit(row.unit)) {
+      spareRaw.push(row);
       continue;
     }
     const key = row.unit.toLowerCase();
@@ -306,6 +325,100 @@ export async function validateFleetWorkbook(
   for (const unit of catalogues.unitsByCode.values())
     if (isFleetTransportType(unit.typeName))
       transportByKey.set(transportKey(unit.code), unit);
+
+  /* ---- pass 2b: the spare pool's ride ------------------------------------ */
+
+  /*
+   * `SPARE | PARKIRAN KASTURI | SPARE | RBU26` (owner, 2026-09-15). Every
+   * slip reading UNIT SPARE prints these buses and this area. Two at most,
+   * one area between them — the owner rules a second area out, so a file
+   * that writes one is refused rather than guessed at.
+   */
+  const spare: ParsedSpareTransport[] = [];
+  for (const row of spareRaw) {
+    if (!isSpareUnit(row.fleet)) {
+      errors.push(
+        danger(
+          row.n,
+          row.unit,
+          row.fleet || "—",
+          "Baris SPARE harus mengisi kolom fleet dengan SPARE"
+        )
+      );
+      continue;
+    }
+    if (!row.area || isBreakdownArea(row.area) || isStandbyArea(row.area)) {
+      errors.push(
+        danger(
+          row.n,
+          row.unit,
+          row.area || "—",
+          "Baris SPARE harus mengisi area tempat bus spare menunggu"
+        )
+      );
+      continue;
+    }
+    if (!row.bus) {
+      errors.push(
+        danger(row.n, row.unit, "—", "Baris SPARE harus mengisi kolom bus")
+      );
+      continue;
+    }
+    const vehicle = transportByKey.get(transportKey(row.bus));
+    if (!vehicle) {
+      const known = catalogues.unitsByCode.get(row.bus.toLowerCase());
+      errors.push(
+        danger(
+          row.n,
+          row.unit,
+          row.bus,
+          known
+            ? `Unit ${known.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`
+            : `Transport "${row.bus}" tidak ada di master`
+        )
+      );
+      continue;
+    }
+    if (spare.some((s) => s.transportUnitId === vehicle.id)) {
+      errors.push(
+        danger(
+          row.n,
+          row.unit,
+          vehicle.code,
+          `Bus ${vehicle.code} sudah ada di baris SPARE lain`
+        )
+      );
+      continue;
+    }
+    spare.push({
+      preview: { row: row.n, transport: vehicle.code, area: row.area },
+      transportUnitId: vehicle.id,
+      workArea: row.area,
+    });
+  }
+  if (spareRaw.length > MAX_SPARE_TRANSPORTS) {
+    const extra = spareRaw[MAX_SPARE_TRANSPORTS]!;
+    errors.push(
+      danger(
+        extra.n,
+        extra.unit,
+        extra.bus || "—",
+        `Bus spare paling banyak ${MAX_SPARE_TRANSPORTS} baris`
+      )
+    );
+  }
+  const spareAreas = [
+    ...new Set(spare.map((s) => s.workArea.trim().toLowerCase())),
+  ];
+  if (spareAreas.length > 1)
+    errors.push(
+      danger(
+        spare[1]!.preview.row,
+        "SPARE",
+        joinCodes(spare.map((s) => s.workArea)),
+        "Semua baris SPARE harus menulis area yang sama"
+      )
+    );
 
   type Resolved = RawRow & {
     unitRow: ImportUnit;
@@ -665,5 +778,5 @@ export async function validateFleetWorkbook(
     .sort();
 
   errors.sort((a, b) => Number(a.row) - Number(b.row));
-  return { rows, support, standby, disband, released, errors };
+  return { rows, support, standby, spare, disband, released, errors };
 }

@@ -50,6 +50,7 @@ import {
   validateFleetWorkbook,
   type FleetCatalogues,
   type ParsedFleetRow,
+  type ParsedSpareTransport,
   type ParsedStandbyUnit,
   type ParsedSupportUnit,
 } from "./fleets-import";
@@ -443,6 +444,7 @@ type FleetImportOutcome = {
   rows: ParsedFleetRow[];
   support: ParsedSupportUnit[];
   standby: ParsedStandbyUnit[];
+  spare: ParsedSpareTransport[];
   disband: { id: string; leaderCode: string }[];
   releasedIds: string[];
 };
@@ -517,6 +519,7 @@ async function parseFleetImport(
       rows: rows.map((r) => r.preview),
       support: parsed.support.map((u) => u.preview),
       standby: parsed.standby.map((u) => u.preview),
+      spare: parsed.spare.map((s) => s.preview),
       disband: parsed.disband.map((d) => d.leaderCode),
       released: parsed.released,
       errors,
@@ -524,6 +527,7 @@ async function parseFleetImport(
     rows,
     support: parsed.support,
     standby: parsed.standby,
+    spare: parsed.spare,
     disband: parsed.disband,
     releasedIds: releasedRows.map((u) => u.id),
   };
@@ -758,6 +762,18 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
                 transportUnitId: unit.transportUnitId,
               })
               .where(eq(schema.units.id, unit.unitId));
+
+          /* The spare pool's ride, replaced whole like the rest of the day's
+             answer: a file with no SPARE row leaves the spares with none. */
+          await tx.delete(schema.fleetSpareTransports);
+          if (outcome.spare.length)
+            await tx.insert(schema.fleetSpareTransports).values(
+              outcome.spare.map((s, position) => ({
+                transportUnitId: s.transportUnitId,
+                workArea: s.workArea,
+                position,
+              }))
+            );
         });
       } catch (error) {
         // Validation reads the database a moment before the write: another
@@ -783,6 +799,7 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
         disbanded: outcome.disband.length,
         support: outcome.support.filter((u) => !u.breakdown).length,
         standby: outcome.standby.length,
+        spare: outcome.spare.length,
         released: outcome.releasedIds.length,
       };
     },

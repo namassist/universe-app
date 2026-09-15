@@ -262,3 +262,39 @@ describe("the bytes a printer takes", () => {
     );
   });
 });
+
+/* The spare pool's ride (owner, 2026-09-15): a slip reading UNIT SPARE names
+   the spare buses and where they wait; FLEET stays a dash. */
+describe("the spare bus on a SPARE slip", () => {
+  const spareRide = { buses: ["RBU26", "RBU27"], area: "PARKIRAN KASTURI" };
+
+  test("NO BUS names both buses, AREA the place, FLEET a dash", () => {
+    const lines = ticketPreview({
+      ...full,
+      seat: null,
+      withoutUnit: "spare",
+      spareRide,
+    }).split("\n");
+    expect(lines).toContain("UNIT           : SPARE");
+    expect(lines).toContain("NO BUS         : RBU26/RBU27");
+    expect(lines).toContain("FLEET          : -");
+    expect(lines).toContain("AREA           : PARKIRAN KASTURI");
+  });
+
+  test("a seat prints its own ride, not the spare bus", () => {
+    const lines = ticketPreview({
+      ...full,
+      withoutUnit: "spare",
+      spareRide,
+    }).split("\n");
+    expect(lines).toContain("NO BUS         : RBU26");
+    expect(lines).toContain("AREA           : PANEL EAST - UTARA BAWAH");
+  });
+
+  test("somebody reading a dash rides nothing", () => {
+    const lines = ticketPreview({ ...full, seat: null, spareRide }).split("\n");
+    expect(lines).toContain("UNIT           : -");
+    expect(lines).toContain("NO BUS         : -");
+    expect(lines).toContain("AREA           : -");
+  });
+});

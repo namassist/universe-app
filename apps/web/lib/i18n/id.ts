@@ -728,6 +728,7 @@ export const id = {
   flImpSupport: "Unit support",
   flImpBreakdown: "Breakdown",
   flImpStandby: "Standby",
+  flImpSpare: "Bus spare",
   flImpDisband: "Fleet dibubarkan",
   flImpReleased: "Unit keluar dari operasi",
   flImpRemoveT: "Yang akan dihapus file ini",

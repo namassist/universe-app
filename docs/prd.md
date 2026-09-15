@@ -1286,6 +1286,17 @@ SESUAI APLIKASI                     (centred)
   mechanic, a standby employee, anybody not `aktif` in an allocated
   position. The full-scenario print test found them held to the second
   finger, waiting for an allocation that is never made for them.
+- **A SPARE slip names the spare bus** (owner, 2026-09-15). Fleet Setting
+  carries the spare pool's ride as rows of their own — `SPARE | PARKIRAN
+KASTURI | SPARE | RBU26`: unit and fleet cells read SPARE, the area is
+  where the spare buses wait, the bus must be a transport unit. At most two
+  rows, one area between them; a file writing more, or a second area, is
+  refused. Every import replaces the last one's rows, since the yard swaps
+  the buses between shifts. The board copies them when it is built, so an
+  import for the next shift changes nothing for the one under way. The slip
+  prints `NO BUS : RBU26/RBU27`, `FLEET : -` and the area on every UNIT
+  SPARE; a seat prints its own ride, and `UNIT : -` rides nothing. The fleet
+  wall shows the same buses and area.
 - **The slip reads taps and seats the way the board does** (2026-09-15):
   - **Every board is built from freshly derived readings.** `spare-validate`
     and the Actual tab's regenerate rebuild `finger_readings` from every tap

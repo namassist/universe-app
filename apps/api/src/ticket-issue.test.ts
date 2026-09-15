@@ -1359,3 +1359,177 @@ describe("reading taps and seats the board's way", () => {
     ).toBe(`UNIT           : ${unit!.code}`);
   });
 });
+
+/*
+ * The spare pool's ride on the slip (owner, 2026-09-15). Fleet Setting's rows
+ * before the board; the board's copy after, so an import for the next shift
+ * cannot change what this shift's slips say.
+ */
+describe("the spare bus", () => {
+  const fixture = {
+    niks: [] as string[],
+    units: [] as string[],
+    employees: [] as string[],
+    positions: [] as string[],
+    docs: [] as string[],
+  };
+  let saved: (typeof schema.fleetSpareTransports.$inferSelect)[] = [];
+
+  beforeAll(async () => {
+    saved = await db.select().from(schema.fleetSpareTransports);
+    await db.delete(schema.fleetSpareTransports);
+  });
+
+  afterAll(async () => {
+    await db.delete(schema.fleetSpareTransports);
+    if (saved.length)
+      await db.insert(schema.fleetSpareTransports).values(saved);
+    if (fixture.niks.length) {
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, fixture.niks));
+      await db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.nik, fixture.niks));
+    }
+    if (fixture.docs.length)
+      await db
+        .delete(schema.fleetActualDocuments)
+        .where(inArray(schema.fleetActualDocuments.id, fixture.docs));
+    if (fixture.units.length)
+      await db
+        .delete(schema.units)
+        .where(inArray(schema.units.id, fixture.units));
+    if (fixture.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees));
+    if (fixture.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, fixture.positions));
+  });
+
+  const someone = async (fleetAllocation: boolean) => {
+    const [dept] = await db
+      .select({
+        id: schema.departments.id,
+        companyId: schema.departments.companyId,
+      })
+      .from(schema.departments)
+      .limit(1);
+    const who = `90${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} RIDE ${who}`,
+        departmentId: dept!.id,
+        fleetAllocation,
+      })
+      .returning({ id: schema.positions.id });
+    fixture.positions.push(position!.id);
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: who,
+        name: `${tag} ${who}`,
+        departmentId: dept!.id,
+        companyId: dept!.companyId,
+        positionId: position!.id,
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(employee!.id);
+    fixture.niks.push(who);
+    return who;
+  };
+
+  const bus = async () => {
+    const [[cls], [type], [model], [brand]] = await Promise.all([
+      db
+        .select({ id: schema.unitClasses.id })
+        .from(schema.unitClasses)
+        .limit(1),
+      db.select({ id: schema.unitTypes.id }).from(schema.unitTypes).limit(1),
+      db.select({ id: schema.unitModels.id }).from(schema.unitModels).limit(1),
+      db.select({ id: schema.unitBrands.id }).from(schema.unitBrands).limit(1),
+    ]);
+    const [row] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZSB${uid()}`,
+        classId: cls!.id,
+        typeId: type!.id,
+        modelId: model!.id,
+        brandId: brand!.id,
+      })
+      .returning({ id: schema.units.id, code: schema.units.code });
+    fixture.units.push(row!.id);
+    return row!;
+  };
+
+  const slip = async (who: string, date: string) => {
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who, at: `${date} 05:40:00` });
+    const result = await issueTicket(
+      { ip, nik: who, at: `${date} 05:40:00`, date, shift: "day" },
+      { printingEnabled: false }
+    );
+    expect(result.issued).toBe(true);
+    const lines = result.issued ? result.preview.split("\n") : [];
+    const line = (label: string) =>
+      lines.find((l) => l.startsWith(`${label} `))?.slice(17);
+    return {
+      unit: line("UNIT"),
+      bus: line("NO BUS"),
+      fleet: line("FLEET"),
+      area: line("AREA"),
+    };
+  };
+
+  test("before the board, a SPARE slip names Fleet Setting's spare buses", async () => {
+    const one = await bus();
+    const two = await bus();
+    await db.insert(schema.fleetSpareTransports).values([
+      { transportUnitId: one.id, workArea: "PARKIRAN UJI", position: 0 },
+      { transportUnitId: two.id, workArea: "PARKIRAN UJI", position: 1 },
+    ]);
+    expect(await slip(await someone(true), "2026-01-24")).toEqual({
+      unit: "SPARE",
+      bus: `${one.code}/${two.code}`,
+      fleet: "-",
+      area: "PARKIRAN UJI",
+    });
+  });
+
+  test("after the board, it names the board's copy, not today's setting", async () => {
+    const date = "2026-01-25";
+    const [doc] = await db
+      .insert(schema.fleetActualDocuments)
+      .values({
+        date,
+        shift: "day",
+        spareArea: "PARKIRAN PAPAN",
+        spareBusCodes: ["RBX01"],
+      })
+      .returning({ id: schema.fleetActualDocuments.id });
+    fixture.docs.push(doc!.id);
+    expect(await slip(await someone(true), date)).toEqual({
+      unit: "SPARE",
+      bus: "RBX01",
+      fleet: "-",
+      area: "PARKIRAN PAPAN",
+    });
+  });
+
+  test("somebody the board never considers rides nothing", async () => {
+    expect(await slip(await someone(false), "2026-01-24")).toEqual({
+      unit: "-",
+      bus: "-",
+      fleet: "-",
+      area: "-",
+    });
+  });
+});

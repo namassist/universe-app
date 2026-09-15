@@ -214,6 +214,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  /* A committed SPARE row points at a fixture bus, and the key is restrict. */
+  if (made.units.length)
+    await db
+      .delete(schema.fleetSpareTransports)
+      .where(inArray(schema.fleetSpareTransports.transportUnitId, made.units));
   // Fleets created by commits are found by digger, not remembered by hand.
   const fleets = await db
     .select({ id: schema.fleets.id })
@@ -1065,5 +1070,104 @@ describe("the commit writes the unit facts, not just the formation", () => {
     expect(preview.errorCount).toBe(0);
     // The formation that held it is named as disbanded instead of refusing.
     expect(preview.disband).toContain(digger3.code);
+  });
+});
+
+/* ------------------------------------------------------- the spare pool's ride */
+
+/*
+ * `SPARE | PARKIRAN KASTURI | SPARE | RBU26` (owner, 2026-09-15): the bus
+ * every slip reading UNIT SPARE prints. At most two, one area between them.
+ */
+describe("SPARE rows", () => {
+  const AREA = `${tag} PARKIRAN`;
+
+  test("two buses in one area are read, and do not count as a unit twice", async () => {
+    const preview = await validate([
+      ...fleetRows(digger1.code, [hauler1.code]),
+      ["SPARE", AREA, "SPARE", busUnit.code],
+      ["SPARE", AREA, "SPARE", manhaulUnit.code],
+    ]);
+    expect(preview.errorCount).toBe(0);
+    expect(preview.spare).toEqual([
+      { row: 4, transport: busUnit.code, area: AREA },
+      { row: 5, transport: manhaulUnit.code, area: AREA },
+    ]);
+  });
+
+  test("the fleet cell must read SPARE too", async () => {
+    const preview = await validate([
+      ["SPARE", AREA, digger1.code, busUnit.code],
+    ]);
+    expect(preview.errors.map((e) => e.issue)).toContain(
+      "Baris SPARE harus mengisi kolom fleet dengan SPARE"
+    );
+    expect(preview.spare).toEqual([]);
+  });
+
+  test("the bus must be a transport unit", async () => {
+    const preview = await validate([["SPARE", AREA, "SPARE", digger1.code]]);
+    expect(preview.errorCount).toBe(1);
+    expect(preview.errors[0]!.issue).toContain(digger1.code);
+  });
+
+  test("a third row is refused", async () => {
+    const preview = await validate([
+      ["SPARE", AREA, "SPARE", busUnit.code],
+      ["SPARE", AREA, "SPARE", manhaulUnit.code],
+      ["SPARE", AREA, "SPARE", busUnit.code],
+    ]);
+    expect(
+      preview.errors.some((e) => e.issue.includes("paling banyak 2"))
+    ).toBe(true);
+  });
+
+  /* The owner rules a second area out; guessing one would print the wrong
+     place on half the slips. */
+  test("a second area is refused", async () => {
+    const preview = await validate([
+      ["SPARE", AREA, "SPARE", busUnit.code],
+      ["SPARE", `${AREA} LAIN`, "SPARE", manhaulUnit.code],
+    ]);
+    expect(preview.errors.map((e) => e.issue)).toContain(
+      "Semua baris SPARE harus menulis area yang sama"
+    );
+  });
+
+  test("the commit replaces the ride, and a file without SPARE rows clears it", async () => {
+    const withSpare = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(
+        await file([
+          ...fleetRows(digger1.code, [hauler1.code], miningName),
+          ["SPARE", AREA, "SPARE", manhaulUnit.code],
+          ["SPARE", AREA, "SPARE", busUnit.code],
+        ])
+      )
+    );
+    expect(withSpare.status).toBe(200);
+    expect(await withSpare.json()).toMatchObject({ spare: 2 });
+
+    const stored = await db
+      .select({
+        transportUnitId: schema.fleetSpareTransports.transportUnitId,
+        workArea: schema.fleetSpareTransports.workArea,
+        position: schema.fleetSpareTransports.position,
+      })
+      .from(schema.fleetSpareTransports)
+      .orderBy(schema.fleetSpareTransports.position);
+    expect(stored).toEqual([
+      { transportUnitId: manhaulUnit.id, workArea: AREA, position: 0 },
+      { transportUnitId: busUnit.id, workArea: AREA, position: 1 },
+    ]);
+
+    const without = await postForm(
+      "/fleets/import/commit",
+      admin.cookie,
+      form(await file(fleetRows(digger1.code, [hauler1.code], miningName)))
+    );
+    expect(without.status).toBe(200);
+    expect(await db.select().from(schema.fleetSpareTransports)).toEqual([]);
   });
 });

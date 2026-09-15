@@ -23,6 +23,7 @@ import {
 
 import { buildBoard, candidates, storeBoard } from "../allocation";
 import { deriveDate } from "../derive";
+import { spareRideOf, type SpareRide } from "../spare-ride";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
@@ -829,6 +830,7 @@ export const fleetActualRoutes = new Elysia({
         rotateSeconds: rotate,
         layout,
         deviceName,
+        spare: null as SpareRide | null,
         fleets: [],
       };
 
@@ -901,6 +903,7 @@ export const fleetActualRoutes = new Elysia({
         rotateSeconds: rotate,
         layout,
         deviceName,
+        spare: await spareRideOf(now.date, now.shift),
         fleets: groupIntoFleets(
           slots.map((s) => {
             const person = s.employeeId ? names.get(s.employeeId) : undefined;

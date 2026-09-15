@@ -685,9 +685,28 @@ export async function storeBoard(board: Board): Promise<string> {
           eq(schema.fleetActualDocuments.shift, board.shift)
         )
       );
+    /* The spare pool's ride, copied like the formations: a Fleet Setting
+       import for the next shift must not change what this shift's slips
+       and wall say (2026-09-15). */
+    const spareRide = await tx
+      .select({
+        code: schema.units.code,
+        area: schema.fleetSpareTransports.workArea,
+      })
+      .from(schema.fleetSpareTransports)
+      .innerJoin(
+        schema.units,
+        eq(schema.units.id, schema.fleetSpareTransports.transportUnitId)
+      )
+      .orderBy(asc(schema.fleetSpareTransports.position));
     const [doc] = await tx
       .insert(schema.fleetActualDocuments)
-      .values({ date: board.date, shift: board.shift })
+      .values({
+        date: board.date,
+        shift: board.shift,
+        spareArea: spareRide[0]?.area ?? null,
+        spareBusCodes: spareRide.map((r) => r.code),
+      })
       .returning({ id: schema.fleetActualDocuments.id });
 
     /* The formations first, because the slots point at them. Written per

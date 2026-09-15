@@ -373,6 +373,26 @@ export function FleetImport() {
               ))}
             </div>
 
+            {/* The spare pool's ride this file sets. Informational, not a
+                removal: it replaces the last file's buses (2026-09-15). */}
+            {preview.spare.length ? (
+              <div className="mb-5 rounded-card border border-(--badge-info-border) bg-(--badge-info-fill) p-4">
+                <div className="mb-2 text-sm font-semibold text-(--badge-info-text)">
+                  {t.flImpSpare}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {preview.spare.map((s) => (
+                    <Badge key={s.row} variant="info">
+                      {s.transport}
+                    </Badge>
+                  ))}
+                  <span className="text-xs text-(--badge-info-text)">
+                    {preview.spare[0]!.area}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
             {/* Read before pressing commit, not discovered after it. */}
             {removals.length ? (
               <div className="mb-5 rounded-card border border-(--badge-danger-border) bg-(--badge-danger-fill) p-4">

@@ -628,6 +628,30 @@ export const units = pgTable(
 );
 
 /**
+ * The buses the spare pool rides, as Fleet Setting last set them (owner,
+ * 2026-09-15).
+ *
+ * Not a unit and not a formation: a slip reading UNIT SPARE has nowhere else
+ * to read its ride from. At most two, one area between them, replaced whole by
+ * every Fleet Setting import — the yard swaps them between shifts. A board
+ * copies them when it is built, so a new import for the next shift does not
+ * change what this shift's slips say.
+ */
+export const fleetSpareTransports = pgTable("fleet_spare_transports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  transportUnitId: uuid("transport_unit_id")
+    .notNull()
+    .references(() => units.id, { onDelete: "restrict" }),
+  /** Where the spare bus waits — the same on every row. */
+  workArea: text("work_area").notNull(),
+  /** File order, so the slip names the buses as the admin wrote them. */
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * A bus is not an entity — it is a unit of type BUS with a departure time
  * attached (design D6). `unique` on `unit_id` because a bus has one departure
  * time; a second row for the same unit is a 409, not a second schedule.
@@ -1233,6 +1257,12 @@ export const fleetActualDocuments = pgTable(
     generatedAt: timestamp("generated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /** The spare pool's ride, copied from Fleet Setting when built. */
+    spareArea: text("spare_area"),
+    spareBusCodes: text("spare_bus_codes")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
   },
   (table) => [
     uniqueIndex("fleet_actual_documents_date_shift_idx").on(

@@ -36,6 +36,12 @@ export type TicketFields = {
    * before the field existed, which then reprint as they were: "-".
    */
   withoutUnit?: "spare";
+  /**
+   * The spare pool's buses and where they wait, printed on a slip reading
+   * UNIT SPARE (owner, 2026-09-15): NO BUS names both, AREA the place, FLEET
+   * stays a dash. Absent on slips stored before, which reprint as dashes.
+   */
+  spareRide?: { buses: string[]; area: string | null };
   /** The booth's paired printer, named on the slip as ShiftCorner names it. */
   printerName: string;
   /** `"YYYY-MM-DD HH:MM:SS"` — the first tap of the shift. */
@@ -151,6 +157,9 @@ export function ticketLines(fields: TicketFields): {
    */
   footer: string[];
 } {
+  /* Only a slip reading UNIT SPARE rides the spare bus. */
+  const spareRide =
+    !fields.seat && fields.withoutUnit === "spare" ? fields.spareRide : null;
   return {
     centred: ["PT UNGGUL DINAMIKA UTAMA", "SITE PROJECT INDEXIM"],
     body: [
@@ -166,9 +175,18 @@ export function ticketLines(fields: TicketFields): {
             ? "SPARE"
             : "-"
       ),
-      field("NO BUS", orDash(fields.seat?.bus)),
+      field(
+        "NO BUS",
+        fields.seat
+          ? orDash(fields.seat.bus)
+          : orDash(spareRide?.buses.join("/"))
+      ),
+      /* A spare belongs to no formation, so FLEET stays a dash (owner). */
       field("FLEET", orDash(fields.seat?.fleet)),
-      field("AREA", orDash(fields.seat?.area)),
+      field(
+        "AREA",
+        fields.seat ? orDash(fields.seat.area) : orDash(spareRide?.area)
+      ),
       field("NAMA PRINTER", orDash(fields.printerName)),
       field("JAM ABSEN", fields.at),
       field("STATUS", "IN"),

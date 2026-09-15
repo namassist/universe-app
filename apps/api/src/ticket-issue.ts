@@ -26,6 +26,7 @@ import { db, schema } from "./db";
 import { env } from "./env";
 import { takesPartInAllocation } from "./fleet-scope";
 import { rosterDayInForce } from "./roster-in-force";
+import { spareRideOf } from "./spare-ride";
 import {
   pairingRefusal,
   personByNik,
@@ -672,6 +673,12 @@ export async function issueTicket(
        anybody the board never considers keeps the dash (owner, 2026-09-15). */
     ...(person.status === "aktif" && person.fleetAllocation
       ? { withoutUnit: "spare" as const }
+      : {}),
+    /* A slip reading SPARE names the spare bus and where it waits. */
+    ...(!decision.seat && person.status === "aktif" && person.fleetAllocation
+      ? await spareRideOf(tap.date, tap.shift).then((ride) =>
+          ride ? { spareRide: ride } : {}
+        )
       : {}),
     hazards: notices.hazards,
     safety: notices.safety,

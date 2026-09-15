@@ -730,6 +730,7 @@ export const en: Dict = {
   flImpSupport: "Support units",
   flImpBreakdown: "Breakdown",
   flImpStandby: "Standby",
+  flImpSpare: "Spare bus",
   flImpDisband: "Fleets disbanded",
   flImpReleased: "Units leaving operation",
   flImpRemoveT: "What this file removes",

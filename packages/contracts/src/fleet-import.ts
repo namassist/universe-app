@@ -66,6 +66,20 @@ export const STANDBY_AREA = "STANDBY";
 export const isStandbyArea = (area: string) =>
   area.replace(/\s+/g, "").toUpperCase() === STANDBY_AREA;
 
+/**
+ * The row that names the spare pool's ride rather than a unit (owner,
+ * 2026-09-15).
+ *
+ * `SPARE | PARKIRAN KASTURI | SPARE | RBU26`: the unit and fleet cells both
+ * read SPARE, the area is where the spare bus waits, and the bus is the ride
+ * every slip reading UNIT SPARE prints. At most two, one area between them —
+ * the yard runs two buses for its spares, from one place.
+ */
+export const SPARE_UNIT = "SPARE";
+export const isSpareUnit = (value: string) =>
+  value.replace(/\s+/g, "").toUpperCase() === SPARE_UNIT;
+export const MAX_SPARE_TRANSPORTS = 2;
+
 /** Which composition fields an update would overwrite. */
 export const FLEET_IMPORT_FIELDS = ["area", "units", "transport"] as const;
 export type FleetImportField = (typeof FLEET_IMPORT_FIELDS)[number];
@@ -122,6 +136,13 @@ export type FleetImportStandbyRow = {
   fleet: string;
 };
 
+/** One bus the spare pool rides, from a SPARE row. */
+export type FleetImportSpareRow = {
+  row: number;
+  transport: string;
+  area: string;
+};
+
 export type FleetImportPreview = {
   /** Echoed so the commit can be checked against the file just validated. */
   fileName: string;
@@ -136,6 +157,8 @@ export type FleetImportPreview = {
   support: FleetImportSupportRow[];
   /** Units the commit would set standby, and the broken digger behind each. */
   standby: FleetImportStandbyRow[];
+  /** The spare pool's buses and where they wait; replaces the last file's. */
+  spare: FleetImportSpareRow[];
   /**
    * Formations the database holds and this file never names — the commit would
    * disband them.
@@ -156,6 +179,7 @@ export type FleetImportResult = {
   disbanded: number;
   support: number;
   standby: number;
+  spare: number;
   released: number;
 };
 
