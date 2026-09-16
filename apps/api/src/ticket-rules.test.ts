@@ -252,3 +252,32 @@ describe("a seat the board decided", () => {
     expect(out.print && out.seat).toBeNull();
   });
 });
+
+/* A spare the board is certain to seat nowhere (owner, 2026-09-15). */
+describe("a spare who cannot be seated", () => {
+  test("gets SPARE at the first finger", () => {
+    expect(
+      ask({
+        role: "spare",
+        readiness: readiness("fail", "pass"),
+        seat: null,
+        tappedAt: "05:00:00",
+        firstTapAt: "05:00:00",
+        cannotBeSeated: true,
+      })
+    ).toMatchObject({ print: true, reason: "attendance-only" });
+  });
+
+  test("a spare who still might be seated waits as before", () => {
+    expect(
+      ask({
+        role: "spare",
+        readiness: readiness("fail", "pass"),
+        seat: null,
+        tappedAt: "05:00:00",
+        firstTapAt: "05:00:00",
+        cannotBeSeated: false,
+      })
+    ).toMatchObject({ print: false });
+  });
+});

@@ -41,6 +41,7 @@ import {
   fingerInDeadline,
   ftwDeadline,
   judge,
+  judgeFtw,
   type Readiness,
 } from "./readiness";
 import { activeNotices } from "./safety-notices";
@@ -67,6 +68,61 @@ const rosteredTo = (date: string, shift: ShiftKind) =>
       and ${schema.rosterDays.code} = ${shift === "day" ? "D" : "N"}
       and ${rosterDayInForce}
   )`;
+
+/**
+ * Whether the board is certain to seat this spare nowhere (owner, 2026-09-15).
+ *
+ * Two things must both hold. His FTW, judged as if the unit asked for it, is a
+ * final no: refused or resting (`fail`), uploaded after the deadline (`late`),
+ * or still missing once the deadline has passed. And there is no unit left he
+ * could take without FTW — none that takes part in allocation, does not ask for
+ * FTW, and wants a SIMPER he holds. The board seats a spare with a failed FTW
+ * on exactly such a unit, so while one exists the slip keeps waiting.
+ *
+ * An unreadable verdict or a missing one before the deadline is not final:
+ * he may still upload, or savera may still be read.
+ */
+export async function cannotBeSeated(input: {
+  nik: string;
+  ftw: {
+    ftwDecision: string | null;
+    sleepCategory: string | null;
+    sentAt: string | null;
+  } | null;
+  /** `"HH:MM:SS"` of this tap. */
+  tapClock: string;
+  ftwDeadline: string;
+}): Promise<boolean> {
+  const verdict = judgeFtw({
+    ftw: input.ftw,
+    requiresFtw: true,
+    ftwDeadline: input.ftwDeadline,
+  });
+  const final =
+    verdict === "fail" ||
+    verdict === "late" ||
+    (verdict === "missing" && input.tapClock >= input.ftwDeadline);
+  if (!final) return false;
+
+  const [open] = await db
+    .select({ id: schema.units.id })
+    .from(schema.units)
+    .where(
+      and(
+        eq(schema.units.ftw, false),
+        seatable(),
+        /* A unit with no SIMPER asks for none, as `pairingRefusal` reads it. */
+        sql`(${schema.units.simperCodeId} is null or exists (
+          select 1 from ${schema.employeeSkills}
+          join ${schema.employees} on ${schema.employees.id} = ${schema.employeeSkills.employeeId}
+          where ${schema.employees.nik} = ${input.nik}
+            and ${schema.employeeSkills.simperCodeId} = ${schema.units.simperCodeId}
+        ))`
+      )
+    )
+    .limit(1);
+  return !open;
+}
 
 /** Whether the board would consider this person for this shift at all. */
 export async function awaitsAllocation(
@@ -601,6 +657,21 @@ export async function issueTicket(
     ftwDeadline: uploadClose,
   });
 
+  const tapClock = tap.at.slice(11, 19);
+  const waits = await awaitsAllocation(tap.nik, tap.date, tap.shift);
+  /* Asked only of a spare the rule is about to hold: the query is for him. */
+  const certainlyUnseated =
+    role === "spare" &&
+    waits &&
+    readiness.finger !== "late" &&
+    tapClock < secondFingerAt &&
+    (await cannotBeSeated({
+      nik: tap.nik,
+      ftw: ftwRow,
+      tapClock,
+      ftwDeadline: uploadClose,
+    }));
+
   const decision = ticketFor({
     role,
     readiness,
@@ -627,7 +698,8 @@ export async function issueTicket(
     secondFingerAt,
     /* Not rostered to this shift is somebody the board never considers too:
        nothing to wait for (2026-09-15). */
-    awaitsAllocation: await awaitsAllocation(tap.nik, tap.date, tap.shift),
+    awaitsAllocation: waits,
+    cannotBeSeated: certainlyUnseated,
     boardDecided: held?.source === "manual" || held?.source === "board",
   });
   if (!decision.print) return { issued: false, reason: "held-back" };

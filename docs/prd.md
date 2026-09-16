@@ -1331,6 +1331,13 @@ KASTURI | SPARE | RBU26`: unit and fleet cells read SPARE, the area is
   test found a tap heard too late for the board printing a standing unit the
   board had already given to a spare holding a slip for it. An admin places
   him by hand.
+- **A spare certain to get no unit prints at once** (owner, 2026-09-15): his
+  FTW, judged as if the unit asked for it, is already a final no — Tidak Boleh
+  Bekerja, Istirahat, uploaded late, or not uploaded once the FTW deadline has
+  passed — and every unit in allocation that he holds a SIMPER for asks for
+  FTW. The board seats a spare with a failed FTW on a unit that asks none, so
+  while such a unit is within his SIMPERs his slip still waits for the second
+  finger, as does a spare whose FTW may still arrive or pass.
 - **A spare whose first finger is late prints at once** (2026-09-15). The
   board will not seat him, so waiting for the second finger only made him tap
   twice for the same SPARE.

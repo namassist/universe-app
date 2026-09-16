@@ -1533,3 +1533,253 @@ describe("the spare bus", () => {
     });
   });
 });
+
+/*
+ * A spare the board is certain to seat nowhere gets SPARE at the first finger
+ * (owner, 2026-09-15): his FTW is a final no, and every unit he holds a SIMPER
+ * for asks for FTW. Anybody who might still be seated keeps waiting.
+ */
+describe("a spare certain to get no unit", () => {
+  const day = "2026-01-26";
+  const fixture = {
+    niks: [] as string[],
+    employees: [] as string[],
+    positions: [] as string[],
+    units: [] as string[],
+    codes: [] as string[],
+    docs: [] as string[],
+    departments: [] as string[],
+  };
+  let ctx: {
+    deptId: string;
+    companyId: string;
+    docId: string;
+    ftwCode: string;
+    freeCode: string;
+  };
+
+  beforeAll(async () => {
+    const [company] = await db
+      .select({ id: schema.companies.id })
+      .from(schema.companies)
+      .limit(1);
+    const [dept] = await db
+      .insert(schema.departments)
+      .values({ name: `${tag} UNSEAT DEPT`, companyId: company!.id })
+      .returning({ id: schema.departments.id });
+    fixture.departments.push(dept!.id);
+    const [doc] = await db
+      .insert(schema.rosterDocuments)
+      .values({
+        departmentId: dept!.id,
+        month: "2026-01-01",
+        fileName: `${tag}-unseat.xlsx`,
+      })
+      .returning({ id: schema.rosterDocuments.id });
+    fixture.docs.push(doc!.id);
+
+    const code = async (name: string) => {
+      const [row] = await db
+        .insert(schema.simperCodes)
+        .values({ name: `${tag} ${name}` })
+        .returning({ id: schema.simperCodes.id });
+      fixture.codes.push(row!.id);
+      return row!.id;
+    };
+    const ftwCode = await code("SIM WAJIB");
+    const freeCode = await code("SIM BEBAS");
+
+    const [[cls], [type], [model], [brand]] = await Promise.all([
+      db
+        .select({ id: schema.unitClasses.id })
+        .from(schema.unitClasses)
+        .limit(1),
+      db.select({ id: schema.unitTypes.id }).from(schema.unitTypes).limit(1),
+      db.select({ id: schema.unitModels.id }).from(schema.unitModels).limit(1),
+      db.select({ id: schema.unitBrands.id }).from(schema.unitBrands).limit(1),
+    ]);
+    for (const [simperCodeId, ftw] of [
+      [ftwCode, true],
+      [freeCode, false],
+    ] as const) {
+      const [unit] = await db
+        .insert(schema.units)
+        .values({
+          code: `ZZUS${uid()}`,
+          classId: cls!.id,
+          typeId: type!.id,
+          modelId: model!.id,
+          brandId: brand!.id,
+          fleetSupport: true,
+          workArea: `${tag} Pit`,
+          simperCodeId,
+          ftw,
+        })
+        .returning({ id: schema.units.id });
+      fixture.units.push(unit!.id);
+    }
+    ctx = {
+      deptId: dept!.id,
+      companyId: company!.id,
+      docId: doc!.id,
+      ftwCode,
+      freeCode,
+    };
+  });
+
+  afterAll(async () => {
+    if (fixture.niks.length) {
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, fixture.niks));
+      await db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.nik, fixture.niks));
+      await db
+        .delete(schema.ftwReadings)
+        .where(inArray(schema.ftwReadings.nik, fixture.niks));
+    }
+    if (fixture.employees.length) {
+      await db
+        .delete(schema.employeeSkills)
+        .where(inArray(schema.employeeSkills.employeeId, fixture.employees));
+      await db
+        .delete(schema.rosterDays)
+        .where(inArray(schema.rosterDays.employeeId, fixture.employees));
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, fixture.employees));
+    }
+    if (fixture.docs.length)
+      await db
+        .delete(schema.rosterDocuments)
+        .where(inArray(schema.rosterDocuments.id, fixture.docs));
+    if (fixture.units.length)
+      await db
+        .delete(schema.units)
+        .where(inArray(schema.units.id, fixture.units));
+    if (fixture.codes.length)
+      await db
+        .delete(schema.simperCodes)
+        .where(inArray(schema.simperCodes.id, fixture.codes));
+    if (fixture.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, fixture.positions));
+    if (fixture.departments.length)
+      await db
+        .delete(schema.departments)
+        .where(inArray(schema.departments.id, fixture.departments));
+  });
+
+  /** A rostered spare holding the given SIMPERs, with the given FTW. */
+  const spare = async (skills: ("ftw" | "free")[], category: string | null) => {
+    const who = `89${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} UNSEAT ${who}`,
+        departmentId: ctx.deptId,
+        fleetAllocation: true,
+      })
+      .returning({ id: schema.positions.id });
+    fixture.positions.push(position!.id);
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: who,
+        name: `${tag} ${who}`,
+        departmentId: ctx.deptId,
+        companyId: ctx.companyId,
+        positionId: position!.id,
+      })
+      .returning({ id: schema.employees.id });
+    fixture.employees.push(employee!.id);
+    fixture.niks.push(who);
+    for (const s of skills)
+      await db.insert(schema.employeeSkills).values({
+        employeeId: employee!.id,
+        simperCodeId: s === "ftw" ? ctx.ftwCode : ctx.freeCode,
+      });
+    await db.insert(schema.rosterDays).values({
+      documentId: ctx.docId,
+      employeeId: employee!.id,
+      date: day,
+      code: "D",
+    });
+    if (category)
+      await db.insert(schema.ftwReadings).values({
+        nik: who,
+        date: day,
+        name: tag,
+        sleepMinutes: 300,
+        sleepCategory: category,
+        ftwDecision:
+          category === "Dapat Bekerja" ? "FTW aman" : "FTW perlu tindak lanjut",
+        sentAt: `${day} 04:40:00`,
+      });
+    return who;
+  };
+
+  const tapAt = async (who: string, clock: string) => {
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who, at: `${day} ${clock}` });
+    return issueTicket(
+      { ip, nik: who, at: `${day} ${clock}`, date: day, shift: "day" },
+      { printingEnabled: false }
+    );
+  };
+
+  const unitOf = (result: Awaited<ReturnType<typeof issueTicket>>) =>
+    result.issued
+      ? result.preview.split("\n").find((l) => l.startsWith("UNIT "))
+      : null;
+
+  test("refused by FTW, every SIMPER on an FTW unit: SPARE at once", async () => {
+    const result = await tapAt(
+      await spare(["ftw"], "Tidak Boleh Bekerja"),
+      "05:00:00"
+    );
+    expect(result.issued).toBe(true);
+    expect(unitOf(result)).toBe("UNIT           : SPARE");
+  });
+
+  test("refused by FTW but able to take a unit that asks none: waits", async () => {
+    const result = await tapAt(
+      await spare(["ftw", "free"], "Tidak Boleh Bekerja"),
+      "05:00:00"
+    );
+    expect(result).toEqual({ issued: false, reason: "held-back" });
+  });
+
+  test("resting counts as a final no too", async () => {
+    const result = await tapAt(
+      await spare(["ftw"], "Istirahat Minimal 1 Jam"),
+      "05:00:00"
+    );
+    expect(result.issued).toBe(true);
+  });
+
+  test("not uploaded while the FTW gate is still open: waits", async () => {
+    const result = await tapAt(await spare(["ftw"], null), "05:00:00");
+    expect(result).toEqual({ issued: false, reason: "held-back" });
+  });
+
+  /* The day timeline closes FTW at 05:22 and the finger at 05:25. */
+  test("not uploaded once the FTW gate has closed: SPARE at once", async () => {
+    const result = await tapAt(await spare(["ftw"], null), "05:23:00");
+    expect(result.issued).toBe(true);
+    expect(unitOf(result)).toBe("UNIT           : SPARE");
+  });
+
+  test("passed FTW: waits for the board", async () => {
+    const result = await tapAt(
+      await spare(["ftw"], "Dapat Bekerja"),
+      "05:00:00"
+    );
+    expect(result).toEqual({ issued: false, reason: "held-back" });
+  });
+});

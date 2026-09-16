@@ -66,6 +66,13 @@ export type TicketInput = {
    * board had on a unit. Only a plan seat, before any board, is judged here.
    */
   boardDecided?: boolean;
+  /**
+   * The board is certain to give him nothing (owner, 2026-09-15): his FTW is
+   * already a final no — refused, resting, uploaded late, or not uploaded by
+   * the deadline — and every unit he holds a SIMPER for asks for FTW. Holding
+   * his slip for the second finger only makes him tap twice for SPARE.
+   */
+  cannotBeSeated?: boolean;
 };
 
 export type TicketDecision =
@@ -105,6 +112,7 @@ export function ticketFor(input: TicketInput): TicketDecision {
   if (
     input.role === "spare" &&
     input.awaitsAllocation &&
+    !input.cannotBeSeated &&
     input.readiness.finger !== "late" &&
     input.tappedAt < input.secondFingerAt
   )
