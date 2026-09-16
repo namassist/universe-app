@@ -1171,3 +1171,24 @@ describe("SPARE rows", () => {
     expect(await db.select().from(schema.fleetSpareTransports)).toEqual([]);
   });
 });
+
+/* The pinned Fleet Spare entry reads what the import set (2026-09-15). */
+describe("the spare ride endpoint", () => {
+  test("answers the ride the last import stored, or null", async () => {
+    await db.delete(schema.fleetSpareTransports);
+    const none = await get("/fleets/spare-ride", admin.cookie);
+    expect(none.status).toBe(200);
+    expect(await none.json()).toEqual({ ride: null });
+
+    await db
+      .insert(schema.fleetSpareTransports)
+      .values([
+        { transportUnitId: busUnit.id, workArea: `${tag} PONDOK`, position: 0 },
+      ]);
+    const set = await get("/fleets/spare-ride", admin.cookie);
+    expect(await set.json()).toEqual({
+      ride: { buses: [busUnit.code], area: `${tag} PONDOK` },
+    });
+    await db.delete(schema.fleetSpareTransports);
+  });
+});

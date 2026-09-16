@@ -42,6 +42,11 @@ export async function spareRideOf(
       ? { buses: board.buses, area: board.area }
       : null;
 
+  return currentSpareRide();
+}
+
+/** Fleet Setting's own rows, whatever any board copied — what the menu shows. */
+export async function currentSpareRide(): Promise<SpareRide | null> {
   const rows = await db
     .select({
       code: schema.units.code,

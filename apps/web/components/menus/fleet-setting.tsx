@@ -28,6 +28,7 @@ import {
   fleetsQueryOptions,
   noFleetKey,
   noFleetQueryOptions,
+  spareRideQueryOptions,
   type FleetRow,
 } from "@/lib/queries/fleets";
 import { unitsQueryOptions, type UnitRow } from "@/lib/queries/units";
@@ -126,6 +127,9 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
     () => noFleetQ.data?.units ?? [],
     [noFleetQ.data]
   );
+
+  /* The third pinned entry: the spare pool's ride, set only by import. */
+  const spareRide = useQuery(spareRideQueryOptions()).data?.ride ?? null;
 
   // Active units — the only catalogue this screen still offers from.
   const unitsQ = useQuery(unitsQueryOptions({ active: true }));
@@ -748,6 +752,46 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                   </TableRow>
                 ))
               : null}
+            {/* Fleet Spare: where the operators whose slip reads SPARE are
+                picked up. No units and nothing to edit here — the import's
+                SPARE rows are the only way to set it (2026-09-15). */}
+            {!listNeedle ? (
+              <TableRow key="spare">
+                {canW ? <TableCell /> : null}
+                <TableCell>
+                  <NameCell name={t.flSpare} sub={t.flSpareSub} />
+                </TableCell>
+                <TableCell
+                  className={
+                    spareRide?.area ? undefined : "text-(--text-tertiary)"
+                  }
+                >
+                  {spareRide?.area ?? "—"}
+                </TableCell>
+                <TableCell className="max-xl:hidden">
+                  {spareRide?.buses.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {spareRide.buses.map((code) => (
+                        <Badge key={code} variant="info">
+                          {code}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-(--text-tertiary)">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <span className="text-xs text-(--text-tertiary) italic">
+                    {spareRide ? t.flSpareUnits : t.flSpareEmpty}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="info">{t.flSpareFixed}</Badge>
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            ) : null}
             {pg.rows.map((f) => (
               <TableRow key={f.id} selected={sel.has(f.id)}>
                 {canW ? (

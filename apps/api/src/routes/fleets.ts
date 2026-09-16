@@ -29,6 +29,8 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
+
+import { currentSpareRide } from "../spare-ride";
 import {
   FLEET_MAX_UNITS,
   FLEET_MIN_UNITS,
@@ -605,6 +607,25 @@ export const fleetsRoutes = new Elysia({ prefix: "/fleets", tags: ["fleets"] })
     detail: {
       summary: "Active units belonging to no formation — outside allocation",
     },
+  })
+
+  /* The spare pool's ride as Fleet Setting holds it, for the pinned Fleet
+     Spare entry (2026-09-15). Read-only: the import is what sets it. */
+  .get("/spare-ride", async () => ({ ride: await currentSpareRide() }), {
+    auth: { menu: ["fleet-setting", "display-fleet"], mode: "view" },
+    response: {
+      200: t.Object({
+        ride: t.Nullable(
+          t.Object({
+            buses: t.Array(t.String()),
+            area: t.Nullable(t.String()),
+          })
+        ),
+      }),
+      401: ErrorSchema,
+      403: ErrorSchema,
+    },
+    detail: { summary: "The spare pool's buses and where they wait" },
   })
 
   /* ---------------------------------------------------------------- import

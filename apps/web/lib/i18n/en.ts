@@ -762,6 +762,11 @@ export const en: Dict = {
   flNoFleet: "No-fleet",
   flNoFleetSub: "No formation and no operator",
   flSupport: "Support fleet",
+  flSpare: "Spare fleet",
+  flSpareSub: "Bus and area for operators whose slip reads SPARE",
+  flSpareFixed: "From import",
+  flSpareUnits: "No units — operators from SPARE slips",
+  flSpareEmpty: "Not set — add SPARE rows to the import",
   flSupportSub: "Units in no formation that are still given an operator",
   flSupportFixed: "In allocation",
   flSupportDlgB:

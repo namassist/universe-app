@@ -20,6 +20,7 @@ import {
   fleetActualRoutes,
   groupIntoFleets,
   planSlots,
+  spareCrewOf,
   type WallSlot,
 } from "./fleet-actual";
 
@@ -1262,5 +1263,118 @@ describe("an operator's photo on the wall", () => {
       wall.cookie
     );
     expect(res.status).toBe(404);
+  });
+});
+
+/*
+ * The spare wall's people (owner, 2026-09-15): whoever's latest slip this
+ * shift reads UNIT SPARE, less anybody the board has since seated.
+ */
+describe("who the spare wall shows", () => {
+  const date = "1999-07-21";
+  const niks: string[] = [];
+  const employees: string[] = [];
+  const docs: string[] = [];
+
+  afterAll(async () => {
+    if (niks.length)
+      await db.delete(schema.tickets).where(inArray(schema.tickets.nik, niks));
+    if (docs.length)
+      await db
+        .delete(schema.fleetActualDocuments)
+        .where(inArray(schema.fleetActualDocuments.id, docs));
+    if (employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, employees));
+  });
+
+  const person = async (suffix: string) => {
+    const [ref] = await db
+      .select({
+        departmentId: schema.employees.departmentId,
+        companyId: schema.employees.companyId,
+        positionId: schema.employees.positionId,
+      })
+      .from(schema.employees)
+      .where(eq(schema.employees.id, opOne))
+      .limit(1);
+    const nik = `98${suffix}${Math.floor(Math.random() * 1e5)
+      .toString()
+      .padStart(5, "0")}`;
+    const [row] = await db
+      .insert(schema.employees)
+      .values({ nik, name: `ZZ SPARE ${suffix}`, ...ref! })
+      .returning({ id: schema.employees.id });
+    niks.push(nik);
+    employees.push(row!.id);
+    return { nik, id: row!.id };
+  };
+
+  const slip = (
+    nik: string,
+    at: string,
+    fields: Record<string, unknown>,
+    hash: string
+  ) =>
+    db.insert(schema.tickets).values({
+      nik,
+      date,
+      shift: "day",
+      ip: "203.0.113.190",
+      status: "printed",
+      contentHash: hash,
+      preview: "x",
+      fields: { at: `${date} ${at}`, ...fields },
+    });
+
+  test("latest slip SPARE is shown, a unit slip or a later seat is not", async () => {
+    const spare = await person("01");
+    const seatedLater = await person("02");
+    const withUnit = await person("03");
+    const mechanic = await person("04");
+
+    await slip(
+      spare.nik,
+      "05:00:00",
+      { seat: null, withoutUnit: "spare" },
+      "a"
+    );
+    await slip(
+      seatedLater.nik,
+      "05:01:00",
+      { seat: null, withoutUnit: "spare" },
+      "b"
+    );
+    await slip(
+      withUnit.nik,
+      "05:02:00",
+      { seat: null, withoutUnit: "spare" },
+      "c"
+    );
+    await slip(
+      withUnit.nik,
+      "05:02:00",
+      { seat: { unit: "DT-X" }, withoutUnit: "spare" },
+      "d"
+    );
+    await slip(mechanic.nik, "05:03:00", { seat: null }, "e");
+
+    /* A board that has since seated one of them. */
+    const [doc] = await db
+      .insert(schema.fleetActualDocuments)
+      .values({ date, shift: "day" })
+      .returning({ id: schema.fleetActualDocuments.id });
+    docs.push(doc!.id);
+    await db.insert(schema.fleetActualSlots).values({
+      documentId: doc!.id,
+      unitId: unitA,
+      employeeId: seatedLater.id,
+      source: "spare",
+    });
+
+    const crew = await spareCrewOf(date, "day");
+    expect(crew.map((c) => c.nik)).toEqual([spare.nik]);
+    expect(crew[0]!.tappedAt).toBe("05:00:00");
   });
 });

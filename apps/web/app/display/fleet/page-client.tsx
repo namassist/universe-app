@@ -19,6 +19,7 @@ import {
   SLIDE_COLS,
   SLIDE_ROWS,
   SLIDE_SIZE,
+  SPARE_DEVICE_NAME,
   SUPPORT_DEVICE_NAME,
 } from "@universe/contracts";
 
@@ -193,7 +194,9 @@ const PORTRAIT_CARD = "aspect-[3/4] w-[min(100cqw,75cqh)]";
 const fleetTitle = (fleet: { kind: string; leaderCode: string | null }) =>
   fleet.kind === "support"
     ? SUPPORT_DEVICE_NAME
-    : `Fleet ${fleet.leaderCode ?? "—"}`;
+    : fleet.kind === "spare"
+      ? SPARE_DEVICE_NAME
+      : `Fleet ${fleet.leaderCode ?? "—"}`;
 
 /**
  * One turn of the rotation.
@@ -795,34 +798,46 @@ export default function DisplayFleetPage() {
      which also gives the cards back the height the tiles were taking. */
   const stats = isMonitor
     ? []
-    : [
-        {
-          icon: <Truck className="text-(--color-primary-bright)" />,
-          iconClass: "bg-(--badge-info-fill) border-(--badge-info-border)",
-          value: String(page?.fleet.total ?? 0),
-          label: "Unit Aktif",
-        },
-        {
-          icon: <CheckCircle2 className="text-(--badge-success-text)" />,
-          iconClass:
-            "bg-(--badge-success-fill) border-(--badge-success-border)",
-          value: String(page?.fleet.crewed ?? 0),
-          label: "Teralokasi",
-        },
-        {
-          icon: <UserX className="text-(--color-danger-text)" />,
-          iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
-          value: String(page?.fleet.idle ?? 0),
-          label: "Tanpa Operator",
-        },
-        {
-          icon: <Repeat2 className="text-(--badge-warning-text)" />,
-          iconClass:
-            "bg-(--badge-warning-fill) border-(--badge-warning-border)",
-          value: String(page?.fleet.substituted ?? 0),
-          label: "Spare",
-        },
-      ];
+    : /* The spare wall counts people, not seats: one number is the answer. */
+      page?.fleet.kind === "spare"
+      ? [
+          {
+            icon: <Repeat2 className="text-(--badge-warning-text)" />,
+            iconClass:
+              "bg-(--badge-warning-fill) border-(--badge-warning-border)",
+            value: String(page.fleet.total),
+            label: "Operator Spare",
+          },
+        ]
+      : [
+          {
+            icon: <Truck className="text-(--color-primary-bright)" />,
+            iconClass: "bg-(--badge-info-fill) border-(--badge-info-border)",
+            value: String(page?.fleet.total ?? 0),
+            label: "Unit Aktif",
+          },
+          {
+            icon: <CheckCircle2 className="text-(--badge-success-text)" />,
+            iconClass:
+              "bg-(--badge-success-fill) border-(--badge-success-border)",
+            value: String(page?.fleet.crewed ?? 0),
+            label: "Teralokasi",
+          },
+          {
+            icon: <UserX className="text-(--color-danger-text)" />,
+            iconClass:
+              "bg-(--badge-danger-fill) border-(--badge-danger-border)",
+            value: String(page?.fleet.idle ?? 0),
+            label: "Tanpa Operator",
+          },
+          {
+            icon: <Repeat2 className="text-(--badge-warning-text)" />,
+            iconClass:
+              "bg-(--badge-warning-fill) border-(--badge-warning-border)",
+            value: String(page?.fleet.substituted ?? 0),
+            label: "Spare",
+          },
+        ];
 
   return (
     <DisplayShell
@@ -851,19 +866,6 @@ export default function DisplayFleetPage() {
             <span className="inline-flex flex-none items-center gap-2.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-4.5 py-1 font-bold text-(--badge-warning-text)">
               <Hourglass className="size-6" />
               Line-up sementara — belum digenerate
-            </span>
-          ) : null}
-          {/* The spare pool's ride, on every page (owner, 2026-09-15): a
-              spare reads it off his slip, and a supervisor off the wall. */}
-          {data?.spare?.buses.length ? (
-            <span className="inline-flex flex-none items-center gap-2.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-4.5 py-1 font-bold text-(--color-primary-bright)">
-              <Bus className="size-6" />
-              Spare {data.spare.buses.join("/")}
-              {data.spare.area ? (
-                <span className="font-medium text-(--text-secondary)">
-                  · {data.spare.area}
-                </span>
-              ) : null}
             </span>
           ) : null}
 

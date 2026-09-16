@@ -1,7 +1,10 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import {
+  BUILT_IN_FLEET_DEVICE_IDS,
   DISPLAY_ROUTE_OF_KIND,
+  SPARE_DEVICE_ID,
+  SPARE_DEVICE_NAME,
   SUPPORT_DEVICE_ID,
   SUPPORT_DEVICE_NAME,
   type AccessMode,
@@ -156,14 +159,23 @@ const MAX_ROTATE_SECONDS = 600;
  * would put it only on databases that ran it.
  */
 async function ensureSupportDevice(): Promise<void> {
+  /* And the spare wall beside it, on the same terms (2026-09-15). */
   await db
     .insert(schema.devices)
-    .values({
-      id: SUPPORT_DEVICE_ID,
-      name: SUPPORT_DEVICE_NAME,
-      kind: "fleet",
-      layout: "slideshow",
-    })
+    .values([
+      {
+        id: SUPPORT_DEVICE_ID,
+        name: SUPPORT_DEVICE_NAME,
+        kind: "fleet",
+        layout: "slideshow",
+      },
+      {
+        id: SPARE_DEVICE_ID,
+        name: SPARE_DEVICE_NAME,
+        kind: "fleet",
+        layout: "slideshow",
+      },
+    ])
     .onConflictDoNothing();
 }
 
@@ -314,10 +326,10 @@ export const devicesRoutes = new Elysia({
   .post(
     "/",
     async ({ body, permissions, status }) => {
-      if (body.id.trim() === SUPPORT_DEVICE_ID)
+      if (BUILT_IN_FLEET_DEVICE_IDS.includes(body.id.trim()))
         return status(422, {
           code: "reserved_id",
-          message: `ID "${SUPPORT_DEVICE_ID}" dipakai layar Fleet Support bawaan`,
+          message: `ID "${body.id.trim()}" dipakai layar fleet bawaan`,
         });
       if (!mayTouch(permissions, body.kind, "manage"))
         return status(403, {
@@ -444,7 +456,7 @@ export const devicesRoutes = new Elysia({
        * on a real change rather than on the mention of one, so a form that
        * echoes the values back unchanged still goes through.
        */
-      const locked = params.id === SUPPORT_DEVICE_ID;
+      const locked = BUILT_IN_FLEET_DEVICE_IDS.includes(params.id);
       if (
         locked &&
         (patch.name !== undefined ||
@@ -454,7 +466,7 @@ export const devicesRoutes = new Elysia({
         return status(422, {
           code: "device_locked",
           message:
-            "Layar Fleet Support hanya bisa diubah durasi slide-nya — isinya mengikuti setting fleet",
+            "Layar fleet bawaan hanya bisa diubah durasi slide-nya — isinya mengikuti setting fleet",
         });
 
       // A request that changes only the fleet picks touches no device column,
@@ -523,10 +535,10 @@ export const devicesRoutes = new Elysia({
       /* The yard always has support units, so a screen for them is part of the
          product rather than something somebody set up and may undo. Deleting
          it would only mean the next list call created it again. */
-      if (params.id === SUPPORT_DEVICE_ID)
+      if (BUILT_IN_FLEET_DEVICE_IDS.includes(params.id))
         return status(422, {
           code: "device_locked",
-          message: "Layar Fleet Support bawaan tidak bisa dihapus",
+          message: "Layar fleet bawaan tidak bisa dihapus",
         });
       const [row] = await db
         .delete(schema.devices)

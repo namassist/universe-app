@@ -16,12 +16,12 @@ import {
 } from "lucide-react";
 
 import {
+  BUILT_IN_FLEET_DEVICE_IDS,
   COLOR_VAL,
   DEVICE_ID_PREFIX,
   DISPLAY_ROUTE_OF_KIND,
   MONITOR_FLEETS_PER_PAGE,
   RUNTEXT_COLORS,
-  SUPPORT_DEVICE_ID,
   type DeviceKind,
   type DisplayLayout,
   type RunTextColor,
@@ -271,7 +271,7 @@ export function DisplayAdminMenu({
   const monitor = kind === "fleet" && fLayout === "monitor";
   /* The support wall: fixed in every respect but its dwell. What it shows is
      decided by what it is, so there is nothing on this form to decide. */
-  const locked = editing?.id === SUPPORT_DEVICE_ID;
+  const locked = !!editing && BUILT_IN_FLEET_DEVICE_IDS.includes(editing.id);
   /* How many turns of the wall the current picks make. On a slideshow that is
      one per formation; on a monitor, one per four. */
   const monPages = Math.max(
@@ -579,7 +579,7 @@ export function DisplayAdminMenu({
                               only mean the next list call created it again.
                               Its dwell is still editable, which is why the
                               pencil beside this stays. */}
-                          {d.id === SUPPORT_DEVICE_ID ? null : (
+                          {BUILT_IN_FLEET_DEVICE_IDS.includes(d.id) ? null : (
                             <IconButton
                               danger
                               aria-label={t.empDel}

@@ -1295,8 +1295,15 @@ KASTURI | SPARE | RBU26`: unit and fleet cells read SPARE, the area is
   the buses between shifts. The board copies them when it is built, so an
   import for the next shift changes nothing for the one under way. The slip
   prints `NO BUS : RBU26/RBU27`, `FLEET : -` and the area on every UNIT
-  SPARE; a seat prints its own ride, and `UNIT : -` rides nothing. The fleet
-  wall shows the same buses and area.
+  SPARE; a seat prints its own ride, and `UNIT : -` rides nothing.
+- **Fleet Spare is a built-in wall and a pinned entry, like Fleet Support**
+  (owner, 2026-09-15). The Display menu always carries a `fleet-spare` screen
+  — created on its own, fixed in all but its dwell, never deleted — showing
+  one group: the operators whose latest slip this shift reads UNIT SPARE,
+  less anybody a board has since seated, each with photo, tap and FTW badge,
+  under the spare area and buses. No other screen shows the spare pool. Fleet
+  Setting pins a read-only "Fleet spare" row with the area and buses the last
+  import set.
 - **The slip reads taps and seats the way the board does** (2026-09-15):
   - **Every board is built from freshly derived readings.** `spare-validate`
     and the Actual tab's regenerate rebuild `finger_readings` from every tap

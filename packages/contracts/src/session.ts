@@ -101,6 +101,22 @@ export const SUPPORT_DEVICE_ID = "fleet-support";
 export const SUPPORT_DEVICE_NAME = "Fleet Support";
 
 /**
+ * The spare wall, built in the same way (owner, 2026-09-15).
+ *
+ * The operators whose slip reads UNIT SPARE, under the spare bus and the place
+ * it waits. Like the support wall it is part of the product, fixed in all but
+ * its dwell, and shown on no other screen — a pit's wall is about its pit.
+ */
+export const SPARE_DEVICE_ID = "fleet-spare";
+export const SPARE_DEVICE_NAME = "Fleet Spare";
+
+/** The built-in fleet walls: created on their own, fixed, never deleted. */
+export const BUILT_IN_FLEET_DEVICE_IDS: readonly string[] = [
+  SUPPORT_DEVICE_ID,
+  SPARE_DEVICE_ID,
+];
+
+/**
  * The shape of one slide on the fleet wall: six across, two down.
  *
  * Fixed rather than fitted to what is standing in it (owner, 2026-09-04). A

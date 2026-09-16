@@ -35,3 +35,13 @@ export const noFleetQueryOptions = () =>
     queryKey: noFleetKey,
     queryFn: () => unwrap(api.v1.fleets["no-fleet"].get()),
   });
+
+/**
+ * The spare pool's ride — buses and area — as the last import set it
+ * (2026-09-15). Under `fleetsKey`, so an import's invalidation refreshes it.
+ */
+export const spareRideQueryOptions = () =>
+  queryOptions({
+    queryKey: ["fleets", "spare-ride"] as const,
+    queryFn: () => unwrap(api.v1.fleets["spare-ride"].get()),
+  });

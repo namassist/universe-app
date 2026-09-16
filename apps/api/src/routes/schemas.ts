@@ -1350,9 +1350,10 @@ export const FleetDisplayFleetSchema = t.Object({
   id: t.String(),
   /**
    * A formation, or the one group holding the units that belong to none.
-   * `support` sorts last and carries no leader and no single area.
+   * `support` sorts last and carries no leader and no single area. `spare` is
+   * the spare wall's one group: people, not units (2026-09-15).
    */
-  kind: t.UnionEnum(["fleet", "support"] as const),
+  kind: t.UnionEnum(["fleet", "support", "spare"] as const),
   leaderCode: t.Nullable(t.String()),
   area: t.Nullable(t.String()),
   /** Set only when every unit in the group rides the same vehicle. */
@@ -1414,13 +1415,6 @@ export const FleetDisplaySchema = t.Object({
    * person previewing the site-wide board. A monitor heads itself with it.
    */
   deviceName: t.Nullable(t.String()),
-  /**
-   * The spare pool's buses and where they wait (owner, 2026-09-15) — the
-   * board's copy once it exists, Fleet Setting's before. Null when none set.
-   */
-  spare: t.Nullable(
-    t.Object({ buses: t.Array(t.String()), area: t.Nullable(t.String()) })
-  ),
   /**
    * The formations, then the support group.
    *

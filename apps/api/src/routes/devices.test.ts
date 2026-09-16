@@ -16,7 +16,12 @@ import { eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
-import { SUPPORT_DEVICE_ID, SUPPORT_DEVICE_NAME } from "@universe/contracts";
+import {
+  SPARE_DEVICE_ID,
+  SPARE_DEVICE_NAME,
+  SUPPORT_DEVICE_ID,
+  SUPPORT_DEVICE_NAME,
+} from "@universe/contracts";
 import { redis } from "../redis";
 import { devicesRoutes, effectiveRunTexts } from "./devices";
 
@@ -227,6 +232,76 @@ describe("the support wall exists on its own and stays fixed", () => {
 
     const taken = await send("POST", "/devices", admin.cookie, {
       id: SUPPORT_DEVICE_ID,
+      name: "Palsu",
+      kind: "fleet",
+    });
+    expect(taken.status).toBe(422);
+    expect(await taken.json()).toMatchObject({ code: "reserved_id" });
+  });
+});
+
+describe("the spare wall exists on its own and stays fixed, like support", () => {
+  test("listing brings it into being, once", async () => {
+    /* Part of the product rather than something somebody set up: the yard
+       always has support units, so the screen for them is there the first time
+       anybody opens the menu. */
+    const first = await send("GET", "/devices?kind=fleet", admin.cookie);
+    expect(first.status).toBe(200);
+    const rows = (await first.json()) as { id: string; name: string }[];
+    const spareWall = rows.find((r) => r.id === SPARE_DEVICE_ID);
+    expect(spareWall?.name).toBe(SPARE_DEVICE_NAME);
+
+    // A second call must not clobber a dwell somebody has since set.
+    await send("PATCH", `/devices/${SPARE_DEVICE_ID}`, admin.cookie, {
+      rotateSeconds: 45,
+    });
+    await send("GET", "/devices?kind=fleet", admin.cookie);
+    const again = (await (
+      await send("GET", "/devices?kind=fleet", admin.cookie)
+    ).json()) as { id: string; rotateSeconds: number }[];
+    expect(again.find((r) => r.id === SPARE_DEVICE_ID)?.rotateSeconds).toBe(45);
+  });
+
+  test("its dwell is editable and everything else is refused", async () => {
+    const ok = await send(
+      "PATCH",
+      `/devices/${SPARE_DEVICE_ID}`,
+      admin.cookie,
+      {
+        rotateSeconds: 20,
+      }
+    );
+    expect(ok.status).toBe(200);
+
+    for (const body of [
+      { name: "Bukan Spare" },
+      { layout: "monitor" },
+      { fleetIds: [crypto.randomUUID()] },
+    ]) {
+      const refused = await send(
+        "PATCH",
+        `/devices/${SPARE_DEVICE_ID}`,
+        admin.cookie,
+        body
+      );
+      /* Refused rather than ignored: what this screen shows is decided by
+         which screen it is, so there is no version of the request that could
+         have been meant. */
+      expect(refused.status).toBe(422);
+      expect(await refused.json()).toMatchObject({ code: "device_locked" });
+    }
+  });
+
+  test("it cannot be deleted, and its id cannot be taken", async () => {
+    const gone = await send(
+      "DELETE",
+      `/devices/${SPARE_DEVICE_ID}`,
+      admin.cookie
+    );
+    expect(gone.status).toBe(422);
+
+    const taken = await send("POST", "/devices", admin.cookie, {
+      id: SPARE_DEVICE_ID,
       name: "Palsu",
       kind: "fleet",
     });

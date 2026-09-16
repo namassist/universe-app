@@ -17,13 +17,14 @@ import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
   SHIFT_KINDS,
+  SPARE_DEVICE_ID,
   SUPPORT_DEVICE_ID,
   type ShiftKind,
 } from "@universe/contracts";
 
 import { buildBoard, candidates, storeBoard } from "../allocation";
 import { deriveDate } from "../derive";
-import { spareRideOf, type SpareRide } from "../spare-ride";
+import { spareRideOf } from "../spare-ride";
 import { currentShift } from "../current-shift";
 import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
@@ -390,9 +391,123 @@ const photoNotFound = {
  * looser rule (an employee that exists, an employee on some board) would let a
  * kiosk walk the register one NIK at a time.
  */
+/**
+ * The operators whose slip reads UNIT SPARE this shift (owner, 2026-09-15).
+ *
+ * Read from the slips themselves — each person's latest one — so the wall
+ * shows exactly who holds paper saying SPARE, rather than a second
+ * derivation of the rule that printed it. Somebody a board has since seated
+ * is left out: his next tap prints the unit, and the fleet wall shows him on
+ * it already.
+ */
+export async function spareCrewOf(date: string, shift: ShiftKind) {
+  const result = await db.execute<{
+    employee_id: string;
+    nik: string;
+    name: string;
+    photo_file: string | null;
+    at: string | null;
+    without_unit: string | null;
+    has_seat: boolean;
+  }>(sql`
+    select distinct on (t.nik)
+      e.id as employee_id, e.nik, e.name, e.photo_file_name as photo_file,
+      t.fields->>'at' as at,
+      t.fields->>'withoutUnit' as without_unit,
+      coalesce(jsonb_typeof(t.fields->'seat') = 'object', false) as has_seat
+    from ${schema.tickets} t
+    join ${schema.employees} e on e.nik = t.nik
+    where t.date = ${date} and t.shift = ${shift}
+    order by t.nik, t.created_at desc
+  `);
+  const latest = [...((result as { rows?: unknown[] }).rows ?? result)] as {
+    employee_id: string;
+    nik: string;
+    name: string;
+    photo_file: string | null;
+    at: string | null;
+    without_unit: string | null;
+    has_seat: boolean;
+  }[];
+
+  const doc = await documentOf(date, shift);
+  const seated = new Set(
+    doc
+      ? (
+          await db
+            .select({ employeeId: schema.fleetActualSlots.employeeId })
+            .from(schema.fleetActualSlots)
+            .where(eq(schema.fleetActualSlots.documentId, doc.id))
+        )
+          .map((s) => s.employeeId)
+          .filter((id): id is string => !!id)
+      : []
+  );
+
+  return latest
+    .filter(
+      (r) =>
+        r.without_unit === "spare" && !r.has_seat && !seated.has(r.employee_id)
+    )
+    .map((r) => ({
+      employeeId: r.employee_id,
+      nik: r.nik,
+      name: r.name,
+      photoFile: r.photo_file,
+      tappedAt: r.at ? r.at.slice(11, 19) : null,
+    }))
+    .sort((a, b) => (a.tappedAt ?? "").localeCompare(b.tappedAt ?? ""));
+}
+
+/** The spare wall's one group: the crew above, under the spare bus. */
+async function spareGroup(date: string, shift: ShiftKind): Promise<WallFleet> {
+  const [crew, ride] = await Promise.all([
+    spareCrewOf(date, shift),
+    spareRideOf(date, shift),
+  ]);
+  const readingFor = await wallReadings(
+    date,
+    shift,
+    crew.map((c) => normalizeNik(c.nik))
+  );
+  const busCode = ride?.buses.length ? ride.buses.join("/") : null;
+  return {
+    id: "spare",
+    kind: "spare",
+    leaderCode: null,
+    area: ride?.area ?? null,
+    busCode,
+    total: crew.length,
+    crewed: crew.length,
+    idle: 0,
+    substituted: 0,
+    units: crew.map((c) => ({
+      unitId: `spare-${c.nik}`,
+      unitCode: "SPARE",
+      modelName: "",
+      brandName: "",
+      unitArea: ride?.area ?? null,
+      busCode,
+      employeeNik: c.nik,
+      employeeName: c.name,
+      employeePhotoFile: c.photoFile,
+      source: "spare" as const,
+      tappedAt: c.tappedAt,
+      ftw: readingFor?.(normalizeNik(c.nik), true).ftw ?? null,
+    })),
+  };
+}
+
 async function onDisplayedBoard(employeeId: string): Promise<boolean> {
   const now = currentShift(new Date(), await shiftGates());
   if (!now) return false;
+  /* The spare wall shows faces too, and they are on no board. */
+  if (
+    (await spareCrewOf(now.date, now.shift)).some(
+      (c) => c.employeeId === employeeId
+    )
+  )
+    return true;
 
   const doc = await documentOf(now.date, now.shift);
   const [hit] = doc
@@ -466,7 +581,7 @@ export type WallSlot = {
    */
   fleetId: string | null;
   /** A formation, or the group holding the units that belong to none. */
-  groupKind: "fleet" | "support";
+  groupKind: "fleet" | "support" | "spare";
   /**
    * The *live* formation behind it, or null once that formation is gone.
    *
@@ -498,7 +613,7 @@ export type WallSlot = {
 
 export type WallFleet = {
   id: string;
-  kind: "fleet" | "support";
+  kind: "fleet" | "support" | "spare";
   /** Null on the support group, which has no leader to be named after. */
   leaderCode: string | null;
   area: string | null;
@@ -808,8 +923,12 @@ export const fleetActualRoutes = new Elysia({
        * why it has no picks to make and none to lose.
        */
       const supportOnly = screen?.id === SUPPORT_DEVICE_ID;
+      /* The spare wall, likewise: its one group and nothing else. */
+      const spareOnly = screen?.id === SPARE_DEVICE_ID;
       const scope =
-        screen && !supportOnly ? await deviceFleetScope(screen.id) : null;
+        screen && !supportOnly && !spareOnly
+          ? await deviceFleetScope(screen.id)
+          : null;
       const rotate = screen?.rotateSeconds ?? DEFAULT_ROTATE_SECONDS;
       /* A wall nobody registered — a person previewing the site-wide board —
          reads as a slideshow: it has no picks, so it has nothing to lay four
@@ -830,8 +949,7 @@ export const fleetActualRoutes = new Elysia({
         rotateSeconds: rotate,
         layout,
         deviceName,
-        spare: null as SpareRide | null,
-        fleets: [],
+        fleets: [] as WallFleet[],
       };
 
       // The changeover, not `finger-in`: the wall turns over when a shift's
@@ -842,6 +960,28 @@ export const fleetActualRoutes = new Elysia({
       if (!now) return blank;
 
       const doc = await documentOf(now.date, now.shift);
+
+      if (spareOnly) {
+        const at = new Date();
+        const [ftwGate, fingerGate, group] = await Promise.all([
+          ftwDeadline(now.shift),
+          fingerInDeadline(now.shift),
+          spareGroup(now.date, now.shift),
+        ]);
+        return {
+          ...blank,
+          servedAt: at.toISOString(),
+          date: now.date,
+          shift: now.shift,
+          generatedAt: doc?.generatedAt.toISOString() ?? null,
+          /* Not provisional: the slips are what it shows, and they are final
+             the moment they print. */
+          provisional: false,
+          ftwClosed: deadlinePassed(ftwGate, now.date, at),
+          fingerClosed: deadlinePassed(fingerGate, now.date, at),
+          fleets: [group],
+        };
+      }
 
       /*
        * No board yet — so the wall shows the standing plan for this shift,
@@ -903,7 +1043,6 @@ export const fleetActualRoutes = new Elysia({
         rotateSeconds: rotate,
         layout,
         deviceName,
-        spare: await spareRideOf(now.date, now.shift),
         fleets: groupIntoFleets(
           slots.map((s) => {
             const person = s.employeeId ? names.get(s.employeeId) : undefined;

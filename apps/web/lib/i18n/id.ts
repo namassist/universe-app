@@ -760,6 +760,11 @@ export const id = {
   flNoFleet: "No-fleet",
   flNoFleetSub: "Tanpa formasi dan tanpa operator",
   flSupport: "Fleet support",
+  flSpare: "Fleet spare",
+  flSpareSub: "Bus dan area untuk operator yang tiketnya SPARE",
+  flSpareFixed: "Dari import",
+  flSpareUnits: "Tanpa unit — operator dari tiket SPARE",
+  flSpareEmpty: "Belum diatur — isi baris SPARE di import",
   flSupportSub: "Unit tanpa formasi yang tetap dialokasikan operator",
   flSupportFixed: "Masuk alokasi",
   flSupportDlgB:
