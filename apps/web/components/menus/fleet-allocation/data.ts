@@ -321,3 +321,31 @@ export function siteClock(iso: string | null | undefined): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
+
+/**
+ * "MINING OPERATION" → "MO", "PIT SERVICE AND DEVELOPMENT" → "PSD" — the
+ * badge form of a department name, connector words dropped. The full name
+ * rides on the badge's title so the abbreviation never has to be guessed at.
+ */
+const CONNECTORS = new Set(["and", "dan", "of", "the", "&"]);
+export function deptAbbrev(name: string): string {
+  return name
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w && !CONNECTORS.has(w.toLowerCase()))
+    .map((w) => w[0]!.toUpperCase())
+    .join("")
+    .slice(0, 4);
+}
+
+/**
+ * How a unit's status reads on screen — one definition, so the board's cards
+ * and the crew list's column cannot label the same machine differently.
+ */
+export const stBadge: Record<
+  UnitStatus,
+  { variant: BadgeVariant; label: string }
+> = {
+  ready: { variant: "success", label: "Ready" },
+  breakdown: { variant: "danger", label: "Breakdown" },
+  standby: { variant: "warning", label: "Standby" },
+};

@@ -557,6 +557,46 @@ describe("the board composes what the screen renders", () => {
     expect(bare?.skills).toEqual([]);
   });
 
+  /* The crew list under the board is one table over both halves of the
+     workforce, so a paired operator has to arrive as completely as a spare:
+     the same roster, the same permits, the same department. Half of them
+     described would make the table describe two different things. */
+  test("a paired operator carries what a spare carries", async () => {
+    const board = (await (
+      await send("GET", "/fleet-allocation/plan", viewer.cookie)
+    ).json()) as {
+      date: string;
+      units: {
+        code: string;
+        slots: {
+          nik: string;
+          rosterCode: string | null;
+          departmentName: string;
+          skills: string[];
+        }[];
+      }[];
+      spares: { nik: string; rosterCode: string | null }[];
+    };
+
+    const free = board.units.find((u) => u.code === unitFree.code);
+    const day = free?.slots.find((s) => s.nik === opDay.nik);
+    expect(day?.rosterCode).toBe("D");
+    expect(day?.departmentName).toBe(`${tag} A`);
+    expect(day?.skills).toEqual([]);
+
+    const night = free?.slots.find((s) => s.nik === opNight.nik);
+    expect(night?.rosterCode).toBe("N");
+
+    // A spare the roster does not know reads null rather than going missing.
+    expect(
+      board.spares.find((s) => s.nik === opFree.nik)?.rosterCode
+    ).toBeNull();
+    expect(board.spares.find((s) => s.nik === opFit.nik)).toBeUndefined();
+
+    // Stated, because the roster column it describes changes at midnight.
+    expect(board.date).toBe(localDate(new Date()));
+  });
+
   test("releasing frees the slot and the spare returns", async () => {
     const release = await send(
       "DELETE",

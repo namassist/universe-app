@@ -213,6 +213,63 @@ fill the gap from the spare pool.
   and FTW displays if they tap and file.
 - **Spare pool** = fleet-allocation-position operators with no assigned unit.
   Spares follow their own roster and cannot be called outside their shift.
+- **The crew list under the Plan board** (owner, 2026-09-16). A table under
+  the board, replacing the pool of spare cards, which described only the half
+  of the workforce that holds nothing. **One row is a unit**, not a person
+  (owner, 2026-09-16, after the first build read the other way): the fleet
+  setting, the board and this table must name the same machines, and a
+  person-shaped row dropped a whole unit from the list the moment both its
+  operators were on leave — which is the machine somebody opens this screen to
+  find. Every unit the board carries has a row, including one nobody is paired
+  to; the spares follow, one row each, marked SPARE in the unit column the way
+  their slip reads.
+- **What a row states:** its operators (name, NIK), their departments, their
+  SIMPER codes and their roster codes today, then the unit's own fleet with
+  its area, and the unit code. A unit's two operators are
+  two lines of the row — rendered as two `<tr>`s with the unit's cells merged
+  across them, so each operator lines up with his own department, permits and
+  roster code. Units first, by formation then code; spares after them by name.
+- **Filters,** in that order — the people first, then the machines, with the
+  search last: units/spare, today's shift, SIMPER code (several), department,
+  fleet, and a search over operator name, NIK **and unit code**.
+  The fleet column and its filter never read a unit outside a formation as an
+  absence: it says **Fleet support** or **No fleet**, the two groups the
+  board's own fleet filter offers, because both are answers the fleet setting
+  gave rather than a gap in it. A row matches when any of its operators does.
+  The unit's own status (Ready / Standby / Breakdown) is deliberately not here
+  (owner, 2026-09-16): the board states it on the card, and this table is about
+  who is on the machine.
+- **The table is scoped the way the wall is.** A unit reads _Kosong_ only when
+  allocation is about it at all — active, not broken down, and in a formation
+  or flagged support, the same `fleet-scope` rule the engine and the
+  provisional wall apply. Everything else keeps its row, marked **Di luar
+  alokasi**, because the fleet setting gave it an answer and a machine should
+  not go quiet unnoticed; but nobody will ever be sent to fill it, and counting
+  it made the vacancy figure roughly double what the wall would show (2026-09-16:
+  109 real against 108 phantom).
+- **Before `spare-validate` the table and the fleet wall agree**, unit for unit
+  and name for name: the provisional wall is the same standing plan read
+  through the same roster rule (`D`/`N` only). Afterwards they diverge by
+  design — the wall becomes the board, where spares fill the vacancies and a
+  failed FTW or a late tap costs the standing operator his unit. The table
+  knows nothing of taps or FTW, and should not: it is what was planned, not
+  what became of it.
+- **The shift never removes a unit; it decides what "empty" means.** Choosing
+  Siang or Malam keeps every unit on screen and marks the ones no operator
+  works that shift — a unit whose day operator is on leave is exactly what the
+  morning list is for, and the first build dropped it. A unit whose only
+  working operator is on nights therefore reads empty at the morning muster,
+  which is the truth of it. For a spare — a row about a person, not a machine
+  — the shift still filters him in or out. A second control, **Hanya unit
+  kosong**, narrows to the marked ones; the two read as one sentence: "the
+  morning shift, only the units nobody is on". The shift opens on the
+  shift being mustered, read from the clock at mount: Siang before noon, Malam
+  after it. There is no filter on the roster code itself — the code is a
+  column, so the _reason_ (CR, OFF, A, TGS) is read off the vacancy rather than
+  searched for. The vacancy is marked on the unit's row, which the board cannot do:
+  there its operators are still paired to it. The board's payload carries the
+  date it read the roster for, and the table states it, because the roster
+  column changes at midnight.
 
 ### FTW + attendance ingestion — shipped
 

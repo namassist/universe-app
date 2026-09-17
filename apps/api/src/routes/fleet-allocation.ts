@@ -27,6 +27,7 @@ import { Elysia, t } from "elysia";
 import {
   rosterCodeKind,
   type PlanImportPreview,
+  type RosterCode,
   type RosterCodeKind,
   type UnitStatus,
 } from "@universe/contracts";
@@ -66,6 +67,18 @@ const SlotSchema = t.Object({
   name: t.String(),
   simperTypeName: t.Nullable(t.String()),
   rosterShift: ShiftKindSchema,
+  /** The operator's own department — not the unit's, which may differ. */
+  departmentName: t.String(),
+  /**
+   * The roster code for today, as written: `D`, `N`, `CR`, `STB`, …
+   *
+   * `rosterShift` above says only whether that code is a working shift.
+   * The crew list states the code itself, because "on leave" and "off" are
+   * different answers to "why is this unit empty today".
+   */
+  rosterCode: t.Nullable(t.String()),
+  /** The SIMPER codes this operator holds, by name — what a unit matches on. */
+  skills: t.Array(t.String()),
 });
 
 /**
@@ -116,6 +129,8 @@ const PlanBoardSchema = t.Object({
       name: t.String(),
       departmentName: t.String(),
       rosterShift: ShiftKindSchema,
+      /** The roster code for today, as written — see `SlotSchema`. */
+      rosterCode: t.Nullable(t.String()),
       /**
        * The SIMPER codes this operator holds, by name.
        *
@@ -126,6 +141,8 @@ const PlanBoardSchema = t.Object({
       skills: t.Array(t.String()),
     })
   ),
+  /** The date the roster was read for, `YYYY-MM-DD`. */
+  date: t.String(),
 });
 
 const CandidateSchema = t.Object({
@@ -149,12 +166,19 @@ const CandidateSchema = t.Object({
 
 /* ------------------------------------------------------------------ lookups */
 
-/** day/night for a set of employees on one date — other kinds read as null. */
-export async function shiftKinds(
+/**
+ * The roster code each of these employees carries on one date.
+ *
+ * The code itself, not what it means: a screen listing today's crew states
+ * `CR` or `STB` as the roster states it, and `shiftKinds` below reduces the
+ * same rows to the day/night the pairing rules ask about. One query serves
+ * both, so the two can never disagree about what the roster says.
+ */
+export async function rosterCodesOf(
   employeeIds: string[],
   date: string
-): Promise<Map<string, "day" | "night">> {
-  const map = new Map<string, "day" | "night">();
+): Promise<Map<string, RosterCode>> {
+  const map = new Map<string, RosterCode>();
   if (!employeeIds.length) return map;
   const rows = await db
     .select({
@@ -169,9 +193,19 @@ export async function shiftKinds(
         rosterDayInForce
       )
     );
-  for (const row of rows) {
-    const kind: RosterCodeKind = rosterCodeKind(row.code);
-    if (kind === "day" || kind === "night") map.set(row.employeeId, kind);
+  for (const row of rows) map.set(row.employeeId, row.code);
+  return map;
+}
+
+/** day/night for a set of employees on one date — other kinds read as null. */
+export async function shiftKinds(
+  employeeIds: string[],
+  date: string
+): Promise<Map<string, "day" | "night">> {
+  const map = new Map<string, "day" | "night">();
+  for (const [employeeId, code] of await rosterCodesOf(employeeIds, date)) {
+    const kind: RosterCodeKind = rosterCodeKind(code);
+    if (kind === "day" || kind === "night") map.set(employeeId, kind);
   }
   return map;
 }
@@ -249,6 +283,7 @@ type SlotHolder = {
   nik: string;
   name: string;
   simperTypeName: string | null;
+  departmentName: string;
 };
 
 /** unitId → slot holders, resolved for the board. */
@@ -260,12 +295,17 @@ async function slotsByUnit(): Promise<Map<string, SlotHolder[]>> {
       nik: schema.employees.nik,
       name: schema.employees.name,
       simperTypeName: schema.simperTypes.name,
+      departmentName: schema.departments.name,
       createdAt: schema.fleetPlanSlots.createdAt,
     })
     .from(schema.fleetPlanSlots)
     .innerJoin(
       schema.employees,
       eq(schema.employees.id, schema.fleetPlanSlots.employeeId)
+    )
+    .innerJoin(
+      schema.departments,
+      eq(schema.departments.id, schema.employees.departmentId)
     )
     .leftJoin(
       schema.simperTypes,
@@ -280,6 +320,7 @@ async function slotsByUnit(): Promise<Map<string, SlotHolder[]>> {
       nik: row.nik,
       name: row.name,
       simperTypeName: row.simperTypeName,
+      departmentName: row.departmentName,
     });
     map.set(row.unitId, list);
   }
@@ -638,11 +679,17 @@ export const fleetAllocationRoutes = new Elysia({
       );
       const spares = people.filter((p) => !paired.has(p.id));
 
-      const kinds = await shiftKinds(
-        [...paired, ...spares.map((s) => s.id)],
-        today
-      );
-      const skills = await skillNamesByEmployee(spares.map((s) => s.id));
+      /* Everybody the board can name, paired or not: the crew list below the
+         board is one table over both halves, so it reads the roster and the
+         permits for both in one pass rather than twice with two answers. */
+      const everyone = [...paired, ...spares.map((s) => s.id)];
+      const codes = await rosterCodesOf(everyone, today);
+      const kinds = new Map<string, "day" | "night">();
+      for (const [id, code] of codes) {
+        const kind = rosterCodeKind(code);
+        if (kind === "day" || kind === "night") kinds.set(id, kind);
+      }
+      const skills = await skillNamesByEmployee(everyone);
 
       /* The area rides with the formation, not with each of its units: it is
          one value for the whole fleet, and sending it per unit is what had the
@@ -677,6 +724,9 @@ export const fleetAllocationRoutes = new Elysia({
             name: s.name,
             simperTypeName: s.simperTypeName,
             rosterShift: kinds.get(s.employeeId) ?? null,
+            departmentName: s.departmentName,
+            rosterCode: codes.get(s.employeeId) ?? null,
+            skills: skills.get(s.employeeId) ?? [],
           })),
         })),
         fleets: fleetRows.map((f) => ({ ...f, area: f.area ?? "" })),
@@ -685,8 +735,13 @@ export const fleetAllocationRoutes = new Elysia({
           name: s.name,
           departmentName: s.departmentName,
           rosterShift: kinds.get(s.id) ?? null,
+          rosterCode: codes.get(s.id) ?? null,
           skills: skills.get(s.id) ?? [],
         })),
+        /* The date the roster was read for. Stated rather than assumed: this
+           board changes at midnight, and a tab left open overnight would
+           otherwise present yesterday's crew as today's. */
+        date: today,
       };
     },
     {

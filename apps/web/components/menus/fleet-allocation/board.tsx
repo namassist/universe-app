@@ -16,7 +16,7 @@ import {
 } from "@/lib/queries/fleet-allocation";
 import { cn } from "@/lib/utils";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
-import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,13 +40,16 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 
 import { CheckFilter } from "./check-filter";
+import { CrewTable } from "./crew-table";
 import {
   ACTUAL_UNITS,
   CANDIDATES,
+  deptAbbrev,
   FLEET_OPTIONS,
   ftwBadge,
   siteClock,
   SPARE_INIT,
+  stBadge,
   type BoardUnit,
   type Candidate,
   type Slot,
@@ -135,30 +138,6 @@ type DialogRow = Candidate & {
   deptOk?: boolean;
   skillOk?: boolean;
   expired?: boolean;
-};
-
-/**
- * "MINING OPERATION" → "MO", "PIT SERVICE AND DEVELOPMENT" → "PSD" — the
- * badge form of a department name, connector words dropped. The full name
- * rides on the badge's title so the abbreviation never has to be guessed at.
- */
-const CONNECTORS = new Set(["and", "dan", "of", "the", "&"]);
-function deptAbbrev(name: string): string {
-  return name
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((w) => w && !CONNECTORS.has(w.toLowerCase()))
-    .map((w) => w[0]!.toUpperCase())
-    .join("")
-    .slice(0, 4);
-}
-
-const stBadge: Record<
-  BoardUnit["status"],
-  { variant: BadgeVariant; label: string }
-> = {
-  ready: { variant: "success", label: "Ready" },
-  breakdown: { variant: "danger", label: "Breakdown" },
-  standby: { variant: "warning", label: "Standby" },
 };
 
 /* ---------- Dialog alokasi operator ---------- */
@@ -1032,147 +1011,155 @@ export function AllocBoard({
         </div>
       </Panel>
 
+      {/* Below the board, the crew: who is on today and what they hold.
+          PLAN reads the server and can answer that for both halves of the
+          workforce at once; ACTUAL is still the static port, so it keeps the
+          spare pool it has until its own generation engine lands. */}
+      {mode === "plan" ? <CrewTable board={planQ.data} /> : null}
+
       {/* pool spare — operator kompeten yang belum dapat unit */}
-      <Panel>
-        <Toolbar className="mb-2">
-          <ToolbarTitle>
-            {t.faSpareTitle} ({spareShown.length}/{spare.length})
-          </ToolbarTitle>
-          <ToolbarGroup>
-            {spareDepts.length ? (
-              <Select
-                aria-label={t.faDeptAll}
-                wrapperClassName="w-auto"
-                className="h-10 w-auto pr-9"
-                value={spareDeptF}
-                onChange={(e) => {
-                  setSpareDeptF(e.target.value);
+      {mode === "plan" ? null : (
+        <Panel>
+          <Toolbar className="mb-2">
+            <ToolbarTitle>
+              {t.faSpareTitle} ({spareShown.length}/{spare.length})
+            </ToolbarTitle>
+            <ToolbarGroup>
+              {spareDepts.length ? (
+                <Select
+                  aria-label={t.faDeptAll}
+                  wrapperClassName="w-auto"
+                  className="h-10 w-auto pr-9"
+                  value={spareDeptF}
+                  onChange={(e) => {
+                    setSpareDeptF(e.target.value);
+                    setSparePage(1);
+                  }}
+                >
+                  <option value="all">{t.faDeptAll}</option>
+                  {spareDepts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+              <CheckFilter
+                label={t.faSkillFilter}
+                options={spareSkills.map((code) => ({
+                  value: code,
+                  label: code,
+                }))}
+                value={spareSkillF}
+                onChange={(next) => {
+                  setSpareSkillF(next);
                   setSparePage(1);
                 }}
-              >
-                <option value="all">{t.faDeptAll}</option>
-                {spareDepts.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </Select>
-            ) : null}
-            <CheckFilter
-              label={t.faSkillFilter}
-              options={spareSkills.map((code) => ({
-                value: code,
-                label: code,
-              }))}
-              value={spareSkillF}
-              onChange={(next) => {
-                setSpareSkillF(next);
-                setSparePage(1);
-              }}
-            />
-            <SearchInput
-              className="w-[240px]"
-              placeholder={t.searchOp}
-              aria-label={t.searchOp}
-              value={spareQ}
-              onChange={(e) => {
-                setSpareQ(e.target.value);
-                setSparePage(1);
-              }}
-            />
-          </ToolbarGroup>
-        </Toolbar>
-        <p className="mb-4 text-xs text-(--text-tertiary)">
-          {t.faSpareSub} {t.faSpareAuto}
-        </p>
-        {!spareShown.length ? (
-          <p className="text-sm text-(--text-tertiary)">
-            {spareQ.trim() ? t.faNoMatch : t.faSpareEmpty}
+              />
+              <SearchInput
+                className="w-[240px]"
+                placeholder={t.searchOp}
+                aria-label={t.searchOp}
+                value={spareQ}
+                onChange={(e) => {
+                  setSpareQ(e.target.value);
+                  setSparePage(1);
+                }}
+              />
+            </ToolbarGroup>
+          </Toolbar>
+          <p className="mb-4 text-xs text-(--text-tertiary)">
+            {t.faSpareSub} {t.faSpareAuto}
           </p>
-        ) : (
-          <>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-              {sparePageRows.map((r) => (
-                <div
-                  key={r.nik}
-                  className="flex items-center gap-3 rounded-icon border border-(--divider) bg-(--fill-subtle) p-3"
-                >
-                  <Avatar className="flex-none text-xs">
-                    {initialsOf(r.name)}
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <b
-                      className="block truncate text-[13px] font-semibold"
-                      title={r.name}
-                    >
-                      {r.name}
-                    </b>
-                    <span className="block truncate font-mono text-xs text-(--text-tertiary)">
-                      {r.nik}
-                    </span>
-                    {/* Smaller than the department badge on purpose: the
+          {!spareShown.length ? (
+            <p className="text-sm text-(--text-tertiary)">
+              {spareQ.trim() ? t.faNoMatch : t.faSpareEmpty}
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+                {sparePageRows.map((r) => (
+                  <div
+                    key={r.nik}
+                    className="flex items-center gap-3 rounded-icon border border-(--divider) bg-(--fill-subtle) p-3"
+                  >
+                    <Avatar className="flex-none text-xs">
+                      {initialsOf(r.name)}
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <b
+                        className="block truncate text-[13px] font-semibold"
+                        title={r.name}
+                      >
+                        {r.name}
+                      </b>
+                      <span className="block truncate font-mono text-xs text-(--text-tertiary)">
+                        {r.nik}
+                      </span>
+                      {/* Smaller than the department badge on purpose: the
                         department says who this operator belongs to, the codes
                         say what they may drive. Several of the second fit on a
                         card only if each is slighter than the one of the
                         first, and the codes are read as a set rather than
                         one at a time. */}
-                    {r.skills?.length ? (
-                      <span
-                        className="mt-1 flex flex-wrap gap-1"
-                        title={r.skills.join(" · ")}
+                      {r.skills?.length ? (
+                        <span
+                          className="mt-1 flex flex-wrap gap-1"
+                          title={r.skills.join(" · ")}
+                        >
+                          {r.skills.slice(0, SPARE_SKILL_BADGES).map((code) => (
+                            <span
+                              key={code}
+                              className="rounded-chip border border-(--badge-info-border) bg-(--badge-info-fill) px-1.5 py-px font-mono text-[10px] leading-4 font-semibold text-(--color-primary-bright)"
+                            >
+                              {code}
+                            </span>
+                          ))}
+                          {r.skills.length > SPARE_SKILL_BADGES ? (
+                            <span className="px-0.5 font-mono text-[10px] leading-4 text-(--text-tertiary)">
+                              +{r.skills.length - SPARE_SKILL_BADGES}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </div>
+                    {r.departmentName ? (
+                      <Badge
+                        variant="accent"
+                        title={r.departmentName}
+                        className="flex-none self-start"
                       >
-                        {r.skills.slice(0, SPARE_SKILL_BADGES).map((code) => (
-                          <span
-                            key={code}
-                            className="rounded-chip border border-(--badge-info-border) bg-(--badge-info-fill) px-1.5 py-px font-mono text-[10px] leading-4 font-semibold text-(--color-primary-bright)"
-                          >
-                            {code}
-                          </span>
-                        ))}
-                        {r.skills.length > SPARE_SKILL_BADGES ? (
-                          <span className="px-0.5 font-mono text-[10px] leading-4 text-(--text-tertiary)">
-                            +{r.skills.length - SPARE_SKILL_BADGES}
-                          </span>
-                        ) : null}
-                      </span>
+                        {deptAbbrev(r.departmentName)}
+                      </Badge>
                     ) : null}
                   </div>
-                  {r.departmentName ? (
-                    <Badge
-                      variant="accent"
-                      title={r.departmentName}
-                      className="flex-none self-start"
-                    >
-                      {deptAbbrev(r.departmentName)}
-                    </Badge>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-            {/* Only once there is more than a page of them: a pager under six
+                ))}
+              </div>
+              {/* Only once there is more than a page of them: a pager under six
                 cards is a control that does nothing. */}
-            {spareShown.length > sparePerN || sparePageCount > 1 ? (
-              <PanelFoot>
-                <FootSum>
-                  {t.attSumA} <b>{spareRange}</b> {t.attSumB}{" "}
-                  <b>{spareShown.length}</b> {t.faSpareSumB}
-                </FootSum>
-                <Pagination
-                  page={spareCur}
-                  pageCount={sparePageCount}
-                  onPage={setSparePage}
-                  per={sparePer}
-                  perOptions={["12", "24", "48"]}
-                  onPer={(value) => {
-                    setSparePer(value);
-                    setSparePage(1);
-                  }}
-                />
-              </PanelFoot>
-            ) : null}
-          </>
-        )}
-      </Panel>
+              {spareShown.length > sparePerN || sparePageCount > 1 ? (
+                <PanelFoot>
+                  <FootSum>
+                    {t.attSumA} <b>{spareRange}</b> {t.attSumB}{" "}
+                    <b>{spareShown.length}</b> {t.faSpareSumB}
+                  </FootSum>
+                  <Pagination
+                    page={spareCur}
+                    pageCount={sparePageCount}
+                    onPage={setSparePage}
+                    per={sparePer}
+                    perOptions={["12", "24", "48"]}
+                    onPer={(value) => {
+                      setSparePer(value);
+                      setSparePage(1);
+                    }}
+                  />
+                </PanelFoot>
+              ) : null}
+            </>
+          )}
+        </Panel>
+      )}
 
       {canEdit || canIntervene ? (
         <AllocDialog
