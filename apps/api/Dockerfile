@@ -22,7 +22,16 @@ COPY package.json bun.lock ./
 COPY packages/contracts/package.json packages/contracts/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-RUN bun install --frozen-lockfile
+# Downloaded whole before it is unpacked, not streamed into the extractor.
+# Bun 1.3.14 hands a tarball whose download was cut short straight to the
+# extractor instead of retrying it (oven-sh/bun#34821), so on a network that
+# drops one of the hundreds of parallel downloads the install dies with
+# `Fail extracting tarball for "next"` — the largest package, and so the one
+# most likely to be cut. It failed three builds on 2026-09-18 — twice on the
+# site server, once on a developer machine — while a single `curl` of the same
+# tarball came down whole every time. Set on this one command only: nothing at
+# runtime installs anything. Drop it once the base image carries the fix.
+RUN BUN_FEATURE_FLAG_DISABLE_STREAMING_INSTALL=1 bun install --frozen-lockfile
 
 COPY tsconfig.base.json ./
 COPY packages/contracts packages/contracts
