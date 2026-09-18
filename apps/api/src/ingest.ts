@@ -18,6 +18,7 @@ import { sql } from "drizzle-orm";
 import { db, schema } from "./db";
 import { env } from "./env";
 import { localDate } from "./scheduler";
+import { registeredNiks } from "./registered-niks";
 import { normalizeNik } from "./sources/nik";
 import { fetchFtwRows, type FtwFetcher } from "./sources/savera";
 import { fetchFingerRows, type FingerFetcher } from "./sources/nakula";
@@ -37,7 +38,10 @@ export type SyncResult = {
    * inserted, `xmax` is 0.
    */
   inserted: number;
-  /** Rows refused for want of a usable NIK — counted, never silent. */
+  /**
+   * Rows refused — no usable NIK, a NIK the employee register does not know,
+   * or a duplicate of another row's key. Counted, never silent.
+   */
   skipped: number;
 };
 
@@ -73,9 +77,16 @@ export async function syncFtwReadings(
   fetch: FtwFetcher = fetchFtwRows
 ): Promise<SyncResult> {
   const rows = await fetch(dates);
+  /* Only people the register knows (owner, 2026-09-17). savera reports FTW for
+     every driver on site — a quarter of a morning's rows, 187 of 714 on
+     2026-09-16, belong to nobody in `employees` — and the Monitoring FTW list
+     and its export showed them all. Dropped here rather than hidden on read,
+     the same rule the booth pull applies: somebody added to the register
+     later is picked up by any pass while their date is still in the window. */
+  const registered = await registeredNiks();
   const usable = rows.flatMap((row) => {
     const nik = normalizeNik(row.nik);
-    if (!nik) return [];
+    if (!nik || !registered.has(nik)) return [];
     return [
       {
         nik,

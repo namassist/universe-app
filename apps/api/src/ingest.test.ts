@@ -1,4 +1,11 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
@@ -10,6 +17,64 @@ import type { FingerSourceRow } from "./sources/nakula";
 const D1 = "1999-01-01";
 const D2 = "1999-01-02";
 const TEST_DATES = [D1, D2];
+
+/*
+ * The people the FTW rows describe, in the register.
+ *
+ * The FTW pull keeps only NIKs the register knows (2026-09-17), so every NIK a
+ * test expects to land has to exist first. Its own company, department and
+ * position, so nothing here leans on the seeded master.
+ */
+const KNOWN_NIKS = ["50121018", "50121099"];
+const tag = `ZZ Uji Ingest ${crypto.randomUUID().slice(0, 8)}`;
+const made = {
+  employees: [] as string[],
+  chain: [] as (() => Promise<unknown>)[],
+};
+
+beforeAll(async () => {
+  const [company] = await db
+    .insert(schema.companies)
+    .values({ name: tag, code: `ZZ${crypto.randomUUID().slice(0, 6)}` })
+    .returning({ id: schema.companies.id });
+  const [dept] = await db
+    .insert(schema.departments)
+    .values({ name: tag, companyId: company!.id })
+    .returning({ id: schema.departments.id });
+  const [position] = await db
+    .insert(schema.positions)
+    .values({ name: tag, departmentId: dept!.id })
+    .returning({ id: schema.positions.id });
+  const people = await db
+    .insert(schema.employees)
+    .values(
+      KNOWN_NIKS.map((nik) => ({
+        nik,
+        name: `${tag} ${nik}`,
+        companyId: company!.id,
+        departmentId: dept!.id,
+        positionId: position!.id,
+      }))
+    )
+    .returning({ id: schema.employees.id });
+  made.employees = people.map((p) => p.id);
+  made.chain = [
+    () =>
+      db.delete(schema.positions).where(eq(schema.positions.id, position!.id)),
+    () =>
+      db.delete(schema.departments).where(eq(schema.departments.id, dept!.id)),
+    () =>
+      db.delete(schema.companies).where(eq(schema.companies.id, company!.id)),
+  ];
+});
+
+afterAll(async () => {
+  if (made.employees.length)
+    await db
+      .delete(schema.employees)
+      .where(inArray(schema.employees.id, made.employees));
+  for (const drop of made.chain) await drop();
+});
 
 async function wipe() {
   await db
@@ -106,6 +171,27 @@ describe("syncFtwReadings", () => {
       inserted: 1,
       skipped: 2,
     });
+  });
+
+  /* savera reports FTW for every driver on site; a quarter of a morning's
+     rows belong to nobody in the register (2026-09-16: 187 of 714). They are
+     read by no screen that matters and were listed raw by Monitoring FTW. */
+  test("a NIK the employee register does not know is skipped and counted", async () => {
+    const result = await syncFtwReadings(TEST_DATES, async () => [
+      ftwRow(),
+      ftwRow({ nik: "50821361", name: "IDRUS YUNUS" }),
+    ]);
+    expect(result).toEqual({
+      fetched: 2,
+      upserted: 1,
+      inserted: 1,
+      skipped: 1,
+    });
+    const rows = await db
+      .select({ nik: schema.ftwReadings.nik })
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(rows.map((r) => r.nik)).toEqual(["50121018"]);
   });
 
   test("two raw NIKs that normalize to the same key collapse to one row, not an error", async () => {

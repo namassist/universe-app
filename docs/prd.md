@@ -281,6 +281,16 @@ fill the gap from the spare pool.
   joins), manual uploads only, filtered to this site's company. The verdict
   is ingested as text (sleep minutes, sleep category, FTW decision) — savera's
   rules are operator-configurable, so re-encoding them here would drift.
+- **Only people the employee register knows are kept** (owner, 2026-09-17).
+  savera reports FTW for every driver on site, and a quarter of a morning's
+  rows belonged to nobody in `employees` (187 of 714 on 2026-09-16) — read by
+  no screen that decides anything, but listed raw by Monitoring FTW and its
+  export. The pull drops them before writing, the same rule the booth pull
+  applies to taps (`registered-niks.ts`, one definition for both), and counts
+  them under `skipped`. Any employee counts whatever their status. Somebody
+  added to the register later is picked up by the next pass while their date
+  is still in the pull window (today and yesterday); older days are not
+  back-filled. Rows already stored before the rule stay as they are (owner).
 - **Attendance** comes from Nakula's raw tap log (`tbl_absen_all`), reduced to
   first IN / first OUT per person per day with device IPs — deliberately not
   Nakula's interpreted view (30 s a query vs milliseconds). Raw as recorded;

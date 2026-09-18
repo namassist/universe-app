@@ -33,6 +33,7 @@ import {
 } from "./sources/fingerprint";
 import { normalizeNik } from "./sources/nik";
 import { notify } from "./notify";
+import { registeredNiks } from "./registered-niks";
 
 /** The two questions a pass asks, injectable so the folding is tested dry. */
 export type DeviceClient = {
@@ -176,11 +177,7 @@ export async function collectOnce(
 
   /* Who the register knows, read once for the whole pass rather than per tap.
      The machines carry 2,930 enrolled people against our 989. */
-  const registered = new Set(
-    (await db.select({ nik: schema.employees.nik }).from(schema.employees)).map(
-      (r) => normalizeNik(r.nik)
-    )
-  );
+  const registered = await registeredNiks();
 
   /* Once for the pass, not once per tap. */
   const cutoff = oldestWorthKeeping();
