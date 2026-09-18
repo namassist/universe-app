@@ -17,6 +17,7 @@ import {
 import { useI18n, type Dict } from "@/lib/i18n";
 import type { Dashboard } from "@/lib/queries/dashboard";
 import { Panel, ToolbarTitle } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StateBox } from "@/components/ui/state-box";
 import {
   Table,
@@ -94,6 +95,17 @@ function foldTail<T extends { category: string }>(
   }
   return [...kept.values()];
 }
+
+/* ---- sizes the charts and their skeletons share ----
+   Named once so the placeholder cannot drift from the thing it stands in
+   for: a skeleton even a row too short makes the page jump when the data
+   lands, and the eye reads the jump as something having changed. */
+const RATIO_AXIS = 40;
+const RATIO_ROW = 34;
+/** What the ratio chart is sized for before it knows how many rows it has. */
+const RATIO_ROWS_EXPECTED = 8;
+const EQUIPMENT_HEIGHT = 300;
+const TREEMAP_HEIGHT = 220;
 
 /* ---- chrome shared by all four panels ---- */
 
@@ -234,7 +246,10 @@ function OperatorRatio({
 
   return (
     <ChartPanel title={title} empty={!data.length}>
-      <ResponsiveContainer width="100%" height={40 + data.length * 34}>
+      <ResponsiveContainer
+        width="100%"
+        height={RATIO_AXIS + data.length * RATIO_ROW}
+      >
         <BarChart
           layout="vertical"
           data={data}
@@ -440,7 +455,7 @@ function CategoryTreemap({
           </span>
         ))}
       </div>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={TREEMAP_HEIGHT}>
         <Treemap
           data={data}
           dataKey="operators"
@@ -490,7 +505,7 @@ function EquipmentReport({
 
   return (
     <ChartPanel title={title} empty={!data.length}>
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={EQUIPMENT_HEIGHT}>
         <BarChart
           data={data}
           margin={{ top: 4, right: 8, bottom: 52, left: 0 }}
@@ -579,6 +594,100 @@ export function DashboardCharts({
           suffix={t.chartOperators}
           t={t}
         />
+      </div>
+    </div>
+  );
+}
+
+/* ---- the same four panels, before the data arrives ---- */
+
+/** A panel's frame with its title line, holding a placeholder body. */
+function PanelSkeleton({ children }: { children: React.ReactNode }) {
+  return (
+    <Panel aria-hidden="true" className="flex min-w-0 flex-col">
+      <Skeleton className="mb-4 h-6 w-56" />
+      {children}
+    </Panel>
+  );
+}
+
+/** Deterministic, so the placeholder does not reshuffle on every render. */
+const RATIO_WIDTHS = ["92%", "78%", "86%", "64%", "71%", "55%", "82%", "60%"];
+const EQUIPMENT_HEIGHTS = [88, 70, 52, 44, 36, 30, 26, 22, 18, 14, 10, 8];
+
+/**
+ * The charts' shapes, drawn in the skeleton tone at the charts' own sizes.
+ *
+ * Shaped like the charts rather than as four grey slabs: bars where bars will
+ * be, columns where columns will be, tiles where tiles will be. A reader who
+ * opens the page every morning learns where each panel sits, and a placeholder
+ * in the right shape lets them look to the right place before the numbers
+ * arrive.
+ */
+export function DashboardChartsSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true">
+      <PanelSkeleton>
+        <div
+          className="flex flex-col justify-center gap-[12px]"
+          style={{
+            height: RATIO_AXIS + RATIO_ROWS_EXPECTED * RATIO_ROW,
+          }}
+        >
+          {RATIO_WIDTHS.map((width, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-3 w-24 shrink-0" />
+              <Skeleton className="h-[22px]" style={{ width }} />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-col">
+          {/* `ui/table` draws a 40px header (py-3 over text-xs) and 45px rows
+              (py-3 over text-sm, plus the divider) — matched here row for
+              row, so the table does not shift when it replaces this. */}
+          <div className="flex h-10 items-center px-4">
+            <Skeleton className="h-3 w-full" />
+          </div>
+          {Array.from({ length: RATIO_ROWS_EXPECTED }).map((_, i) => (
+            <div
+              key={i}
+              className="flex h-[45px] items-center border-b border-(--divider) px-4"
+            >
+              <Skeleton className="h-4 w-full" />
+            </div>
+          ))}
+        </div>
+      </PanelSkeleton>
+
+      <PanelSkeleton>
+        <div
+          className="flex items-end gap-3 border-b border-(--chart-grid) pb-14"
+          style={{ height: EQUIPMENT_HEIGHT }}
+        >
+          {EQUIPMENT_HEIGHTS.map((h, i) => (
+            <div key={i} className="flex h-full flex-1 items-end gap-0.5">
+              <Skeleton className="flex-1" style={{ height: `${h}%` }} />
+              <Skeleton className="flex-1" style={{ height: `${h * 0.92}%` }} />
+              <Skeleton className="flex-1" style={{ height: `${h * 0.6}%` }} />
+            </div>
+          ))}
+        </div>
+      </PanelSkeleton>
+
+      <div className="grid grid-cols-2 gap-6 max-xl:grid-cols-1">
+        {[0, 1].map((i) => (
+          <PanelSkeleton key={i}>
+            <Skeleton className="mb-3 h-4 w-64" />
+            <div
+              className="grid grid-cols-[3fr_2fr] grid-rows-[3fr_2fr] gap-1"
+              style={{ height: TREEMAP_HEIGHT }}
+            >
+              <Skeleton className="row-span-2 h-full" />
+              <Skeleton className="h-full" />
+              <Skeleton className="h-full" />
+            </div>
+          </PanelSkeleton>
+        ))}
       </div>
     </div>
   );

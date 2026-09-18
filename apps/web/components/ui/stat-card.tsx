@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /* Kartu statistik G2 (stat) — opsional tautan dengan panah pojok */
 function StatCard({
@@ -72,4 +73,27 @@ function StatCard({
   return <div className={baseClass}>{body}</div>;
 }
 
-export { StatCard };
+/**
+ * The card's shape while its number is on the way.
+ *
+ * Built from the same chrome and the same line heights as the real card — the
+ * 44px icon well, the 32px figure, the label, the detail line — so that when
+ * the data lands nothing on the page moves. A skeleton that is a few pixels
+ * off is worse than none: the whole grid jumps the moment it is replaced, and
+ * the eye reads the jump as something having changed.
+ */
+function StatCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn("relative block rounded-card p-5 glass-card", className)}
+    >
+      <Skeleton className="mb-3 size-11 rounded-icon" />
+      <Skeleton className="h-10 w-20" />
+      <Skeleton className="mt-0.5 h-5 w-32" />
+      <Skeleton className="mt-2 h-4 w-24" />
+    </div>
+  );
+}
+
+export { StatCard, StatCardSkeleton };

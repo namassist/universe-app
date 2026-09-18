@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   Clock,
+  CloudOff,
   IdCard,
   Truck,
   UserCheck,
@@ -12,15 +13,19 @@ import {
 } from "lucide-react";
 
 import type { MenuSlug } from "@/lib/access";
+import { errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { dashboardQueryOptions } from "@/lib/queries/dashboard";
 import { siteClock } from "@/lib/site-clock";
 import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Fresh, PageTitle, Panel } from "@/components/ui/panel";
-import { StatCard } from "@/components/ui/stat-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard, StatCardSkeleton } from "@/components/ui/stat-card";
+import { StateBox } from "@/components/ui/state-box";
 
-import { DashboardCharts } from "./dashboard-charts";
+import { DashboardCharts, DashboardChartsSkeleton } from "./dashboard-charts";
 
 const CARD_DANGER = {
   background: "var(--badge-danger-fill)",
@@ -63,9 +68,29 @@ function MeFact({
   );
 }
 
+/** The personal strip's shape: a name, a NIK, and the four facts. */
+function MeSkeleton() {
+  return (
+    <Panel aria-hidden="true" className="px-6 py-5">
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+        <div className="min-w-0">
+          <Skeleton className="h-7 w-44" />
+          <Skeleton className="mt-1 h-4 w-20" />
+        </div>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="min-w-0">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="mt-1 h-6 w-24" />
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 export function DashboardMenu() {
   const { t, lang } = useI18n();
-  const { roleLabel } = useRole();
+  const { roleLabel, principal, access } = useRole();
   const dashQ = useQuery(dashboardQueryOptions());
   const data = dashQ.data;
 
@@ -332,6 +357,34 @@ export function DashboardMenu() {
    * than on a grant — it is withheld until the register carries expiry dates
    * at all — so it cannot hold a fixed place and appears underneath.
    */
+  /**
+   * What the page will hold, predicted before the payload says so.
+   *
+   * The request takes 300–600 ms, and for that long the page used to be a
+   * title over nothing: every card, the strip and the charts are rendered
+   * only once their section has arrived. A placeholder fixes that, but only
+   * if it has the page's eventual *shape* — an operator whose whole dashboard
+   * is the personal strip must not watch eight cards and four charts appear
+   * and then vanish.
+   *
+   * So the shape is predicted from the grants the shell already holds, which
+   * are the same grants the API gates each section on. This is a prediction
+   * and nothing more: it decides where grey blocks go for half a second, and
+   * the real cards below still gate on the payload, never on this. If the two
+   * ever disagree the page corrects itself when the data lands — a brief
+   * reshape, not a wrong number.
+   */
+  const holds = (...slugs: MenuSlug[]) => slugs.every((slug) => access(slug));
+  const expected = {
+    me: principal.kind === "user" && Boolean(principal.nik),
+    cards:
+      (holds("fit-to-work") ? 2 : 0) +
+      (holds("attendance") ? 2 : 0) +
+      (holds("fleet-allocation") ? 3 : 0) +
+      (holds("unit-status") ? 1 : 0),
+    charts: holds("fleet-allocation", "attendance", "fit-to-work"),
+  };
+
   const cards = [
     data?.ftw && cardUnfit(),
     data?.ftw && cardBelumFtw(),
@@ -352,6 +405,44 @@ export function DashboardMenu() {
           <b className="font-mono text-(--text-secondary)">{freshTime}</b>
         </Fresh>
       </PageTitle>
+
+      {dashQ.isPending ? (
+        /* First load only. The query refetches every minute, and a refetch
+           keeps the previous figures on screen rather than blanking them —
+           `isPending` is true only while there is nothing to show at all. */
+        <>
+          {expected.me ? <MeSkeleton /> : null}
+          {expected.cards ? (
+            <div
+              aria-busy="true"
+              className="grid grid-cols-4 gap-4 max-xl:grid-cols-2"
+            >
+              {Array.from({ length: expected.cards }).map((_, i) => (
+                <StatCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : null}
+          {expected.charts ? <DashboardChartsSkeleton /> : null}
+        </>
+      ) : null}
+
+      {dashQ.isError && !data ? (
+        /* The other way the page used to go blank. A failed first load left
+           the title over nothing, which reads as "nothing to report" — the
+           one thing a dashboard must never say by accident. Once there is
+           data, a failed refetch keeps it; this is only for having none. */
+        <Panel>
+          <StateBox
+            icon={<CloudOff className="text-(--color-danger-text)" />}
+            title={t.dbLoadErr}
+            body={errorMessage(dashQ.error, t.dbLoadErr)}
+          >
+            <Button variant="secondary" onClick={() => void dashQ.refetch()}>
+              {t.rdRetry}
+            </Button>
+          </StateBox>
+        </Panel>
+      ) : null}
 
       {/* The signed-in person's own day, above the aggregates.
           For a `self` account it is the entire dashboard — a department total

@@ -676,6 +676,24 @@ fill the gap from the spare pool.
   allocation grant alone would hand FTW numbers to somebody the FTW section is
   withheld from.
 
+- **The page never loads blank** (owner, 2026-09-18). The request takes
+  300–600 ms, and every card, the personal strip and the charts render only
+  once their section has arrived — so for that long the page was a title over
+  nothing. It now shows a skeleton of its eventual shape, predicted from the
+  grants the shell already holds (the same grants the API gates each section
+  on) and from whether the account carries a NIK, so an operator whose whole
+  dashboard is the personal strip does not watch eight cards and four charts
+  appear and vanish. The prediction only places grey blocks; the real cards
+  still gate on the payload, never on it.
+
+  Each placeholder is built at its component's own measurements — the card's
+  44px icon well and 32px figure, the chart heights (shared constants, so the
+  two cannot drift), the table's 40px header and 45px rows — because a
+  skeleton a row short makes the page jump when the data replaces it. Only the
+  first load shows it: the minute refetch keeps the previous figures on
+  screen. A failed first load says so with a retry, rather than leaving a
+  blank that reads as "nothing to report".
+
 - **The chart palette is validated, not chosen by eye.** Eight categorical
   slots in a fixed order (identity, never rank — these panels re-sort every
   minute, and a palette assigned by size would repaint DOZER as one more

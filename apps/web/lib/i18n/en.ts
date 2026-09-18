@@ -98,6 +98,7 @@ export const en: Dict = {
   greetNoon: "Good afternoon",
   greetAfternoon: "Good afternoon",
   greetEvening: "Good evening",
+  dbLoadErr: "Could not load the dashboard.",
   dbShiftDay: "Day shift",
   dbShiftNight: "Night shift",
   dataAsOf: "Data as of",

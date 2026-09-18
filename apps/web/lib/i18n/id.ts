@@ -96,6 +96,7 @@ export const id = {
   greetNoon: "Siang",
   greetAfternoon: "Sore",
   greetEvening: "Malam",
+  dbLoadErr: "Gagal memuat dashboard.",
   dbShiftDay: "Shift Siang",
   dbShiftNight: "Shift Malam",
   dataAsOf: "Data per",
