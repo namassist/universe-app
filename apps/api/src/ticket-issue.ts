@@ -33,7 +33,7 @@ import {
   unitByCode,
   type AllocPerson,
 } from "./routes/fleet-allocation";
-import { ftwObliged } from "./routes/readiness-display";
+import { ftwObliged } from "./ftw-obliged";
 // Circular on paper (scheduler → live-listener → here), harmless for the
 // same reason `allocation.ts` gives: only reached inside a function body.
 import { localDate } from "./scheduler";

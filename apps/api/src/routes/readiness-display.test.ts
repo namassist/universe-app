@@ -18,12 +18,12 @@ import { inArray } from "drizzle-orm";
 import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
+import { ftwObliged } from "../ftw-obliged";
 import {
   attendanceBoard,
   attendanceDisplayRoutes,
   fitWorkBoard,
   fitWorkDisplayRoutes,
-  ftwObliged,
 } from "./readiness-display";
 
 const app = new Elysia().use(attendanceDisplayRoutes).use(fitWorkDisplayRoutes);

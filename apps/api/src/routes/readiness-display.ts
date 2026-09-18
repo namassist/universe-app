@@ -26,6 +26,7 @@ import type { ShiftKind } from "@universe/contracts";
 import { requireAuth } from "../auth/macro";
 import { currentShift } from "../current-shift";
 import { db, schema } from "../db";
+import { ftwObliged } from "../ftw-obliged";
 import { rosterDayInForce } from "../roster-in-force";
 import {
   fingerInDeadline,
@@ -82,61 +83,6 @@ type FtwRecord = {
   sleepMinutes: number;
   sentAt: string | null;
 };
-
-/**
- * Of these people, the ones who owe a fit-to-work filing this morning.
- *
- * Two conditions, both the owner's (2026-09-14). The position must be one that
- * is allocated a unit at all — a payroll officer on the roster is not somebody
- * the muster is waiting on. And the person must hold a licence for at least one
- * unit the master marks `ftw`.
- *
- * **The master register is the authority, not what is running today.** The flag
- * is read across every unit carrying that simper code, active or not: `active`
- * says whether a machine is in service this morning, `ftw` says whether its
- * kind demands a filing, and a dozer parked for repair has not stopped being a
- * dozer. A code with no unit at all stays silent, and that is right rather than
- * a gap — the fleet owns none of those machines, so nobody can be put on one.
- *
- * *Any* qualifying licence obliges, not all of them. Somebody licensed on both
- * an excavator and a dump truck can be given either, so he files. Production
- * holds no such person today — the register is clean — but the rule is written
- * for the day one appears rather than against today's data.
- */
-export async function ftwObliged(niks: string[]): Promise<Set<string>> {
-  if (!niks.length) return new Set();
-  const rows = await db
-    .selectDistinct({ nik: schema.employees.nik })
-    .from(schema.employees)
-    .innerJoin(
-      schema.positions,
-      and(
-        eq(schema.positions.id, schema.employees.positionId),
-        eq(schema.positions.fleetAllocation, true)
-      )
-    )
-    .innerJoin(
-      schema.employeeSkills,
-      eq(schema.employeeSkills.employeeId, schema.employees.id)
-    )
-    .innerJoin(
-      schema.units,
-      and(
-        eq(schema.units.simperCodeId, schema.employeeSkills.simperCodeId),
-        eq(schema.units.ftw, true)
-      )
-    )
-    .where(
-      and(
-        inArray(schema.employees.nik, niks),
-        /* Only `aktif` is allocated, so only `aktif` owes an upload. A standby
-           employee is given no unit and would stand on the wall forever as
-           "Belum upload FTW" for a unit nobody will hand him. */
-        eq(schema.employees.status, "aktif")
-      )
-    );
-  return new Set(rows.map((r) => r.nik));
-}
 
 /**
  * Everyone the active roster puts on this shift.
