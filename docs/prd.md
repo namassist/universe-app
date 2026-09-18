@@ -991,6 +991,17 @@ fill the gap from the spare pool.
   rotation would have a TV at one panel cycling through dozers working
   somewhere else. The yard always has support units, so the screen is part of
   the product rather than something to set up.
+- **Plan first, then the board — the same as every formation wall** (owner,
+  2026-09-18). From the changeover it shows each support unit's standing
+  operator, taken from the plan and marked provisional; once `spare-validate`
+  has built the board it shows who the board actually put there, spares
+  included. The second half always worked, because a board gives the support
+  group a snapshot row of its own. The first never did: a support unit belongs
+  to no formation, so its plan slot carries no group id, and the wall dropped
+  every slot without one. On 2026-09-18 the plan held 42 support units, 28 with
+  an operator rostered on, and the wall showed none of them until the board.
+  Plan support slots now gather under one fixed key; a slot with no id that is
+  not support still drops out, as before.
 - **Fixed in every respect but its dwell.** Name, layout and contents are
   decided by what it is; `rotateSeconds` is the one honest question, because
   how long a slide should hold depends on the room. Changes to the rest are

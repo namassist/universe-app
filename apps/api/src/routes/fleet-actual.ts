@@ -647,6 +647,16 @@ export type WallFleet = {
  * which unit leads, which formation comes first, what is left out — is the
  * part that would be wrong in a way nobody notices from a screenshot.
  */
+/**
+ * The support group's id while the wall shows the plan.
+ *
+ * A board gives the group a snapshot row and its id; the plan has no row to
+ * give, and the wall still needs a key to gather the units under and to hand
+ * the screen for its React keys. Not a uuid on purpose, so it can never be
+ * mistaken for a row that exists.
+ */
+const PLAN_SUPPORT_GROUP = "plan-support";
+
 export function groupIntoFleets(
   slots: WallSlot[],
   /**
@@ -675,17 +685,36 @@ export function groupIntoFleets(
   /** Group id → the live fleet behind it, for the pick order below only. */
   const liveOf = new Map<string, string | null>();
   for (const s of slots) {
-    if (!s.fleetId) continue;
+    /*
+     * Which group this slot joins.
+     *
+     * A formation's slot names it. A support slot from a *board* names the
+     * board's own support row; a support slot from the *plan* names nothing,
+     * because a support unit belongs to no formation — that is what makes it
+     * support. Those used to be dropped here with every other slot lacking an
+     * id, so the support wall stood empty from the changeover until the board
+     * was built: on 2026-09-18 the plan held 42 support units, 28 with an
+     * operator rostered on, and the wall showed none of them (owner: it shows
+     * the standing operators from the changeover, as every formation wall
+     * does). There is one support group, so a fixed key is the whole answer.
+     *
+     * A slot with no id that is *not* support still drops out: that is a unit
+     * in no formation on a board generated before snapshots existed, and it
+     * has no group to be shown under.
+     */
+    const groupId =
+      s.fleetId ?? (s.groupKind === "support" ? PLAN_SUPPORT_GROUP : null);
+    if (!groupId) continue;
     /* A formation needs its leader's code to be named by; the support group
        needs nothing, which is why the two are told apart by `kind` rather than
        by whether a code happens to be there. */
     if (s.groupKind === "fleet" && !s.leaderCode) continue;
     if (supportOnly !== (s.groupKind === "support")) continue;
     if (wanted && !(s.sourceFleetId && wanted.has(s.sourceFleetId))) continue;
-    let group = groups.get(s.fleetId);
+    let group = groups.get(groupId);
     if (!group) {
       group = {
-        id: s.fleetId,
+        id: groupId,
         kind: s.groupKind,
         leaderCode: s.leaderCode,
         area: s.area,
@@ -696,8 +725,8 @@ export function groupIntoFleets(
         substituted: 0,
         units: [],
       };
-      groups.set(s.fleetId, group);
-      liveOf.set(s.fleetId, s.sourceFleetId);
+      groups.set(groupId, group);
+      liveOf.set(groupId, s.sourceFleetId);
     }
     group.total += 1;
     if (s.employeeName) group.crewed += 1;

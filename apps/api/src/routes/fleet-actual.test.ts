@@ -767,6 +767,108 @@ describe("arranging the board into formations", () => {
   });
 });
 
+describe("the support wall, before and after the board", () => {
+  /**
+   * The owner's rule (2026-09-18): from the changeover the support wall shows
+   * each support unit's standing operator, from the plan, the way every
+   * formation wall does; once `spare-validate` has built the board it shows
+   * who the board actually put there, spares included.
+   *
+   * The two halves reach this function in different shapes. A board gives the
+   * support group a snapshot row, so its slots carry an id. The plan has no
+   * such row — a support unit belongs to no formation, which is the definition
+   * of one — so its slots arrive with no group id at all.
+   */
+
+  test("shows the standing operators before the board exists", () => {
+    /* The bug this closes. Provisional support slots have no `fleetId`, and
+       the grouping dropped every slot without one: on 2026-09-18 the plan held
+       42 support units, 28 of them with an operator rostered on, and the
+       support wall between 16:00 and the board showed none. */
+    const groups = groupIntoFleets(
+      [
+        slot({
+          unitCode: "DZ-01",
+          groupKind: "support",
+          employeeName: "Andi",
+          source: "plan",
+          unitArea: "PIT 2",
+        }),
+        slot({ unitCode: "WT-01", groupKind: "support" }),
+        slot({
+          unitCode: "MH-01",
+          groupKind: "support",
+          employeeName: "Budi",
+          source: "plan",
+        }),
+      ],
+      null,
+      true
+    );
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      kind: "support",
+      leaderCode: null,
+      total: 3,
+      crewed: 2,
+      idle: 1,
+      substituted: 0,
+    });
+    expect(groups[0]!.units.map((u) => u.unitCode)).toEqual([
+      "DZ-01",
+      "MH-01",
+      "WT-01",
+    ]);
+  });
+
+  test("shows who the board put there once it exists, spares included", () => {
+    const board = "support-snapshot";
+    const groups = groupIntoFleets(
+      [
+        slot({
+          unitCode: "DZ-01",
+          fleetId: board,
+          groupKind: "support",
+          employeeName: "Andi",
+          source: "plan",
+        }),
+        slot({
+          unitCode: "WT-01",
+          fleetId: board,
+          groupKind: "support",
+          employeeName: "Cakra",
+          source: "spare",
+        }),
+      ],
+      null,
+      true
+    );
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      id: board,
+      kind: "support",
+      crewed: 2,
+      substituted: 1,
+    });
+    expect(groups[0]!.units.find((u) => u.unitCode === "WT-01")).toMatchObject({
+      employeeName: "Cakra",
+      source: "spare",
+    });
+  });
+
+  test("a formation wall still leaves the support units off", () => {
+    // The support group has a screen of its own, and a pit's TV cycling
+    // through dozers working somewhere else is what that screen prevents.
+    const groups = groupIntoFleets([
+      slot({ unitCode: "DZ-01", groupKind: "support", employeeName: "Andi" }),
+      slot({ unitCode: "EX-22", fleetId: "f1", leaderCode: "EX-22" }),
+    ]);
+    expect(groups.map((g) => g.kind)).toEqual(["fleet"]);
+  });
+});
+
 describe("the provisional line-up, before a board exists", () => {
   const mine = async (shift: "day" | "night") => {
     const rows = await planSlots(PLAN_DATE, shift);
