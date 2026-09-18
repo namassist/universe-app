@@ -29,6 +29,39 @@ Closing it means giving the timeline history — a valid-from column, and every
 reader asking for the gate _as of_ the date being judged — which changes how
 the Timeline menu is edited. Worth doing the day these numbers are audited.
 
+### A window already open ignores edits made while it runs
+
+Three windows fix their closing time **once, when they open**, and keep it to
+the end: the FTW pull (opened by `ftw-ingest`, closes at `ftw-deadline`), the
+live listen (opened by `finger-ingest`) and the tap collection (opened by
+`shift-start`), the last two closing at `bus-depart` plus the grace period
+(`scheduler.ts`: `ingest`, `listen`, `collect`). Everything else reads the
+timeline live — tickets per tap, the walls per request, the board when
+`spare-validate` fires — so an edit mid-muster changes the rule while the
+windows carry on under the old one.
+
+**Symptom:** at 17:10 an admin moves the night `ftw-deadline` from 17:20 to
+17:40 so late operators can still file. The rule follows — an upload at 17:30
+now counts as on time — but the FTW pull still stops at 17:20, so nothing sent
+between 17:20 and 17:40 reaches `ftw_readings` before the board is built.
+People the rule passes read as "belum upload" unless someone presses the
+manual sync. Moving `bus-depart` mid-muster likewise neither extends nor
+shortens listening that day.
+
+The same mechanism has a machine-side twin. The listen loop re-reads the
+machine list every `DEVICE_LISTEN_RETRY_SECONDS` but only ever _adds_ a
+session (`runListenWindow`): a booth added at 16:35 is heard within fifteen
+seconds, but one deactivated or unticked at 16:50 keeps listening — and
+printing — until the window closes. Today the only way to stop it at once is
+the stop button on Monitoring Tap.
+
+Closing it (owner, 2026-09-18 — backlog, not now): each loop already turns
+every few seconds, so recompute the closing time from the timeline on every
+pass rather than once at open, and have the listen loop close sessions for
+booths that have dropped out of `boothsToHear()` as well as open the new
+ones. A restart already recomputes its window (`resumeListening`); this makes
+a running window behave the same way.
+
 ### Signing a low-privileged account into a paired TV's browser darkens it
 
 `/display/*` now admits a user session as well as the device cookie, and the
