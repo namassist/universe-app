@@ -1572,11 +1572,30 @@ KASTURI | SPARE | RBU26`: unit and fleet cells read SPARE, the area is
 - **Fleet Spare is a built-in wall and a pinned entry, like Fleet Support**
   (owner, 2026-09-15). The Display menu always carries a `fleet-spare` screen
   — created on its own, fixed in all but its dwell, never deleted — showing
-  one group: the operators whose latest slip this shift reads UNIT SPARE,
-  less anybody a board has since seated, each with photo, tap and FTW badge,
-  under the spare area and buses. No other screen shows the spare pool. Fleet
-  Setting pins a read-only "Fleet spare" row with the area and buses the last
-  import set.
+  one group of spares, each with photo, tap and FTW badge, under the spare
+  area and buses. No other screen shows the spare pool. Fleet Setting pins a
+  read-only "Fleet spare" row with the area and buses the last import set.
+- **Who is on it: the shift's operators whom no other wall shows on a unit**
+  (owner, 2026-09-18). From the changeover, the whole spare pool, tapped or
+  not; once `spare-validate` has built the board, only the spares it left
+  without a unit — the ones it seated are on their own fleet's wall. One rule
+  covers both: everybody the roster puts on the shift (`aktif`, in an
+  allocatable position, the document in force) less everybody on a unit of
+  the line-up the walls are showing, which is the plan before the board and
+  the board after. Every operator therefore stands on exactly one screen — a
+  formation's, the support wall, or this one; on 2026-09-18 day that was 179
+  on plan units and 151 here, the 330 on the roster. A standing operator
+  whose unit is broken down, outside allocation or held by a shift partner
+  today lands here too, which is also where the engine looks for them.
+
+  It replaced reading the slips (2026-09-15), which showed only people who
+  had already tapped and been handed paper saying SPARE: the wall stood empty
+  at the changeover, when arriving spares most want to see where they stand,
+  and after the board it said nothing about every spare who never tapped,
+  though they are exactly as unallocated. Tapped spares lead, in tap order —
+  the order a vacancy is offered in — then the rest by name, their finger
+  badge reading "Belum Absen" and, past the gate, "Tidak Absen".
+
 - **The slip reads taps and seats the way the board does** (2026-09-15):
   - **Every board is built from freshly derived readings.** `spare-validate`
     and the Actual tab's regenerate rebuild `finger_readings` from every tap

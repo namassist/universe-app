@@ -392,84 +392,101 @@ const photoNotFound = {
  * kiosk walk the register one NIK at a time.
  */
 /**
- * The operators whose slip reads UNIT SPARE this shift (owner, 2026-09-15).
+ * Who the spare wall shows (owner, 2026-09-18).
  *
- * Read from the slips themselves — each person's latest one — so the wall
- * shows exactly who holds paper saying SPARE, rather than a second
- * derivation of the rule that printed it. Somebody a board has since seated
- * is left out: his next tap prints the unit, and the fleet wall shows him on
- * it already.
+ * **Everybody the roster puts on this shift who is on no unit of the line-up
+ * the walls are showing** — the standing plan from the changeover, the board
+ * once `spare-validate` has built it. So before the board the wall holds the
+ * whole spare pool, tapped or not, and after it only the spares the board
+ * left without a unit: the ones it seated are on their own fleet's wall now.
+ *
+ * One rule for both halves, and the rule is what makes the walls add up.
+ * Every operator on the shift is on exactly one screen: a formation's, the
+ * support wall, or this one. The line-up this subtracts is the same one
+ * `/display` answers with for every other wall — `planSlots` or the board —
+ * so the two can never disagree about who is on a unit.
+ *
+ * It replaced reading the slips (2026-09-15), which showed only people who
+ * had already tapped and been handed paper saying SPARE. That left the wall
+ * empty at the changeover, when arriving spares most want to see where they
+ * stand, and — after the board — silent about every spare who never tapped,
+ * although they are exactly as unallocated as the ones who did.
+ *
+ * The pool is the engine's own: `aktif`, in a position allocation is about,
+ * rostered to this shift in the document in force. A standing operator whose
+ * unit is broken down, outside allocation, or held today by a shift partner
+ * lands here as well, because the line-up has no seat for them — which is
+ * also where the engine looks for them.
  */
 export async function spareCrewOf(date: string, shift: ShiftKind) {
-  const result = await db.execute<{
-    employee_id: string;
-    nik: string;
-    name: string;
-    photo_file: string | null;
-    at: string | null;
-    without_unit: string | null;
-    has_seat: boolean;
-  }>(sql`
-    select distinct on (t.nik)
-      e.id as employee_id, e.nik, e.name, e.photo_file_name as photo_file,
-      t.fields->>'at' as at,
-      t.fields->>'withoutUnit' as without_unit,
-      coalesce(jsonb_typeof(t.fields->'seat') = 'object', false) as has_seat
-    from ${schema.tickets} t
-    join ${schema.employees} e on e.nik = t.nik
-    where t.date = ${date} and t.shift = ${shift}
-    order by t.nik, t.created_at desc
-  `);
-  const latest = [...((result as { rows?: unknown[] }).rows ?? result)] as {
-    employee_id: string;
-    nik: string;
-    name: string;
-    photo_file: string | null;
-    at: string | null;
-    without_unit: string | null;
-    has_seat: boolean;
-  }[];
+  const rostered = await db
+    .selectDistinct({
+      employeeId: schema.employees.id,
+      nik: schema.employees.nik,
+      name: schema.employees.name,
+      photoFile: schema.employees.photoFileName,
+    })
+    .from(schema.employees)
+    .innerJoin(
+      schema.positions,
+      and(
+        eq(schema.positions.id, schema.employees.positionId),
+        eq(schema.positions.fleetAllocation, true)
+      )
+    )
+    .innerJoin(
+      schema.rosterDays,
+      and(
+        eq(schema.rosterDays.employeeId, schema.employees.id),
+        eq(schema.rosterDays.date, date),
+        eq(schema.rosterDays.code, shift === "day" ? "D" : "N"),
+        rosterDayInForce
+      )
+    )
+    .where(eq(schema.employees.status, "aktif"));
 
   const doc = await documentOf(date, shift);
-  const seated = new Set(
-    doc
-      ? (
-          await db
-            .select({ employeeId: schema.fleetActualSlots.employeeId })
-            .from(schema.fleetActualSlots)
-            .where(eq(schema.fleetActualSlots.documentId, doc.id))
-        )
-          .map((s) => s.employeeId)
-          .filter((id): id is string => !!id)
-      : []
+  const seats = doc
+    ? await db
+        .select({ employeeId: schema.fleetActualSlots.employeeId })
+        .from(schema.fleetActualSlots)
+        .where(eq(schema.fleetActualSlots.documentId, doc.id))
+    : await planSlots(date, shift);
+  const onUnit = new Set(
+    seats.map((s) => s.employeeId).filter((id): id is string => !!id)
   );
 
-  return latest
-    .filter(
-      (r) =>
-        r.without_unit === "spare" && !r.has_seat && !seated.has(r.employee_id)
-    )
-    .map((r) => ({
-      employeeId: r.employee_id,
-      nik: r.nik,
-      name: r.name,
-      photoFile: r.photo_file,
-      tappedAt: r.at ? r.at.slice(11, 19) : null,
-    }))
-    .sort((a, b) => (a.tappedAt ?? "").localeCompare(b.tappedAt ?? ""));
+  return rostered.filter((r) => !onUnit.has(r.employeeId));
 }
 
 /** The spare wall's one group: the crew above, under the spare bus. */
 async function spareGroup(date: string, shift: ShiftKind): Promise<WallFleet> {
-  const [crew, ride] = await Promise.all([
+  const [pool, ride] = await Promise.all([
     spareCrewOf(date, shift),
     spareRideOf(date, shift),
   ]);
   const readingFor = await wallReadings(
     date,
     shift,
-    crew.map((c) => normalizeNik(c.nik))
+    pool.map((c) => normalizeNik(c.nik))
   );
+  /* Tapped first, in the order they tapped — first come first served is the
+     order a spare is offered a vacancy in, so it is the order worth reading —
+     then everyone not here yet, by name. */
+  const crew = pool
+    .map((c) => {
+      const reading = readingFor?.(normalizeNik(c.nik), true) ?? null;
+      return { ...c, tappedAt: reading?.tappedAt ?? null, ftw: reading?.ftw };
+    })
+    .sort((a, b) =>
+      a.tappedAt && b.tappedAt
+        ? a.tappedAt.localeCompare(b.tappedAt)
+        : a.tappedAt
+          ? -1
+          : b.tappedAt
+            ? 1
+            : a.name.localeCompare(b.name)
+    );
   const busCode = ride?.buses.length ? ride.buses.join("/") : null;
   return {
     id: "spare",
@@ -493,7 +510,7 @@ async function spareGroup(date: string, shift: ShiftKind): Promise<WallFleet> {
       employeePhotoFile: c.photoFile,
       source: "spare" as const,
       tappedAt: c.tappedAt,
-      ftw: readingFor?.(normalizeNik(c.nik), true).ftw ?? null,
+      ftw: c.ftw ?? null,
     })),
   };
 }

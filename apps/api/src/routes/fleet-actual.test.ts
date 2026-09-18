@@ -1369,18 +1369,23 @@ describe("an operator's photo on the wall", () => {
 });
 
 /*
- * The spare wall's people (owner, 2026-09-15): whoever's latest slip this
- * shift reads UNIT SPARE, less anybody the board has since seated.
+ * The spare wall's people (owner, 2026-09-18): everybody the roster puts on
+ * the shift who is on no unit of the line-up the walls are showing — the
+ * plan until the board exists, the board after.
  */
 describe("who the spare wall shows", () => {
   const date = "1999-07-21";
-  const niks: string[] = [];
   const employees: string[] = [];
+  const rosterRows: string[] = [];
   const docs: string[] = [];
 
   afterAll(async () => {
-    if (niks.length)
-      await db.delete(schema.tickets).where(inArray(schema.tickets.nik, niks));
+    // Roster rows first: they reference the people, and the file's own
+    // teardown only reaches them through a document that outlives this block.
+    if (rosterRows.length)
+      await db
+        .delete(schema.rosterDays)
+        .where(inArray(schema.rosterDays.id, rosterRows));
     if (docs.length)
       await db
         .delete(schema.fleetActualDocuments)
@@ -1391,7 +1396,12 @@ describe("who the spare wall shows", () => {
         .where(inArray(schema.employees.id, employees));
   });
 
-  const person = async (suffix: string) => {
+  /** Somebody in the fixture's allocatable position, rostered as asked. */
+  const person = async (
+    suffix: string,
+    code: "D" | "N" | "OFF" = "D",
+    status: "aktif" | "standby" = "aktif"
+  ) => {
     const [ref] = await db
       .select({
         departmentId: schema.employees.departmentId,
@@ -1406,63 +1416,54 @@ describe("who the spare wall shows", () => {
       .padStart(5, "0")}`;
     const [row] = await db
       .insert(schema.employees)
-      .values({ nik, name: `ZZ SPARE ${suffix}`, ...ref! })
+      .values({ nik, name: `ZZ SPARE ${suffix}`, status, ...ref! })
       .returning({ id: schema.employees.id });
-    niks.push(nik);
     employees.push(row!.id);
+    await rosterOn(row!.id, code);
     return { nik, id: row!.id };
   };
 
-  const slip = (
-    nik: string,
-    at: string,
-    fields: Record<string, unknown>,
-    hash: string
-  ) =>
-    db.insert(schema.tickets).values({
-      nik,
-      date,
-      shift: "day",
-      ip: "203.0.113.190",
-      status: "printed",
-      contentHash: hash,
-      preview: "x",
-      fields: { at: `${date} ${at}`, ...fields },
-    });
+  /** A roster row on this block's date, in the fixture's document. */
+  const rosterOn = async (employeeId: string, code: "D" | "N" | "OFF") => {
+    const [row] = await db
+      .insert(schema.rosterDays)
+      .values({ documentId: made.rosterDocs[0]!, employeeId, date, code })
+      .returning({ id: schema.rosterDays.id });
+    rosterRows.push(row!.id);
+  };
 
-  test("latest slip SPARE is shown, a unit slip or a later seat is not", async () => {
-    const spare = await person("01");
-    const seatedLater = await person("02");
-    const withUnit = await person("03");
-    const mechanic = await person("04");
+  const niksOf = async () =>
+    new Set((await spareCrewOf(date, "day")).map((c) => c.nik));
 
-    await slip(
-      spare.nik,
-      "05:00:00",
-      { seat: null, withoutUnit: "spare" },
-      "a"
-    );
-    await slip(
-      seatedLater.nik,
-      "05:01:00",
-      { seat: null, withoutUnit: "spare" },
-      "b"
-    );
-    await slip(
-      withUnit.nik,
-      "05:02:00",
-      { seat: null, withoutUnit: "spare" },
-      "c"
-    );
-    await slip(
-      withUnit.nik,
-      "05:02:00",
-      { seat: { unit: "DT-X" }, withoutUnit: "spare" },
-      "d"
-    );
-    await slip(mechanic.nik, "05:03:00", { seat: null }, "e");
+  /* opOne holds unitA in the standing plan. Rostered on this date, the plan
+     wall shows him on it — so before the board this wall must not, and after
+     a board that did not seat him it must. Both tests lean on it, so it is
+     set up here rather than inside either. */
+  beforeAll(async () => {
+    await rosterOn(opOne, "D");
+  });
 
-    /* A board that has since seated one of them. */
+  test("before the board: the whole pool, tapped or not, and nobody on a unit", async () => {
+    /* The wall used to read the slips, so at the changeover — before anybody
+       had tapped — it was empty, which is when arriving spares most want to
+       see where they stand. */
+    const untapped = await person("01");
+    const nightShift = await person("02", "N");
+    const off = await person("03", "OFF");
+    const standby = await person("04", "D", "standby");
+
+    const shown = await niksOf();
+    expect(shown.has(untapped.nik)).toBe(true);
+    expect(shown.has(nikOne)).toBe(false);
+    expect(shown.has(nightShift.nik)).toBe(false);
+    expect(shown.has(off.nik)).toBe(false);
+    expect(shown.has(standby.nik)).toBe(false);
+  });
+
+  test("after the board: only the spares it left without a unit", async () => {
+    const seated = await person("05");
+    const leftOver = await person("06");
+
     const [doc] = await db
       .insert(schema.fleetActualDocuments)
       .values({ date, shift: "day" })
@@ -1470,13 +1471,18 @@ describe("who the spare wall shows", () => {
     docs.push(doc!.id);
     await db.insert(schema.fleetActualSlots).values({
       documentId: doc!.id,
-      unitId: unitA,
-      employeeId: seatedLater.id,
+      unitId: unitB,
+      employeeId: seated.id,
       source: "spare",
     });
 
-    const crew = await spareCrewOf(date, "day");
-    expect(crew.map((c) => c.nik)).toEqual([spare.nik]);
-    expect(crew[0]!.tappedAt).toBe("05:00:00");
+    const shown = await niksOf();
+    // Seated by the board: on that unit's wall now, so off this one.
+    expect(shown.has(seated.nik)).toBe(false);
+    // Never tapped, never seated — as unallocated as anybody, so still here.
+    expect(shown.has(leftOver.nik)).toBe(true);
+    /* And the board, not the plan, is what counts now: opOne holds unitA in
+       the plan but this board did not seat him, so he is a spare today. */
+    expect(shown.has(nikOne)).toBe(true);
   });
 });
