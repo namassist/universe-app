@@ -517,17 +517,76 @@ fill the gap from the spare pool.
   row for a given day; 322 of them are off, on leave, travelling or sick. Only
   `D` and `N` schedule a shift, so presence is read against 668. Counting
   against 990 would make an ordinary day look like a crisis, every day.
+- **And it is _one_ shift, picked by the clock** (owner, 2026-09-18). Opened
+  before noon the dashboard counts the day shift; from noon onwards, the night
+  one. Every people-shaped figure obeys it — attendance, FTW, the personal
+  strip, the "unit terisi shift ini" card and the attention panel — and the
+  payload carries the shift it counted, so the screen labels the cards from
+  the site's clock rather than the reader's laptop.
+
+  Both codes used to land in one denominator. On 2026-09-18 at 07:15 that read
+  "belum lapor FTW 408 dari 657" and "belum absen 657 dari 657", of which 324
+  were night operators hours away from starting work: a red number printed
+  every morning that nobody could act on. Shift-scoped the same moment reads
+  332 rostered, and the FTW shortfall drops to 84.
+
+  The boundary is noon rather than the `shift-start` stage, and deliberately.
+  `currentShift` answers "which board does the TV in the yard show" and has to
+  turn over exactly when the muster does; this one answers "which shift is the
+  person at the desk asking about", where a configured stage would surprise
+  them — at 13:00 an admin is looking ahead to tonight, not back at a day shift
+  the timeline still calls current until 16:00. Noon is also the boundary the
+  application already splits the day on everywhere else: `first_in_at` against
+  `first_in_pm_at`, the FTW upload shift, and the plan board's crew table. The
+  two live side by side in `current-shift.ts` as `currentShift` and
+  `deskShift`. Between 12:00 and the night `shift-start` they disagree on
+  purpose, and the dashboard says which one it used.
+
+- **A tap is read from the shift's own column, never `a ?? b`.** The noon split
+  exists because one date holds two arrivals; the fallback it refuses is a
+  night operator's 06:20 wrong-button tap on the way home standing as their
+  arrival for a shift that starts at 17:00. The personal strip and the seat
+  lookup follow the same rule, so "you tapped at" and "you are on" are both
+  about the shift the cards are about.
 - **A `self` account gets its own day, not a smaller version of the site's.**
   Roster code, FTW verdict, tap time, the unit today's board seated them on,
   and anything they are waiting on. An aggregate over a department means
   nothing to an operator; "you are on D, you tapped at 04:45, you are on
   DT4023" is the only line on the page they can act on. Everyone else gets the
   strip too, because everyone has a shift.
-- **One card exists because nothing else would ever show its number:** _Units
-  outside every fleet_ — held by a standing operator, claimed by no formation.
-  The signature of a configuration gap rather than a deliberate omission, since
-  a grader kept out of the fleets carries no standing pairing either. Shown
-  only when non-zero; during setup it was 289.
+- **The grid is eight cards in a fixed order** (owner, 2026-09-18): _Tidak
+  lolos FTW · Belum lapor FTW · Belum absen · Hadir_, then _ACTUAL shift ini ·
+  Unit terisi · Unit tidak terisi · Unit breakdown_. Two rows of four — the
+  people, then the yard. A card the caller has no grant for leaves a gap
+  rather than shifting the rest up: the reader is missing a card, not looking
+  at a different one.
+- **Unit tidak terisi is its own card.** It used to be the small print under
+  _Unit terisi_, where a shortfall of 292 read as a footnote to a 0 — and the
+  shortfall is the half somebody has to act on.
+- **ACTUAL is about the shift, not the day** (owner, 2026-09-18), and it
+  reports the clock rather than a count. It used to read `1/2` for the day's
+  two boards, which answers a question nobody at a muster asks — by the time
+  tonight's board matters, it is tonight's shift. A board generated at 04:10
+  and one generated at 07:04 are very different mornings, and the second is
+  the one somebody wants to know about. No board for this shift shows "—" and
+  "belum digenerate", never a zero: not generated and generated-holding-
+  nothing are different mornings too.
+
+  The instant is sent as an ISO string and rendered through `siteClock`, which
+  moved to `lib` when the dashboard became its second caller. `generated_at`
+  is a `timestamptz`, and its `::text` form carries a space separator and a
+  bare `+00` offset that browsers are not obliged to parse — the card would
+  have printed "—" all morning with nothing anywhere saying why.
+
+- **Three cards were taken out** (owner, 2026-09-18). _Fit shift ini_ said the
+  same thing as the two beside it with the sign reversed, and the reader who
+  needs to act is looking for the failures. _Display TV online_ is not about
+  the shift at all. Both counts left the payload with them — `ftw.fit` and the
+  whole `devices` section — because a figure no screen reads has still crossed
+  the wire. Offline displays keep their rows in the attention panel: a dark TV
+  in the yard is exactly the sort of thing nobody notices without being told.
+  _Unit belum masuk fleet_ went the same way, and `fleetConfig` with it; the
+  gap it reported is Fleet Settings' own business and that screen shows it.
 - **Unmatched source readings were a second such card, and were taken out**
   (owner, 2026-09-01). A reading whose NIK matches nobody is not an error
   anywhere — it is simply skipped, by these counts, by the attendance table,
@@ -535,6 +594,109 @@ fill the gap from the spare pool.
   344 FTW rows and 531 of 1155 taps, so every other figure on the page is
   quietly computed over the remainder. The finding stands and is worth chasing;
   the dashboard is simply not where it is reported.
+- **The FTW section counts who _owes_ a filing, not who is on shift** (owner,
+  2026-09-18). The same narrowing the fit-to-work wall has always applied, and
+  now from the same definition: `ftw-obliged.ts` holds the rule once, as a
+  `where` the dashboard drops into its aggregate and as the set the wall, the
+  ingest list and the ticket already asked for. On 2026-09-18 the card read
+  "belum lapor 84" where 10 was the answer — of the other 74, seventy-two hold
+  no licence for a unit the master marks `ftw` and two sit in a position that
+  is never allocated a unit at all. None of them had filed, which is not a
+  failure; it is the rule working. It narrows the whole section rather than
+  the missing count alone, because a denominator holding people whose filings
+  were never counted makes "240 fit of 332" arithmetic nobody can reproduce.
+
+  **Attendance is deliberately not narrowed.** Everybody rostered is expected
+  at the gate, clerk or operator; a tap card borrowing this denominator would
+  stop counting most of the site.
+
+- **A filing passes on both verdicts or neither** (owner, 2026-09-18). savera
+  sends two independent answers — `ftw_decision` ("FTW aman") and
+  `sleep_category` ("Dapat Bekerja") — and the board, the walls and now this
+  card all require both. The card used to read the decision alone, which made
+  it the most optimistic number on the page: on 2026-09-18 it showed 2 people
+  worth looking at where the Fit To Work menu showed 7, because six "FTW aman"
+  rows carried a category of "Tidak Boleh Bekerja" or "Istirahat Minimal N
+  Jam". Neither column is a summary of the other. Lateness is deliberately not
+  part of this card — `judgeFtw` fails a filing sent after the deadline, but
+  that is an allocation gate rather than anything about the person's fitness,
+  and the card sends its reader to Fit To Work to look for a health reason.
+
+  The attention row names the verdict that _failed_, in savera's own words.
+  Sending the decision regardless printed "FTW aman" beside a name listed as
+  unfit — the row arguing with itself in front of the supervisor acting on it.
+
+  **The Fit To Work menu still tints its rows by category alone**, so a filing
+  that clears the category and fails the decision reads green there and counts
+  here. That is one person on 2026-09-18, and it is the menu that is short.
+
+- **Four charts replaced the attention table** (owner, 2026-09-18). The table
+  listed ten names and a badge; the verdict on it was "jelek dan tidak
+  informatif", and fairly — a list of whoever sorted first never did say how
+  the shift was going. In its place are the four panels the operations admin
+  rebuilt by hand in a spreadsheet for every morning meeting: _Rasio
+  Operator_, _Operator Spare_, _Laporan Alat_, _Istirahat_. The numbers were
+  always in this database; only the assembling was manual.
+
+  Stacked by how much width each panel needs rather than in a plain grid
+  (owner, 2026-09-18): _Rasio Operator_ full width, then _Laporan Alat_ full
+  width, then the two treemaps side by side. The first two carry a row per
+  category and a group of three columns per unit class — both run out of room
+  in half a screen, and a rotated axis label is the first thing to go. The
+  treemaps are a handful of tiles each and drop to one column when the
+  viewport can no longer hold two.
+
+  **One categorisation across the three operator panels**, so a bar and a tile
+  reading "DOZER" are about the same dozers. `unit_types` is nearly the report's
+  own vocabulary already; the one place it is too coarse is `EXCAVATOR`, which
+  holds both the production digger that leads a formation and the small
+  excavator that supports one. `unit_classes` draws exactly that line, so
+  excavators group by class and everything else by type. The equipment panel is
+  deliberately finer — it wants the tonnage split (`REARDUMP100T` against
+  `REARDUMP60T`) that the operator panels would drown in. Two questions, two
+  granularities.
+
+  **A spare belongs to the best unit their licences reach.** Over half hold
+  licences across two or three categories (58 and 14 of 131 on 2026-09-18), and
+  counting one person under each would draw a treemap whose tiles sum to more
+  than the pool. Priority rank breaks the tie rather than an arbitrary pick,
+  because it is already the order the engine would crew them in. Spares are in
+  the ratio chart too, not only in their own tile: a ratio that left out 131 of
+  330 people would be a ratio of something nobody asked about.
+
+  **Names stay the register's own.** The morning report writes OHT, DT and
+  DIGGER; the screen writes `REAR DUMP TRUCK`, `DUMP TRUCK` and `BIGDIGGER`,
+  because every other menu spells them the way the register does and one screen
+  inventing a second vocabulary is how two people come to count different
+  things.
+
+  **The charts need all three grants they are made of** — `fleet-allocation`,
+  `attendance` and `fit-to-work`. A bar labelled "tidak lolos FTW" is a
+  fit-to-work figure whatever panel it is drawn on, and opening it on the
+  allocation grant alone would hand FTW numbers to somebody the FTW section is
+  withheld from.
+
+- **The chart palette is validated, not chosen by eye.** Eight categorical
+  slots in a fixed order (identity, never rank — these panels re-sort every
+  minute, and a palette assigned by size would repaint DOZER as one more
+  operator tapped in), validated against this application's own glass surfaces
+  rather than any default: worst adjacent CVD ΔE 8.4 dark / 9.1 light, normal
+  vision 19.3 / 19.6. A ninth category is never a generated hue — it folds into
+  `LAINNYA`, shown rather than dropped.
+
+  The ratio bar uses the reserved status palette, and **its segment order is
+  load-bearing**: status green and status red sit ΔE 4.1 apart under
+  deuteranopia, so amber is always between them and they never share an edge.
+  Every segment carries its own count and the table beneath repeats them, which
+  is also the relief the light-mode contrast warning obliges. The equipment
+  panel counts machines on one axis; the spreadsheet it replaces drew
+  percentages and printed counts on the bars, which is two scales in one frame.
+
+  The eight named categories were checked against the register, not assumed:
+  the first draft carried `WHEELDIGGER` (one machine, in no formation, crewed
+  by nobody) and omitted `MANHAUL TRUCK`, which would have folded five real
+  operators into `LAINNYA` with nothing saying so.
+
 - **The SIMPER card is withheld until the dates exist.** Every active employee
   carries a SIMPER _type_ and exactly one carries an expiry date, so a card
   counting zero out of nothing would read as "all clear" — the opposite of the
@@ -1502,8 +1664,6 @@ same fields from the plan.
 
 ### Open questions
 
-- The dashboard counts FTW as passed on the word "aman" alone — looser than the
-  allocation's rule. Tracked separately; not part of this work.
 - **Nakula is no longer read** (owner, 2026-09-14). `derive.ts` writes
   `finger_readings` directly, the finger-ingest stage only listens, and the
   manual Sync button rebuilds from the taps we hold. The comparison tab and the

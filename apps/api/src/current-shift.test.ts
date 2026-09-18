@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { currentShift } from "./current-shift";
+import { currentShift, deskShift } from "./current-shift";
 
 /** Local time, since the boundary is a fact about the site's clock. */
 const at = (date: string, time: string) => new Date(`${date}T${time}`);
@@ -84,5 +84,45 @@ describe("currentShift", () => {
         night: "05:15:00",
       })
     ).toBeNull();
+  });
+});
+
+describe("deskShift", () => {
+  test("is the day shift right through the morning", () => {
+    for (const time of ["00:00:00", "06:20:00", "11:59:59"])
+      expect(deskShift(at("2026-09-18", time))).toEqual({
+        date: "2026-09-18",
+        shift: "day",
+      });
+  });
+
+  test("turns over at noon exactly, and stays over", () => {
+    for (const time of ["12:00:00", "17:05:00", "23:59:59"])
+      expect(deskShift(at("2026-09-18", time))).toEqual({
+        date: "2026-09-18",
+        shift: "night",
+      });
+  });
+
+  test("the date is always today, never yesterday", () => {
+    /* Where it parts company with `currentShift`, and on purpose. At 01:00 a
+       wall in the yard is still showing the night board that started
+       yesterday; an admin at a desk asking for "the dashboard" means today's
+       figures, and reporting them under yesterday's date would be a quiet
+       lie about which numbers they are reading. */
+    expect(deskShift(at("2026-09-18", "01:00:00"))).toEqual({
+      date: "2026-09-18",
+      shift: "day",
+    });
+    expect(currentShift(at("2026-09-18", "01:00:00"), GATES)).toEqual({
+      date: "2026-09-17",
+      shift: "night",
+    });
+  });
+
+  test("needs no timeline, so it cannot be half-configured", () => {
+    // `currentShift` refuses on a missing gate; this one has nothing to miss,
+    // and the dashboard is never left without a shift to count.
+    expect(deskShift(at("2026-09-18", "09:00:00")).shift).toBe("day");
   });
 });

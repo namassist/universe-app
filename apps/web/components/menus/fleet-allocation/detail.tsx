@@ -26,6 +26,7 @@ import {
   type ActualSlot,
   type AuditRow,
 } from "@/lib/queries/fleet-actual";
+import { siteClock } from "@/lib/site-clock";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
@@ -64,7 +65,6 @@ import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
 
 import { CheckFilter } from "./check-filter";
-import { siteClock } from "./data";
 
 /** "PIT SERVICE AND DEVELOPMENT" → "PSD", so a badge stays a badge. */
 function deptAbbrev(name: string): string {

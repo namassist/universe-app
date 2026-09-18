@@ -1,15 +1,11 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   Clock,
-  Heart,
   IdCard,
-  Monitor,
-  Search,
   Truck,
   UserCheck,
   XCircle,
@@ -17,47 +13,14 @@ import {
 
 import type { MenuSlug } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import {
-  dashboardQueryOptions,
-  type AttentionFact,
-} from "@/lib/queries/dashboard";
+import { dashboardQueryOptions } from "@/lib/queries/dashboard";
+import { siteClock } from "@/lib/site-clock";
 import { useRole } from "@/components/providers/role-context";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
-import { Pagination, usePagination } from "@/components/ui/pagination";
-import {
-  FootSum,
-  Fresh,
-  PageTitle,
-  Panel,
-  PanelFoot,
-  Toolbar,
-  ToolbarGroup,
-  ToolbarTitle,
-} from "@/components/ui/panel";
-import { SearchInput } from "@/components/ui/search-input";
-import { Select } from "@/components/ui/select";
+import { Fresh, PageTitle, Panel } from "@/components/ui/panel";
 import { StatCard } from "@/components/ui/stat-card";
-import { StateBox } from "@/components/ui/state-box";
-import {
-  NameCell,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
-type AttentionRow = {
-  name: string;
-  sub: string;
-  dept: string;
-  issue: string;
-  badge: string;
-  badgeVariant: BadgeVariant;
-  target: MenuSlug;
-  action: string;
-};
+import { DashboardCharts } from "./dashboard-charts";
 
 const CARD_DANGER = {
   background: "var(--badge-danger-fill)",
@@ -102,7 +65,7 @@ function MeFact({
 
 export function DashboardMenu() {
   const { t, lang } = useI18n();
-  const { roleLabel, access } = useRole();
+  const { roleLabel } = useRole();
   const dashQ = useQuery(dashboardQueryOptions());
   const data = dashQ.data;
 
@@ -115,8 +78,11 @@ export function DashboardMenu() {
    * now tests the section rather than re-deriving the permission.
    */
   const facts = React.useMemo(() => {
-    const rows = (kind: AttentionFact["kind"]) =>
-      (data?.attention ?? []).filter((r) => r.kind === kind);
+    /* The board for the shift the payload is about. The API sends both of
+       today's, because one card counts the shift and another counts the day —
+       picking here keeps the two from having to share a number. */
+    const boards = data?.allocation ?? [];
+    const board = boards.find((b) => b.shift === data?.shift);
     return {
       att: {
         total: data?.attendance?.scheduled ?? 0,
@@ -128,41 +94,35 @@ export function DashboardMenu() {
       },
       ftw: {
         total: data?.ftw?.scheduled ?? 0,
-        fit: data?.ftw?.fit ?? 0,
         kurang: data?.ftw?.followUp ?? 0,
         belum: data?.ftw?.missing ?? 0,
       },
-      units: { breakdown: data?.units?.breakdown ?? 0 },
+      units: {
+        breakdown: data?.units?.breakdown ?? 0,
+        codes: data?.units?.breakdownCodes ?? [],
+      },
       simper: {
         expired: data?.simper?.expired ?? 0,
         soon: data?.simper?.soon ?? 0,
       },
-      disp: {
-        total: data?.devices?.total ?? 0,
-        offline: data?.devices?.offline ?? 0,
-      },
       alloc: {
-        /* Both of today's shifts, summed: the card is "how much of today is
-           crewed", not "how much of one shift is". */
-        filled: (data?.allocation ?? []).reduce((n, b) => n + b.filled, 0),
-        slots: (data?.allocation ?? []).reduce((n, b) => n + b.slots, 0),
-        boards: (data?.allocation ?? []).length,
+        /* This shift's board, for the card that says "shift ini" — it used to
+           sum both, so before noon it reported tonight's empty board as part
+           of this morning's shortfall. */
+        filled: board?.filled ?? 0,
+        vacant: Math.max(0, (board?.slots ?? 0) - (board?.filled ?? 0)),
+        slots: board?.slots ?? 0,
+        /* Null when this shift has no board. Not a zero: "not generated
+           yet" and "generated, holding nothing" are different mornings. */
+        generatedAt: board?.generatedAt ?? null,
       },
-      fleetGap: data?.fleetConfig?.unitsWithOperatorNoFleet ?? 0,
       ingest: data?.ingest ?? null,
       me: data?.me ?? null,
-      breakdownUnits: rows("breakdown"),
-      unfit: rows("unfit"),
-      absent: rows("absent"),
-      offlineDisplays: rows("display"),
     };
   }, [data]);
   const en = lang === "en";
   const link = (slug: MenuSlug) => `/${slug}`;
-  const has = (slug: MenuSlug) => Boolean(access(slug));
 
-  const [q, setQ] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("");
   const [freshTime, setFreshTime] = React.useState("");
 
   React.useEffect(() => {
@@ -183,12 +143,17 @@ export function DashboardMenu() {
         : hour < 19
           ? t.greetAfternoon
           : t.greetEvening;
+  /* Named, not implied. Every people-shaped number below is about one shift,
+     and the reader has to be told which — a morning figure and an evening one
+     look identical on a card. The API decides it; the browser's clock would
+     disagree with the site's the moment a laptop is an hour out. */
+  const shiftLabel = data?.shift === "night" ? t.dbShiftNight : t.dbShiftDay;
   const dateLine = `${new Date().toLocaleDateString(en ? "en-GB" : "id-ID", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  })} · ${t.shiftNote}`;
+  })}${data ? ` · ${shiftLabel}` : ""}`;
 
   /* ---- card library ---- */
   const cardUnfit = () => (
@@ -246,10 +211,10 @@ export function DashboardMenu() {
       label={t.statBreakdown}
       detail={
         <>
-          <b>{facts.breakdownUnits[0]?.name ?? "—"}</b>
-          {facts.breakdownUnits
-            .slice(1, 3)
-            .map((u) => ` · ${u.name}`)
+          <b>{facts.units.codes[0] ?? "—"}</b>
+          {facts.units.codes
+            .slice(1)
+            .map((code) => ` · ${code}`)
             .join("")}
         </>
       }
@@ -285,21 +250,6 @@ export function DashboardMenu() {
       }
     />
   );
-  const cardFit = () => (
-    <StatCard
-      key="fit"
-      href={link("fit-to-work")}
-      icon={<Heart />}
-      iconStyle={CARD_SUCCESS}
-      value={String(facts.ftw.fit)}
-      label={t.statFtwFit}
-      detail={
-        <>
-          {t.dAbsent1} <b>{facts.ftw.total}</b> {t.dOps}
-        </>
-      }
-    />
-  );
   const cardAlloc = () => (
     <StatCard
       key="alloc"
@@ -310,188 +260,89 @@ export function DashboardMenu() {
       label={t.statAllocNow}
       detail={
         <>
-          <b>{Math.max(0, facts.alloc.slots - facts.alloc.filled)}</b>{" "}
-          {t.dNoOperator}
+          {t.dAbsent1} <b>{facts.alloc.slots}</b> {t.dUnits}
         </>
       }
     />
   );
-  const cardActualToday = () => (
+  /* Its other half, as a number of its own. It was the small print under the
+     card above, where a shortfall of 292 read as a footnote to a 0 — and the
+     shortfall is the half somebody has to do something about. */
+  const cardAllocGap = () => (
     <StatCard
-      key="actual-today"
+      key="alloc-gap"
+      href={link("fleet-allocation")}
+      icon={<Truck />}
+      iconStyle={facts.alloc.vacant ? CARD_WARNING : CARD_SUCCESS}
+      value={String(facts.alloc.vacant)}
+      label={t.statAllocGap}
+      detail={
+        <>
+          {t.dAbsent1} <b>{facts.alloc.slots}</b> {t.dUnits}
+        </>
+      }
+    />
+  );
+  /**
+   * Whether this shift's board is out, and when it was generated.
+   *
+   * It used to count the day's two boards as `1/2`, which answered a question
+   * nobody standing at a muster asks: by the time tonight's board matters, it
+   * is tonight's shift. The clock is the useful figure — a board generated at
+   * 04:10 and one generated at 07:04 are very different mornings, and the
+   * second is the one somebody wants to know about.
+   */
+  const cardActualShift = () => (
+    <StatCard
+      key="actual-shift"
       href={link("fleet-allocation")}
       icon={<CalendarDays />}
-      iconStyle={facts.alloc.boards < 2 ? CARD_WARNING : CARD_SUCCESS}
-      value={`${facts.alloc.boards}/2`}
-      label={t.statActualToday}
+      iconStyle={facts.alloc.generatedAt ? CARD_SUCCESS : CARD_WARNING}
+      value={siteClock(facts.alloc.generatedAt)}
+      label={t.statActualShift}
       detail={
-        <>
-          <b>{facts.alloc.slots}</b> {t.dGenerated}
-        </>
+        facts.alloc.generatedAt ? (
+          <>
+            <b>{facts.alloc.slots}</b> {t.dUnits}
+          </>
+        ) : (
+          t.dNotGenerated
+        )
       }
     />
   );
-  const cardDisplays = () => (
-    <StatCard
-      key="disp"
-      href={
-        has("display-attendance")
-          ? link("display-attendance")
-          : link("display-fleet")
-      }
-      icon={<Monitor />}
-      iconStyle={facts.disp.offline ? CARD_WARNING : CARD_SUCCESS}
-      value={`${facts.disp.total - facts.disp.offline}/${facts.disp.total}`}
-      label={t.statDisplays}
-      detail={
-        <>
-          <b>{facts.disp.offline}</b> offline
-        </>
-      }
-    />
-  );
-
-  /**
-   * Units a standing operator holds that no formation claims.
-   *
-   * Shown only when there are any: during normal operation this is zero and a
-   * permanent card reading 0 is one nobody looks at. While the formations are
-   * still being set up it is in the hundreds, and it is the single number that
-   * says how much of the yard the engine cannot see.
-   */
-  const cardFleetGap = () => (
-    <StatCard
-      key="fleet-gap"
-      href={link("fleet-setting")}
-      icon={<Truck />}
-      iconStyle={CARD_WARNING}
-      value={String(facts.fleetGap)}
-      label={t.statFleetGap}
-      detail={<>{t.dFleetGap}</>}
-    />
-  );
-
-  /* ---- attention rows ----
-     The API sends facts; the sentence and the badge are written here, in the
-     reader's language. Kept as one mapper rather than six near-identical
-     ones — the shape is the same and only the wording differs. */
-  const rowsOf = (
-    kind: AttentionFact["kind"],
-    badge: string,
-    badgeVariant: BadgeVariant,
-    target: MenuSlug,
-    action: string,
-    issue: (fact: AttentionFact) => string
-  ): AttentionRow[] =>
-    facts[
-      (
-        {
-          breakdown: "breakdownUnits",
-          unfit: "unfit",
-          absent: "absent",
-          display: "offlineDisplays",
-        } as const
-      )[kind]
-    ].map((fact) => ({
-      name: fact.name,
-      sub: fact.sub,
-      dept: fact.dept,
-      issue: issue(fact),
-      badge,
-      badgeVariant,
-      target,
-      action,
-    }));
-
-  const bdRows = () =>
-    rowsOf(
-      "breakdown",
-      "Breakdown",
-      "danger",
-      "unit-status",
-      en ? "Open Unit Status" : "Buka Status Unit",
-      (f) => (en ? `Down — ${f.sub}` : `Rusak — ${f.sub}`)
-    );
-  const unfitRows = () =>
-    rowsOf(
-      "unfit",
-      "Unfit",
-      "danger",
-      "fit-to-work",
-      en ? "Open Fit To Work" : "Buka Fit To Work",
-      /* The source's own words, not a paraphrase: a supervisor comparing this
-         against the Fit To Work menu must not find two wordings for one
-         reading. */
-      (f) => f.detail ?? (en ? "Needs follow-up" : "Perlu tindak lanjut")
-    );
-  const absenRows = () =>
-    rowsOf(
-      "absent",
-      en ? "No tap" : "Belum tap",
-      "warning",
-      "attendance",
-      en ? "Open Attendance" : "Buka Attendance",
-      (f) =>
-        en
-          ? `Rostered ${f.detail} — no fingerprint yet`
-          : `Roster ${f.detail} — belum ada fingerprint`
-    );
-  const dispRows = () =>
-    rowsOf(
-      "display",
-      "Offline",
-      "danger",
-      "display-attendance",
-      en ? "Open Displays" : "Buka Display",
-      () =>
-        en
-          ? "No heartbeat in the last minutes"
-          : "Tidak ada heartbeat beberapa menit terakhir"
-    );
 
   /* ---- composition ---- */
-  /* Driven by the caller's grants rather than by a role name. Roles are
-     created at runtime now, so a branch per role would have nothing to match
-     the moment somebody adds one — and every card here was already gated on a
-     permission anyway. Order is fixed: most urgent first. */
-  const cards: React.ReactNode[] = [];
-  const allRows: AttentionRow[] = [];
-
-  /* Gated on the section, not on the grant. The API already applied the
-     permission — a null section is its answer, and re-deriving it here would
-     be a second rule to keep in step with the first. */
-  if (data?.ftw) {
-    cards.push(cardUnfit(), cardBelumFtw(), cardFit());
-    allRows.push(...unfitRows());
-  }
-  if (data?.attendance) {
-    cards.push(cardAbsen(), cardPresent());
-    allRows.push(...absenRows());
-  }
-  if (data?.units) {
-    cards.push(cardBreakdown());
-    allRows.push(...bdRows());
-  }
-  if (data?.allocation) cards.push(cardAlloc(), cardActualToday());
-  if (data?.fleetConfig && data.fleetConfig.unitsWithOperatorNoFleet > 0)
-    cards.push(cardFleetGap());
-  if (data?.simper) cards.push(cardSimper());
-  if (data?.devices) {
-    cards.push(cardDisplays());
-    allRows.push(...dispRows());
-  }
-
-  const badgeOpts = Array.from(new Set(allRows.map((r) => r.badge)));
-  const rows = allRows.filter((r) => {
-    const needle = q.toLowerCase();
-    const okQ =
-      r.name.toLowerCase().includes(needle) ||
-      r.sub.toLowerCase().includes(needle) ||
-      r.issue.toLowerCase().includes(needle);
-    return okQ && (statusFilter === "" || r.badge === statusFilter);
-  });
-  const pg = usePagination(rows);
-  const heads = [t.thName, t.thDept, t.thIssue, t.thStatus, t.thAction];
+  /**
+   * The order the owner reads them in (2026-09-18), written as a list rather
+   * than as a run of `push` calls so that the order is the thing you see.
+   *
+   * Two rows of four on a wide screen: the people first — who cannot work,
+   * who has not filed, who has not tapped, who is here — then the yard: is
+   * the board out, how much of it is crewed, how much is not, what is broken.
+   * Left to right is roughly most urgent to least within each row.
+   *
+   * Gated on the section, not on the grant. The API already applied the
+   * permission — a null section is its answer, and re-deriving it here would
+   * be a second rule to keep in step with the first. A withheld section
+   * leaves a gap rather than shifting everything up, which is the honest
+   * reading: the reader is missing a card, not looking at a different one.
+   *
+   * The SIMPER card below the eight is conditional on its own data rather
+   * than on a grant — it is withheld until the register carries expiry dates
+   * at all — so it cannot hold a fixed place and appears underneath.
+   */
+  const cards = [
+    data?.ftw && cardUnfit(),
+    data?.ftw && cardBelumFtw(),
+    data?.attendance && cardAbsen(),
+    data?.attendance && cardPresent(),
+    data?.allocation && cardActualShift(),
+    data?.allocation && cardAlloc(),
+    data?.allocation && cardAllocGap(),
+    data?.units && cardBreakdown(),
+    data?.simper && cardSimper(),
+  ].filter(Boolean);
 
   return (
     <div className="flex flex-col gap-6">
@@ -550,97 +401,13 @@ export function DashboardMenu() {
         <div className="grid grid-cols-4 gap-4 max-xl:grid-cols-2">{cards}</div>
       ) : null}
 
-      <Panel>
-        <Toolbar>
-          <ToolbarTitle>{t.panelTitle}</ToolbarTitle>
-          <ToolbarGroup>
-            <SearchInput
-              className="w-60"
-              placeholder={t.searchPh}
-              aria-label={t.searchPh}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-            <Select
-              wrapperClassName="w-[170px]"
-              aria-label={t.thStatus}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">{t.allStatus}</option>
-              {badgeOpts.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </Select>
-          </ToolbarGroup>
-        </Toolbar>
-
-        {rows.length ? (
-          <>
-            <Table>
-              <TableHeader>
-                <tr>
-                  {heads.map((h, i) => (
-                    <TableHead
-                      key={h}
-                      className={i === 1 ? "max-xl:hidden" : undefined}
-                    >
-                      {h}
-                    </TableHead>
-                  ))}
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {pg.rows.map((r) => (
-                  <TableRow key={`${r.name}-${r.badge}-${r.sub}`}>
-                    <TableCell>
-                      <NameCell name={r.name} sub={r.sub} />
-                    </TableCell>
-                    <TableCell className="max-xl:hidden">{r.dept}</TableCell>
-                    <TableCell>{r.issue}</TableCell>
-                    <TableCell>
-                      <Badge variant={r.badgeVariant} dot>
-                        {r.badge}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {has(r.target) ? (
-                        <Link href={link(r.target)}>{r.action}</Link>
-                      ) : (
-                        <span className="text-(--text-tertiary)">
-                          {r.action}
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <PanelFoot>
-              <FootSum>
-                {t.attSumA} <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b>{" "}
-                {t.sumRest}
-              </FootSum>
-              <Pagination
-                page={pg.page}
-                pageCount={pg.pageCount}
-                onPage={pg.setPage}
-                per={pg.per}
-                perOptions={["10", "25", "50"]}
-                onPer={pg.setPer}
-              />
-            </PanelFoot>
-          </>
-        ) : (
-          <StateBox
-            icon={<Search className="text-(--text-tertiary)" />}
-            title={t.noResTitle}
-            body={t.noResBody}
-          />
-        )}
-      </Panel>
+      {/* The four charts the operations admin used to rebuild by hand for the
+          morning meeting (owner, 2026-09-18). They replaced a ten-row table of
+          names — "jelek dan tidak informatif", and true: a list of whoever was
+          alphabetically first never did say how the shift was going. */}
+      {data?.analytics ? (
+        <DashboardCharts analytics={data.analytics} shiftLabel={shiftLabel} />
+      ) : null}
     </div>
   );
 }

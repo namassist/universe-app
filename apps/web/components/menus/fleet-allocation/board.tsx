@@ -14,6 +14,7 @@ import {
   planCandidatesQueryOptions,
   type PlanBoard,
 } from "@/lib/queries/fleet-allocation";
+import { siteClock } from "@/lib/site-clock";
 import { cn } from "@/lib/utils";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +48,6 @@ import {
   deptAbbrev,
   FLEET_OPTIONS,
   ftwBadge,
-  siteClock,
   SPARE_INIT,
   stBadge,
   type BoardUnit,

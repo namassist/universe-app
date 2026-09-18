@@ -1811,13 +1811,24 @@ export const FitWorkDisplaySchema = t.Object({
 export const DashboardSchema = t.Object({
   /** Site-local today, so the screen never re-derives it from a UTC instant. */
   date: t.String(),
+  /**
+   * The shift every people-shaped figure below is about: before noon the day
+   * shift, from noon onwards the night one. Sent for the same reason `date`
+   * is — the reader's clock is not the site's.
+   */
+  shift: ShiftKindSchema,
   attendance: t.Nullable(
     t.Object({ scheduled: t.Integer(), tapped: t.Integer() })
   ),
+  /**
+   * Only the people the FTW rule obliges — an excavator operator files, a
+   * payroll clerk on the same roster never does. `scheduled` is therefore
+   * smaller than `attendance.scheduled`, deliberately: everybody rostered is
+   * expected at the gate, but only some of them owe a filing.
+   */
   ftw: t.Nullable(
     t.Object({
       scheduled: t.Integer(),
-      fit: t.Integer(),
       followUp: t.Integer(),
       missing: t.Integer(),
     })
@@ -1827,9 +1838,10 @@ export const DashboardSchema = t.Object({
       active: t.Integer(),
       breakdown: t.Integer(),
       standby: t.Integer(),
+      /** The first few by code; the count above says how many there are. */
+      breakdownCodes: t.Array(t.String()),
     })
   ),
-  devices: t.Nullable(t.Object({ total: t.Integer(), offline: t.Integer() })),
   /** When the two external sources last answered; null when never. */
   ingest: t.Nullable(
     t.Object({
@@ -1837,8 +1849,12 @@ export const DashboardSchema = t.Object({
       fingerSyncedAt: t.Nullable(t.String()),
     })
   ),
-  fleetConfig: t.Nullable(t.Object({ unitsWithOperatorNoFleet: t.Integer() })),
-  /** One line per shift that has a board today; absent means not generated. */
+  /**
+   * One line per shift that has a board today; a shift with none is simply
+   * absent, which is how the screen says "not generated yet" without
+   * inventing a zero. `generatedAt` is an ISO instant, to be rendered as a
+   * clock at site rather than sliced.
+   */
   allocation: t.Nullable(
     t.Array(
       t.Object({
@@ -1848,6 +1864,40 @@ export const DashboardSchema = t.Object({
         filled: t.Integer(),
       })
     )
+  ),
+  /**
+   * The dashboard's four charts, or null when the caller lacks any of the
+   * three grants they are made of. One shift, one categorisation.
+   */
+  analytics: t.Nullable(
+    t.Object({
+      /** Every operator this shift has, by category and by what stops them. */
+      operators: t.Array(
+        t.Object({
+          category: t.String(),
+          ready: t.Integer(),
+          noFinger: t.Integer(),
+          noFtw: t.Integer(),
+        })
+      ),
+      /** Of those, the ones with no unit of their own. */
+      spares: t.Array(
+        t.Object({ category: t.String(), operators: t.Integer() })
+      ),
+      /** Of those, the ones savera has told to rest. */
+      resting: t.Array(
+        t.Object({ category: t.String(), operators: t.Integer() })
+      ),
+      /** The machines allocation is about, by class. */
+      equipment: t.Array(
+        t.Object({
+          unitClass: t.String(),
+          qty: t.Integer(),
+          ready: t.Integer(),
+          running: t.Integer(),
+        })
+      ),
+    })
   ),
   /** Null until the employee register carries SIMPER expiry dates at all. */
   simper: t.Nullable(t.Object({ expired: t.Integer(), soon: t.Integer() })),
@@ -1861,19 +1911,6 @@ export const DashboardSchema = t.Object({
       tappedAt: t.Nullable(t.String()),
       unitCode: t.Nullable(t.String()),
       unitSource: t.Nullable(t.UnionEnum(["plan", "spare", "manual"] as const)),
-    })
-  ),
-  /**
-   * The rows worth acting on, capped per kind. Facts only — the screen writes
-   * the sentence and picks the badge, in the reader's language.
-   */
-  attention: t.Array(
-    t.Object({
-      kind: t.UnionEnum(["breakdown", "unfit", "absent", "display"] as const),
-      name: t.String(),
-      sub: t.String(),
-      dept: t.String(),
-      detail: t.Nullable(t.String()),
     })
   ),
 });

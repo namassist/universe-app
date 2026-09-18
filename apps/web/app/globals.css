@@ -131,6 +131,38 @@
   --radius-icon: 14px;
   --radius-card: 20px;
   --radius-panel: 28px;
+
+  /* ---- Grafik dashboard ----
+     Dua peran yang berbeda, dan tidak boleh tertukar.
+
+     `--chart-1..8` adalah palet *kategori*: identitas, bukan tingkatan.
+     Urutannya tetap — slot 1 selalu warna pertama, apa pun isi datanya —
+     karena itulah yang membuat DOZER berwarna sama di setiap panel. Delapan
+     slot ini divalidasi berpasangan-bersebelahan terhadap permukaan kartu
+     kaca aplikasi ini (#1a1d2d gelap, #f3f8ff terang), bukan terhadap
+     permukaan bawaan mana pun: CVD ΔE terburuk 8.4 gelap / 9.1 terang,
+     penglihatan normal 19.3 / 19.6. Langkah gelap adalah pilihan tersendiri,
+     bukan pembalikan otomatis dari yang terang.
+
+     `--chart-good/warning/critical` adalah palet *status*, sengaja dipatok
+     sama di kedua tema dan sengaja berbeda dari kedelapan slot di atas,
+     supaya sebuah status tidak pernah menyamar sebagai satu seri. Hijau dan
+     merah hanya terpisah ΔE 4.1 di mata deutan, jadi keduanya tidak pernah
+     ditempatkan bersebelahan: amber selalu duduk di antaranya, dan setiap
+     segmen memakai label angka sendiri. Warna tidak pernah menjadi
+     satu-satunya pembawa arti. */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+  --chart-good: #0ca30c;
+  --chart-warning: #fab219;
+  --chart-critical: #d03b3b;
+  --chart-grid: rgba(255, 255, 255, 0.1);
 }
 
 /* ============ TEMA TERANG — satu blok override ============ */
@@ -218,6 +250,20 @@
     rgba(0, 212, 255, 0.3),
     rgba(37, 99, 235, 0.14)
   );
+
+  /* Langkah terang dari ramp yang sama — lihat catatan di blok gelap. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #4a3aa7;
+  --chart-8: #e34948;
+  --chart-good: #0ca30c;
+  --chart-warning: #fab219;
+  --chart-critical: #d03b3b;
+  --chart-grid: rgba(10, 27, 58, 0.12);
 }
 
 :root,

@@ -34,8 +34,8 @@ import { stageTimeOf } from "./stage-time";
  * matching — and `unreadable` below is how the cost is made visible instead of
  * silently emptying a board.
  */
-const FTW_PASS_DECISION = "ftw aman";
-const FTW_PASS_CATEGORY = "dapat bekerja";
+export const FTW_PASS_DECISION = "ftw aman";
+export const FTW_PASS_CATEGORY = "dapat bekerja";
 
 /** Every value observed in the source. A value outside these is unreadable. */
 const KNOWN_DECISIONS = new Set([

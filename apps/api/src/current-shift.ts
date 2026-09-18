@@ -51,3 +51,35 @@ export function currentShift(now: Date, deadlines: Deadlines): ShiftNow | null {
   if (at >= day) return { date: localDate(now), shift: "day" };
   return { date: localDate(new Date(now.getTime() - DAY_MS)), shift: "night" };
 }
+
+/** Noon, in minutes since midnight — the boundary the rule below turns on. */
+const NOON = 12 * 60;
+
+/**
+ * Which shift the person at the desk is asking about: before noon the day
+ * shift, from noon onwards the night one (owner, 2026-09-18).
+ *
+ * A second boundary next to `currentShift`, deliberately, because the two
+ * answer different questions. `currentShift` answers "which board does the TV
+ * in the yard show", and it has to turn over exactly when the muster does —
+ * so its boundary is the `shift-start` stage, whatever the timeline says that
+ * is. This one answers "which shift is the screen in the office about", where
+ * a configured stage would surprise the reader: an admin opening the dashboard
+ * at 13:00 is looking ahead to tonight, not back at a day shift the timeline
+ * still calls current until 16:00.
+ *
+ * It is the same boundary the rest of the application already splits the day
+ * on — `first_in_at` against `first_in_pm_at`, `ftwUploadShift`, the plan
+ * board's crew table — so the dashboard now agrees with all three rather than
+ * with none of them.
+ *
+ * Never null. There is nothing here to configure and therefore nothing to be
+ * half-configured, which is why the dashboard can lean on it where a wall
+ * cannot: the office always gets an answer.
+ */
+export function deskShift(now: Date): ShiftNow {
+  return {
+    date: localDate(now),
+    shift: minutesOfDay(now) < NOON ? "day" : "night",
+  };
+}

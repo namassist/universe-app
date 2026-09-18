@@ -27,4 +27,3 @@ export const dashboardQueryOptions = () =>
 export type Dashboard = Awaited<
   ReturnType<NonNullable<ReturnType<typeof dashboardQueryOptions>["queryFn"]>>
 >;
-export type AttentionFact = Dashboard["attention"][number];
