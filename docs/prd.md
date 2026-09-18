@@ -291,6 +291,21 @@ fill the gap from the spare pool.
   added to the register later is picked up by the next pass while their date
   is still in the pull window (today and yesterday); older days are not
   back-filled. Rows already stored before the rule stay as they are (owner).
+- **Monitoring FTW reads by colour** (owner, 2026-09-17): Tidak Boleh Bekerja
+  (red), Istirahat (yellow), Dapat Bekerja (green), then Belum lapor — and
+  inside each, the newest upload first. The day no longer leads, and a late
+  upload no longer lifts a green row above the others. Clicking a column still
+  replaces this order entirely.
+- **Monitoring FTW lists who has not filed** (owner, 2026-09-17). savera sends
+  only what was uploaded, so the "Belum lapor" category could never hold
+  anyone. The list (and its export) now adds a row for every person rostered
+  `D` or `N` on a day in the range who owes an FTW — the wall's own
+  `ftwObliged` rule — and has no upload for that date at any hour; a late
+  upload is an upload, flagged late, not a missing one. Such a row carries
+  `rosterShift`, and is placed in Shift 1 or 2 by it, since it has no send
+  time. These rows are what the fit-to-work wall counts as "Belum upload", so
+  the two screens agree (2026-09-17 day: 12 on both). The FTW history page
+  shows them too, as the days an operator did not file.
 - **Attendance** comes from Nakula's raw tap log (`tbl_absen_all`), reduced to
   first IN / first OUT per person per day with device IPs — deliberately not
   Nakula's interpreted view (30 s a query vs milliseconds). Raw as recorded;

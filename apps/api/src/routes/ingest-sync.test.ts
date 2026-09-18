@@ -53,7 +53,7 @@ async function makeUser(
     .returning({ id: schema.users.id });
   made.users.push(user!.id);
   const session = await createSession("user", user!.id, "cookie");
-  return { cookie: `${SESSION_COOKIE}=${session.id}` };
+  return { id: user!.id, cookie: `${SESSION_COOKIE}=${session.id}` };
 }
 
 const send = (method: string, path: string, cookie?: string) =>
@@ -164,6 +164,202 @@ describe("the FTW list", () => {
         )
       ).status
     ).toBe(422);
+  });
+});
+
+/*
+ * "Belum lapor" (owner, 2026-09-17): savera reports only what was sent, so the
+ * list builds the unsent from the roster, with the fit-to-work wall's rules.
+ */
+describe("the FTW list names who owed an upload and sent none", () => {
+  const D3 = "1998-03-02";
+  const cleanup: (() => Promise<unknown>)[] = [];
+
+  /* In the order registered: each step removes what the next one's rows
+     still point at. */
+  afterAll(async () => {
+    for (const drop of cleanup) await drop();
+  });
+
+  test("rostered, obliged and unfiled — once per person per day", async () => {
+    const viewer = await makeUser("fit-to-work", "view");
+
+    const [company] = await db
+      .insert(schema.companies)
+      .values({ name: `${tag} FTW`, code: `ZZ${uid()}` })
+      .returning({ id: schema.companies.id });
+    const [dept] = await db
+      .insert(schema.departments)
+      .values({ name: `${tag} FTW`, companyId: company!.id })
+      .returning({ id: schema.departments.id });
+    const [operator] = await db
+      .insert(schema.positions)
+      .values({
+        name: `${tag} OP`,
+        departmentId: dept!.id,
+        fleetAllocation: true,
+      })
+      .returning({ id: schema.positions.id });
+    const [code] = await db
+      .insert(schema.simperCodes)
+      .values({ name: `${tag} FTWCODE` })
+      .returning({ id: schema.simperCodes.id });
+    const [cls] = await db
+      .insert(schema.unitClasses)
+      .values({ name: `${tag} C` })
+      .returning({ id: schema.unitClasses.id });
+    const [typ] = await db
+      .insert(schema.unitTypes)
+      .values({ name: `${tag} T` })
+      .returning({ id: schema.unitTypes.id });
+    const [mdl] = await db
+      .insert(schema.unitModels)
+      .values({ name: `${tag} M` })
+      .returning({ id: schema.unitModels.id });
+    const [brd] = await db
+      .insert(schema.unitBrands)
+      .values({ name: `${tag} B` })
+      .returning({ id: schema.unitBrands.id });
+    /* The machine that makes the licence an obligation. */
+    const [unit] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZFTW${uid()}`,
+        classId: cls!.id,
+        typeId: typ!.id,
+        modelId: mdl!.id,
+        brandId: brd!.id,
+        simperCodeId: code!.id,
+        ftw: true,
+      })
+      .returning({ id: schema.units.id });
+
+    const people: string[] = [];
+    const person = async (
+      nik: string,
+      opts: { skilled?: boolean; status?: "aktif" | "standby" } = {}
+    ) => {
+      const [row] = await db
+        .insert(schema.employees)
+        .values({
+          nik,
+          name: `${tag} ${nik}`,
+          companyId: company!.id,
+          departmentId: dept!.id,
+          positionId: operator!.id,
+          status: opts.status ?? "aktif",
+        })
+        .returning({ id: schema.employees.id });
+      people.push(row!.id);
+      if (opts.skilled !== false)
+        await db
+          .insert(schema.employeeSkills)
+          .values({ employeeId: row!.id, simperCodeId: code!.id });
+      return row!.id;
+    };
+    const owesDay = await person("90000031");
+    const owesNight = await person("90000032");
+    const filed = await person("90000033");
+    const unlicensed = await person("90000034", { skilled: false });
+    const offDuty = await person("90000035");
+    const standby = await person("90000036", { status: "standby" });
+
+    const [doc] = await db
+      .insert(schema.rosterDocuments)
+      .values({
+        departmentId: dept!.id,
+        month: "1998-03-01",
+        fileName: `${tag}.xlsx`,
+        uploadedBy: viewer.id,
+      })
+      .returning({ id: schema.rosterDocuments.id });
+    await db.insert(schema.rosterDays).values([
+      { documentId: doc!.id, employeeId: owesDay, date: D3, code: "D" },
+      { documentId: doc!.id, employeeId: owesNight, date: D3, code: "N" },
+      { documentId: doc!.id, employeeId: filed, date: D3, code: "D" },
+      { documentId: doc!.id, employeeId: unlicensed, date: D3, code: "D" },
+      { documentId: doc!.id, employeeId: offDuty, date: D3, code: "OFF" },
+      { documentId: doc!.id, employeeId: standby, date: D3, code: "D" },
+    ]);
+    /* Sent late, and still an upload: lateness is not "belum lapor". */
+    await db.insert(schema.ftwReadings).values({
+      nik: "90000033",
+      date: D3,
+      name: `${tag} 90000033`,
+      sleepMinutes: 400,
+      sleepCategory: "Dapat Bekerja",
+      ftwDecision: "FTW aman",
+      sentAt: `${D3} 07:40:00`,
+    });
+
+    cleanup.push(
+      () =>
+        db.delete(schema.ftwReadings).where(eq(schema.ftwReadings.date, D3)),
+      () =>
+        db
+          .delete(schema.rosterDocuments)
+          .where(eq(schema.rosterDocuments.id, doc!.id)),
+      () =>
+        db
+          .delete(schema.employeeSkills)
+          .where(inArray(schema.employeeSkills.employeeId, people)),
+      () =>
+        db.delete(schema.employees).where(inArray(schema.employees.id, people)),
+      () => db.delete(schema.units).where(eq(schema.units.id, unit!.id)),
+      () =>
+        db.delete(schema.unitClasses).where(eq(schema.unitClasses.id, cls!.id)),
+      () => db.delete(schema.unitTypes).where(eq(schema.unitTypes.id, typ!.id)),
+      () =>
+        db.delete(schema.unitModels).where(eq(schema.unitModels.id, mdl!.id)),
+      () =>
+        db.delete(schema.unitBrands).where(eq(schema.unitBrands.id, brd!.id)),
+      () =>
+        db
+          .delete(schema.simperCodes)
+          .where(eq(schema.simperCodes.id, code!.id)),
+      () =>
+        db
+          .delete(schema.positions)
+          .where(eq(schema.positions.id, operator!.id)),
+      () =>
+        db
+          .delete(schema.departments)
+          .where(eq(schema.departments.id, dept!.id)),
+      () =>
+        db.delete(schema.companies).where(eq(schema.companies.id, company!.id))
+    );
+
+    const res = await send(
+      "GET",
+      `/fit-to-work/?from=${D3}&to=${D3}`,
+      viewer.cookie
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rows: {
+        nik: string;
+        sleepCategory: string | null;
+        sentAt: string | null;
+        late: boolean;
+        rosterShift: "day" | "night" | null;
+        department: string | null;
+      }[];
+    };
+    const mine = body.rows.filter((r) => r.nik.startsWith("900000"));
+
+    const unfiled = mine.filter((r) => !r.sentAt);
+    expect(unfiled.map((r) => [r.nik, r.rosterShift]).sort()).toEqual([
+      ["90000031", "day"],
+      ["90000032", "night"],
+    ]);
+    expect(unfiled.every((r) => r.sleepCategory === null)).toBe(true);
+    expect(unfiled[0]!.department).toBe(`${tag} FTW`);
+
+    // The late upload is itself, once, and flagged — not a second, unfiled row.
+    const sent = mine.filter((r) => r.nik === "90000033");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.rosterShift).toBeNull();
+    expect(sent[0]!.late).toBe(true);
   });
 });
 

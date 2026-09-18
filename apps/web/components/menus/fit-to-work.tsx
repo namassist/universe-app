@@ -52,11 +52,11 @@ import {
   daysAgo,
   ftwDecisionBadge as decisionBadge,
   isoDate,
+  ftwRowShift as rowShift,
   ftwSeverity as severity,
   ftwShiftLabel as shiftLabel,
   ftwSleepClass as sleepClass,
   ftwSleepText as sleepText,
-  ftwUploadShift as uploadShift,
   ftwUploadShiftNow as uploadShiftNow,
   type FtwCatKey as CatKey,
 } from "./fit-to-work-shared";
@@ -286,12 +286,16 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
   });
 
   const rows = exceptShift
-    .filter((r) => !shift || String(uploadShift(r.sentAt) ?? "") === shift)
+    .filter((r) => !shift || String(rowShift(r) ?? "") === shift)
     /*
-     * Default: newest day first, then worst first inside it. Date leads
-     * because the screen is operational — a refusal from six days ago must not
-     * sit above this morning's — and severity decides the order of the day you
-     * are actually looking at.
+     * Default (owner, 2026-09-17): by the verdict's colour — red, yellow,
+     * green — then those who have not filed, and inside each the newest
+     * upload first. The newest upload is the one somebody at the muster can
+     * still act on. The not-filed have no upload time and read by name.
+     *
+     * The day no longer leads. The screen opens on today, where it cannot
+     * matter, and across a wider range the send time already puts this
+     * morning's refusals above last week's.
      *
      * A chosen column replaces that ordering rather than layering on top of
      * it: a sort that silently kept severity above the column you clicked
@@ -301,9 +305,14 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
     .sort((a, b) => {
       if (!sort)
         return (
-          b.date.localeCompare(a.date) ||
-          severity(a.sleepCategory, a.late) -
-            severity(b.sleepCategory, b.late) ||
+          severity(a.sleepCategory) - severity(b.sleepCategory) ||
+          (a.sentAt && b.sentAt
+            ? b.sentAt.localeCompare(a.sentAt)
+            : a.sentAt
+              ? -1
+              : b.sentAt
+                ? 1
+                : 0) ||
           a.name.localeCompare(b.name)
         );
       const dir = sort.dir === "asc" ? 1 : -1;
@@ -539,7 +548,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                       <TableCell>{r.department ?? "—"}</TableCell>
                       <TableCell>{r.position ?? "—"}</TableCell>
                       <TableCell>{r.mess ?? "—"}</TableCell>
-                      <TableCell>{shiftLabel(r.sentAt)}</TableCell>
+                      <TableCell>{shiftLabel(r)}</TableCell>
                       <TableCell className={sleepClass(rowCat)}>
                         {sleepText(r.sleepMinutes)}
                       </TableCell>

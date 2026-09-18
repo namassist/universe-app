@@ -96,30 +96,53 @@ export const ftwUploadShift = (sentAt: string | null): FtwUploadShift =>
 export const ftwUploadShiftNow = (now = new Date()): 1 | 2 =>
   shiftOfTime(now.toTimeString().slice(0, 8));
 
-export const ftwShiftLabel = (sentAt: string | null): string => {
-  const shift = ftwUploadShift(sentAt);
+/**
+ * The half of the day a list row belongs to.
+ *
+ * An upload by when it was sent, as above. A "Belum lapor" row has nothing
+ * sent, so it is placed by the shift the roster owed the upload for — the day
+ * shift uploads in Shift 1 and the night shift in Shift 2, which is exactly
+ * where the row would have landed had it been sent on time (2026-09-17).
+ */
+export const ftwRowShift = (row: {
+  sentAt: string | null;
+  rosterShift: "day" | "night" | null;
+}): FtwUploadShift =>
+  row.sentAt
+    ? ftwUploadShift(row.sentAt)
+    : row.rosterShift
+      ? row.rosterShift === "day"
+        ? 1
+        : 2
+      : null;
+
+export const ftwShiftLabel = (row: {
+  sentAt: string | null;
+  rosterShift: "day" | "night" | null;
+}): string => {
+  const shift = ftwRowShift(row);
   return shift === null ? "—" : `Shift ${shift}`;
 };
 
 /**
- * Reading order: worst first (owner, 2026-08-30).
+ * Reading order (owner, 2026-09-17): red, yellow, green, then not filed.
  *
- *   Tidak Boleh Bekerja → Kurang tidur → Upload telat → Fit
+ *   Tidak Boleh Bekerja → Istirahat → Dapat Bekerja → Belum lapor
  *
- * Lateness only promotes a row that is otherwise fit: a person who is both
- * short of sleep and late is short of sleep first, and burying that under an
- * administrative flag would rank the smaller problem higher. "Belum lapor"
- * sits with "tidak boleh bekerja" — no FTW at all blocks work just as firmly
- * as a refusal does, and it does not belong below a rest advisory.
+ * "Belum lapor" closes the list. Since the list builds those rows from the
+ * roster there are many of them before a shift's uploads come in — 147 on one
+ * afternoon — and leading with them buried the verdicts that were actually
+ * sent.
+ *
+ * Lateness does not promote a row: a late "Dapat Bekerja" is green like the
+ * rest, and the late flag stays on its send time.
  */
 const FTW_RANK: Record<FtwCatKey, number> = {
   tidak: 0,
-  belum: 1,
-  istirahat: 2,
-  fit: 4,
+  istirahat: 1,
+  fit: 2,
+  belum: 3,
 };
 
-export const ftwSeverity = (category: string | null, late: boolean): number => {
-  const cat = ftwCatOf(category);
-  return cat === "fit" && late ? 3 : FTW_RANK[cat];
-};
+export const ftwSeverity = (category: string | null): number =>
+  FTW_RANK[ftwCatOf(category)];

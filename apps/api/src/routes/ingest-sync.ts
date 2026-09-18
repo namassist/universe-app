@@ -14,7 +14,8 @@
  * Sync requires `manage`; reading only `view`.
  */
 
-import { and, asc, desc, eq, gte, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
+import type { ShiftKind } from "@universe/contracts";
 import ExcelJS from "exceljs";
 import { Elysia, t } from "elysia";
 
@@ -24,6 +25,7 @@ import { rosterDayInForce } from "../roster-in-force";
 import { ingestDates, syncFtwReadings } from "../ingest";
 import { deriveDate } from "../derive";
 import { fingerInDeadline, ftwDeadline, shiftIn } from "../readiness";
+import { ftwObliged } from "../ftw-obliged";
 import {
   AttendanceListSchema,
   ErrorSchema,
@@ -60,7 +62,26 @@ const FTW_EXPORT_COLUMNS = [
   "telat",
 ] as const;
 
-type FtwExportRow = typeof schema.ftwReadings.$inferSelect & { late: boolean };
+/** One row of the FTW list — an upload, or somebody who owes one. */
+type FtwListRow = {
+  nik: string;
+  date: string;
+  name: string;
+  company: string | null;
+  department: string | null;
+  position: string | null;
+  mess: string | null;
+  shift: string | null;
+  sleepMinutes: number;
+  sleepCategory: string | null;
+  ftwDecision: string | null;
+  sentAt: string | null;
+  late: boolean;
+  /** Set only on an unfiled row: the shift the roster owed the upload for. */
+  rosterShift: ShiftKind | null;
+};
+
+type FtwExportRow = FtwListRow;
 
 /**
  * Minutes as the screen shows them — "7j 20m" — beside the raw number.
@@ -92,11 +113,7 @@ async function ftwWorkbook(rows: FtwExportRow[]): Promise<Buffer> {
       mess: r.mess ?? "",
       // Derived, not savera's own column — see the list route for why that
       // column cannot be trusted for this.
-      shift_upload: r.sentAt
-        ? r.sentAt.slice(11, 19) < "12:00:00"
-          ? "Shift 1"
-          : "Shift 2"
-        : "",
+      shift_upload: halfOf(r) ? `Shift ${halfOf(r)}` : "",
       jam_tidur: sleepText(r.sleepMinutes),
       menit_tidur: r.sleepMinutes,
       kategori: r.sleepCategory ?? "",
@@ -105,6 +122,184 @@ async function ftwWorkbook(rows: FtwExportRow[]): Promise<Buffer> {
       telat: r.late ? "YA" : "",
     });
   return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+/**
+ * The half of the day a row belongs to — "1" before noon, "2" after.
+ *
+ * An upload is placed by when it was sent (savera's own `shift` column says
+ * "Shift 1" on every row). Somebody who never sent one is placed by the shift
+ * the roster owed it for, which is the only thing that says when he should
+ * have (owner, 2026-09-17).
+ */
+function halfOf(
+  row: Pick<FtwListRow, "sentAt" | "rosterShift">
+): "1" | "2" | "" {
+  if (row.sentAt) return row.sentAt.slice(11, 19) < "12:00:00" ? "1" : "2";
+  if (row.rosterShift) return row.rosterShift === "day" ? "1" : "2";
+  return "";
+}
+
+/**
+ * Everybody who owed an FTW upload on a day in the range and has none.
+ *
+ * The "Belum lapor" rows (owner, 2026-09-17). savera reports only what was
+ * sent, so until now the category could never hold anyone: the filter that
+ * offered it always came back empty. The question is answered the way the
+ * fit-to-work wall answers it, with the same two rules — rostered `D` or `N`
+ * on that date in the document in force, and obliged by `ftwObliged` (active,
+ * allocated position, a licence for a unit that asks for FTW). Two
+ * definitions of "belum lapor" would be two answers to the same question on
+ * two screens.
+ *
+ * "Has none" is any upload for that NIK and date, at any hour — the wall's
+ * test too. An upload sent late is still an upload, and is the `late` flag's
+ * business rather than this one's.
+ */
+async function unfiledRows(from: string, to: string): Promise<FtwListRow[]> {
+  const rostered = await db
+    .select({
+      nik: schema.employees.nik,
+      name: schema.employees.name,
+      date: schema.rosterDays.date,
+      code: schema.rosterDays.code,
+      company: schema.companies.name,
+      department: schema.departments.name,
+      position: schema.positions.name,
+    })
+    .from(schema.rosterDays)
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.rosterDays.employeeId)
+    )
+    .leftJoin(
+      schema.companies,
+      eq(schema.companies.id, schema.employees.companyId)
+    )
+    .leftJoin(
+      schema.departments,
+      eq(schema.departments.id, schema.employees.departmentId)
+    )
+    .leftJoin(
+      schema.positions,
+      eq(schema.positions.id, schema.employees.positionId)
+    )
+    .where(
+      and(
+        gte(schema.rosterDays.date, from),
+        lte(schema.rosterDays.date, to),
+        inArray(schema.rosterDays.code, ["D", "N"]),
+        rosterDayInForce
+      )
+    );
+  if (!rostered.length) return [];
+
+  const niks = [...new Set(rostered.map((r) => r.nik))];
+  const obliged = await ftwObliged(niks);
+  if (!obliged.size) return [];
+
+  const filed = new Set(
+    (
+      await db
+        .select({
+          nik: schema.ftwReadings.nik,
+          date: schema.ftwReadings.date,
+        })
+        .from(schema.ftwReadings)
+        .where(
+          and(
+            gte(schema.ftwReadings.date, from),
+            lte(schema.ftwReadings.date, to),
+            inArray(schema.ftwReadings.nik, [...obliged])
+          )
+        )
+    ).map((r) => `${r.nik}|${r.date}`)
+  );
+
+  /* One row per person per date, even if two documents both claim the day. */
+  const seen = new Set<string>();
+  return rostered.flatMap((r) => {
+    const key = `${r.nik}|${r.date}`;
+    if (!obliged.has(r.nik) || filed.has(key) || seen.has(key)) return [];
+    seen.add(key);
+    return [
+      {
+        nik: r.nik,
+        date: r.date,
+        name: r.name,
+        company: r.company,
+        department: r.department,
+        position: r.position,
+        mess: null,
+        shift: null,
+        sleepMinutes: 0,
+        sleepCategory: null,
+        ftwDecision: null,
+        sentAt: null,
+        late: false,
+        rosterShift: r.code === "N" ? ("night" as const) : ("day" as const),
+      },
+    ];
+  });
+}
+
+/**
+ * The list both the screen and its export read: the range's uploads, each
+ * flagged late or not, followed by the unfiled — newest day first, then name.
+ */
+async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
+  /*
+   * Which gate a reading is judged against.
+   *
+   * The engine knows the shift because it is building one shift's board;
+   * a list of readings has no such context, and savera's own `shift`
+   * column is unusable — 1,030 rows say "Shift 1" and none says "Shift 2",
+   * night uploads included. So the half of the day the upload falls in
+   * stands in for it. This is presentation only: the board still judges
+   * every reading against the exact gate of the shift it is building, and
+   * the two never disagree for a person on the shift they uploaded for.
+   */
+  const [dayGate, nightGate] = await Promise.all([
+    ftwDeadline("day"),
+    ftwDeadline("night"),
+  ]);
+  const isLate = (sentAt: string | null): boolean => {
+    if (!sentAt) return false;
+    const at = sentAt.slice(11, 19);
+    const gate = at < "12:00:00" ? dayGate : nightGate;
+    return gate ? at >= gate : false;
+  };
+
+  const uploads = await db
+    .select()
+    .from(schema.ftwReadings)
+    .where(
+      and(gte(schema.ftwReadings.date, from), lte(schema.ftwReadings.date, to))
+    );
+
+  const rows: FtwListRow[] = [
+    ...uploads.map((r) => ({
+      nik: r.nik,
+      date: r.date,
+      name: r.name,
+      company: r.company,
+      department: r.department,
+      position: r.position,
+      mess: r.mess,
+      shift: r.shift,
+      sleepMinutes: r.sleepMinutes,
+      sleepCategory: r.sleepCategory,
+      ftwDecision: r.ftwDecision,
+      sentAt: r.sentAt,
+      /** Uploaded after its shift's `ftw-deadline` — refused by the board. */
+      late: isLate(r.sentAt),
+      rosterShift: null,
+    })),
+    ...(await unfiledRows(from, to)),
+  ];
+  return rows.sort(
+    (a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)
+  );
 }
 
 const MAX_RANGE_DAYS = 62;
@@ -146,56 +341,8 @@ export const fitToWorkSyncRoutes = new Elysia({
       const span = rangeDays(from, to);
       if (span < 1 || span > MAX_RANGE_DAYS) return status(422, invalidRange);
 
-      const rows = await db
-        .select()
-        .from(schema.ftwReadings)
-        .where(
-          and(
-            gte(schema.ftwReadings.date, from),
-            lte(schema.ftwReadings.date, to)
-          )
-        )
-        .orderBy(desc(schema.ftwReadings.date), asc(schema.ftwReadings.name));
-
-      /*
-       * Which gate a reading is judged against.
-       *
-       * The engine knows the shift because it is building one shift's board;
-       * a list of readings has no such context, and savera's own `shift`
-       * column is unusable — 1,030 rows say "Shift 1" and none says "Shift 2",
-       * night uploads included. So the half of the day the upload falls in
-       * stands in for it. This is presentation only: the board still judges
-       * every reading against the exact gate of the shift it is building, and
-       * the two never disagree for a person on the shift they uploaded for.
-       */
-      const [dayGate, nightGate] = await Promise.all([
-        ftwDeadline("day"),
-        ftwDeadline("night"),
-      ]);
-      const isLate = (sentAt: string | null): boolean => {
-        if (!sentAt) return false;
-        const at = sentAt.slice(11, 19);
-        const gate = at < "12:00:00" ? dayGate : nightGate;
-        return gate ? at >= gate : false;
-      };
-
       return {
-        rows: rows.map((r) => ({
-          nik: r.nik,
-          date: r.date,
-          name: r.name,
-          company: r.company,
-          department: r.department,
-          position: r.position,
-          mess: r.mess,
-          shift: r.shift,
-          sleepMinutes: r.sleepMinutes,
-          sleepCategory: r.sleepCategory,
-          ftwDecision: r.ftwDecision,
-          sentAt: r.sentAt,
-          /** Uploaded after its shift's `ftw-deadline` — refused by the board. */
-          late: isLate(r.sentAt),
-        })),
+        rows: await ftwListRows(from, to),
         lastSyncedAt: await lastSyncedAt(schema.ftwReadings),
       };
     },
@@ -229,41 +376,11 @@ export const fitToWorkSyncRoutes = new Elysia({
       const span = rangeDays(from, to);
       if (span < 1 || span > MAX_RANGE_DAYS) return status(422, invalidRange);
 
-      const [dayGate, nightGate] = await Promise.all([
-        ftwDeadline("day"),
-        ftwDeadline("night"),
-      ]);
-      const isLate = (sentAt: string | null): boolean => {
-        if (!sentAt) return false;
-        const at = sentAt.slice(11, 19);
-        const gate = at < "12:00:00" ? dayGate : nightGate;
-        return gate ? at >= gate : false;
-      };
-
-      const rows = (
-        await db
-          .select()
-          .from(schema.ftwReadings)
-          .where(
-            and(
-              gte(schema.ftwReadings.date, from),
-              lte(schema.ftwReadings.date, to)
-            )
-          )
-          .orderBy(desc(schema.ftwReadings.date), asc(schema.ftwReadings.name))
-      ).filter((r) => {
-        const late = isLate(r.sentAt);
+      const rows = (await ftwListRows(from, to)).filter((r) => {
         if (query.company && r.company !== query.company) return false;
         if (query.department && r.department !== query.department) return false;
-        if (query.shift) {
-          const half = r.sentAt
-            ? r.sentAt.slice(11, 19) < "12:00:00"
-              ? "1"
-              : "2"
-            : "";
-          if (half !== query.shift) return false;
-        }
-        if (query.category === "late" && !late) return false;
+        if (query.shift && halfOf(r) !== query.shift) return false;
+        if (query.category === "late" && !r.late) return false;
         if (query.category && query.category !== "late") {
           const cat = (r.sleepCategory ?? "").toLowerCase();
           const key = !r.sleepCategory
@@ -284,18 +401,13 @@ export const fitToWorkSyncRoutes = new Elysia({
       });
 
       const name = `ftw-${from}${from === to ? "" : `-sd-${to}`}.xlsx`;
-      return new Response(
-        new Uint8Array(
-          await ftwWorkbook(rows.map((r) => ({ ...r, late: isLate(r.sentAt) })))
-        ),
-        {
-          headers: {
-            "content-type":
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "content-disposition": `attachment; filename="${name}"`,
-          },
-        }
-      );
+      return new Response(new Uint8Array(await ftwWorkbook(rows)), {
+        headers: {
+          "content-type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "content-disposition": `attachment; filename="${name}"`,
+        },
+      });
     },
     {
       auth: { menu: "fit-to-work", mode: "view" },

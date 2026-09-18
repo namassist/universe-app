@@ -1657,6 +1657,12 @@ export const FtwReadingSchema = t.Object({
    * moves the flag, and a stored one would be wrong the moment it did.
    */
   late: t.Boolean(),
+  /**
+   * Set only on a row for somebody who owed an upload and sent none — the
+   * "Belum lapor" rows. The shift the roster owed it for, since an unsent
+   * upload has no send time to place it in a half of the day.
+   */
+  rosterShift: t.Nullable(t.Union([t.Literal("day"), t.Literal("night")])),
 });
 
 export const FtwListSchema = t.Object({
