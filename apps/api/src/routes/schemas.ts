@@ -1755,6 +1755,37 @@ export const AttendanceDisplaySchema = t.Object({
   ),
 });
 
+/** The attendance TV's tickets: the latest scans of the running shift. */
+export const AttendanceScansSchema = t.Object({
+  servedAt: t.String(),
+  date: t.Nullable(t.String()),
+  shift: t.Nullable(ShiftKindSchema),
+  /** Oldest first — the order the screen plays them in. */
+  scans: t.Array(
+    t.Object({
+      /** One tap, whichever source saw it; what the screen dedupes on. */
+      key: t.String(),
+      nik: t.String(),
+      name: t.String(),
+      /** Cache-buster for the photo URL; null when there is none on file. */
+      photoFile: t.Nullable(t.String()),
+      /** IN, or OUT when the pull recorded one; a live tap reads IN. */
+      status: t.UnionEnum(["IN", "OUT"] as const),
+      /** "HH:MM:SS" on the machine's clock. */
+      scannedAt: t.String(),
+      /** The running shift this scan was shown under. */
+      shift: ShiftKindSchema,
+      /** savera's sleep category for the shift's date; null when unfiled. */
+      ftw: t.Nullable(t.String()),
+      /** The unit the slip printed, "SPARE", "-", or null when no slip. */
+      unit: t.Nullable(t.String()),
+      /** Where the slip sent them; null with no slip or none printed. */
+      area: t.Nullable(t.String()),
+      bus: t.Nullable(t.String()),
+    })
+  ),
+});
+
 export const FitWorkDisplaySchema = t.Object({
   ...WallEnvelope,
   /** Uploaded something, whatever it said. */

@@ -88,7 +88,7 @@ export const forgetListens = () => held.clear();
  * from the tap rather than from the clock on the wall means a ticket issued a
  * moment after midnight still belongs to the muster the person tapped in.
  */
-function ticketTapOf(ip: string, tap: { nik: string; at: string }) {
+export function ticketTapOf(ip: string, tap: { nik: string; at: string }) {
   return {
     ip,
     nik: tap.nik,

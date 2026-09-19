@@ -35,6 +35,7 @@ import {
   attendanceDisplayRoutes,
   fitWorkDisplayRoutes,
 } from "./routes/readiness-display";
+import { attendanceScanRoutes } from "./routes/attendance-scans";
 import { masterRoutes } from "./routes/master";
 import { rolesRoutes } from "./routes/roles";
 import { rosterRoutes } from "./routes/roster";
@@ -74,6 +75,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(attendanceSyncRoutes)
   .use(fitWorkDisplayRoutes)
   .use(attendanceDisplayRoutes)
+  .use(attendanceScanRoutes)
   .use(runTextsRoutes)
   .use(soundsRoutes)
   .use(timelineRoutes)

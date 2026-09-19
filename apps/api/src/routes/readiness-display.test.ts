@@ -11,22 +11,28 @@
  *   bun --env-file=.env test src/routes/readiness-display.test.ts
  */
 
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { inArray } from "drizzle-orm";
+import { and, inArray, isNotNull, ne } from "drizzle-orm";
 
 import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
 import { ftwObliged } from "../ftw-obliged";
+import { localDate } from "../scheduler";
+import { deletePhoto, writePhoto } from "../storage";
 import {
   attendanceBoard,
   attendanceDisplayRoutes,
   fitWorkBoard,
   fitWorkDisplayRoutes,
 } from "./readiness-display";
+import { attendanceScanRoutes } from "./attendance-scans";
 
-const app = new Elysia().use(attendanceDisplayRoutes).use(fitWorkDisplayRoutes);
+const app = new Elysia()
+  .use(attendanceDisplayRoutes)
+  .use(attendanceScanRoutes)
+  .use(fitWorkDisplayRoutes);
 
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Uji Wall ${uid()}`;
@@ -608,6 +614,200 @@ describe("who may read a wall", () => {
     expect(typeof body.servedAt).toBe("string");
     expect(Array.isArray(body.rows)).toBe(true);
     expect(body.rows.length).toBeLessThanOrEqual(body.total);
+  });
+});
+
+/* ------------------------------------------------------------ scan tickets */
+
+/**
+ * The attendance TV's ticket feed and the faces on it.
+ *
+ * One real scan, stamped now, so the route's own idea of the running shift
+ * includes it — which is also why this needs the seeded timeline: with no
+ * shift gates there is no running shift and nothing is anybody's to see.
+ */
+describe("the scan feed and its photos", () => {
+  /* Digits only: every source's NIK is normalized to its digits, the photo
+     route's lookup included. */
+  const nik = `9${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`;
+  const photoFile = `zz-wall-${uid()}.jpg`;
+  const ip = `10.99.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+  let employeeId: string | null = null;
+
+  /** The wall clock the machines write, in the process's own zone. */
+  const machineNow = () => {
+    const now = new Date();
+    const hms = [now.getHours(), now.getMinutes(), now.getSeconds()]
+      .map((n) => String(n).padStart(2, "0"))
+      .join(":");
+    return `${localDate(now)} ${hms}`;
+  };
+
+  beforeAll(async () => {
+    /* Borrowed from the seeded master: the register's foreign keys are not
+       what this is about. */
+    const [someone] = await db
+      .select({
+        companyId: schema.employees.companyId,
+        positionId: schema.employees.positionId,
+        departmentId: schema.employees.departmentId,
+      })
+      .from(schema.employees)
+      .limit(1);
+    const [row] = await db
+      .insert(schema.employees)
+      .values({ ...someone!, nik, name: tag, photoFileName: photoFile })
+      .returning({ id: schema.employees.id });
+    employeeId = row!.id;
+    await writePhoto(photoFile, new Uint8Array([0xff, 0xd8, 0xff]).buffer);
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik, at: machineNow() });
+  });
+
+  afterAll(async () => {
+    await db
+      .delete(schema.deviceLiveEvents)
+      .where(inArray(schema.deviceLiveEvents.nik, [nik]));
+    if (employeeId)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, [employeeId]));
+    await deletePhoto(photoFile);
+  });
+
+  test("no session gets 401", async () => {
+    expect((await get("/attendance/display/scans")).status).toBe(401);
+    expect((await get(`/attendance/display/photo/${nik}`)).status).toBe(401);
+  });
+
+  test("only the attendance screen may read them", async () => {
+    const fitwork = await makeDevice("fitwork");
+    expect((await get("/attendance/display/scans", fitwork)).status).toBe(403);
+    expect(
+      (await get(`/attendance/display/photo/${nik}`, fitwork)).status
+    ).toBe(403);
+  });
+
+  test("a scan made now is on the feed, with who and where", async () => {
+    const att = await makeDevice("att");
+    const res = await get("/attendance/display/scans", att);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      servedAt: string;
+      shift: string | null;
+      scans: {
+        key: string;
+        nik: string;
+        name: string;
+        photoFile: string | null;
+        status: string;
+        scannedAt: string;
+        shift: string;
+        ftw: string | null;
+        unit: string | null;
+        area: string | null;
+        bus: string | null;
+      }[];
+    };
+    expect(body.shift).not.toBeNull();
+    const mine = body.scans.find((s) => s.nik === nik);
+    expect(mine).toBeDefined();
+    expect(mine!.name).toBe(tag);
+    expect(mine!.photoFile).toBe(photoFile);
+    // A live tap carries no direction; the slip prints IN, and so does this.
+    expect(mine!.status).toBe("IN");
+    expect(mine!.scannedAt).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(mine!.shift).toBe(body.shift!);
+    // Nothing filed and no slip printed: all four empty, none invented.
+    expect(mine!.ftw).toBeNull();
+    expect(mine!.unit).toBeNull();
+    expect(mine!.area).toBeNull();
+    expect(mine!.bus).toBeNull();
+  });
+
+  test("the seat is the slip's, and FTW is what savera filed", async () => {
+    /* Filed the way the listener files it — the tap's own date and half of
+       the day — which is not always the wall's shift date after midnight. */
+    const [scan] = await db
+      .select({ at: schema.deviceLiveEvents.at })
+      .from(schema.deviceLiveEvents)
+      .where(inArray(schema.deviceLiveEvents.nik, [nik]));
+    const date = scan!.at.slice(0, 10);
+    const shift = scan!.at.slice(11, 19) < "12:00:00" ? "day" : "night";
+    await db.insert(schema.tickets).values({
+      nik,
+      date,
+      shift,
+      ip,
+      status: "dry",
+      contentHash: `zz-${uid()}`,
+      preview: "",
+      fields: {
+        seat: { unit: "ZZDT9", bus: "ZZ BU 04", fleet: null, area: "ZZ AREA" },
+      },
+    });
+
+    const shiftDate = (
+      (await (
+        await get("/attendance/display/scans", await makeDevice("att"))
+      ).json()) as { date: string }
+    ).date;
+    await db.insert(schema.ftwReadings).values({
+      nik,
+      date: shiftDate,
+      name: tag,
+      sleepCategory: "Langsung bekerja",
+    });
+
+    const att = await makeDevice("att");
+    const body = (await (
+      await get("/attendance/display/scans", att)
+    ).json()) as {
+      scans: {
+        nik: string;
+        ftw: string | null;
+        unit: string | null;
+        area: string | null;
+        bus: string | null;
+      }[];
+    };
+    const mine = body.scans.find((s) => s.nik === nik);
+    expect(mine?.unit).toBe("ZZDT9");
+    expect(mine?.area).toBe("ZZ AREA");
+    expect(mine?.bus).toBe("ZZ BU 04");
+    expect(mine?.ftw).toBe("Langsung bekerja");
+
+    await db.delete(schema.tickets).where(inArray(schema.tickets.nik, [nik]));
+    await db
+      .delete(schema.ftwReadings)
+      .where(inArray(schema.ftwReadings.nik, [nik]));
+  });
+
+  test("a screen gets the face of somebody who scanned this shift", async () => {
+    const att = await makeDevice("att");
+    const res = await get(`/attendance/display/photo/${nik}`, att);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("image/");
+  });
+
+  test("and nobody else's: the register is not browsable one NIK at a time", async () => {
+    const att = await makeDevice("att");
+    const [other] = await db
+      .select({ nik: schema.employees.nik })
+      .from(schema.employees)
+      .where(
+        and(
+          isNotNull(schema.employees.photoFileName),
+          ne(schema.employees.nik, nik)
+        )
+      )
+      .limit(1);
+    const res = await get(
+      `/attendance/display/photo/${other?.nik ?? "ZZ000000"}`,
+      att
+    );
+    expect(res.status).toBe(404);
   });
 });
 
