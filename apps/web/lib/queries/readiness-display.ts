@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { api, unwrap } from "@/lib/api";
+import { api, API_URL, unwrap } from "@/lib/api";
 
 /**
  * The two readiness TVs' own feeds — arrivals, and FTW filings.
@@ -38,6 +38,50 @@ export type AttendanceDisplay = Awaited<
   >
 >;
 export type AttendanceDisplayRow = AttendanceDisplay["rows"][number];
+
+/**
+ * The attendance TV's scans, for its tickets.
+ *
+ * Two seconds rather than the walls' thirty: this screen answers the person
+ * standing at the booth, and a live tap reaches the database about a second
+ * after the finger leaves the glass. Each poll carries the latest hundred
+ * scans, so a missed poll loses nothing — the next one repeats them.
+ */
+export const ATTENDANCE_SCANS_POLL_MS = 2_000;
+
+export const attendanceScansKey = ["attendance-scans"] as const;
+
+export const attendanceScansQueryOptions = () =>
+  queryOptions({
+    queryKey: attendanceScansKey,
+    queryFn: () => unwrap(api.v1.attendance.display.scans.get()),
+    refetchInterval: ATTENDANCE_SCANS_POLL_MS,
+    refetchIntervalInBackground: true,
+    retry: false,
+  });
+
+export type AttendanceScans = Awaited<
+  ReturnType<
+    NonNullable<ReturnType<typeof attendanceScansQueryOptions>["queryFn"]>
+  >
+>;
+export type AttendanceScan = AttendanceScans["scans"][number];
+
+/**
+ * Where a ticket's photograph comes from, or null when there is none on file.
+ *
+ * The attendance wall's own route, which serves only people who scanned this
+ * shift — the fleet wall's reasoning, see `fleetPhotoUrl`. The stored file
+ * name is the cache-buster, so a replaced photo is picked up without a reload.
+ */
+export function attendancePhotoUrl(scan: {
+  nik: string;
+  photoFile: string | null;
+}): string | null {
+  if (!scan.photoFile) return null;
+  const nik = encodeURIComponent(scan.nik);
+  return `${API_URL}/v1/attendance/display/photo/${nik}?v=${scan.photoFile}`;
+}
 
 export const fitWorkDisplayKey = ["fitwork-display"] as const;
 

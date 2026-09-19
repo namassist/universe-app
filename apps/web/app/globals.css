@@ -44,6 +44,9 @@
     #003a8c 58%,
     #00051b 88%
   );
+  /* The attendance TV's scan ticket (design option A, 2026-09-19): deep blue
+     fading to navy under the data, behind the cyan identity panel. */
+  --gradient-ticket: linear-gradient(125deg, #0b3a9e 0%, #0b1328 72%);
   --blob-cyan: rgba(0, 212, 255, 0.15);
   --blob-blue: rgba(0, 102, 255, 0.18);
   --glass-1-fill: rgba(255, 255, 255, 0.06);
@@ -176,6 +179,8 @@
     #9cc4ff 58%,
     #eaf3ff 88%
   );
+  /* Kiosks are dark-only; kept so the token exists in both themes. */
+  --gradient-ticket: linear-gradient(125deg, #9cc4ff 0%, #eaf3ff 72%);
   --blob-cyan: rgba(0, 170, 255, 0.3);
   --blob-blue: rgba(0, 102, 255, 0.22);
 

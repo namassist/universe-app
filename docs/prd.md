@@ -1703,6 +1703,55 @@ same fields from the plan.
 | Attendance time      | first tap of the shift                                     |
 | Status               | IN                                                         |
 
+### The attendance wall shows the scan as a ticket — shipped
+
+The attendance TV stopped being a list of who has not arrived (owner,
+2026-09-19). It now shows **the person who just scanned**, as one large card:
+photograph, name, NIK, **Status IN**, the clock-in time to the second, the
+**FTW category**, the **shift**, and the **unit, area and bus** their slip
+printed. It states facts and **judges none** — no Hadir / Terlambat: whether
+a tap was on time is the Attendance menu's question, not the booth's. A value
+the records do not hold reads "-". The TV's device-name chip is not shown here.
+Every word on it is Indonesian (owner, 2026-09-19): the screen is titled
+**Display Absensi** with the shift in the line beneath, and the machine's
+IN / OUT reads **Masuk / Keluar**. FTW is coloured as the Fit to Work page
+colours its badge — Dapat Bekerja green, Istirahat yellow, Tidak Boleh Bekerja
+red, no filing an uncoloured dash — and a SPARE unit is yellow.
+The card is design option A, "Split Signal" (owner, 2026-09-19): a cyan
+identity panel with the photograph on the left; name, NIK and status pill,
+then the check-in time, then a grid of FTW (two columns), unit, shift, area
+and bus on the right.
+
+- **Both sources, merged.** Live-session taps (about 1 s) and pulled taps
+  (about 90 s, every booth machine) for the running shift — from its
+  `shift-start` gate, the same boundary every wall turns on. A tap both saw is
+  one ticket, keyed on machine + NIK + machine time, and placed at whichever
+  moment we first learned of it.
+- **Anyone in the register**, rostered or not. Taps by NIKs we do not carry
+  are dropped.
+- **Status** is IN, or OUT when a pulled tap recorded that direction; a live
+  tap carries none and reads IN, as the slip does.
+- **FTW** is savera's sleep category from `ftw_readings` for the shift's date,
+  as the fleet wall reads it.
+- **Unit, area and bus** are what the slip printed — the seat, or _SPARE_ with
+  the spare pool's buses and where they wait, or a dash — found by the rule the
+  listener files slips under (the tap's own date and half of the day). No slip,
+  and all three read "-".
+- **The queue.** The screen polls every 2 s and takes new scans in the order
+  they reached us. Each ticket holds the screen for **3 s**; with nobody
+  waiting, **the last ticket stays up**. Opening the screen shows only the
+  latest scan rather than replaying the shift. A person already on the glass or
+  in line is not queued again, so a double press is one ticket.
+- **A rush gives way** (owner, 2026-09-19). At most **20** tickets wait — a
+  minute behind. Past that the oldest are skipped and the card says
+  _+N lainnya_, so the screen never looks as if it showed everyone when it did
+  not.
+- **Photos** come from `GET /v1/attendance/display/photo/:nik`, which serves
+  only people who scanned during the running shift — the fleet wall's rule,
+  drawn around this wall — so a paired TV cannot walk the register.
+- The previous endpoint, `GET /v1/attendance/display`, is **kept until the new
+  screen has run a muster**, as the way back; nothing calls it now.
+
 ### When the printer fails
 
 - The tap is recorded as attendance regardless.
