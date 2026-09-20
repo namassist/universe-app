@@ -296,6 +296,16 @@ fill the gap from the spare pool.
   inside each, the newest upload first. The day no longer leads, and a late
   upload no longer lifts a green row above the others. Clicking a column still
   replaces this order entirely.
+- **Every row carries the roster's own code for its day** (owner, 2026-09-20).
+  savera knows nothing of the roster, so its list showed a day operator's 04:26
+  filing and a night operator filing early for tonight as the same kind of row.
+  On 2026-09-20 two of the screen's first nine rows were rostered `N`, which is
+  why it appeared to disagree with the dashboard's count of eight — the
+  dashboard counts one shift, this screen counts uploads. The code rather than
+  a shift, because `CR`, `OFF` and the rest answer "why is this person here at
+  all", and a reader who can see `D` and `N` will ask it. Null when the roster
+  holds nothing for that day; it is read once for the whole range, and the
+  export carries it too.
 - **Monitoring FTW lists who has not filed** (owner, 2026-09-17). savera sends
   only what was uploaded, so the "Belum lapor" category could never hold
   anyone. The list (and its export) now adds a row for every person rostered

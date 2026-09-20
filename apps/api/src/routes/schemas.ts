@@ -1663,6 +1663,11 @@ export const FtwReadingSchema = t.Object({
    * upload has no send time to place it in a half of the day.
    */
   rosterShift: t.Nullable(t.Union([t.Literal("day"), t.Literal("night")])),
+  /**
+   * What the roster had this person on that day, in its own code. Null when
+   * the roster holds nothing for them — not everybody who uploads is on it.
+   */
+  rosterCode: t.Nullable(RosterCodeSchema),
 });
 
 export const FtwListSchema = t.Object({

@@ -126,7 +126,7 @@ function SortHead({
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className="inline-flex cursor-pointer items-center gap-1.5 uppercase hover:text-(--color-primary-bright)"
+        className="inline-flex cursor-pointer items-center gap-1.5 uppercase hover:text-primary-bright"
       >
         {label}
         {active === "asc" ? (
@@ -405,7 +405,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
           <ToolbarTitle>{t.ftwLog}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
-              className="w-[240px]"
+              className="w-60"
               placeholder={t.searchOp}
               aria-label={t.searchOp}
               value={q}
@@ -494,13 +494,13 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
           <TableSkeleton rows={8} />
         ) : listQ.isError ? (
           <StateBox
-            icon={<Search className="text-(--color-primary-bright)" />}
+            icon={<Search className="text-primary-bright" />}
             title={t.ftwLoadErr}
             body={errorMessage(listQ.error, t.ftwLoadErr)}
           />
         ) : pg.rows.length ? (
           <div className="overflow-x-auto">
-            <Table className="min-w-[1440px]">
+            <Table className="min-w-360">
               <TableHeader>
                 <tr>
                   <TableHead>{t.thOperator}</TableHead>
@@ -509,6 +509,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                   <TableHead>{t.thDept}</TableHead>
                   <TableHead>{t.thPos}</TableHead>
                   <TableHead>Mess</TableHead>
+                  <TableHead>{t.thRoster}</TableHead>
                   <TableHead>{t.thShift}</TableHead>
                   <SortHead
                     label={t.thSleep}
@@ -548,6 +549,15 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                       <TableCell>{r.department ?? "—"}</TableCell>
                       <TableCell>{r.position ?? "—"}</TableCell>
                       <TableCell>{r.mess ?? "—"}</TableCell>
+                      {/* The roster's own code, beside the upload's half of
+                          the day, because the two answer different questions:
+                          this one says which shift the person was on, and the
+                          next says when they filed. Two operators filing at
+                          04:26 look alike without it even when one is on days
+                          and the other is filing early for tonight. */}
+                      <TableCell className="font-mono">
+                        {r.rosterCode ?? "—"}
+                      </TableCell>
                       <TableCell>{shiftLabel(r)}</TableCell>
                       <TableCell className={sleepClass(rowCat)}>
                         {sleepText(r.sleepMinutes)}
@@ -617,7 +627,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
              the clock rather than by the reader — so the screen says so and
              offers the way out, instead of looking like missing data. */
           <StateBox
-            icon={<Clock className="text-(--color-primary-bright)" />}
+            icon={<Clock className="text-primary-bright" />}
             title={shift === "1" ? t.ftwNoShift1T : t.ftwNoShift2T}
             body={t.ftwNoShiftB}
           >
@@ -627,7 +637,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
           </StateBox>
         ) : (
           <StateBox
-            icon={<Search className="text-(--color-primary-bright)" />}
+            icon={<Search className="text-primary-bright" />}
             title={t.noResTitle}
             body={t.ftwEmptyB}
           />

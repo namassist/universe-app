@@ -342,6 +342,7 @@ describe("the FTW list names who owed an upload and sent none", () => {
         sentAt: string | null;
         late: boolean;
         rosterShift: "day" | "night" | null;
+        rosterCode: string | null;
         department: string | null;
       }[];
     };
@@ -360,6 +361,17 @@ describe("the FTW list names who owed an upload and sent none", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]!.rosterShift).toBeNull();
     expect(sent[0]!.late).toBe(true);
+
+    /* An upload carries the roster's own code for its day (owner,
+       2026-09-20). Without it the screen cannot tell a day operator's 04:26
+       filing from a night operator filing early for tonight, which is what
+       put two rows in its top nine that the dashboard did not count. The
+       unfiled rows carry theirs too, and it agrees with their shift. */
+    expect(sent[0]!.rosterCode).toBe("D");
+    expect(unfiled.map((r) => [r.nik, r.rosterCode]).sort()).toEqual([
+      ["90000031", "D"],
+      ["90000032", "N"],
+    ]);
   });
 });
 

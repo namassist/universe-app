@@ -15,7 +15,7 @@
  */
 
 import { and, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
-import type { ShiftKind } from "@universe/contracts";
+import type { RosterCode, ShiftKind } from "@universe/contracts";
 import ExcelJS from "exceljs";
 import { Elysia, t } from "elysia";
 
@@ -53,6 +53,7 @@ const FTW_EXPORT_COLUMNS = [
   "departemen",
   "jabatan",
   "mess",
+  "roster",
   "shift_upload",
   "jam_tidur",
   "menit_tidur",
@@ -79,6 +80,22 @@ type FtwListRow = {
   late: boolean;
   /** Set only on an unfiled row: the shift the roster owed the upload for. */
   rosterShift: ShiftKind | null;
+  /**
+   * What the roster says this person was doing that day, in its own code.
+   *
+   * The list is savera's uploads as they came, and savera knows nothing of the
+   * roster — so two operators filing at 04:26 look alike here even when one is
+   * on days and the other files early for tonight. On 2026-09-20 that was
+   * exactly the gap between this screen and the dashboard: two of its first
+   * nine rows were rostered `N` and belonged to a shift the dashboard had not
+   * reached. The code, not a shift, because `CR`, `OFF` and the rest are the
+   * answer to "why is this person here at all" and a reader who can see `D`
+   * and `N` will ask it.
+   *
+   * Null when the roster has nothing for that day — not everybody who uploads
+   * is on it.
+   */
+  rosterCode: RosterCode | null;
 };
 
 type FtwExportRow = FtwListRow;
@@ -111,6 +128,7 @@ async function ftwWorkbook(rows: FtwExportRow[]): Promise<Buffer> {
       departemen: r.department ?? "",
       jabatan: r.position ?? "",
       mess: r.mess ?? "",
+      roster: r.rosterCode ?? "",
       // Derived, not savera's own column — see the list route for why that
       // column cannot be trusted for this.
       shift_upload: halfOf(r) ? `Shift ${halfOf(r)}` : "",
@@ -156,6 +174,43 @@ function halfOf(
  * test too. An upload sent late is still an upload, and is the `late` flag's
  * business rather than this one's.
  */
+/**
+ * Every in-force roster code in the range, keyed by person and date.
+ *
+ * One query for the whole list rather than one per row: the screen opens on a
+ * single day, and even a month is one indexed scan against the thousands of
+ * lookups the alternative would make.
+ *
+ * `rosterDayInForce` for the usual reason — a re-uploaded month keeps its
+ * archived rows, and joining on the date alone would answer with both.
+ */
+async function rosterCodesIn(
+  from: string,
+  to: string
+): Promise<Map<string, RosterCode>> {
+  const rows = await db
+    .select({
+      nik: schema.employees.nik,
+      date: schema.rosterDays.date,
+      code: schema.rosterDays.code,
+    })
+    .from(schema.rosterDays)
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.rosterDays.employeeId)
+    )
+    .where(
+      and(
+        gte(schema.rosterDays.date, from),
+        lte(schema.rosterDays.date, to),
+        rosterDayInForce
+      )
+    );
+  const byPersonDay = new Map<string, RosterCode>();
+  for (const row of rows) byPersonDay.set(`${row.nik}|${row.date}`, row.code);
+  return byPersonDay;
+}
+
 async function unfiledRows(from: string, to: string): Promise<FtwListRow[]> {
   const rostered = await db
     .select({
@@ -238,6 +293,7 @@ async function unfiledRows(from: string, to: string): Promise<FtwListRow[]> {
         sentAt: null,
         late: false,
         rosterShift: r.code === "N" ? ("night" as const) : ("day" as const),
+        rosterCode: r.code,
       },
     ];
   });
@@ -270,12 +326,18 @@ async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
     return gate ? at >= gate : false;
   };
 
-  const uploads = await db
-    .select()
-    .from(schema.ftwReadings)
-    .where(
-      and(gte(schema.ftwReadings.date, from), lte(schema.ftwReadings.date, to))
-    );
+  const [uploads, rosterCodes] = await Promise.all([
+    db
+      .select()
+      .from(schema.ftwReadings)
+      .where(
+        and(
+          gte(schema.ftwReadings.date, from),
+          lte(schema.ftwReadings.date, to)
+        )
+      ),
+    rosterCodesIn(from, to),
+  ]);
 
   const rows: FtwListRow[] = [
     ...uploads.map((r) => ({
@@ -294,6 +356,7 @@ async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
       /** Uploaded after its shift's `ftw-deadline` — refused by the board. */
       late: isLate(r.sentAt),
       rosterShift: null,
+      rosterCode: rosterCodes.get(`${r.nik}|${r.date}`) ?? null,
     })),
     ...(await unfiledRows(from, to)),
   ];
