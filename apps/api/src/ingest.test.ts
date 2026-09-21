@@ -10,7 +10,8 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import { runIngestWindow, syncFingerReadings, syncFtwReadings } from "./ingest";
-import type { FtwSourceRow } from "./sources/savera";
+import type { FtwFetcher, FtwSourceRow } from "./sources/savera";
+import type { SleepRule } from "./ftw-rules";
 import type { FingerSourceRow } from "./sources/nakula";
 
 /** Dates no real source will ever emit again — safe to own and wipe. */
@@ -116,9 +117,46 @@ const fingerRow = (over: Partial<FingerSourceRow> = {}): FingerSourceRow => ({
   ...over,
 });
 
+/** savera's active default sleep rules, 2026-09-21 — see `ftw-rules.test.ts`. */
+const rule = (over: Partial<SleepRule>): SleepRule => ({
+  code: "X",
+  metricKey: "effective_sleep_minutes",
+  minMinutes: null,
+  minInclusive: true,
+  maxMinutes: null,
+  maxInclusive: false,
+  decisionLabel: "X",
+  priority: 99,
+  shiftId: null,
+  sleepType: "all",
+  effectiveFrom: null,
+  effectiveTo: null,
+  ...over,
+});
+const SAVERA_RULES: SleepRule[] = [
+  rule({ maxMinutes: 270, decisionLabel: "Tidak Boleh Bekerja", priority: 1 }),
+  rule({
+    minMinutes: 270,
+    maxMinutes: 300,
+    decisionLabel: "Istirahat Minimal 2 Jam",
+    priority: 2,
+  }),
+  rule({
+    minMinutes: 300,
+    maxMinutes: 330,
+    decisionLabel: "Istirahat Minimal 1 Jam",
+    priority: 3,
+  }),
+  rule({ minMinutes: 330, decisionLabel: "Dapat Bekerja", priority: 4 }),
+];
+
+/** One FTW pass over the test dates, with savera's rules readable. */
+const syncFtw = (fetch: FtwFetcher) =>
+  syncFtwReadings(TEST_DATES, fetch, async () => SAVERA_RULES);
+
 describe("syncFtwReadings", () => {
   test("snapshots a source row with the NIK normalized", async () => {
-    const result = await syncFtwReadings(TEST_DATES, async () => [ftwRow()]);
+    const result = await syncFtw(async () => [ftwRow()]);
 
     expect(result).toEqual({
       fetched: 1,
@@ -138,14 +176,14 @@ describe("syncFtwReadings", () => {
   });
 
   test("re-syncing the same rows amends in place, never duplicates", async () => {
-    await syncFtwReadings(TEST_DATES, async () => [ftwRow()]);
+    await syncFtw(async () => [ftwRow()]);
     const [before] = await db
       .select()
       .from(schema.ftwReadings)
       .where(eq(schema.ftwReadings.date, D1));
 
     // The operator re-uploads inside the window; the verdict changes.
-    await syncFtwReadings(TEST_DATES, async () => [
+    await syncFtw(async () => [
       ftwRow({ sleep_minutes: 240, sleep_category: "Tidak Boleh Bekerja" }),
     ]);
 
@@ -160,7 +198,7 @@ describe("syncFtwReadings", () => {
   });
 
   test("a row with no usable NIK is skipped and counted, not dropped silently", async () => {
-    const result = await syncFtwReadings(TEST_DATES, async () => [
+    const result = await syncFtw(async () => [
       ftwRow(),
       ftwRow({ nik: null }),
       ftwRow({ nik: "N/A" }),
@@ -177,7 +215,7 @@ describe("syncFtwReadings", () => {
      rows belong to nobody in the register (2026-09-16: 187 of 714). They are
      read by no screen that matters and were listed raw by Monitoring FTW. */
   test("a NIK the employee register does not know is skipped and counted", async () => {
-    const result = await syncFtwReadings(TEST_DATES, async () => [
+    const result = await syncFtw(async () => [
       ftwRow(),
       ftwRow({ nik: "50821361", name: "IDRUS YUNUS" }),
     ]);
@@ -198,9 +236,12 @@ describe("syncFtwReadings", () => {
     // "050121018" and "50121018" are the same person seen through two source
     // formattings; landing both in one statement must not blow the pass up
     // with ON CONFLICT's cannot-affect-row-twice.
-    const result = await syncFtwReadings(TEST_DATES, async () => [
-      ftwRow({ nik: "050121018", sleep_category: "Dapat Bekerja" }),
-      ftwRow({ nik: "50121018", sleep_category: "Tidak Boleh Bekerja" }),
+    const result = await syncFtw(async () => [
+      /* Told apart by minutes: the category is worked out from them now,
+         so two rows differing only in savera's label would compute alike
+         and the test could not see which one won. */
+      ftwRow({ nik: "050121018", sleep_minutes: 426 }),
+      ftwRow({ nik: "50121018", sleep_minutes: 240 }),
     ]);
     expect(result).toEqual({
       fetched: 2,
@@ -222,14 +263,14 @@ describe("syncFtwReadings", () => {
     // The number a person pressing Sync is reading. Every pass upserts the
     // whole window, so without this a sync that found thirty late uploads
     // looks exactly like one that found nothing.
-    const first = await syncFtwReadings(TEST_DATES, async () => [ftwRow()]);
+    const first = await syncFtw(async () => [ftwRow()]);
     expect(first.inserted).toBe(1);
 
-    const again = await syncFtwReadings(TEST_DATES, async () => [ftwRow()]);
+    const again = await syncFtw(async () => [ftwRow()]);
     expect(again.upserted).toBe(1);
     expect(again.inserted).toBe(0);
 
-    const withNew = await syncFtwReadings(TEST_DATES, async () => [
+    const withNew = await syncFtw(async () => [
       ftwRow(),
       ftwRow({ nik: "50121099" }),
     ]);
@@ -238,7 +279,7 @@ describe("syncFtwReadings", () => {
   });
 
   test("the same person on two dates is two snapshot rows", async () => {
-    await syncFtwReadings(TEST_DATES, async () => [
+    await syncFtw(async () => [
       ftwRow(),
       ftwRow({ date: D2, sent_at: `${D2} 04:30:00` }),
     ]);
@@ -247,6 +288,93 @@ describe("syncFtwReadings", () => {
       .from(schema.ftwReadings)
       .where(inArray(schema.ftwReadings.date, TEST_DATES));
     expect(rows).toHaveLength(2);
+  });
+
+  /* The morning this was written (2026-09-21): 8h30 of sleep, and savera's own
+     row still said "Tidak Boleh Bekerja" at our last pass before the board.
+     savera corrected itself 82 seconds later; the board had used the stale
+     word, and five operators lost a unit. */
+  test("the category comes from savera's rules, not from savera's lagging row", async () => {
+    await syncFtw(async () => [
+      ftwRow({ sleep_minutes: 510, sleep_category: "Tidak Boleh Bekerja" }),
+    ]);
+    const [row] = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(row!.sleepCategory).toBe("Dapat Bekerja");
+    // savera's word is kept beside ours, not overwritten.
+    expect(row!.saveraCategory).toBe("Tidak Boleh Bekerja");
+  });
+
+  test("the rules' own edges decide, as savera's table draws them", async () => {
+    await syncFtw(async () => [ftwRow({ sleep_minutes: 329 })]);
+    const [row] = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(row!.sleepCategory).toBe("Istirahat Minimal 1 Jam");
+  });
+
+  /* Nothing here may be worse than before this change: with the rules out of
+     reach the pass keeps savera's own category, exactly as it used to. */
+  test("rules that cannot be read fall back to savera's category", async () => {
+    await syncFtwReadings(
+      TEST_DATES,
+      async () => [
+        ftwRow({ sleep_minutes: 510, sleep_category: "Tidak Boleh Bekerja" }),
+      ],
+      async () => {
+        throw new Error("savera unreachable");
+      }
+    );
+    const [row] = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(row!.sleepCategory).toBe("Tidak Boleh Bekerja");
+    expect(row!.saveraCategory).toBe("Tidak Boleh Bekerja");
+  });
+
+  /* The review's catch (2026-09-21): a gap in the rules used to leave the
+     category empty, and every screen reads an empty category as "never
+     uploaded" — for somebody who plainly did. savera's own word is the
+     honest answer when ours has none. */
+  test("minutes no rule covers keep savera's category, never an empty one", async () => {
+    await syncFtwReadings(
+      TEST_DATES,
+      async () => [
+        ftwRow({ sleep_minutes: 500, sleep_category: "Dapat Bekerja" }),
+      ],
+      async () => [
+        rule({
+          minMinutes: 0,
+          maxMinutes: 100,
+          decisionLabel: "Tidak Boleh Bekerja",
+          priority: 1,
+        }),
+      ]
+    );
+    const [row] = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(row!.sleepCategory).toBe("Dapat Bekerja");
+  });
+
+  test("rules the engine cannot honour fall back to savera's category too", async () => {
+    await syncFtwReadings(
+      TEST_DATES,
+      async () => [
+        ftwRow({ sleep_minutes: 510, sleep_category: "Tidak Boleh Bekerja" }),
+      ],
+      async () => [...SAVERA_RULES, rule({ shiftId: 3, minMinutes: 0 })]
+    );
+    const [row] = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(row!.sleepCategory).toBe("Tidak Boleh Bekerja");
   });
 });
 

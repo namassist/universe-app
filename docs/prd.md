@@ -454,6 +454,43 @@ fill the gap from the spare pool.
 - A reading with no `sent_at` is judged on its verdict alone — inventing
   lateness from a null would fail people for a gap in our own record.
 
+### The FTW category is savera's rule, applied here — shipped
+
+**The category is worked out by Universe, from savera's own rules** (owner,
+2026-09-21). savera still decides the rules; we stopped waiting for it to write
+the answer down.
+
+- **Why.** savera's background sync can create a person's insight row early,
+  from a trickle of wearable data, and its five-minute job rewrites the
+  category some laps later. On 2026-09-21 an operator with 8h30 of sleep read
+  "Tidak Boleh Bekerja" at our last pass (05:21:41); savera corrected the row
+  at 05:23:03; the board was built at 05:26 on the stale word. Five operators
+  with 6h47–8h30 of sleep lost a unit that morning. No pull window fixes this:
+  savera was still rewriting rows at 18:45.
+- **What.** Each pass reads the active `default` rules from savera's
+  `ftw_sleep_rules` and applies them to `summaries.sleep` — the minutes we
+  already fetch. First rule by priority whose range holds the minutes, edges
+  as the table's own `min_inclusive` / `max_inclusive` say, the rule's
+  `decision_label` as the category. Nothing is hardcoded: an edit in savera
+  takes effect on our next pull.
+- **Evidence it is savera's answer, not a second opinion.** Applied to
+  `summaries.sleep`, the rules reproduce savera's settled category on 10,395
+  of 10,395 uploads over the fourteen days before the change. The rules name
+  their metric `effective_sleep_minutes`, but `stage_effective_minutes`
+  agrees on only 8,408 — the data, not the name, decided the input.
+- **savera's own word is kept** in `ftw_readings.savera_category`, beside ours,
+  so a disagreement is visible rather than overwritten. It is not shown on any
+  screen (owner, 2026-09-21).
+- **Fail safe.** Rules that cannot be read, or rules narrowed to a shift or a
+  sleep type the engine cannot match yet, make the pass keep savera's own
+  category — the behaviour before this change — and say so in the log. So do
+  minutes no rule covers, and a rule that names no category: never an empty
+  category, which every screen reads as "never uploaded" for somebody who did
+  (review, 2026-09-21).
+- **Unchanged:** the FTW decision (`FTW aman` / `Perlu Tindak Lanjut`) was
+  already read from the raw answers for the same kind of staleness, and the
+  late-upload rule is untouched.
+
 ### The IN tap is split at noon — shipped
 
 - **A day holds two shift-starts, so one "first IN" cannot serve both**
