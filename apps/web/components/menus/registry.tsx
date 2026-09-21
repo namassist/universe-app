@@ -23,6 +23,7 @@ import { MenuPlaceholder } from "./placeholder";
 import { PrintersMenu } from "./printers";
 import { RosterDataMenu } from "./roster-data";
 import { RunTextsMenu } from "./run-texts";
+import { ScanIdMenu } from "./scan-id";
 import { SettingMenu } from "./setting";
 import { SoundsMenu } from "./sounds";
 import { TicketsMenu } from "./tickets";
@@ -52,6 +53,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "fleet-setting": FleetSettingMenu,
   "allocation-priority": AllocationPriorityMenu,
   "monitoring-tap": MonitoringTapMenu,
+  "scan-id": ScanIdMenu,
   tiket: TicketsMenu,
   "database-unit": DatabaseUnitMenu,
   "jenis-unit": (p) => <MasterMenu {...p} cat="jenis-unit" />,

@@ -90,6 +90,9 @@ export const NAV: NavEntry[] = [
       leaf("attendance"),
       leaf("monitoring-tap"),
       leaf("tiket"),
+      /* Beside Attendance because it is read while asking about a person at
+         the gate — who is this, and what did the muster give him. */
+      leaf("scan-id"),
     ],
   },
   item("fit-to-work", Heart),
