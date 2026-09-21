@@ -13,6 +13,7 @@ export const MENU_SLUGS = [
   "display-fitwork",
   "monitoring-fingerprint",
   "monitoring-tap",
+  "scan-id",
   "employees",
   "roster-data",
   "attendance",
@@ -54,6 +55,9 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   "display-fitwork": "Display Fit To Work",
   "monitoring-fingerprint": "Monitoring Fingerprint",
   "monitoring-tap": "Monitoring Tap",
+  // Read at a gate with a phone: scan the card, see who it is and what the
+  // muster gave them today.
+  "scan-id": "Scan ID Card",
   employees: "Karyawan",
   "roster-data": "Data Roster",
   attendance: "Attendance",

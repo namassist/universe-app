@@ -187,6 +187,11 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
      action on the screen is reprinting a slip that failed, and the person
      standing at the muster with an empty hand is manpower's to answer. */
     { slug: "tiket", mode: "manage", roles: ["manpower"] },
+    /* Scanning a card is asking who somebody is and what the muster gave
+       them — manpower's question at the gate, and a manajer's about his own
+       department, which his scope already narrows it to (owner, 2026-09-20).
+       View: the screen reads the register and writes nothing to it. */
+    { slug: "scan-id", mode: "view", roles: ["manpower", "manajer"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */

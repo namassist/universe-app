@@ -1791,6 +1791,28 @@ export const AttendanceScansSchema = t.Object({
   ),
 });
 
+/** One scanned ID card: who this is, and what the muster gave them today. */
+export const IdCardSchema = t.Object({
+  nik: t.String(),
+  name: t.String(),
+  /** Cache-buster for the photo URL; null when there is none on file. */
+  photoFile: t.Nullable(t.String()),
+  department: t.Nullable(t.String()),
+  position: t.Nullable(t.String()),
+  /** The simper codes held, in code order; empty when there are none. */
+  simper: t.Array(t.String()),
+  /** The running shift, or null when the timeline cannot name one. */
+  shift: t.Nullable(ShiftKindSchema),
+  /** The roster code for today — D, N, L — from the document in force. */
+  roster: t.Nullable(t.String()),
+  /** A unit code, "SPARE", or null when allocation is not about them. */
+  unit: t.Nullable(t.String()),
+  area: t.Nullable(t.String()),
+  bus: t.Nullable(t.String()),
+  /** "HH:MM:SS" of the first IN tap of the running shift. */
+  checkInAt: t.Nullable(t.String()),
+});
+
 export const FitWorkDisplaySchema = t.Object({
   ...WallEnvelope,
   /** Uploaded something, whatever it said. */
