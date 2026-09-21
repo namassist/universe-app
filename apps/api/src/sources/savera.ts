@@ -40,6 +40,7 @@
 import postgres from "postgres";
 
 import { env } from "../env";
+import type { SleepRule } from "../ftw-rules";
 
 export type FtwSourceRow = {
   /** Raw source NIK (`employees.code` in savera) — normalize before joining. */
@@ -142,6 +143,43 @@ export const fetchFtwRows: FtwFetcher = async (dates) => {
     order by e.code, si.send_date, s.send_time desc nulls last
   `;
   return rows as unknown as FtwSourceRow[];
+};
+
+/** savera's sleep rules, as `ftw-rules.ts` applies them. */
+export type SleepRulesFetcher = () => Promise<SleepRule[]>;
+
+/**
+ * The sleep rules in force in savera for our company.
+ *
+ * Read on every pass rather than once, so an edit made in savera's master data
+ * takes effect on our next pull instead of at the next deploy. Active and not
+ * deleted, and only the `default` group: savera keeps test rules in the same
+ * table under their own group, deleted but still present.
+ *
+ * Dates come back as text for the same reason every time-shaped column here
+ * does — see the module comment.
+ */
+export const fetchSleepRules: SleepRulesFetcher = async () => {
+  const rows = await sql()`
+    select code,
+           metric_key                  as "metricKey",
+           min_minutes                 as "minMinutes",
+           coalesce(min_inclusive, true)  as "minInclusive",
+           max_minutes                 as "maxMinutes",
+           coalesce(max_inclusive, false) as "maxInclusive",
+           decision_label              as "decisionLabel",
+           coalesce(priority, 0)       as priority,
+           shift_id::int               as "shiftId",
+           coalesce(sleep_type, 'all') as "sleepType",
+           effective_from::text        as "effectiveFrom",
+           effective_to::text          as "effectiveTo"
+    from ftw_sleep_rules
+    where company_id = ${env.FTW_SOURCE_COMPANY_ID}
+      and status = true
+      and deleted_at is null
+      and rule_group = 'default'
+  `;
+  return rows as unknown as SleepRule[];
 };
 
 /** For tests and graceful shutdown. */

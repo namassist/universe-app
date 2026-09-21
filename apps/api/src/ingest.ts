@@ -20,7 +20,13 @@ import { env } from "./env";
 import { localDate } from "./scheduler";
 import { registeredNiks } from "./registered-niks";
 import { normalizeNik } from "./sources/nik";
-import { fetchFtwRows, type FtwFetcher } from "./sources/savera";
+import { categoryOf, ruleSetOf, type RuleSet } from "./ftw-rules";
+import {
+  fetchFtwRows,
+  fetchSleepRules,
+  type FtwFetcher,
+  type SleepRulesFetcher,
+} from "./sources/savera";
 import { fetchFingerRows, type FingerFetcher } from "./sources/nakula";
 
 export type SyncResult = {
@@ -72,11 +78,38 @@ function dedupeByNikDate<T extends { nik: string; date: string }>(
   return [...byKey.values()];
 }
 
+/**
+ * savera's sleep rules for this pass, or null to keep savera's own category.
+ *
+ * Never fatal. The rules live in the same database as the rows, but a pass
+ * that lost them — a timeout, a column renamed on their side — must not lose
+ * the morning's readings with them: it writes what it always wrote before the
+ * category was ours to compute, and says so in the log.
+ */
+async function rulesFor(fetch: SleepRulesFetcher): Promise<RuleSet | null> {
+  try {
+    const set = ruleSetOf(await fetch());
+    if (!set)
+      console.warn(
+        "[ingest] savera's sleep rules are not ones this engine can apply " +
+          "(none, or narrowed to a shift or sleep type) — keeping savera's own category"
+      );
+    return set;
+  } catch (error) {
+    console.error(
+      "[ingest] savera's sleep rules unreadable — keeping savera's own category",
+      error
+    );
+    return null;
+  }
+}
+
 export async function syncFtwReadings(
   dates: string[],
-  fetch: FtwFetcher = fetchFtwRows
+  fetch: FtwFetcher = fetchFtwRows,
+  fetchRules: SleepRulesFetcher = fetchSleepRules
 ): Promise<SyncResult> {
-  const rows = await fetch(dates);
+  const [rows, rules] = await Promise.all([fetch(dates), rulesFor(fetchRules)]);
   /* Only people the register knows (owner, 2026-09-17). savera reports FTW for
      every driver on site — a quarter of a morning's rows, 187 of 714 on
      2026-09-16, belong to nobody in `employees` — and the Monitoring FTW list
@@ -98,7 +131,17 @@ export async function syncFtwReadings(
         mess: row.mess,
         shift: row.shift,
         sleepMinutes: row.sleep_minutes ?? 0,
-        sleepCategory: row.sleep_category,
+        /* Worked out from savera's rules and the minutes it reported, so the
+           verdict is savera's settled one at the moment the upload arrives
+           rather than whenever its own job next gets round to it
+           (`ftw-rules.ts`). savera's word is kept beside it. */
+        /* Where our rules have no answer — none readable, or minutes they do
+           not cover — savera's own word, never an empty category: an empty
+           one reads as "never uploaded" for somebody who did. */
+        sleepCategory:
+          (rules && categoryOf(row.sleep_minutes ?? 0, row.date, rules)) ??
+          row.sleep_category,
+        saveraCategory: row.sleep_category,
         ftwDecision: row.ftw_decision,
         sentAt: row.sent_at,
       },
@@ -122,6 +165,7 @@ export async function syncFtwReadings(
           shift: sql`excluded.shift`,
           sleepMinutes: sql`excluded.sleep_minutes`,
           sleepCategory: sql`excluded.sleep_category`,
+          saveraCategory: sql`excluded.savera_category`,
           ftwDecision: sql`excluded.ftw_decision`,
           sentAt: sql`excluded.sent_at`,
           syncedAt: sql`now()`,
@@ -212,6 +256,7 @@ type WindowOptions = {
   windowMs?: number;
   passDelayMs?: number;
   ftwFetch?: FtwFetcher;
+  ftwRulesFetch?: SleepRulesFetcher;
   fingerFetch?: FingerFetcher;
 };
 
@@ -262,7 +307,11 @@ export async function runIngestWindow(
     try {
       last =
         kind === "ftw"
-          ? await syncFtwReadings(dates, options.ftwFetch)
+          ? await syncFtwReadings(
+              dates,
+              options.ftwFetch,
+              options.ftwRulesFetch
+            )
           : await syncFingerReadings(dates, options.fingerFetch);
       console.log(
         `[ingest] ${kind} pass ${passes}: ` +

@@ -1436,6 +1436,16 @@ export const ftwReadings = pgTable(
     /** savera's verdicts as text: their rules are operator-configurable, so an
      *  enum here would break on their next edit, not ours. */
     sleepCategory: text("sleep_category"),
+    /**
+     * savera's own category, as its insight row read at this pull.
+     *
+     * `sleep_category` above is worked out here from savera's rules
+     * (`ftw-rules.ts`), because savera's row can lag its own rules by an hour.
+     * This keeps savera's word beside ours so a disagreement stays visible
+     * rather than being overwritten — and it is what `sleep_category` falls
+     * back to on a pass where the rules could not be read.
+     */
+    saveraCategory: text("savera_category"),
     ftwDecision: text("ftw_decision"),
     /** When the operator uploaded, source-local time. String mode: the value
      *  passes through verbatim — a timezone conversion here would shift the

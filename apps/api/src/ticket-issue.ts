@@ -730,9 +730,10 @@ export async function issueTicket(
     position: person.position ?? "-",
     department: person.department ?? "-",
     role,
-    /* savera's own category, not the verdict `judge` made of it: the slip
-       states what the rule decided about him, and whether that was enough for
-       a unit is said by the allocation lines above. */
+    /* The category savera's rule gives him — worked out from savera's
+       rules at ingest (`ftw-rules.ts`), not the verdict `judge` made of it:
+       the slip states what the rule decided about him, and whether that was
+       enough for a unit is said by the allocation lines above. */
     /* No filing reads "Belum Upload" only for somebody who owes one — the
        fit-to-work wall's own test. Everybody else reads a dash, as the wall
        leaves them off entirely (2026-09-15). */

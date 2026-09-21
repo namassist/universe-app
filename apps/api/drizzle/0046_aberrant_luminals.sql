@@ -1,0 +1,1 @@
+ALTER TABLE "ftw_readings" ADD COLUMN "savera_category" text;
