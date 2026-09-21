@@ -1289,6 +1289,48 @@ fill the gap from the spare pool.
   in the success notification. Naming the units would be actionable; it is also
   a longer message than a bell can hold.
 
+## Scan ID Card — shipped
+
+A card held up to a phone at the gate answers who this is and what the muster
+gave them today (owner, 2026-09-20). The **QR code** carries the NIK; the screen
+shows photograph, name, NIK, department, position, **Simper Code**, roster,
+shift, unit, area, bus and check-in time. Anything the records do not hold
+reads "-".
+
+- **Its own menu**, `scan-id`, beside Attendance — read while asking about a
+  person, not about a machine. Granted to **manpower** and **manajer**;
+  superadmin holds every slug by reconciliation.
+- **Scoped like every other read of the register** (owner, 2026-09-20). A
+  `dept` role — manajer — resolves its own department and nobody else, and a
+  card it may not see is the same 404 as a NIK nobody holds: which of the two
+  it is, is not a screen's business. **Devices never reach it**: a kiosk that
+  resolved any NIK would be a way to walk the register.
+- **Read-only.** Scanning records nothing; it is looking, not an event.
+- **The NIK is read by what the payload calls it** (owner, 2026-09-21): a
+  JSON `nik`, then a link's `nik=` parameter, then the digits themselves —
+  bare, or the last segment of a path — with leading zeros and printed
+  prefixes stripped, the recipe every other source is matched by. Order
+  matters: reading digits out of a whole link would fold a version or a port
+  into the number and resolve to somebody else. A reading with no number in it
+  is discarded before anybody is asked.
+- **QR only.** Each extra symbology is another pass over every frame, and a
+  screen that also read the 1D barcode on a parcel label would answer
+  confidently about the wrong thing.
+- **Unit, area and bus** come from `seatOf` — the board if it has decided, the
+  standing plan while it has not — and an operator the board could have used
+  but did not reads _SPARE_ with the pool's buses and where they wait, exactly
+  as the slip prints it. Somebody allocation is not about holds nothing rather
+  than SPARE.
+- **Check-in** is the first IN tap of the running shift, read from the live
+  taps, so it is right during the muster rather than a minute and a half late.
+- **Decoding** is the browser's own `BarcodeDetector` where it exists (Chrome
+  on Android) and a WebAssembly polyfill loaded on demand where it does not
+  (Safari). Nothing is fetched until the camera is started.
+- **The camera needs a secure origin**, which this installation does not have
+  until the tunnel lands — see `docs/deploy.md`. The screen says so and the
+  manual NIK field carries it meanwhile; that field is also what a scuffed
+  card, a desk without a camera, and a QR reader that types the number use.
+
 ## Kiosk access
 
 **A kiosk admits two kinds of viewer, because it has two.** A wall-mounted TV

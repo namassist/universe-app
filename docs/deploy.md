@@ -266,6 +266,18 @@ docker run --rm -v universe_apidata:/data -v "$PWD:/out" alpine \
 
 Take both in the same run, keep them together, and restore them together.
 
+## What plain HTTP costs the card scanner
+
+**Scan ID Card cannot use a phone camera over plain HTTP.** Browsers refuse
+`getUserMedia` outside a secure origin, and no application change can lift
+that: Chrome on Android can be told to trust one origin per device, and Safari
+cannot be told at all. The screen detects this and says so, and its manual NIK
+field works regardless — a QR reader typing the number into it is a complete
+workaround at a desk.
+
+Terminating TLS in front of the app — the tunnel, or the section below — is
+what makes the camera work. Nothing in the application changes.
+
 ## Adding TLS later
 
 Everything here was arranged so this stays a small change:
