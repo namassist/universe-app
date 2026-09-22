@@ -19,6 +19,7 @@ import {
 import {
   ACCESS_MODES,
   BLOOD_TYPES,
+  CARD_LAYOUTS,
   DEVICE_KINDS,
   DISPLAY_LAYOUTS,
   EMPLOYEE_STATUSES,
@@ -43,6 +44,7 @@ export const scope = pgEnum("scope", SCOPES);
 export const accessMode = pgEnum("access_mode", ACCESS_MODES);
 export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const displayLayout = pgEnum("display_layout", DISPLAY_LAYOUTS);
+export const cardLayout = pgEnum("card_layout", CARD_LAYOUTS);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const notificationKind = pgEnum("notification_kind", NOTIFICATION_KINDS);
 export const notificationTone = pgEnum("notification_tone", NOTIFICATION_TONES);
@@ -187,6 +189,13 @@ export const devices = pgTable("devices", {
    * kept rather than nulled, so switching a screen back restores its dwell.
    */
   layout: displayLayout("layout").notNull().default("slideshow"),
+  /**
+   * How a fleet wall draws each unit's card. Default `overlay`, the card every
+   * wall drew before this column. Unlike `layout` it is editable on the
+   * built-in support and spare walls: they are fixed in what they show, not in
+   * how a card looks.
+   */
+  cardLayout: cardLayout("card_layout").notNull().default("overlay"),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

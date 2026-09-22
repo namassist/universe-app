@@ -26,6 +26,7 @@ import { db, isUniqueViolation, schema, type DeviceRow } from "../db";
 import { env } from "../env";
 import { redis } from "../redis";
 import {
+  CardLayoutSchema,
   DeviceKindSchema,
   DeviceRunTextSchema,
   DeviceSchema,
@@ -132,6 +133,7 @@ function toDevice(row: DeviceRow, fleetIds: string[] = []) {
     active: row.active,
     rotateSeconds: row.rotateSeconds,
     layout: row.layout,
+    cardLayout: row.cardLayout,
     /** Empty means every fleet — see `device_fleets`. */
     fleetIds,
     online,
@@ -351,6 +353,9 @@ export const devicesRoutes = new Elysia({
               ? { rotateSeconds: body.rotateSeconds }
               : {}),
             ...(body.layout !== undefined ? { layout: body.layout } : {}),
+            ...(body.cardLayout !== undefined
+              ? { cardLayout: body.cardLayout }
+              : {}),
           })
           .returning();
         const refused = await replaceFleetPicks(
@@ -383,6 +388,7 @@ export const devicesRoutes = new Elysia({
           })
         ),
         layout: t.Optional(DisplayLayoutSchema),
+        cardLayout: t.Optional(CardLayoutSchema),
         /** Fleet walls only; empty or absent means every fleet. */
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
@@ -445,6 +451,10 @@ export const devicesRoutes = new Elysia({
           : {}),
         ...(body.layout !== undefined && body.layout !== current.layout
           ? { layout: body.layout }
+          : {}),
+        ...(body.cardLayout !== undefined &&
+        body.cardLayout !== current.cardLayout
+          ? { cardLayout: body.cardLayout }
           : {}),
       };
 
@@ -514,6 +524,7 @@ export const devicesRoutes = new Elysia({
           })
         ),
         layout: t.Optional(DisplayLayoutSchema),
+        cardLayout: t.Optional(CardLayoutSchema),
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
       response: {

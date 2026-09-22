@@ -1331,6 +1331,37 @@ until someone pressed Sync at 07:07 — although they were on time.
   without them the wall reads as four formations changing on their own. The
   segmented story bar stays on the slideshow, where one segment is one subject.
 
+### A fleet wall chooses its card layout — shipped
+
+- **Each fleet screen picks how a unit's card is drawn** (`devices.card_layout`,
+  owner 2026-09-22), on the Display menu beside the slideshow/monitor choice.
+  Two layouts, taken from the owner's reference study (its variants 01 and 05),
+  in the project's own colour tokens rather than the study's palette:
+  - **Portrait overlay** (`overlay`, the default): the photograph fills the
+    card and everything is read in one block over its lower edge — unit code
+    in cyan, the seat badge, the name, the area on support, then the bus, FTW
+    and tap badges — under one fade into the wall's surface (`--overlay-fill`).
+    The top of the face is left clear; before this, the unit code and badge
+    sat on a second scrim at the top of the photo.
+  - **Identity first** (`identity`): the photograph on top, never covered, a
+    cyan rule (`--color-primary-bright`), then the same facts on the card
+    surface beneath it. The photo gives up height to the facts, so a support
+    card's extra area line never pushes the badges off.
+- **Only the look changes, never what is said.** Both layouts render the same
+  details component, so the seat colours, the FTW and tap wording, the red
+  empty seat and the dashed provisional card are identical under either.
+- **Both are portrait**, so the walls' 3:4 cells hold either one and a card
+  stays one size on every turn. The study's "dispatch compact" variant (07)
+  was left out for that reason: it is a short landscape card, and fitting it
+  would have meant reshaping the grid and shrinking the faces.
+- **Editable on the built-in Support and Spare walls,** which are otherwise
+  fixed in all but their dwell: they are fixed in what they show, not in how
+  a card looks.
+- **A partial PATCH never resets it.** The field is a plain union of literals
+  rather than `t.UnionEnum`, which fills an omitted optional field with its
+  first member — a rename would otherwise put an identity-first wall back on
+  the overlay.
+
 ### Deferred until the Actual-tab engine exists
 
 - **Actual tab:** generated per shift by Manpower — assigned operators who

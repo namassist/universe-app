@@ -16,6 +16,7 @@ import {
   ACCESS_MODES,
   ACCOUNT_IMPORT_FIELDS,
   BLOOD_TYPES,
+  CARD_LAYOUTS,
   DEVICE_KINDS,
   DISPLAY_LAYOUTS,
   EMPLOYEE_STATUSES,
@@ -44,6 +45,16 @@ export const ScopeSchema = t.UnionEnum(SCOPES);
 export const MenuSlugSchema = t.UnionEnum(MENU_SLUGS);
 export const DeviceKindSchema = t.UnionEnum(DEVICE_KINDS);
 export const DisplayLayoutSchema = t.UnionEnum(DISPLAY_LAYOUTS);
+/*
+ * A union of literals, not `t.UnionEnum`: the latter fills an omitted optional
+ * field with its first member, so a PATCH that only renames a screen would put
+ * its cards back on the overlay — and comparing against the stored row cannot
+ * tell that injected value from a real one.
+ */
+export const CardLayoutSchema = t.Union([
+  t.Literal(CARD_LAYOUTS[0]),
+  t.Literal(CARD_LAYOUTS[1]),
+]);
 export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
 export const RunTextKindSchema = t.UnionEnum(RUNTEXT_KINDS);
@@ -1424,6 +1435,8 @@ export const FleetDisplaySchema = t.Object({
    * `rotateSeconds` is the dwell it turns pages at.
    */
   layout: DisplayLayoutSchema,
+  /** How each unit's card is drawn — the screen's own setting. */
+  cardLayout: CardLayoutSchema,
   /**
    * The registered screen's own name, or null when nobody named a device — a
    * person previewing the site-wide board. A monitor heads itself with it.
@@ -1450,6 +1463,8 @@ export const DeviceSchema = t.Object({
   rotateSeconds: t.Integer(),
   /** How the wall spends itself: one formation at a time, or up to four. */
   layout: DisplayLayoutSchema,
+  /** How a fleet wall draws each unit's card. */
+  cardLayout: CardLayoutSchema,
   /**
    * Fleet walls: which formations to show, in the order the screen shows them.
    * Empty means every fleet.

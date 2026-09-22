@@ -63,6 +63,18 @@ export const DISPLAY_LAYOUTS = ["slideshow", "monitor"] as const;
 export type DisplayLayout = (typeof DISPLAY_LAYOUTS)[number];
 
 /**
+ * How a fleet wall draws one unit's card (owner, 2026-09-22), per screen.
+ *
+ * `overlay` — the photograph fills the card and everything sits in one block
+ * over its lower edge; the card every wall drew before this setting, so the
+ * default. `identity` — the photograph on top, a cyan rule, and the unit's
+ * facts on the card surface beneath it. Both are portrait: the walls' cells
+ * are 3:4 whichever is chosen.
+ */
+export const CARD_LAYOUTS = ["overlay", "identity"] as const;
+export type CardLayout = (typeof CARD_LAYOUTS)[number];
+
+/**
  * How many formations a `monitor` screen shows at once.
  *
  * Two, side by side (owner, 2026-09-04). It was four in a 2x2, which on the

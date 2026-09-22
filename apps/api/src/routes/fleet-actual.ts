@@ -577,6 +577,7 @@ async function fleetScreen(deviceId: string) {
       name: schema.devices.name,
       rotateSeconds: schema.devices.rotateSeconds,
       layout: schema.devices.layout,
+      cardLayout: schema.devices.cardLayout,
     })
     .from(schema.devices)
     .where(
@@ -980,6 +981,7 @@ export const fleetActualRoutes = new Elysia({
          reads as a slideshow: it has no picks, so it has nothing to lay four
          of side by side. */
       const layout = screen?.layout ?? "slideshow";
+      const cardLayout = screen?.cardLayout ?? "overlay";
       /* The screen's own name, so a monitor can head itself with it. A browser
          previewing the site-wide board names no device and gets null. */
       const deviceName = screen?.name ?? null;
@@ -994,6 +996,7 @@ export const fleetActualRoutes = new Elysia({
         fingerClosed: false,
         rotateSeconds: rotate,
         layout,
+        cardLayout,
         deviceName,
         fleets: [] as WallFleet[],
       };
@@ -1088,6 +1091,7 @@ export const fleetActualRoutes = new Elysia({
         fingerClosed: deadlinePassed(fingerGate, now.date, at),
         rotateSeconds: rotate,
         layout,
+        cardLayout,
         deviceName,
         fleets: groupIntoFleets(
           slots.map((s) => {

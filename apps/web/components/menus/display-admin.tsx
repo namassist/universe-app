@@ -22,6 +22,7 @@ import {
   DISPLAY_ROUTE_OF_KIND,
   MONITOR_FLEETS_PER_PAGE,
   RUNTEXT_COLORS,
+  type CardLayout,
   type DeviceKind,
   type DisplayLayout,
   type RunTextColor,
@@ -159,6 +160,7 @@ export function DisplayAdminMenu({
       active: boolean;
       rotateSeconds: number;
       layout: DisplayLayout;
+      cardLayout: CardLayout;
       fleetIds: string[];
       runTexts: CustomRunText[];
     }) => {
@@ -168,6 +170,7 @@ export function DisplayAdminMenu({
             active: input.active,
             rotateSeconds: input.rotateSeconds,
             layout: input.layout,
+            cardLayout: input.cardLayout,
             fleetIds: input.fleetIds,
           })
         : await api.v1.devices.post({
@@ -177,6 +180,7 @@ export function DisplayAdminMenu({
             active: input.active,
             rotateSeconds: input.rotateSeconds,
             layout: input.layout,
+            cardLayout: input.cardLayout,
             fleetIds: input.fleetIds,
           });
       if (result.error) throw result.error;
@@ -262,6 +266,7 @@ export function DisplayAdminMenu({
   const [fSel, setFSel] = React.useState<string[]>([]);
   const [fRotate, setFRotate] = React.useState(DEFAULT_ROTATE);
   const [fLayout, setFLayout] = React.useState<DisplayLayout>("slideshow");
+  const [fCardLayout, setFCardLayout] = React.useState<CardLayout>("overlay");
   const [fleetQ, setFleetQ] = React.useState("");
 
   /* A monitor draws four formations at a time and pages through the rest, so
@@ -342,6 +347,7 @@ export function DisplayAdminMenu({
     setFSel([]);
     setFRotate(DEFAULT_ROTATE);
     setFLayout("slideshow");
+    setFCardLayout("overlay");
     setFleetQ("");
     setFRuntexts([]);
     setFActive(true);
@@ -357,6 +363,7 @@ export function DisplayAdminMenu({
     setFSel(d.fleetIds);
     setFRotate(d.rotateSeconds);
     setFLayout(d.layout);
+    setFCardLayout(d.cardLayout);
     setFleetQ("");
     setFRuntexts([]);
     setFActive(d.active);
@@ -412,6 +419,7 @@ export function DisplayAdminMenu({
       active: fActive,
       rotateSeconds: fRotate,
       layout: kind === "fleet" ? fLayout : "slideshow",
+      cardLayout: kind === "fleet" ? fCardLayout : "overlay",
       // Fleet walls only. Sending [] on the other kinds is how a screen stays
       // unscoped, and the API refuses a non-empty pick on them anyway.
       fleetIds: kind === "fleet" ? fSel : [],
@@ -508,6 +516,11 @@ export function DisplayAdminMenu({
                         {d.layout === "monitor"
                           ? t.dspLayoutMonShort
                           : t.dspLayoutSlideShort}
+                      </Badge>{" "}
+                      <Badge variant="neutral">
+                        {d.cardLayout === "identity"
+                          ? t.dspCardIdentity
+                          : t.dspCardOverlay}
                       </Badge>
                       <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
                         {d.fleetIds.length
@@ -687,6 +700,29 @@ export function DisplayAdminMenu({
                 >
                   <option value="slideshow">{t.dspLayoutSlideshow}</option>
                   <option value="monitor">{t.dspLayoutMonitor}</option>
+                </Select>
+              </Field>
+            ) : null}
+
+            {/* Offered on the built-in walls too: they are fixed in what
+                they show, not in how a card looks. */}
+            {kind === "fleet" ? (
+              <Field
+                label={t.dspCardLayout}
+                htmlFor="dsp-card-layout"
+                helper={
+                  fCardLayout === "identity"
+                    ? t.dspCardHelpIdentity
+                    : t.dspCardHelpOverlay
+                }
+              >
+                <Select
+                  id="dsp-card-layout"
+                  value={fCardLayout}
+                  onChange={(e) => setFCardLayout(e.target.value as CardLayout)}
+                >
+                  <option value="overlay">{t.dspCardOverlay}</option>
+                  <option value="identity">{t.dspCardIdentity}</option>
                 </Select>
               </Field>
             ) : null}

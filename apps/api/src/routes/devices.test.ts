@@ -491,6 +491,70 @@ describe("how a screen spends itself", () => {
   });
 });
 
+describe("which card a fleet screen draws", () => {
+  type Row = { cardLayout: string; layout: string; name: string };
+
+  test("is the portrait overlay unless the caller says otherwise", async () => {
+    // The overlay is the card every wall already drew, so an existing screen
+    // must not change its look because the column arrived.
+    const res = await send("POST", "/devices", admin.cookie, {
+      id: newId(),
+      name: tag,
+      kind: "fleet",
+    });
+    expect(((await res.json()) as Row).cardLayout).toBe("overlay");
+  });
+
+  test("can be set to identity-first and back", async () => {
+    const id = newId();
+    const made = await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      cardLayout: "identity",
+    });
+    expect(((await made.json()) as Row).cardLayout).toBe("identity");
+    const back = await send("PATCH", `/devices/${id}`, admin.cookie, {
+      cardLayout: "overlay",
+    });
+    expect(((await back.json()) as Row).cardLayout).toBe("overlay");
+  });
+
+  test("a patch about something else leaves it alone", async () => {
+    // `t.UnionEnum` fills an omitted field with its first member; a rename
+    // must not quietly put an identity-first wall back on the overlay.
+    const id = newId();
+    await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      cardLayout: "identity",
+    });
+    const res = await send("PATCH", `/devices/${id}`, admin.cookie, {
+      name: `${tag} renamed`,
+    });
+    expect(((await res.json()) as Row).cardLayout).toBe("identity");
+  });
+
+  test("is editable on the built-in support wall", async () => {
+    // The support wall is fixed in what it shows, not in how a card looks.
+    try {
+      const res = await send(
+        "PATCH",
+        `/devices/${SUPPORT_DEVICE_ID}`,
+        admin.cookie,
+        { cardLayout: "identity" }
+      );
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as Row).cardLayout).toBe("identity");
+    } finally {
+      await send("PATCH", `/devices/${SUPPORT_DEVICE_ID}`, admin.cookie, {
+        cardLayout: "overlay",
+      });
+    }
+  });
+});
+
 /**
  * What the ticker actually shows once hazards are rows rather than a sentence.
  *

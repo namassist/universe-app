@@ -51,5 +51,10 @@ Missing a color? Add a token to **both** dark and light blocks in
   `Panel`+`Field` forms; skeletons (`skeleton`, `table-skeleton`) during
   query loading, `state-box` for empty/error states, `toast` for outcomes.
 - Icons: lucide-react only.
+- Display walls (`app/display/*`) are dark-only (`data-theme="dark"` on the
+  shell), so tokens there always resolve to their dark values. A fleet wall's
+  unit card has two layouts per screen — portrait overlay and identity first —
+  sharing one details component (`CardDetails` in `app/display/fleet`); see
+  "A fleet wall chooses its card layout" in `docs/prd.md`.
 - The shell (sidebar/topbar) is themed via the gradient tokens — per-role
   looks come from tokens, not per-role component forks.

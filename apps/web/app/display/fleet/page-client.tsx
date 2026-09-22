@@ -21,6 +21,7 @@ import {
   SLIDE_SIZE,
   SPARE_DEVICE_NAME,
   SUPPORT_DEVICE_NAME,
+  type CardLayout,
 } from "@universe/contracts";
 
 import { isStatus } from "@/lib/api";
@@ -235,6 +236,139 @@ function paginate(fleets: FleetDisplayFleet[]): Page[] {
   });
 }
 
+/**
+ * What a card says, in the order it is read: the unit and how its seat is
+ * filled, then who is in it, where they work, and what they still owe.
+ *
+ * One definition for both card layouts, so choosing a look on the Display
+ * menu can never change what the wall says — only where it sits.
+ */
+function CardDetails({
+  unit,
+  gates,
+  compact,
+  showArea,
+  cardLayout,
+}: {
+  unit: FleetDisplayUnit;
+  gates: Gates;
+  compact: boolean;
+  showArea: boolean;
+  cardLayout: CardLayout;
+}) {
+  const { tone, label } = toneOf(unit);
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        {/* The unit code is what the yard looks for, so it leads either way.
+            Cyan over the photograph, as the overlay's identifier line is;
+            plain on the identity card, where the cyan is the rule above it. */}
+        <b
+          className={cn(
+            "min-w-0 truncate font-mono font-bold tabular-nums",
+            cardLayout === "overlay" && "text-(--color-primary-bright)",
+            compact ? "text-[15px]" : "text-[22px]"
+          )}
+          title={unit.unitCode}
+        >
+          {unit.unitCode}
+        </b>
+        <DisplayBadge
+          tone={tone}
+          className={cn(
+            "flex-none gap-1.5 py-0.5 [&>span]:size-2",
+            compact ? "px-1.5 text-[11px]" : "px-2.5 text-sm"
+          )}
+        >
+          {label}
+        </DisplayBadge>
+      </div>
+      <div
+        className={cn(
+          "mt-0.5 line-clamp-1 leading-tight font-bold",
+          compact ? "text-[14px]" : "text-[21px]"
+        )}
+      >
+        {unit.employeeName ?? "Belum ada operator"}
+      </div>
+      {/* The area gets a line of its own: it is prose, and long enough
+          ("PANEL EAST - UTARA BAWAH") that sharing a row with the badges
+          would push them onto a second one anyway. */}
+      {showArea ? (
+        <div
+          className={cn(
+            "mt-1 flex min-w-0 items-center gap-1.5 font-bold text-(--badge-warning-text)",
+            compact ? "text-[11px]" : "text-[15px]"
+          )}
+        >
+          <Pickaxe
+            className={cn("flex-none", compact ? "size-3" : "size-3.5")}
+          />
+          <span className="truncate">{unit.unitArea ?? "—"}</span>
+        </div>
+      ) : null}
+      {/* The bus and the two readiness verdicts, on one row.
+          The NIK left it on 2026-09-04: the card carries the operator's
+          photograph and their name, and a number identifying somebody
+          already looking out of the card is height a quadrant on a monitor
+          wall does not have to spare. It is still fetched — the photo is
+          addressed by it.
+
+          `items-center`, not `items-baseline` — a pill has no baseline to
+          share with what sits beside it, and aligning to one sits it low.
+
+          The badges matter most before the board exists. Between a shift's
+          changeover and `spare-validate` the wall shows the standing plan,
+          and for the operator walking to the gate "Belum FTW" and "Belum
+          Absen" are the whole of what they still owe. Once the gates shut
+          they turn red and reword themselves — see `ftwBadge`. */}
+      <div
+        className={cn(
+          "mt-1 flex min-w-0 flex-wrap items-center font-mono text-(--text-secondary) tabular-nums",
+          compact ? "gap-1 text-[11px]" : "gap-1.5 text-base"
+        )}
+      >
+        {/* Absent rather than dashed: a unit with no vehicle recorded is
+            not the same statement as one whose vehicle is unknown, and on a
+            wall read at ten metres a dash is only noise. */}
+        {unit.busCode ? (
+          <DisplayBadge
+            tone="info"
+            className={cn(
+              "flex-none gap-1 py-0 font-mono [&>span]:hidden",
+              compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
+            )}
+          >
+            <Bus className={compact ? "size-2.5" : "size-3"} />
+            {unit.busCode}
+          </DisplayBadge>
+        ) : null}
+        {/* Only where there is somebody they are about: an idle unit is
+            already saying the one thing it has to say. */}
+        {unit.employeeName
+          ? [ftwBadge(unit, gates), fingerBadge(unit, gates)]
+              .filter(
+                (badge): badge is { tone: DisplayTone; label: string } =>
+                  !!badge
+              )
+              .map((badge) => (
+                <DisplayBadge
+                  key={badge.label}
+                  tone={badge.tone}
+                  className={cn(
+                    "flex-none gap-1 py-0 font-mono [&>span]:size-1.5",
+                    compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
+                  )}
+                >
+                  {badge.label}
+                </DisplayBadge>
+              ))
+          : null}
+      </div>
+    </div>
+  );
+}
+
 function UnitCard({
   unit,
   provisional,
@@ -260,6 +394,11 @@ function UnitCard({
    * the case where they do not.
    */
   showArea = false,
+  /**
+   * The screen's chosen look (owner, 2026-09-22), set per device on the
+   * Display menu. Both are portrait, so the wall's 3:4 cells hold either.
+   */
+  cardLayout,
   className,
 }: {
   unit: FleetDisplayUnit;
@@ -267,13 +406,44 @@ function UnitCard({
   gates: Gates;
   compact?: boolean;
   showArea?: boolean;
+  cardLayout: CardLayout;
   className?: string;
 }) {
-  const { tone, label } = toneOf(unit);
+  const { tone } = toneOf(unit);
+  /* The operator: their photograph, their initials, or the empty-seat mark.
+     It fills whatever box it is given — the whole card on the overlay, the
+     upper part on the identity card. */
+  const face = unit.employeeName ? (
+    <OperatorFace
+      name={unit.employeeName}
+      src={fleetPhotoUrl(unit)}
+      compact={compact}
+    />
+  ) : (
+    <div className="absolute inset-0 grid place-items-center bg-(--fill-input)">
+      <UserX
+        className={cn(
+          "text-(--text-disabled)",
+          compact ? "size-10" : "size-20"
+        )}
+      />
+    </div>
+  );
+  const details = (
+    <CardDetails
+      unit={unit}
+      gates={gates}
+      compact={compact}
+      showArea={showArea}
+      cardLayout={cardLayout}
+    />
+  );
+
   return (
     <div
       className={cn(
         "relative min-w-0 overflow-hidden rounded-card border border-(--glass-2-border)",
+        cardLayout === "identity" && "flex flex-col bg-(--overlay-fill)",
         className,
         tone === "danger" &&
           !provisional &&
@@ -286,137 +456,40 @@ function UnitCard({
           "border-dashed border-(--border-input) opacity-55 saturate-50"
       )}
     >
-      {/* The operator fills the card: their photograph, their initials, or the
-          empty-seat mark. */}
-      {unit.employeeName ? (
-        <OperatorFace
-          name={unit.employeeName}
-          src={fleetPhotoUrl(unit)}
-          compact={compact}
-        />
+      {cardLayout === "identity" ? (
+        <>
+          {/* Identity first: the face takes the top of the card and is never
+              covered, then a cyan rule, then the facts on the card's own
+              surface. The photo gives up height to the details rather than
+              the other way round, so a support card's extra area line never
+              pushes the badges out. */}
+          <div className="relative min-h-0 flex-1">{face}</div>
+          <div
+            className={cn(
+              "flex-none border-t-2 border-(--color-primary-bright)",
+              compact ? "px-2 py-1.5" : "px-3.5 py-2.5"
+            )}
+          >
+            {details}
+          </div>
+        </>
       ) : (
-        <div className="absolute inset-0 grid place-items-center bg-(--fill-input)">
-          <UserX
+        <>
+          {/* Portrait overlay: the photograph fills the card and everything
+              is read in one block over its lower edge, under a single fade
+              into the wall's own surface — the top of the face stays clear. */}
+          {face}
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_30%,var(--overlay-fill)_76%)]" />
+          <div
             className={cn(
-              "text-(--text-disabled)",
-              compact ? "size-10" : "size-20"
+              "absolute inset-x-0 bottom-0",
+              compact ? "p-2" : "p-3.5"
             )}
-          />
-        </div>
+          >
+            {details}
+          </div>
+        </>
       )}
-      {/* Scrim, so the text survives whatever is behind it. */}
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(1,4,22,.65)_0%,rgba(1,4,22,0)_32%,rgba(1,4,22,0)_52%,rgba(1,4,22,.88)_100%)]" />
-      <div
-        className={cn(
-          "absolute inset-0 flex flex-col justify-between",
-          compact ? "p-2" : "p-3.5"
-        )}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <b
-            className={cn(
-              "min-w-0 truncate font-mono font-bold tabular-nums",
-              compact ? "text-[15px]" : "text-[22px]"
-            )}
-            title={unit.unitCode}
-          >
-            {unit.unitCode}
-          </b>
-          <DisplayBadge
-            tone={tone}
-            className={cn(
-              "flex-none gap-1.5 py-0.5 [&>span]:size-2",
-              compact ? "px-1.5 text-[11px]" : "px-2.5 text-sm"
-            )}
-          >
-            {label}
-          </DisplayBadge>
-        </div>
-        <div className="min-w-0">
-          <div
-            className={cn(
-              "line-clamp-1 leading-tight font-bold",
-              compact ? "text-[14px]" : "text-[21px]"
-            )}
-          >
-            {unit.employeeName ?? "Belum ada operator"}
-          </div>
-          {/* The area gets a line of its own: it is prose, and long enough
-              ("PANEL EAST - UTARA BAWAH") that sharing a row with the badges
-              would push them onto a second one anyway. */}
-          {showArea ? (
-            <div
-              className={cn(
-                "mt-1 flex min-w-0 items-center gap-1.5 font-bold text-(--badge-warning-text)",
-                compact ? "text-[11px]" : "text-[15px]"
-              )}
-            >
-              <Pickaxe
-                className={cn("flex-none", compact ? "size-3" : "size-3.5")}
-              />
-              <span className="truncate">{unit.unitArea ?? "—"}</span>
-            </div>
-          ) : null}
-          {/* The bus and the two readiness verdicts, on one row.
-              The NIK left it on 2026-09-04: the card carries the operator's
-              photograph and their name, and a number identifying somebody
-              already looking out of the card is height a quadrant on a monitor
-              wall does not have to spare. It is still fetched — the photo is
-              addressed by it.
-
-              `items-center`, not `items-baseline` — a pill has no baseline to
-              share with what sits beside it, and aligning to one sits it low.
-
-              The badges matter most before the board exists. Between a shift's
-              changeover and `spare-validate` the wall shows the standing plan,
-              and for the operator walking to the gate "Belum FTW" and "Belum
-              Absen" are the whole of what they still owe. Once the gates shut
-              they turn red and reword themselves — see `ftwBadge`. */}
-          <div
-            className={cn(
-              "mt-1 flex min-w-0 flex-wrap items-center font-mono text-(--text-secondary) tabular-nums",
-              compact ? "gap-1 text-[11px]" : "gap-1.5 text-base"
-            )}
-          >
-            {/* Absent rather than dashed: a unit with no vehicle recorded is
-                not the same statement as one whose vehicle is unknown, and on a
-                wall read at ten metres a dash is only noise. */}
-            {unit.busCode ? (
-              <DisplayBadge
-                tone="info"
-                className={cn(
-                  "flex-none gap-1 py-0 font-mono [&>span]:hidden",
-                  compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
-                )}
-              >
-                <Bus className={compact ? "size-2.5" : "size-3"} />
-                {unit.busCode}
-              </DisplayBadge>
-            ) : null}
-            {/* Only where there is somebody they are about: an idle unit is
-                already saying the one thing it has to say. */}
-            {unit.employeeName
-              ? [ftwBadge(unit, gates), fingerBadge(unit, gates)]
-                  .filter(
-                    (badge): badge is { tone: DisplayTone; label: string } =>
-                      !!badge
-                  )
-                  .map((badge) => (
-                    <DisplayBadge
-                      key={badge.label}
-                      tone={badge.tone}
-                      className={cn(
-                        "flex-none gap-1 py-0 font-mono [&>span]:size-1.5",
-                        compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
-                      )}
-                    >
-                      {badge.label}
-                    </DisplayBadge>
-                  ))
-              : null}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -445,12 +518,14 @@ function FleetQuadrant({
   fleet,
   provisional,
   gates,
+  cardLayout,
   className,
   style,
 }: {
   fleet: FleetDisplayFleet;
   provisional: boolean;
   gates: Gates;
+  cardLayout: CardLayout;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -534,6 +609,7 @@ function FleetQuadrant({
                 provisional={provisional}
                 gates={gates}
                 compact
+                cardLayout={cardLayout}
                 className={PORTRAIT_CARD}
               />
             ) : (
@@ -621,6 +697,7 @@ export default function DisplayFleetPage() {
   /* The screen's own type, delivered with the board. A browser previewing the
      site-wide wall is told `slideshow`, which is what it has always been. */
   const isMonitor = data?.layout === "monitor";
+  const cardLayout: CardLayout = data?.cardLayout ?? "overlay";
   /* Both false until the first response lands, which is the same thing the
      badges say when the timeline cannot name a gate: nothing has closed yet,
      so nothing is written off yet. */
@@ -903,6 +980,7 @@ export default function DisplayFleetPage() {
                     fleet={f}
                     provisional={data?.provisional ?? false}
                     gates={gates}
+                    cardLayout={cardLayout}
                     className={flipClass}
                     style={{ animationDelay: `${i * STAGGER_MS}ms` }}
                   />
@@ -975,6 +1053,7 @@ export default function DisplayFleetPage() {
                   provisional={data?.provisional ?? false}
                   gates={gates}
                   showArea={page.fleet.kind === "support"}
+                  cardLayout={cardLayout}
                   className={PORTRAIT_CARD}
                 />
               ) : (

@@ -473,6 +473,13 @@ export const id = {
   dspPagesWord: "halaman",
   dspLayoutCol: "Tipe",
   dspLayoutSlideShort: "Slideshow",
+  dspCardLayout: "Tampilan kartu",
+  dspCardOverlay: "Foto penuh",
+  dspCardIdentity: "Foto di atas",
+  dspCardHelpOverlay:
+    "Foto operator memenuhi kartu; unit, nama dan status di bagian bawah foto.",
+  dspCardHelpIdentity:
+    "Foto operator di atas, garis cyan, lalu unit, nama dan status di bawahnya.",
   dspLayoutMonShort: "Monitor",
   dspPicked: "dipilih",
   dspSupportLocked:

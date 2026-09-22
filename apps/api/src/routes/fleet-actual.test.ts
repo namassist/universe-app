@@ -1170,7 +1170,11 @@ describe("the board's audit table", () => {
 describe("previewing one screen from a browser", () => {
   const makeScreen = async (
     rotateSeconds: number,
-    extra: { name?: string; layout?: "slideshow" | "monitor" } = {}
+    extra: {
+      name?: string;
+      layout?: "slideshow" | "monitor";
+      cardLayout?: "overlay" | "identity";
+    } = {}
   ) => {
     const id = `ZZW${uid().toUpperCase()}`;
     made.devices.push(id);
@@ -1180,9 +1184,33 @@ describe("previewing one screen from a browser", () => {
       kind: "fleet",
       rotateSeconds,
       ...(extra.layout ? { layout: extra.layout } : {}),
+      ...(extra.cardLayout ? { cardLayout: extra.cardLayout } : {}),
     });
     return id;
   };
+
+  test("carries the screen's card layout", async () => {
+    const id = await makeScreen(30, { cardLayout: "identity" });
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/display?device=${id}`,
+      wall.cookie
+    );
+    expect(((await res.json()) as { cardLayout: string }).cardLayout).toBe(
+      "identity"
+    );
+  });
+
+  test("an unnamed preview draws the overlay card", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      wall.cookie
+    );
+    expect(((await res.json()) as { cardLayout: string }).cardLayout).toBe(
+      "overlay"
+    );
+  });
 
   test("answers with the named screen's own dwell", async () => {
     const id = await makeScreen(9);

@@ -477,6 +477,13 @@ export const en: Dict = {
   dspPagesWord: "pages",
   dspLayoutCol: "Type",
   dspLayoutSlideShort: "Slideshow",
+  dspCardLayout: "Card layout",
+  dspCardOverlay: "Portrait overlay",
+  dspCardIdentity: "Identity first",
+  dspCardHelpOverlay:
+    "The operator's photo fills the card; unit, name and status sit over its lower edge.",
+  dspCardHelpIdentity:
+    "The operator's photo on top, a cyan rule, then unit, name and status beneath it.",
   dspLayoutMonShort: "Monitor",
   dspPicked: "selected",
   dspSupportLocked:
