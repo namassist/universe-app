@@ -148,6 +148,47 @@ describe("issuing", () => {
     }
   });
 
+  /*
+   * The trial of 2026-09-21: Onesimus Balalembang tapped late at Mesin 18,
+   * then at Mesin 20 seven seconds later, and got a second slip. Mesin 18's
+   * clock ran about ten seconds fast — the slip it printed at 17:24:32 read an
+   * arrival of 17:24:42 — so the later tap at Mesin 20, stamped 17:24:37,
+   * became his "first" and moved the arrival by five seconds. Nothing he acts
+   * on had changed: no unit either way.
+   *
+   * Unlike the test above, each slip is issued before the next tap is heard,
+   * which is how it happens at the booth when the second tap follows the
+   * first slip rather than racing it.
+   */
+  test("an arrival that moves only because two booth clocks disagree prints nothing new", async () => {
+    const day = "2026-01-08";
+    try {
+      /* The fast booth, heard first, stamps the later time. */
+      await db
+        .insert(schema.deviceLiveEvents)
+        .values({ ip, nik, at: `${day} 05:40:42` });
+      const first = await issueTicket(
+        { ...tapOn(day), at: `${day} 05:40:42` },
+        { printingEnabled: false }
+      );
+      expect(first.issued).toBe(true);
+
+      /* The honest booth, heard second, stamps the earlier time. */
+      await db
+        .insert(schema.deviceLiveEvents)
+        .values({ ip: otherIp, nik, at: `${day} 05:40:37` });
+      const second = await issueTicket(
+        { ...tapOn(day), ip: otherIp, at: `${day} 05:40:37` },
+        { printingEnabled: false }
+      );
+      expect(second).toEqual({ issued: false, reason: "duplicate" });
+    } finally {
+      await db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.ip, [ip, otherIp]));
+    }
+  });
+
   test("a nik the register does not carry is refused", async () => {
     const result = await issueTicket(
       { ...tapOn("2026-01-04"), nik: "000000000" },
@@ -1171,6 +1212,30 @@ describe("hand placements and the roster", () => {
     await placeByHand(date, u.id, refused.id);
     expect(unitOf(await tapAt(refused.nik, date, "05:00:00"))).toBe(
       `UNIT           : ${u.code}`
+    );
+  });
+
+  /*
+   * The other side of ignoring the arrival: a slip still reprints when
+   * something he acts on changes. The trial of 2026-09-21 had the case —
+   * Asman Azis was handed SPARE at 16:51 while his FTW had not arrived, and a
+   * unit three minutes later once it had. The second slip is the right one,
+   * and hashing without the arrival must not swallow it.
+   */
+  test("a unit given after the first slip still prints a second one", async () => {
+    const date = "2026-01-18";
+    const u = await unit();
+    const worker = await operator();
+
+    const first = await tapAt(worker.nik, date, "05:40:00");
+    expect(unitOf(first)).toBe("UNIT           : SPARE");
+
+    await placeByHand(date, u.id, worker.id);
+    const second = await tapAt(worker.nik, date, "05:41:00");
+    expect(unitOf(second)).toBe(`UNIT           : ${u.code}`);
+    /* And it states the arrival the first slip did — his first tap. */
+    expect(second.issued && second.preview).toContain(
+      `JAM ABSEN      : ${date} 05:40:00`
     );
   });
 

@@ -1598,6 +1598,17 @@ fleet, unit, bus, area — are filled only for a person who has a unit
   is the rule `readiness.ts` already enforces; unchanged.
 - **The attendance time is always the person's first tap of the shift.** That is
   why a spare taps twice.
+- **A second tap prints again only when something on the slip changed for the
+  person** — the unit, the FTW category, the spare ride, the notices. Two things
+  are left out of that comparison because neither is news to the person holding
+  the first slip: which booth printed it (trial, 2026-09-14), and the arrival
+  time (trial, 2026-09-21). Every machine stamps a tap with its own clock and the
+  clocks disagree: Mesin 18 ran about ten seconds fast, so Onesimus
+  Balalembang's later tap at Mesin 20 read as earlier, became his first tap, and
+  printed a second slip five seconds different and otherwise identical. A
+  corrected arrival that matters — one that turns late into on time — changes
+  the seat or the verdict, and those still reprint. The stored slip keeps the
+  arrival it was printed with.
 
 ### What the slip says
 

@@ -760,11 +760,23 @@ export async function issueTicket(
     at: `${tap.date} ${decision.at}`,
   };
   const preview = ticketPreview(fields);
-  /* Hashed without the printer's name: the booth that printed a slip is not
-     something that changed about the person, and counting it let a tap at a
-     second booth print the same slip again (trial, 2026-09-14). */
+  /* Hashed without two things that are not news to the person holding the
+     first slip.
+
+     The printer's name: which booth printed it did not change anything about
+     him, and counting it let a tap at a second booth print the same slip
+     again (trial, 2026-09-14).
+
+     The arrival time: every machine stamps a tap with its own clock, and the
+     clocks disagree. On 2026-09-21 Mesin 18 ran about ten seconds fast, so
+     a later tap at Mesin 20 read as earlier, became the "first" tap, moved
+     the arrival by five seconds, and printed a second slip saying nothing
+     new. When a corrected arrival does matter — an earlier tap that turns
+     late into on time — it changes the seat or the verdict, and those are
+     hashed, so that slip still prints. The stored slip keeps the arrival it
+     was printed with. */
   const contentHash = Bun.hash(
-    ticketPreview({ ...fields, printerName: "" })
+    ticketPreview({ ...fields, printerName: "", at: "" })
   ).toString(16);
 
   /* The claim. A second tap carrying the same slip loses here, which is the
