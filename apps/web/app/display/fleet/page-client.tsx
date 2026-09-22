@@ -4,13 +4,19 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Ban,
   Bus,
+  Check,
   CheckCircle2,
+  CircleHelp,
+  Clock3,
   Hourglass,
   Pickaxe,
   Repeat2,
   Truck,
   UserX,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -97,15 +103,35 @@ function toneOf(unit: FleetDisplayUnit): {
  * never asked for FTW, and a reassuring mark standing for a check nobody made
  * is worse than silence.
  */
-const FTW_BADGE: Record<
-  NonNullable<FleetDisplayUnit["ftw"]>,
-  { tone: DisplayTone; label: string } | null
-> = {
-  pass: { tone: "success", label: "Lolos FTW" },
-  missing: { tone: "neutral", label: "Belum FTW" },
-  fail: { tone: "danger", label: "Tidak lolos FTW" },
-  late: { tone: "warning", label: "FTW terlambat" },
-  unreadable: { tone: "warning", label: "FTW tak terbaca" },
+/**
+ * A readiness chip as the card draws it: an icon and a short word, the way the
+ * owner's reference study draws them (2026-09-22). The state is carried by
+ * the icon and the colour together; `label` is the full wording, kept as the
+ * icon's accessible name and the chip's identity.
+ */
+type Chip = {
+  tone: DisplayTone;
+  icon: LucideIcon;
+  text: string;
+  label: string;
+};
+
+const FTW_BADGE: Record<NonNullable<FleetDisplayUnit["ftw"]>, Chip | null> = {
+  pass: { tone: "success", icon: Check, text: "FTW", label: "Lolos FTW" },
+  missing: {
+    tone: "neutral",
+    icon: Hourglass,
+    text: "FTW",
+    label: "Belum FTW",
+  },
+  fail: { tone: "danger", icon: X, text: "FTW", label: "Tidak lolos FTW" },
+  late: { tone: "warning", icon: Clock3, text: "FTW", label: "FTW terlambat" },
+  unreadable: {
+    tone: "warning",
+    icon: CircleHelp,
+    text: "FTW",
+    label: "FTW tak terbaca",
+  },
   "not-required": null,
 };
 
@@ -130,13 +156,12 @@ type Gates = { ftw: boolean; finger: boolean };
  * are facts about the morning whatever time it is read, and they keep the
  * colours they had.
  */
-function ftwBadge(
-  unit: FleetDisplayUnit,
-  gates: Gates
-): { tone: DisplayTone; label: string } | null {
+function ftwBadge(unit: FleetDisplayUnit, gates: Gates): Chip | null {
   if (!unit.ftw) return null;
+  /* Ban rather than the refusal's X: never filed is a different fact from
+     filed and refused, and with the words gone the icon has to say which. */
   if (unit.ftw === "missing" && gates.ftw)
-    return { tone: "danger", label: "Tidak FTW" };
+    return { tone: "danger", icon: Ban, text: "FTW", label: "Tidak FTW" };
   return FTW_BADGE[unit.ftw];
 }
 
@@ -153,18 +178,16 @@ function ftwBadge(
  * "Absen" rather than "tap", which is the word on the audit screen: this one
  * is read by people standing in the yard, and it should use theirs.
  */
-function fingerBadge(
-  unit: FleetDisplayUnit,
-  gates: Gates
-): {
-  tone: DisplayTone;
-  label: string;
-} {
-  if (unit.tappedAt)
-    return { tone: "success", label: unit.tappedAt.slice(0, 5) };
+function fingerBadge(unit: FleetDisplayUnit, gates: Gates): Chip {
+  if (unit.tappedAt) {
+    const at = unit.tappedAt.slice(0, 5);
+    return { tone: "success", icon: Clock3, text: at, label: `Absen ${at}` };
+  }
+  /* The clock with an empty time: the colour says whether it is still owed
+     (grey) or no longer coming (red). */
   return gates.finger
-    ? { tone: "danger", label: "Tidak Absen" }
-    : { tone: "neutral", label: "Belum Absen" };
+    ? { tone: "danger", icon: Clock3, text: "--:--", label: "Tidak Absen" }
+    : { tone: "neutral", icon: Clock3, text: "--:--", label: "Belum Absen" };
 }
 
 /*
@@ -347,20 +370,24 @@ function CardDetails({
             already saying the one thing it has to say. */}
         {unit.employeeName
           ? [ftwBadge(unit, gates), fingerBadge(unit, gates)]
-              .filter(
-                (badge): badge is { tone: DisplayTone; label: string } =>
-                  !!badge
-              )
+              .filter((badge): badge is Chip => !!badge)
               .map((badge) => (
                 <DisplayBadge
                   key={badge.label}
                   tone={badge.tone}
                   className={cn(
-                    "flex-none gap-1 py-0 font-mono [&>span]:size-1.5",
+                    /* The icon replaces the tone dot, as on the bus chip. */
+                    "flex-none gap-1 py-0 font-mono [&>span]:hidden",
                     compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
                   )}
                 >
-                  {badge.label}
+                  <badge.icon
+                    role="img"
+                    aria-label={badge.label}
+                    strokeWidth={3}
+                    className={compact ? "size-2.5" : "size-3"}
+                  />
+                  {badge.text}
                 </DisplayBadge>
               ))
           : null}
@@ -458,7 +485,7 @@ function UnitCard({
     >
       {cardLayout === "identity" ? (
         <>
-          {/* Identity first: the face takes the top of the card and is never
+          {/* Identity: the face takes the top of the card and is never
               covered, then a cyan rule, then the facts on the card's own
               surface. The photo gives up height to the details rather than
               the other way round, so a support card's extra area line never
@@ -475,7 +502,7 @@ function UnitCard({
         </>
       ) : (
         <>
-          {/* Portrait overlay: the photograph fills the card and everything
+          {/* Overlay: the photograph fills the card and everything
               is read in one block over its lower edge, under a single fade
               into the wall's own surface — the top of the face stays clear. */}
           {face}

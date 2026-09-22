@@ -1337,13 +1337,13 @@ until someone pressed Sync at 07:07 — although they were on time.
   owner 2026-09-22), on the Display menu beside the slideshow/monitor choice.
   Two layouts, taken from the owner's reference study (its variants 01 and 05),
   in the project's own colour tokens rather than the study's palette:
-  - **Portrait overlay** (`overlay`, the default): the photograph fills the
+  - **Overlay** (`overlay`, the default): the photograph fills the
     card and everything is read in one block over its lower edge — unit code
     in cyan, the seat badge, the name, the area on support, then the bus, FTW
     and tap badges — under one fade into the wall's surface (`--overlay-fill`).
     The top of the face is left clear; before this, the unit code and badge
     sat on a second scrim at the top of the photo.
-  - **Identity first** (`identity`): the photograph on top, never covered, a
+  - **Identity** (`identity`): the photograph on top, never covered, a
     cyan rule (`--color-primary-bright`), then the same facts on the card
     surface beneath it. The photo gives up height to the facts, so a support
     card's extra area line never pushes the badges off.
@@ -1354,6 +1354,13 @@ until someone pressed Sync at 07:07 — although they were on time.
   stays one size on every turn. The study's "dispatch compact" variant (07)
   was left out for that reason: it is a short landscape card, and fitting it
   would have meant reshaping the grid and shrinking the faces.
+- **The FTW and tap badges are icon chips** (owner, 2026-09-22), as in the
+  study: an icon and a short word instead of a sentence. FTW reads "FTW"
+  with ✓ passed (green), ⌛ not yet filed (grey), ⊘ never filed once the gate
+  shut (red), ✕ refused (red), ⏱ late (amber), ? unreadable (amber); the tap
+  reads 🕐 and the time (green), or 🕐 `--:--` grey while still owed and red
+  once the gate shut. Colours and gate rules are unchanged; the full wording
+  ("Tidak lolos FTW", "Belum Absen"…) is the icon's accessible name.
 - **Editable on the built-in Support and Spare walls,** which are otherwise
   fixed in all but their dwell: they are fixed in what they show, not in how
   a card looks.

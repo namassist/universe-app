@@ -478,8 +478,8 @@ export const en: Dict = {
   dspLayoutCol: "Type",
   dspLayoutSlideShort: "Slideshow",
   dspCardLayout: "Card layout",
-  dspCardOverlay: "Portrait overlay",
-  dspCardIdentity: "Identity first",
+  dspCardOverlay: "Overlay",
+  dspCardIdentity: "Identity",
   dspCardHelpOverlay:
     "The operator's photo fills the card; unit, name and status sit over its lower edge.",
   dspCardHelpIdentity:
