@@ -228,7 +228,9 @@ fill the gap from the spare pool.
   its area, and the unit code. A unit's two operators are
   two lines of the row — rendered as two `<tr>`s with the unit's cells merged
   across them, so each operator lines up with his own department, permits and
-  roster code. Units first, by formation then code; spares after them by name.
+  roster code. Units first — formations by leader code, then Fleet support, then
+  No fleet (the fleet filter's order), each by unit code — then the spares by
+  name.
 - **Filters,** in that order — the people first, then the machines, with the
   search last: units/spare, today's shift, SIMPER code (several), department,
   fleet, and a search over operator name, NIK **and unit code**.

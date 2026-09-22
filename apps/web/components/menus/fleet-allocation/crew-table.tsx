@@ -144,14 +144,14 @@ export function crewRows(board: PlanBoard | undefined): CrewRow[] {
     area: unit.fleet ? (areaOf.get(unit.fleet.id) ?? null) : null,
     crew: unit.slots.map(memberOf),
   }));
-  /* A unit outside every formation still belongs among the machines rather
-     than among the spares. `~` sorts after every letter and digit, which puts
-     it at the end of them without a second comparison. */
-  const rank = (r: CrewRow) =>
-    r.fleetLeader ?? (r.fleetSupport ? "~support" : "~none");
+  /* Formations, then support, then no fleet — the fleet filter's own order.
+     A group number rather than a sentinel string: `localeCompare` sorts
+     punctuation before letters, so a `~` prefix put both groups first. */
+  const group = (r: CrewRow) => (r.fleetLeader ? 0 : r.fleetSupport ? 1 : 2);
   units.sort(
     (a, b) =>
-      rank(a).localeCompare(rank(b)) ||
+      group(a) - group(b) ||
+      (a.fleetLeader ?? "").localeCompare(b.fleetLeader ?? "") ||
       (a.unitCode ?? "").localeCompare(b.unitCode ?? "")
   );
   const spares: CrewRow[] = board.spares
