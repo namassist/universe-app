@@ -290,6 +290,82 @@ describe("syncFtwReadings", () => {
     expect(rows).toHaveLength(2);
   });
 
+  /* The correction that happens every morning (owner, 2026-09-22): Q3 answered
+     "No" by mistake at 05:10, fixed by re-uploading at 05:19. savera rewrites
+     the same row in place, so the next pull reads the corrected answers — and
+     it must replace every field, the send time included, with nothing of the
+     05:10 upload left behind. */
+  test("a re-upload replaces the earlier one entirely, send time included", async () => {
+    await syncFtw(async () => [
+      ftwRow({
+        sleep_minutes: 380,
+        ftw_decision: "FTW Perlu Tindak Lanjut",
+        sent_at: `${D1} 05:10:00`,
+      }),
+    ]);
+    await syncFtw(async () => [
+      ftwRow({
+        sleep_minutes: 380,
+        ftw_decision: "FTW aman",
+        sent_at: `${D1} 05:19:00`,
+      }),
+    ]);
+    const rows = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.ftwDecision).toBe("FTW aman");
+    /* The latest upload's own time (owner, 2026-09-22): a correction made
+       after the deadline is judged late, like any other late upload. */
+    expect(rows[0]!.sentAt).toBe(`${D1} 05:19:00`);
+  });
+
+  /* A row read before savera's five-minute job has written its insight row:
+     savera's own category is not there yet, and ours is worked out anyway —
+     this is the whole point of reading the upload rather than the insight. */
+  test("an upload savera has not yet categorised still gets its category", async () => {
+    await syncFtw(async () => [
+      ftwRow({ sleep_minutes: 400, sleep_category: null }),
+    ]);
+    const [row] = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(row!.sleepCategory).toBe("Dapat Bekerja");
+    expect(row!.saveraCategory).toBeNull();
+  });
+
+  /* The review's catch (2026-09-22): a fresh upload savera has not yet
+     categorised, on a pass that also lost the rules, has no category from
+     anywhere. Written anyway it would read "filed" in the wall's tiles and
+     "not seen" in its list at once. It waits a pass instead — which is how it
+     behaved before uploads were read as they landed, so nothing is worse. */
+  test("an upload nobody can categorise yet waits for the next pass", async () => {
+    const fresh = () => [ftwRow({ sleep_minutes: 400, sleep_category: null })];
+    const result = await syncFtwReadings(
+      TEST_DATES,
+      async () => fresh(),
+      async () => {
+        throw new Error("savera unreachable");
+      }
+    );
+    expect(result.skipped).toBe(1);
+    const none = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(none).toHaveLength(0);
+
+    // The next pass reads the rules and writes it.
+    await syncFtw(async () => fresh());
+    const [row] = await db
+      .select()
+      .from(schema.ftwReadings)
+      .where(eq(schema.ftwReadings.date, D1));
+    expect(row!.sleepCategory).toBe("Dapat Bekerja");
+  });
+
   /* The morning this was written (2026-09-21): 8h30 of sleep, and savera's own
      row still said "Tidak Boleh Bekerja" at our last pass before the board.
      savera corrected itself 82 seconds later; the board had used the stale

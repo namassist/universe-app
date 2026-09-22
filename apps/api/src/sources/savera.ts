@@ -1,10 +1,12 @@
 /**
  * The FTW verdict source: savera's `saverawatch` database.
  *
- * savera computes and persists the per-operator, per-day fit-to-work decision
- * in `summary_insights_v2` (its own sync job keeps that table current), so
- * this fetcher reads finished verdicts — it never re-runs savera's sleep
- * categorization or fatigue math.
+ * savera computes a per-operator, per-day fit-to-work verdict in
+ * `summary_insights_v2` on a five-minute job, and that is where this fetcher
+ * used to read from. It no longer waits for it: the upload itself is read from
+ * `summaries`, the category is worked out from savera's own rules
+ * (`ftw-rules.ts`), and the insight row is kept only as savera's word to stand
+ * beside ours. Nothing here re-runs savera's fatigue math.
  *
  * **Which rows count as "the operator uploaded their FTW" is savera's own
  * question, and the answer is its health monitor, not a column.** That page
@@ -80,13 +82,31 @@ function sql() {
 }
 
 /**
- * Manual FTW uploads for the given dates, one row per person per date
- * (`DISTINCT ON` keeps the latest upload when someone uploads twice).
+ * Manual FTW uploads for the given dates, one row per person per date.
+ *
+ * **Read from the upload, not from savera's insight about it** (owner,
+ * 2026-09-22). savera writes `summary_insights_v2` on a five-minute job, so an
+ * upload stayed invisible here for up to five minutes after it landed: three
+ * operators who uploaded at 05:17, 05:18 and 05:20 on 2026-09-22 had their
+ * insight rows written at 05:21:00–05:21:04, after the last pass before the
+ * 05:22 deadline, and read "Belum lapor" all muster. Everything this reads is
+ * on `summaries` itself — sleep, the answers, the send time — and the category
+ * is worked out from savera's rules (`ftw-rules.ts`), so the insight row is
+ * joined only for savera's own category, which is null until its job has run.
+ * Over the fifteen days before the change the two readings returned the same
+ * 10,342 rows field for field; they differ only inside those five minutes.
+ *
+ * **The latest upload wins, entirely.** savera does not keep a second row when
+ * someone re-uploads to correct an answer — it rewrites the same `summaries`
+ * row, send time included — so each pass reads the correction as it stands,
+ * and the upsert overwrites ours. A correction made after the deadline is
+ * therefore judged late, like any late upload (owner, 2026-09-22). `DISTINCT
+ * ON` keeps the newest send time should savera ever start keeping two.
  */
 export const fetchFtwRows: FtwFetcher = async (dates) => {
   if (!dates.length) return [];
   const rows = await sql()`
-    select distinct on (e.code, si.send_date)
+    select distinct on (e.code, s.send_date)
       e.code                                   as nik,
       e.fullname                               as name,
       c.name                                   as company,
@@ -95,6 +115,8 @@ export const fetchFtwRows: FtwFetcher = async (dates) => {
       m.name                                   as mess,
       sh.name                                  as shift,
       coalesce(s.sleep, 0)::int                as sleep_minutes,
+      -- savera's own category; null until its five-minute job has written the
+      -- insight row. Ours comes from the rules and does not wait for it.
       si.base_work_category                    as sleep_category,
       -- The FTW verdict, read from the answers rather than from
       -- si.ftw_decision_label. Same rule savera applies in
@@ -109,9 +131,9 @@ export const fetchFtwRows: FtwFetcher = async (dates) => {
       end                                      as ftw_decision,
       s.send_date::text || ' ' || coalesce(s.send_time::text, '00:00:00')
                                                as sent_at,
-      si.send_date::text                       as date
-    from summary_insights_v2 si
-    join summaries s on s.id = si.summary_id
+      s.send_date::text                        as date
+    from summaries s
+    left join summary_insights_v2 si on si.summary_id = s.id
     left join employees e
       on e.id = s.employee_id
       or (e.user_id = s.user_id and s.employee_id is null)
@@ -119,8 +141,8 @@ export const fetchFtwRows: FtwFetcher = async (dates) => {
     left join departments d on d.id = s.department_id
     left join messes m on m.id = e.mess_id
     left join shifts sh on sh.id = s.shift_id
-    where si.send_date = any(${dates}::date[])
-      and si.company_id = ${env.FTW_SOURCE_COMPANY_ID}
+    where s.send_date = any(${dates}::date[])
+      and s.company_id = ${env.FTW_SOURCE_COMPANY_ID}
       -- Uploaded by the person, not by the background sync. Read from the
       -- batches rather than from si.is_sync_data, which goes stale -- see the
       -- module comment.
@@ -140,7 +162,10 @@ export const fetchFtwRows: FtwFetcher = async (dates) => {
         or s.fit_to_work_q2 is not null
         or s.fit_to_work_q3 is not null
       )
-    order by e.code, si.send_date, s.send_time desc nulls last
+    -- Newest upload first; then, should savera ever hold two insight rows for
+    -- one upload, its most recent — so a pass is deterministic either way.
+    order by e.code, s.send_date, s.send_time desc nulls last,
+             si.updated_at desc nulls last, si.id desc nulls last
   `;
   return rows as unknown as FtwSourceRow[];
 };

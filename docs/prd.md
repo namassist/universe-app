@@ -491,6 +491,37 @@ the answer down.
   already read from the raw answers for the same kind of staleness, and the
   late-upload rule is untouched.
 
+### FTW uploads are read as they land — shipped
+
+**The fetch reads savera's `summaries`, not its insight rows** (owner,
+2026-09-22). savera writes `summary_insights_v2` on a five-minute job, and the
+fetch used to require that row, so an upload was invisible for up to five
+minutes after it landed. On 2026-09-22 three operators uploaded at 05:17,
+05:18 and 05:20; savera wrote their insight rows at 05:21:00–05:21:04, after
+our last pass before the 05:22 deadline, and all three read "Belum lapor"
+until someone pressed Sync at 07:07 — although they were on time.
+
+- Everything the reading needs is on `summaries`: sleep, the three answers, the
+  send time. The category comes from savera's rules (see above), so the insight
+  row is joined only for `savera_category`, which is null until savera's job
+  has run.
+- Over the fifteen days before the change, the old and new reads returned the
+  same 10,342 rows, field for field. They differ only inside those five
+  minutes.
+- **A re-upload replaces the earlier one entirely** (owner, 2026-09-22). savera
+  keeps one row per person per day and rewrites it when somebody corrects an
+  answer — no day in the fortnight held two — so each pass reads the correction
+  as it stands, send time included. **A correction made after the deadline is
+  late**, like any late upload: judging it by the first upload would let
+  anybody file on time and fix it afterwards.
+- **An upload nobody can categorise yet waits a pass** (review, 2026-09-22): a
+  fresh upload savera has not categorised, on a pass that also lost the rules,
+  is not written without a category — the walls would read it as "filed" and
+  "not seen" at once. It lands on the next pass, a minute later; before this
+  change it was not fetched at all, so the rare case is no worse.
+- Unchanged: an upload after the deadline is still not pulled until Sync or the
+  next day's window. It is late whatever it says; only the screens lag.
+
 ### The IN tap is split at noon — shipped
 
 - **A day holds two shift-starts, so one "first IN" cannot serve both**

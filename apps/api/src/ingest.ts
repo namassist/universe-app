@@ -120,6 +120,20 @@ export async function syncFtwReadings(
   const usable = rows.flatMap((row) => {
     const nik = normalizeNik(row.nik);
     if (!nik || !registered.has(nik)) return [];
+    /* Worked out from savera's rules and the minutes it reported, so the
+       verdict is savera's settled one at the moment the upload arrives rather
+       than whenever its own job next gets round to it (`ftw-rules.ts`).
+       Where our rules have no answer — none readable, or minutes they do not
+       cover — savera's own word. */
+    const sleepCategory =
+      (rules && categoryOf(row.sleep_minutes ?? 0, row.date, rules)) ??
+      row.sleep_category;
+    /* And where neither has one — a fresh upload savera has not categorised
+       yet, on a pass that also lost the rules — it waits for the next pass
+       rather than being written without a category, which the walls would
+       read as "filed" and "not seen" at once. That is how it behaved before
+       uploads were read as they landed, so the rare case is no worse. */
+    if (!sleepCategory) return [];
     return [
       {
         nik,
@@ -131,16 +145,7 @@ export async function syncFtwReadings(
         mess: row.mess,
         shift: row.shift,
         sleepMinutes: row.sleep_minutes ?? 0,
-        /* Worked out from savera's rules and the minutes it reported, so the
-           verdict is savera's settled one at the moment the upload arrives
-           rather than whenever its own job next gets round to it
-           (`ftw-rules.ts`). savera's word is kept beside it. */
-        /* Where our rules have no answer — none readable, or minutes they do
-           not cover — savera's own word, never an empty category: an empty
-           one reads as "never uploaded" for somebody who did. */
-        sleepCategory:
-          (rules && categoryOf(row.sleep_minutes ?? 0, row.date, rules)) ??
-          row.sleep_category,
+        sleepCategory,
         saveraCategory: row.sleep_category,
         ftwDecision: row.ftw_decision,
         sentAt: row.sent_at,
