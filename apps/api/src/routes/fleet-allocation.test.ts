@@ -342,6 +342,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Before the units: `fleet_plan_history.unit_id` is `restrict`.
+  if (made.units.length)
+    await db
+      .delete(schema.fleetPlanHistory)
+      .where(inArray(schema.fleetPlanHistory.unitId, made.units));
   if (made.employees.length) {
     await db
       .delete(schema.fleetPlanSlots)

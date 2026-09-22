@@ -52,6 +52,17 @@ export const FLEET_TRANSPORT_TYPES_TEXT =
 export const UNIT_STATUSES = ["breakdown", "standby", "ready"] as const;
 export type UnitStatus = (typeof UNIT_STATUSES)[number];
 
+/** What happened to a standing PLAN pairing — an operator put on or taken off. */
+export const PLAN_HISTORY_ACTIONS = ["assigned", "released"] as const;
+export type PlanHistoryAction = (typeof PLAN_HISTORY_ACTIONS)[number];
+
+/**
+ * Where a PLAN change came from. `migration` marks the pairings that already
+ * stood when the history began: their start is known, who made them is not.
+ */
+export const PLAN_HISTORY_SOURCES = ["board", "import", "migration"] as const;
+export type PlanHistorySource = (typeof PLAN_HISTORY_SOURCES)[number];
+
 /* --------------------------------------------------- allocation priority */
 
 /**

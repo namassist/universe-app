@@ -21,11 +21,13 @@
  * a no-op until those modules exist.
  */
 
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
   rosterCodeKind,
+  type PlanHistoryAction,
+  type PlanHistorySource,
   type PlanImportPreview,
   type RosterCode,
   type RosterCodeKind,
@@ -33,7 +35,7 @@ import {
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
-import { db, isUniqueViolation, schema } from "../db";
+import { db, isUniqueViolation, schema, type Transaction } from "../db";
 import { rosterDayInForce } from "../roster-in-force";
 import { localDate } from "../scheduler";
 import {
@@ -46,6 +48,7 @@ import {
 import { MAX_IMPORT_BYTES } from "./import-columns";
 import {
   ErrorSchema,
+  PlanHistoryRowSchema,
   PlanImportPreviewSchema,
   PlanImportResultSchema,
   UnitStatusSchema,
@@ -331,6 +334,47 @@ const unitNotFound = {
   code: "unit_not_found",
   message: "Unit tidak ditemukan",
 };
+
+/** Whoever made a PLAN change, as the history keeps them. */
+type PlanActor = { id: string; name: string } | null;
+
+/* A device session never reaches a write route (the macro refuses it), so a
+   null actor only ever means "not a person" rather than "unknown". */
+const planActorOf = (principal: {
+  kind: string;
+  id: string;
+  name: string;
+}): PlanActor =>
+  principal.kind === "user" ? { id: principal.id, name: principal.name } : null;
+
+type PlanChange = {
+  unitId: string;
+  employeeId: string;
+  nik: string;
+  name: string;
+  action: PlanHistoryAction;
+};
+
+/**
+ * Appends to `fleet_plan_history`, inside the caller's transaction — so a
+ * pairing and its record commit or roll back together.
+ */
+async function recordPlanChanges(
+  tx: Transaction,
+  changes: PlanChange[],
+  source: Exclude<PlanHistorySource, "migration">,
+  actor: PlanActor
+) {
+  if (!changes.length) return;
+  await tx.insert(schema.fleetPlanHistory).values(
+    changes.map((change) => ({
+      ...change,
+      source,
+      actorUserId: actor?.id ?? null,
+      actorName: actor?.name ?? null,
+    }))
+  );
+}
 
 /** A unit as eligibility needs it, by code. */
 export async function unitByCode(code: string) {
@@ -898,7 +942,7 @@ export const fleetAllocationRoutes = new Elysia({
 
   .post(
     "/plan/import/commit",
-    async ({ body, status }) => {
+    async ({ body, status, principal }) => {
       // Re-validated rather than trusted from the client: the preview the
       // caller saw is advisory, this parse is what gets written.
       const outcome = await parsePlanImport(body.file);
@@ -945,6 +989,35 @@ export const fleetAllocationRoutes = new Elysia({
               unitId: r.unitId,
               employeeId: r.employeeId,
             }))
+          );
+
+          // Releases first, as their own statement, so a move reads in the
+          // order it happened: off the old unit, then onto the new one.
+          const actor = planActorOf(principal);
+          const who = (r: (typeof writes)[number]) => ({
+            employeeId: r.employeeId,
+            nik: r.preview.nik,
+            name: r.preview.name,
+          });
+          await recordPlanChanges(
+            tx,
+            moved.map((r) => ({
+              ...who(r),
+              unitId: r.fromUnitId!,
+              action: "released" as const,
+            })),
+            "import",
+            actor
+          );
+          await recordPlanChanges(
+            tx,
+            writes.map((r) => ({
+              ...who(r),
+              unitId: r.unitId,
+              action: "assigned" as const,
+            })),
+            "import",
+            actor
           );
 
           // The recheck under lock — validation read the plan a moment
@@ -1032,7 +1105,7 @@ export const fleetAllocationRoutes = new Elysia({
 
   .post(
     "/plan/slots",
-    async ({ body, status }) => {
+    async ({ body, status, principal }) => {
       const unit = await unitByCode(body.unitCode);
       if (!unit) return status(404, unitNotFound);
 
@@ -1086,6 +1159,20 @@ export const fleetAllocationRoutes = new Elysia({
           await tx
             .insert(schema.fleetPlanSlots)
             .values({ unitId: unit.id, employeeId: person.id });
+          await recordPlanChanges(
+            tx,
+            [
+              {
+                unitId: unit.id,
+                employeeId: person.id,
+                nik: person.nik,
+                name: person.name,
+                action: "assigned",
+              },
+            ],
+            "board",
+            planActorOf(principal)
+          );
           return { refusal: null };
         });
 
@@ -1141,9 +1228,15 @@ export const fleetAllocationRoutes = new Elysia({
 
   .delete(
     "/plan/slots/:unitCode/:nik",
-    async ({ params, status }) => {
+    async ({ params, status, principal }) => {
       const [row] = await db
-        .select({ slotId: schema.fleetPlanSlots.id })
+        .select({
+          slotId: schema.fleetPlanSlots.id,
+          unitId: schema.fleetPlanSlots.unitId,
+          employeeId: schema.fleetPlanSlots.employeeId,
+          nik: schema.employees.nik,
+          name: schema.employees.name,
+        })
         .from(schema.fleetPlanSlots)
         .innerJoin(
           schema.units,
@@ -1166,9 +1259,29 @@ export const fleetAllocationRoutes = new Elysia({
           message: "Pasangan unit-operator tidak ditemukan",
         });
 
-      await db
-        .delete(schema.fleetPlanSlots)
-        .where(eq(schema.fleetPlanSlots.id, row.slotId));
+      await db.transaction(async (tx) => {
+        // `returning` so a slot another request released a moment earlier
+        // does not get a second "released" line in the history.
+        const gone = await tx
+          .delete(schema.fleetPlanSlots)
+          .where(eq(schema.fleetPlanSlots.id, row.slotId))
+          .returning({ id: schema.fleetPlanSlots.id });
+        if (!gone.length) return;
+        await recordPlanChanges(
+          tx,
+          [
+            {
+              unitId: row.unitId,
+              employeeId: row.employeeId,
+              nik: row.nik,
+              name: row.name,
+              action: "released",
+            },
+          ],
+          "board",
+          planActorOf(principal)
+        );
+      });
       return { ok: true };
     },
     {
@@ -1184,5 +1297,47 @@ export const fleetAllocationRoutes = new Elysia({
         404: ErrorSchema,
       },
       detail: { summary: "Release an operator from their planned unit" },
+    }
+  )
+
+  .get(
+    "/plan/units/:code/history",
+    async ({ params, status }) => {
+      /* Not `unitByCode`, which reads active units only: deactivating is how a
+         unit with a past leaves service (its history blocks deletion), and the
+         trail is most wanted exactly then. */
+      const [unit] = await db
+        .select({ id: schema.units.id })
+        .from(schema.units)
+        .where(eq(schema.units.code, params.code))
+        .limit(1);
+      if (!unit) return status(404, unitNotFound);
+
+      const rows = await db
+        .select({
+          id: schema.fleetPlanHistory.id,
+          action: schema.fleetPlanHistory.action,
+          source: schema.fleetPlanHistory.source,
+          nik: schema.fleetPlanHistory.nik,
+          name: schema.fleetPlanHistory.name,
+          actorName: schema.fleetPlanHistory.actorName,
+          createdAt: schema.fleetPlanHistory.createdAt,
+        })
+        .from(schema.fleetPlanHistory)
+        .where(eq(schema.fleetPlanHistory.unitId, unit.id))
+        .orderBy(desc(schema.fleetPlanHistory.createdAt));
+
+      return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+    },
+    {
+      auth: { menu: "fleet-allocation", mode: "view" },
+      params: t.Object({ code: t.String({ minLength: 1 }) }),
+      response: {
+        200: t.Array(PlanHistoryRowSchema),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+      },
+      detail: { summary: "Every change to a unit's standing PLAN pairings" },
     }
   );

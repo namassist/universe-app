@@ -25,6 +25,8 @@ import {
   MCU_RESULTS,
   NOTIFICATION_KINDS,
   NOTIFICATION_TONES,
+  PLAN_HISTORY_ACTIONS,
+  PLAN_HISTORY_SOURCES,
   ROSTER_CODES,
   ROSTER_DOCUMENT_SOURCES,
   ROSTER_DOCUMENT_STATUSES,
@@ -62,6 +64,14 @@ export const employeeStatus = pgEnum("employee_status", EMPLOYEE_STATUSES);
 export const mcuResult = pgEnum("mcu_result", MCU_RESULTS);
 export const bloodType = pgEnum("blood_type", BLOOD_TYPES);
 export const unitStatus = pgEnum("unit_status", UNIT_STATUSES);
+export const planHistoryAction = pgEnum(
+  "plan_history_action",
+  PLAN_HISTORY_ACTIONS
+);
+export const planHistorySource = pgEnum(
+  "plan_history_source",
+  PLAN_HISTORY_SOURCES
+);
 export const rosterCode = pgEnum("roster_code", ROSTER_CODES);
 export const rosterDocumentStatus = pgEnum(
   "roster_document_status",
@@ -764,6 +774,55 @@ export const fleetPlanSlots = pgTable(
       table.employeeId
     ),
     index("fleet_plan_slots_unit_id_idx").on(table.unitId),
+  ]
+);
+
+/**
+ * Every change to a unit's standing PLAN pairings — who was put on it, who
+ * was taken off, by whom, and from where. `fleet_plan_slots` only knows the
+ * present; this is how somebody finds the operator a unit had before.
+ *
+ * Written in the same transaction as the slot write it describes, and read by
+ * nothing but the history route: allocation, tickets and the displays keep
+ * reading `fleet_plan_slots` alone. Append-only by convention.
+ *
+ * The operator is kept by `nik` and `name` as they were at the time, with the
+ * employee reference beside them set to null if the employee is ever deleted —
+ * a trail that blocked removing everyone who once held a unit would be the
+ * history governing the register. The unit is `restrict`, like
+ * `unit_status_history`: a unit with a past is deactivated, not deleted.
+ * The actor is likewise a name kept beside a nullable user reference.
+ */
+export const fleetPlanHistory = pgTable(
+  "fleet_plan_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    nik: text("nik").notNull(),
+    name: text("name").notNull(),
+    action: planHistoryAction("action").notNull(),
+    source: planHistorySource("source").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    actorName: text("actor_name"),
+    /* `clock_timestamp()`, not `now()`: an import move writes its release and
+       its assignment in one transaction, and `now()` would stamp both with the
+       transaction's start — two rows with no order between them. */
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (table) => [
+    index("fleet_plan_history_unit_created_idx").on(
+      table.unitId,
+      table.createdAt
+    ),
   ]
 );
 

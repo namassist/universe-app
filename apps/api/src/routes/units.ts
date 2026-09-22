@@ -362,17 +362,17 @@ const unitNotFound = {
 /**
  * Why a unit cannot be deleted, by the constraint that refused it.
  *
- * Seven things reference a unit, and until now every one of them was reported
+ * Eight things reference a unit, and until now every one of them was reported
  * as "still has a bus schedule" — the comment that said so was written when a
  * schedule really was the only referrer, and it aged badly. A water truck with
  * two PLAN pairings and two stored board slots sent its owner to the Bus menu
  * to look for something that was never there.
  *
  * Each entry says what holds the unit *and* what to do, because the two are
- * not the same question. The last two cannot be undone at all: a stored board
- * is the record of a shift that has already happened, and status history is
- * append-only by design — for those, deactivating is not a fallback, it is the
- * answer.
+ * not the same question. The last three cannot be undone at all: a stored
+ * board is the record of a shift that has already happened, and the status and
+ * PLAN histories are append-only by design — for those, deactivating is not a
+ * fallback, it is the answer.
  */
 const DELETE_BLOCKED: Record<string, { short: string; full: string }> = {
   bus_schedules_unit_id_units_id_fk: {
@@ -402,6 +402,10 @@ const DELETE_BLOCKED: Record<string, { short: string; full: string }> = {
   unit_status_history_unit_id_units_id_fk: {
     short: "Punya riwayat status",
     full: "Unit punya riwayat perubahan status, dan riwayat itu tidak dihapus — nonaktifkan unitnya, jangan dihapus",
+  },
+  fleet_plan_history_unit_id_units_id_fk: {
+    short: "Punya riwayat operator tetap",
+    full: "Unit punya riwayat operator tetap di PLAN, dan riwayat itu tidak dihapus — nonaktifkan unitnya, jangan dihapus",
   },
 };
 

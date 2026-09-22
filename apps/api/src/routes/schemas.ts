@@ -32,6 +32,8 @@ import {
   SCOPES,
   NOTIFICATION_KINDS,
   NOTIFICATION_TONES,
+  PLAN_HISTORY_ACTIONS,
+  PLAN_HISTORY_SOURCES,
   TIMELINE_ACTIONS,
   UNIT_STATUSES,
   type MenuSlug,
@@ -685,6 +687,18 @@ export const PlanImportPreviewSchema = t.Object({
 export const PlanImportResultSchema = t.Object({
   created: t.Integer(),
   moved: t.Integer(),
+});
+
+/** One line of a unit's PLAN history — newest first on read. */
+export const PlanHistoryRowSchema = t.Object({
+  id: t.String(),
+  action: t.UnionEnum(PLAN_HISTORY_ACTIONS),
+  source: t.UnionEnum(PLAN_HISTORY_SOURCES),
+  nik: t.String(),
+  name: t.String(),
+  /** Null for the pairings that predate the history. */
+  actorName: t.Nullable(t.String()),
+  createdAt: t.String(),
 });
 
 /* ----------------------------------------------------- master data import */

@@ -318,6 +318,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Before the units: `fleet_plan_history.unit_id` is `restrict`.
+  if (made.units.length)
+    await db
+      .delete(schema.fleetPlanHistory)
+      .where(inArray(schema.fleetPlanHistory.unitId, made.units));
   if (made.employees.length) {
     await db
       .delete(schema.fleetPlanSlots)
@@ -505,6 +510,45 @@ describe("the commit writes the plan whole, or not at all", () => {
       .where(inArray(schema.fleetPlanSlots.employeeId, made.employees));
     const ofFit = slots.filter((s) => s.employeeId === opFit.id);
     expect(ofFit).toEqual([{ unitId: unitOther.id, employeeId: opFit.id }]);
+
+    // The move is two facts in the history: taken off one unit, put on the
+    // other — each under its own unit, both marked as the import's doing.
+    const trail = await db
+      .select({
+        unitId: schema.fleetPlanHistory.unitId,
+        action: schema.fleetPlanHistory.action,
+        source: schema.fleetPlanHistory.source,
+        actorUserId: schema.fleetPlanHistory.actorUserId,
+      })
+      .from(schema.fleetPlanHistory)
+      .where(inArray(schema.fleetPlanHistory.employeeId, [opFit.id]))
+      .orderBy(schema.fleetPlanHistory.createdAt);
+    expect(trail).toEqual([
+      {
+        unitId: unitReq.id,
+        action: "assigned",
+        source: "import",
+        actorUserId: admin.id,
+      },
+      {
+        unitId: unitReq.id,
+        action: "released",
+        source: "import",
+        actorUserId: admin.id,
+      },
+      {
+        unitId: unitOther.id,
+        action: "assigned",
+        source: "import",
+        actorUserId: admin.id,
+      },
+    ]);
+    // The unchanged rows of the re-upload wrote nothing a second time.
+    const dayTrail = await db
+      .select({ action: schema.fleetPlanHistory.action })
+      .from(schema.fleetPlanHistory)
+      .where(inArray(schema.fleetPlanHistory.employeeId, [opDay.id]));
+    expect(dayTrail).toEqual([{ action: "assigned" }]);
   });
 
   test("capacity counts what the database already holds", async () => {

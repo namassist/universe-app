@@ -54,6 +54,16 @@ the definition — when they disagree, the code wins. Change flow: edit
 - `fleet_plan_slots` — the standing PLAN pairings. `employee_id` unique (an
   operator holds one unit); max-2-per-unit and the Day/Night pair rule are
   route-enforced (they need the roster, which the table cannot see).
+- `fleet_plan_history` — append-only trail of PLAN pairing changes:
+  `action` (`assigned`/`released`), `source` (`board`/`import`/`migration`),
+  the operator's `nik` and `name` as they were, and the actor's user id and
+  name. Written in the same transaction as the slot write; read only by the
+  history route. `unit_id` is `restrict` like `unit_status_history` (a unit
+  with a past is deactivated, not deleted); `employee_id` and `actor_user_id`
+  are `set null`, so the trail never blocks removing a person — the kept
+  `nik`/`name` still say who it was. `created_at` defaults to
+  `clock_timestamp()`, not `now()`, so the release and assignment an import
+  move writes in one transaction still read in order.
 
 **Roster** (monthly, imported from spreadsheet)
 
