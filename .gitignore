@@ -33,3 +33,6 @@ build/
 
 # Uploaded sound files (SOUND_DIR). Runtime data, not source.
 apps/api/storage/
+
+# Codebase-memory MCP index (per-machine, rebuild with index_repository)
+.codebase-memory/
