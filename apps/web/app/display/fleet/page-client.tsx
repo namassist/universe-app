@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 
 import {
-  MONITOR_FLEETS_PER_PAGE,
+  FLEETS_PER_PAGE,
+  isMonitorLayout,
   SHIFT_KIND_LABELS,
   SLIDE_COLS,
   SLIDE_ROWS,
@@ -54,6 +55,13 @@ import { OperatorFace } from "../_components/operator-face";
  */
 const MONITOR_COLS = 4;
 const MONITOR_ROWS = SLIDE_SIZE / MONITOR_COLS;
+/*
+ * A quarter of a `monitor-4` is the other way round: as wide as a `monitor-2`
+ * panel but half its height, so it takes the slideshow's own six-by-two — the
+ * shape a wide, short box wants — and the cards stay portrait.
+ */
+const DENSE_COLS = SLIDE_COLS;
+const DENSE_ROWS = SLIDE_ROWS;
 
 /**
  * Display Fleet — the Actual board of the shift now running, one formation at
@@ -259,6 +267,28 @@ function paginate(fleets: FleetDisplayFleet[]): Page[] {
   });
 }
 
+/** How the seat is filled — Plan, Spare, Manual or Kosong — as a badge. */
+function SeatBadge({
+  unit,
+  compact,
+}: {
+  unit: FleetDisplayUnit;
+  compact: boolean;
+}) {
+  const { tone, label } = toneOf(unit);
+  return (
+    <DisplayBadge
+      tone={tone}
+      className={cn(
+        "flex-none gap-1.5 py-0.5 [&>span]:size-2",
+        compact ? "px-1.5 text-[11px]" : "px-2.5 text-sm"
+      )}
+    >
+      {label}
+    </DisplayBadge>
+  );
+}
+
 /**
  * What a card says, in the order it is read: the unit and how its seat is
  * filled, then who is in it, where they work, and what they still owe.
@@ -270,18 +300,24 @@ function CardDetails({
   unit,
   gates,
   compact,
+  dense,
   showArea,
   cardLayout,
 }: {
   unit: FleetDisplayUnit;
   gates: Gates;
   compact: boolean;
+  dense: boolean;
   showArea: boolean;
   cardLayout: CardLayout;
 }) {
-  const { tone, label } = toneOf(unit);
   return (
     <div className="min-w-0">
+      {/* On a Monitor 4 card the code has the row to itself (owner,
+          2026-09-22): sharing it with the seat badge cut "DT4012" to "DT4…",
+          and the code is the one thing the card exists to say. The badge sits
+          in the photo's top-right corner instead (see `UnitCard`), where it
+          costs no row. A Monitor 2 card is wide enough for both. */}
       <div className="flex items-center justify-between gap-2">
         {/* The unit code is what the yard looks for, so it leads either way.
             Cyan over the photograph, as the overlay's identifier line is;
@@ -296,24 +332,21 @@ function CardDetails({
         >
           {unit.unitCode}
         </b>
-        <DisplayBadge
-          tone={tone}
+        {dense ? null : <SeatBadge unit={unit} compact={compact} />}
+      </div>
+      {/* An empty seat on a Monitor 4 card says nothing more here: the red
+          badge and the empty-seat mark already said it, and the words were
+          being truncated to "Belum ada…" anyway. */}
+      {unit.employeeName || !dense ? (
+        <div
           className={cn(
-            "flex-none gap-1.5 py-0.5 [&>span]:size-2",
-            compact ? "px-1.5 text-[11px]" : "px-2.5 text-sm"
+            "mt-0.5 line-clamp-1 leading-tight font-bold",
+            compact ? "text-[14px]" : "text-[21px]"
           )}
         >
-          {label}
-        </DisplayBadge>
-      </div>
-      <div
-        className={cn(
-          "mt-0.5 line-clamp-1 leading-tight font-bold",
-          compact ? "text-[14px]" : "text-[21px]"
-        )}
-      >
-        {unit.employeeName ?? "Belum ada operator"}
-      </div>
+          {unit.employeeName ?? "Belum ada operator"}
+        </div>
+      ) : null}
       {/* The area gets a line of its own: it is prose, and long enough
           ("PANEL EAST - UTARA BAWAH") that sharing a row with the badges
           would push them onto a second one anyway. */}
@@ -348,7 +381,11 @@ function CardDetails({
       <div
         className={cn(
           "mt-1 flex min-w-0 flex-wrap items-center font-mono text-(--text-secondary) tabular-nums",
-          compact ? "gap-1 text-[11px]" : "gap-1.5 text-base"
+          dense
+            ? "gap-0.5 text-[11px]"
+            : compact
+              ? "gap-1 text-[11px]"
+              : "gap-1.5 text-base"
         )}
       >
         {/* Absent rather than dashed: a unit with no vehicle recorded is
@@ -359,7 +396,11 @@ function CardDetails({
             tone="info"
             className={cn(
               "flex-none gap-1 py-0 font-mono [&>span]:hidden",
-              compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
+              dense
+                ? "px-1 text-[10px]"
+                : compact
+                  ? "px-1.5 text-[10px]"
+                  : "px-2 text-[13px]"
             )}
           >
             <Bus className={compact ? "size-2.5" : "size-3"} />
@@ -378,7 +419,11 @@ function CardDetails({
                   className={cn(
                     /* The icon replaces the tone dot, as on the bus chip. */
                     "flex-none gap-1 py-0 font-mono [&>span]:hidden",
-                    compact ? "px-1.5 text-[10px]" : "px-2 text-[13px]"
+                    dense
+                      ? "px-1 text-[10px]"
+                      : compact
+                        ? "px-1.5 text-[10px]"
+                        : "px-2 text-[13px]"
                   )}
                 >
                   <badge.icon
@@ -407,6 +452,8 @@ function UnitCard({
    * which is the one thing the card exists to say.
    */
   compact = false,
+  /** A Monitor 4 card — smaller again than a Monitor 2 one. */
+  dense = false,
   /**
    * Show where this unit is working.
    *
@@ -432,6 +479,7 @@ function UnitCard({
   provisional: boolean;
   gates: Gates;
   compact?: boolean;
+  dense?: boolean;
   showArea?: boolean;
   cardLayout: CardLayout;
   className?: string;
@@ -445,6 +493,11 @@ function UnitCard({
       name={unit.employeeName}
       src={fleetPhotoUrl(unit)}
       compact={compact}
+      /* A Monitor 4 identity photo is a short, wide box, and pinned to its
+         top edge it showed foreheads. Framed lower, it shows the face. */
+      imgClassName={
+        dense && cardLayout === "identity" ? "object-[center_30%]" : undefined
+      }
     />
   ) : (
     <div className="absolute inset-0 grid place-items-center bg-(--fill-input)">
@@ -456,11 +509,19 @@ function UnitCard({
       />
     </div>
   );
+  /* On a Monitor 4 card the seat badge rides the photo's top-right corner, so
+     the unit code keeps its own row without the badge costing another one. */
+  const cornerSeat = dense ? (
+    <div className="absolute top-1 right-1 z-10">
+      <SeatBadge unit={unit} compact />
+    </div>
+  ) : null;
   const details = (
     <CardDetails
       unit={unit}
       gates={gates}
       compact={compact}
+      dense={dense}
       showArea={showArea}
       cardLayout={cardLayout}
     />
@@ -490,7 +551,10 @@ function UnitCard({
               surface. The photo gives up height to the details rather than
               the other way round, so a support card's extra area line never
               pushes the badges out. */}
-          <div className="relative min-h-0 flex-1">{face}</div>
+          <div className="relative min-h-0 flex-1">
+            {face}
+            {cornerSeat}
+          </div>
           <div
             className={cn(
               "flex-none border-t-2 border-(--color-primary-bright)",
@@ -515,6 +579,7 @@ function UnitCard({
           >
             {details}
           </div>
+          {cornerSeat}
         </>
       )}
     </div>
@@ -546,6 +611,7 @@ function FleetQuadrant({
   provisional,
   gates,
   cardLayout,
+  dense = false,
   className,
   style,
 }: {
@@ -553,17 +619,19 @@ function FleetQuadrant({
   provisional: boolean;
   gates: Gates;
   cardLayout: CardLayout;
+  /** A quarter of a `monitor-4` rather than a half of a `monitor-2`. */
+  dense?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }) {
+  const baseCols = dense ? DENSE_COLS : MONITOR_COLS;
+  const rows = dense ? DENSE_ROWS : MONITOR_ROWS;
   /* A panel does not paginate — it is one formation, whole — so a group larger
      than the grid widens the grid rather than losing its tail. Only the
      support group ever gets there; a formation holds at most eleven, and its
      twelfth cell is held open like a slide's. */
   const overflowing = fleet.units.length > SLIDE_SIZE;
-  const cols = overflowing
-    ? Math.ceil(fleet.units.length / MONITOR_ROWS)
-    : MONITOR_COLS;
+  const cols = overflowing ? Math.ceil(fleet.units.length / rows) : baseCols;
   const cells: (FleetDisplayUnit | null)[] = overflowing
     ? fleet.units
     : Array.from({ length: SLIDE_SIZE }, (_, i) => fleet.units[i] ?? null);
@@ -573,6 +641,8 @@ function FleetQuadrant({
       style={style}
       className={cn(
         "flex min-h-0 flex-col gap-2.5 rounded-card border border-(--glass-2-border) bg-(--glass-2-fill) px-4.5 py-3.5",
+        /* A quarter is half a panel's height; its heading gives some back. */
+        dense && "gap-1.5 px-3 py-2",
         /* The quadrant itself goes red when someone in it is missing, so an
            empty seat is visible before anyone reads a single card. */
         fleet.idle > 0 && !provisional && "border-[rgba(252,60,59,.45)]",
@@ -582,10 +652,20 @@ function FleetQuadrant({
       <div className="flex flex-none items-baseline gap-3">
         {/* The formation's name is its digger, everywhere in this app — an
             ordinal would be a vocabulary the yard does not use. */}
-        <b className="truncate font-mono text-[26px] leading-none font-bold">
+        <b
+          className={cn(
+            "truncate font-mono text-[26px] leading-none font-bold",
+            dense && "text-[20px]"
+          )}
+        >
           {fleetTitle(fleet)}
         </b>
-        <span className="ml-auto truncate text-[17px] text-(--text-secondary)">
+        <span
+          className={cn(
+            "ml-auto truncate text-[17px] text-(--text-secondary)",
+            dense && "text-[14px]"
+          )}
+        >
           {fleet.area ?? "—"}
         </span>
       </div>
@@ -600,18 +680,33 @@ function FleetQuadrant({
         {fleet.kind === "fleet" ? (
           <>
             {fleet.busCode ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-3 py-0.5 text-[16px] font-bold text-(--color-primary-bright)">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-3 py-0.5 text-[16px] font-bold text-(--color-primary-bright)",
+                  dense && "px-2.5 text-[13px]"
+                )}
+              >
                 <Bus className="size-4" />
                 {fleet.busCode}
               </span>
             ) : null}
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-3 py-0.5 text-[16px] font-bold text-(--badge-warning-text)">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-3 py-0.5 text-[16px] font-bold text-(--badge-warning-text)",
+                dense && "px-2.5 text-[13px]"
+              )}
+            >
               <Pickaxe className="size-4" />
               {fleet.leaderCode}
             </span>
           </>
         ) : null}
-        <span className="rounded-full border border-(--badge-neutral-border) bg-(--badge-neutral-fill) px-3 py-0.5 text-[16px] font-semibold text-(--badge-neutral-text)">
+        <span
+          className={cn(
+            "rounded-full border border-(--badge-neutral-border) bg-(--badge-neutral-fill) px-3 py-0.5 text-[16px] font-semibold text-(--badge-neutral-text)",
+            dense && "px-2.5 text-[13px]"
+          )}
+        >
           {fleet.total} unit · {fleet.crewed} siap
           {fleet.idle ? ` · ${fleet.idle} kosong` : ""}
           {fleet.substituted ? ` · ${fleet.substituted} spare` : ""}
@@ -622,7 +717,7 @@ function FleetQuadrant({
         className="grid min-h-0 flex-1 gap-2"
         style={{
           gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${MONITOR_ROWS}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
         }}
       >
         {cells.map((u, i) => (
@@ -636,6 +731,7 @@ function FleetQuadrant({
                 provisional={provisional}
                 gates={gates}
                 compact
+                dense={dense}
                 cardLayout={cardLayout}
                 className={PORTRAIT_CARD}
               />
@@ -701,8 +797,10 @@ const FLIP_OUT_MS = 360;
 const FLIP_IN_MS = 440;
 /** Between panels, so the turn sweeps across them instead of snapping. */
 const STAGGER_MS = 70;
-const CLOSE_TOTAL = FLIP_OUT_MS + STAGGER_MS * (MONITOR_FLEETS_PER_PAGE - 1);
-const OPEN_TOTAL = FLIP_IN_MS + STAGGER_MS * (MONITOR_FLEETS_PER_PAGE - 1);
+/** How long a page takes to close and to open, its last panel included. */
+const closeTotal = (perPage: number) =>
+  FLIP_OUT_MS + STAGGER_MS * (perPage - 1);
+const openTotal = (perPage: number) => FLIP_IN_MS + STAGGER_MS * (perPage - 1);
 /** The shortest hold still worth reading, if the dwell is set below the flip. */
 const MIN_HOLD_MS = 800;
 
@@ -723,7 +821,12 @@ export default function DisplayFleetPage() {
 
   /* The screen's own type, delivered with the board. A browser previewing the
      site-wide wall is told `slideshow`, which is what it has always been. */
-  const isMonitor = data?.layout === "monitor";
+  const isMonitor = data ? isMonitorLayout(data.layout) : false;
+  /* Two formations a page, or four — the screen's own choice. */
+  const perPage = FLEETS_PER_PAGE[data?.layout ?? "slideshow"];
+  const dense = data?.layout === "monitor-4";
+  const CLOSE_TOTAL = closeTotal(perPage);
+  const OPEN_TOTAL = openTotal(perPage);
   const cardLayout: CardLayout = data?.cardLayout ?? "overlay";
   /* Both false until the first response lands, which is the same thing the
      badges say when the timeline cannot name a gate: nothing has closed yet,
@@ -740,26 +843,20 @@ export default function DisplayFleetPage() {
 
   /**
    * A monitor's pages: the formations it was given, in the order it was given
-   * them, four to a screen.
+   * them, two or four to a screen.
    *
    * A monitor is not a smaller slideshow — it is a slideshow whose subject is
-   * four formations instead of one. A screen given nine turns three pages at
-   * the same dwell, so the control room keeps the breadth without giving up
-   * any of the pits it supervises.
+   * several formations instead of one. A `monitor-4` given nine turns three
+   * pages at the same dwell, so the control room keeps the breadth without
+   * giving up any of the pits it supervises.
    */
   const monPages = React.useMemo(() => {
     const fleets = data?.fleets ?? [];
-    const count = Math.max(
-      1,
-      Math.ceil(fleets.length / MONITOR_FLEETS_PER_PAGE)
-    );
+    const count = Math.max(1, Math.ceil(fleets.length / perPage));
     return Array.from({ length: count }, (_, i) =>
-      fleets.slice(
-        i * MONITOR_FLEETS_PER_PAGE,
-        i * MONITOR_FLEETS_PER_PAGE + MONITOR_FLEETS_PER_PAGE
-      )
+      fleets.slice(i * perPage, i * perPage + perPage)
     ).filter((page) => page.length);
-  }, [data?.fleets]);
+  }, [data?.fleets, perPage]);
 
   /* Rotation comes from the screen's own setting, edited in the Display menu
      and delivered with the board. `?interval=` still wins, so a preview can be
@@ -780,8 +877,8 @@ export default function DisplayFleetPage() {
   }, [isMonitor, intervalSec, turns]);
 
   /*
-   * A monitor turns differently, and it has to: four panels sliding together
-   * reads as the whole screen jumping, where four panels flipping in place
+   * A monitor turns differently, and it has to: its panels sliding together
+   * reads as the whole screen jumping, where panels flipping in place
    * reads as each quadrant changing its own contents. So one turn is a
    * three-phase machine — hold, close, swap, open — rather than one interval.
    * Written as phases that each schedule their own successor, because a single
@@ -808,7 +905,7 @@ export default function DisplayFleetPage() {
     }
     const t = setTimeout(() => setPhase("open"), OPEN_TOTAL);
     return () => clearTimeout(t);
-  }, [isMonitor, phase, turns, holdMs]);
+  }, [isMonitor, phase, turns, holdMs, CLOSE_TOTAL, OPEN_TOTAL]);
 
   /* Clamped during render, not corrected in an effect: fixing the index in an
      effect means one render uses a page outside the range, and the wall blinks
@@ -816,16 +913,13 @@ export default function DisplayFleetPage() {
   const pos = turns ? idx % turns : 0;
   const page = pages[pos];
 
-  /* Always MONITOR_FLEETS_PER_PAGE slots. The blanks on the last page are
-     rendered rather than dropped so that a formation keeps its position from
-     one turn to the next. */
+  /* Always a full page of slots. The blanks on the last page are rendered
+     rather than dropped so that a formation keeps its position from one turn
+     to the next. */
   const slots = React.useMemo(() => {
     const shown = monPages[pos] ?? [];
-    return Array.from(
-      { length: MONITOR_FLEETS_PER_PAGE },
-      (_, i) => shown[i] ?? null
-    );
-  }, [monPages, pos]);
+    return Array.from({ length: perPage }, (_, i) => shown[i] ?? null);
+  }, [monPages, pos, perPage]);
   const shownCount = monPages[pos]?.length ?? 0;
 
   const flipClass =
@@ -835,7 +929,7 @@ export default function DisplayFleetPage() {
         ? "display-flip [animation:kflip-in_440ms_cubic-bezier(.12,.72,.3,1)_both]"
         : undefined;
 
-  /* A monitor is headed by the screen's own name — it shows four formations,
+  /* A monitor is headed by the screen's own name — it shows several formations,
      so no one of them can name it, and the name is what the control room calls
      the wall. A slideshow is headed by the formation on the glass. `?name=` is
      the preview's stand-in for a paired TV's registered name. */
@@ -847,7 +941,7 @@ export default function DisplayFleetPage() {
       ? fleetTitle(page.fleet)
       : "Alokasi Aktual";
   /* Site-wide counts belong to a slideshow, whose header is about the one
-     formation on the glass. A monitor's header would be about four, so it
+     formation on the glass. A monitor's header would be about several, so it
      drops the tiles entirely and each quadrant carries its own numbers —
      which also gives the cards back the height the tiles were taking. */
   const stats = isMonitor
@@ -925,7 +1019,7 @@ export default function DisplayFleetPage() {
 
           {/* A monitor heads itself with where it is and which turn it is on.
               From a distance the page counter is what tells a crew their fleet
-              is coming round shortly — without it the wall reads as four
+              is coming round shortly — without it the wall reads as
               formations changing on their own. */}
           {isMonitor ? (
             data?.fleets.length ? (
@@ -933,8 +1027,7 @@ export default function DisplayFleetPage() {
                 Halaman <b className="text-(--text-primary)">{pos + 1}</b>/
                 {turns}
                 <span className="mx-3 text-(--text-tertiary)">|</span>
-                fleet {pos * MONITOR_FLEETS_PER_PAGE + 1}–
-                {pos * MONITOR_FLEETS_PER_PAGE + shownCount} dari{" "}
+                fleet {pos * perPage + 1}–{pos * perPage + shownCount} dari{" "}
                 {data.fleets.length}
               </span>
             ) : null
@@ -998,7 +1091,10 @@ export default function DisplayFleetPage() {
                 the old nodes and the quadrants merely appear. */}
             <div
               key={pos}
-              className="grid min-h-0 flex-1 grid-cols-2 grid-rows-1 gap-6 perspective-[2200px]"
+              className={cn(
+                "grid min-h-0 flex-1 grid-cols-2 gap-6 perspective-[2200px]",
+                dense ? "grid-rows-2 gap-4" : "grid-rows-1"
+              )}
             >
               {slots.map((f, i) =>
                 f ? (
@@ -1008,6 +1104,7 @@ export default function DisplayFleetPage() {
                     provisional={data?.provisional ?? false}
                     gates={gates}
                     cardLayout={cardLayout}
+                    dense={dense}
                     className={flipClass}
                     style={{ animationDelay: `${i * STAGGER_MS}ms` }}
                   />

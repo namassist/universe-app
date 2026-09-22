@@ -1263,7 +1263,20 @@ until someone pressed Sync at 07:07 — although they were on time.
 
 - **Each fleet TV declares how it spends its screen** (`devices.layout`,
   default `slideshow`). A `slideshow` is the original wall: one formation fills
-  the glass. A `monitor` puts **four** formations side by side.
+  the glass. A monitor shows several at once, in one of two sizes (owner,
+  2026-09-22), with the page size in `FLEETS_PER_PAGE`:
+  - **`monitor-2`** — two formations side by side, each the full height. This
+    is what the unsized `monitor` became on 2026-09-04, when four in a 2×2
+    proved too short for portrait cards on the 1920×1080 canvas; migration
+    0049 renamed the stored value in place, so those walls kept their look.
+    Each half lays its twelve cells 4×3.
+  - **`monitor-4`** — four in a 2×2, back as a choice for control rooms read
+    close up. Each quarter (~950×480) lays its cells 6×2, the slideshow's own
+    shape, so the cards stay portrait at about half a `monitor-2` card; its
+    heading is tightened to give the height back. The Display menu says so
+    beside the option.
+- The bullets below were written when the monitor held four; where they say
+  "four" or "quadrant", read "a page" and "panel".
 - **Default `slideshow`, because that is what every wall already registered
   is.** A default that quietly re-laid out the screens hanging in the yard
   would be a migration nobody asked for.
@@ -1361,6 +1374,14 @@ until someone pressed Sync at 07:07 — although they were on time.
   reads 🕐 and the time (green), or 🕐 `--:--` grey while still owed and red
   once the gate shut. Colours and gate rules are unchanged; the full wording
   ("Tidak lolos FTW", "Belum Absen"…) is the icon's accessible name.
+- **On a Monitor 4 card the unit code has its row to itself** (owner,
+  2026-09-22, after the first Monitor 4 cut "DT4012" to "DT4…"). The seat
+  badge rides the photo's top-right corner instead, so it costs no row; an
+  empty seat drops the "Belum ada operator" line, which the red badge and the
+  empty-seat mark already say; the chips are packed tighter; and the identity
+  photo is framed lower (`object-position` 30%) so a short box shows the face
+  rather than the forehead. Slideshow and Monitor 2 cards are unchanged —
+  badge top-right beside the code — which the owner confirmed as right.
 - **Editable on the built-in Support and Spare walls,** which are otherwise
   fixed in all but their dwell: they are fixed in what they show, not in how
   a card looks.

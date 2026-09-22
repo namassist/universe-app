@@ -23,12 +23,15 @@ function OperatorFace({
   src,
   compact = false,
   initialsClassName,
+  imgClassName,
 }: {
   name: string;
   src: string | null;
   compact?: boolean;
   /** Overrides the initials' size where the box is not a unit card's. */
   initialsClassName?: string;
+  /** Overrides the photo's framing where the box is unusually short. */
+  imgClassName?: string;
 }) {
   const [failedSrc, setFailedSrc] = React.useState<string | null>(null);
   const showPhoto = !!src && failedSrc !== src;
@@ -45,7 +48,10 @@ function OperatorFace({
           onError={() => setFailedSrc(src)}
           /* Top-weighted, because a mugshot is framed on the face and the
              bottom of the card is under the scrim that carries the name. */
-          className="absolute inset-0 size-full object-cover object-top"
+          className={cn(
+            "absolute inset-0 size-full object-cover object-top",
+            imgClassName
+          )}
         />
       ) : (
         <span
