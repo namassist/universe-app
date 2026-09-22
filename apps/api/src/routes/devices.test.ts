@@ -435,6 +435,22 @@ describe("how a screen spends itself", () => {
     );
   });
 
+  test("a patch about something else leaves a monitor a monitor", async () => {
+    // `t.UnionEnum` fills an omitted field with its first member, so a rename
+    // arrived carrying `layout: "slideshow"` and turned the wall back into one.
+    const id = newId();
+    await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      layout: "monitor",
+    });
+    const res = await send("PATCH", `/devices/${id}`, admin.cookie, {
+      name: `${tag} renamed`,
+    });
+    expect(((await res.json()) as { layout: string }).layout).toBe("monitor");
+  });
+
   test("takes more formations than fit one page", async () => {
     // A monitor is not a smaller slideshow: it shows four at a time and pages
     // through the rest, so nothing here is capped. The cap that used to live

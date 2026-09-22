@@ -44,7 +44,13 @@ export const AccessModeSchema = t.UnionEnum(ACCESS_MODES);
 export const ScopeSchema = t.UnionEnum(SCOPES);
 export const MenuSlugSchema = t.UnionEnum(MENU_SLUGS);
 export const DeviceKindSchema = t.UnionEnum(DEVICE_KINDS);
-export const DisplayLayoutSchema = t.UnionEnum(DISPLAY_LAYOUTS);
+/* A union of literals for the same reason as `CardLayoutSchema` below: as a
+   `t.UnionEnum` an omitted `layout` arrived as "slideshow", and a rename
+   turned a monitor wall back into a slideshow. */
+export const DisplayLayoutSchema = t.Union([
+  t.Literal(DISPLAY_LAYOUTS[0]),
+  t.Literal(DISPLAY_LAYOUTS[1]),
+]);
 /*
  * A union of literals, not `t.UnionEnum`: the latter fills an omitted optional
  * field with its first member, so a PATCH that only renames a screen would put

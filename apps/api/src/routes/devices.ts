@@ -429,14 +429,12 @@ export const devicesRoutes = new Elysia({
         });
 
       /*
-       * What the request would actually change, not what it mentions.
-       *
-       * `t.UnionEnum` hands the route its first member when the field is
-       * omitted, so `layout` arrives as "slideshow" on every partial patch —
-       * a request about a name would quietly re-lay out a monitor wall. The
-       * web form always sends it, which is why nobody had hit it. Comparing
-       * against the stored row is the fix that does not depend on knowing
-       * which validator fills in what.
+       * What the request would actually change, not what it mentions — so a
+       * form that echoes unchanged values back does not count as editing
+       * them (the built-in walls' lock below depends on that). The enum
+       * fields are literal unions, not `t.UnionEnum`, which filled an omitted
+       * field with its first member: comparing could not tell that injected
+       * "slideshow" from a real one, and a rename re-laid out monitor walls.
        */
       const patch = {
         ...(body.name !== undefined && body.name.trim() !== current.name
