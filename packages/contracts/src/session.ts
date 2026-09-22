@@ -52,14 +52,20 @@ export const DEVICE_ID_PREFIX: Record<DeviceKind, string> = {
  * A card is as large as the screen allows, which is what makes a name readable
  * from the far side of a workshop.
  *
- * `monitor` trades that size for breadth: `MONITOR_FLEETS_PER_PAGE` formations
- * stand side by side, so a control room takes in more than one pit at a glance
- * instead of waiting out a cycle for the one it cares about. Neither layout caps how
+ * The monitors trade that size for breadth: `FLEETS_PER_PAGE` formations
+ * stand together, so a control room takes in more than one pit at a glance
+ * instead of waiting out a cycle for the one it cares about. No layout caps how
  * many formations a screen may be given — a monitor holding more than one
  * page's worth rotates between pages exactly as a slideshow rotates between
  * fleets, and at the same dwell.
+ *
+ * Two monitor sizes (owner, 2026-09-22). `monitor-2` is the wall the unsized
+ * `monitor` became on 2026-09-04: two formations side by side, each the full
+ * height, so the faces read from across a room. `monitor-4` is the 2x2 it was
+ * before that, back as a choice for control rooms that sit close to their
+ * screen and want the whole shift on it — at about half the card size.
  */
-export const DISPLAY_LAYOUTS = ["slideshow", "monitor"] as const;
+export const DISPLAY_LAYOUTS = ["slideshow", "monitor-2", "monitor-4"] as const;
 export type DisplayLayout = (typeof DISPLAY_LAYOUTS)[number];
 
 /**
@@ -75,19 +81,25 @@ export const CARD_LAYOUTS = ["overlay", "identity"] as const;
 export type CardLayout = (typeof CARD_LAYOUTS)[number];
 
 /**
- * How many formations a `monitor` screen shows at once.
+ * How many formations one page of a wall shows, by layout.
  *
- * Two, side by side (owner, 2026-09-04). It was four in a 2x2, which on the
- * 1920x1080 canvas the walls actually run at gave each formation ~950x480 —
- * wide enough for a unit code and a name, but only half the height a card
- * needs once cards are portrait. Two panels keep the same width and get the
- * whole height, so the operator's photograph — the part of this wall that
- * reads from across a control room — is twice the size it was.
- *
- * A page size, not a ceiling. A screen given nine formations shows five
+ * A page size, not a ceiling: a `monitor-2` given nine formations shows five
  * pages, the last of them holding one.
+ *
+ * Two was chosen on 2026-09-04 because four in a 2x2, on the 1920x1080 canvas
+ * the walls run at, gave each formation ~950x480 — enough for a unit code and
+ * a name, but half the height a portrait card wants. `monitor-4` accepts that
+ * again, on purpose, where the screen is close enough to read it.
  */
-export const MONITOR_FLEETS_PER_PAGE = 2;
+export const FLEETS_PER_PAGE: Record<DisplayLayout, number> = {
+  slideshow: 1,
+  "monitor-2": 2,
+  "monitor-4": 4,
+};
+
+/** Whether a wall shows several formations at once rather than one. */
+export const isMonitorLayout = (layout: DisplayLayout): boolean =>
+  layout !== "slideshow";
 
 /**
  * The one screen that shows the support units, and nothing else.

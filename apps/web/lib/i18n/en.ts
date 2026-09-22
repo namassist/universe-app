@@ -462,15 +462,18 @@ export const en: Dict = {
   dspFleetsCol: "Fleets on screen",
   dspLayout: "Display type",
   dspLayoutSlideshow: "Slideshow — one fleet at a time",
-  dspLayoutMonitor: "Monitor — 4 fleets at once",
+  dspLayoutMonitor2: "Monitor 2 — 2 fleets at once",
+  dspLayoutMonitor4: "Monitor 4 — 4 fleets at once",
   dspLayoutHelpSlide:
     "One formation fills the screen and the wall rotates to the next.",
-  dspLayoutHelpMon:
-    "4 formations side by side; more than 4 rotates a page at a time. Cards are smaller, so mount it where it is read close up.",
+  dspLayoutHelpMon2:
+    "2 formations side by side, each the full height; more than 2 rotates a page at a time.",
+  dspLayoutHelpMon4:
+    "4 formations in a 2×2; more than 4 rotates a page at a time. Cards are about half the size of Monitor 2 — for a control room read close up.",
   dspOrderUp: "Move earlier",
   dspOrderDown: "Move later",
   dspOrderHelp:
-    "Order decides the page and the quadrant: 1–4 is the first screen, 1 top-left.",
+    "Order decides the page and the position: the first formation is top-left on the first page.",
   dspMonRotate: "Seconds per page",
   dspMonRotateHelp:
     "How long each page of 4 fleets stays on screen before the next.",
@@ -484,7 +487,8 @@ export const en: Dict = {
     "The operator's photo fills the card; unit, name and status sit over its lower edge.",
   dspCardHelpIdentity:
     "The operator's photo on top, a cyan rule, then unit, name and status beneath it.",
-  dspLayoutMonShort: "Monitor",
+  dspLayoutMon2Short: "Monitor 2",
+  dspLayoutMon4Short: "Monitor 4",
   dspPicked: "selected",
   dspSupportLocked:
     "Built-in screen — its contents follow the fleet support units automatically. Only the slide duration can be changed.",

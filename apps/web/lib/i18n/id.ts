@@ -459,15 +459,18 @@ export const id = {
   dspFleetsCol: "Fleet yang ditayangkan",
   dspLayout: "Tipe display",
   dspLayoutSlideshow: "Slideshow — satu fleet bergantian",
-  dspLayoutMonitor: "Monitor — 4 fleet sekaligus",
+  dspLayoutMonitor2: "Monitor 2 — 2 fleet sekaligus",
+  dspLayoutMonitor4: "Monitor 4 — 4 fleet sekaligus",
   dspLayoutHelpSlide:
     "Satu formasi memenuhi layar, lalu berganti ke formasi berikutnya.",
-  dspLayoutHelpMon:
-    "4 formasi berdampingan; lebih dari 4 berotasi per halaman. Kartunya lebih kecil, jadi pasang di tempat yang dibaca dari dekat.",
+  dspLayoutHelpMon2:
+    "2 formasi berdampingan, masing-masing setinggi layar; lebih dari 2 berotasi per halaman.",
+  dspLayoutHelpMon4:
+    "4 formasi dalam 2×2; lebih dari 4 berotasi per halaman. Kartunya kira-kira setengah ukuran Monitor 2 — untuk ruang kontrol yang dibaca dari dekat.",
   dspOrderUp: "Naikkan urutan",
   dspOrderDown: "Turunkan urutan",
   dspOrderHelp:
-    "Urutan menentukan halaman dan posisinya: 1–4 halaman pertama, 1 di kiri-atas.",
+    "Urutan menentukan halaman dan posisinya: formasi pertama di kiri-atas halaman pertama.",
   dspMonRotate: "Durasi per halaman (detik)",
   dspMonRotateHelp: "Lama tiap halaman berisi 4 fleet tampil sebelum berganti.",
   dspPagesWord: "halaman",
@@ -480,7 +483,8 @@ export const id = {
     "Foto operator memenuhi kartu; unit, nama dan status di bagian bawah foto.",
   dspCardHelpIdentity:
     "Foto operator di atas, garis cyan, lalu unit, nama dan status di bawahnya.",
-  dspLayoutMonShort: "Monitor",
+  dspLayoutMon2Short: "Monitor 2",
+  dspLayoutMon4Short: "Monitor 4",
   dspPicked: "dipilih",
   dspSupportLocked:
     "Layar bawaan — isinya otomatis mengikuti unit fleet support. Hanya durasi slide yang bisa diubah.",

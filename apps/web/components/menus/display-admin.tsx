@@ -20,7 +20,8 @@ import {
   COLOR_VAL,
   DEVICE_ID_PREFIX,
   DISPLAY_ROUTE_OF_KIND,
-  MONITOR_FLEETS_PER_PAGE,
+  FLEETS_PER_PAGE,
+  isMonitorLayout,
   RUNTEXT_COLORS,
   type CardLayout,
   type DeviceKind,
@@ -269,20 +270,18 @@ export function DisplayAdminMenu({
   const [fCardLayout, setFCardLayout] = React.useState<CardLayout>("overlay");
   const [fleetQ, setFleetQ] = React.useState("");
 
-  /* A monitor draws four formations at a time and pages through the rest, so
-     it caps nothing — it changes what a pick's *position* means: on a
-     slideshow the order is a queue, on a monitor it is the quadrant and the
+  /* A monitor draws two or four formations at a time and pages through the
+     rest, so it caps nothing — it changes what a pick's *position* means: on
+     a slideshow the order is a queue, on a monitor it is the panel and the
      page the formation lands on. */
-  const monitor = kind === "fleet" && fLayout === "monitor";
+  const monitor = kind === "fleet" && isMonitorLayout(fLayout);
+  const perPage = FLEETS_PER_PAGE[fLayout];
   /* The support wall: fixed in every respect but its dwell. What it shows is
      decided by what it is, so there is nothing on this form to decide. */
   const locked = !!editing && BUILT_IN_FLEET_DEVICE_IDS.includes(editing.id);
-  /* How many turns of the wall the current picks make. On a slideshow that is
-     one per formation; on a monitor, one per four. */
-  const monPages = Math.max(
-    1,
-    Math.ceil(fSel.length / MONITOR_FLEETS_PER_PAGE)
-  );
+  /* How many turns of the wall the current picks make: one per page's worth
+     of formations — one on a slideshow, two or four on a monitor. */
+  const monPages = Math.max(1, Math.ceil(fSel.length / perPage));
 
   const visibleFleets = React.useMemo(() => {
     const needle = fleetQ.trim().toLowerCase();
@@ -301,8 +300,8 @@ export function DisplayAdminMenu({
    * is four minutes before a screen comes back to the first one, and nobody
    * works that out from a seconds field alone.
    */
-  /* What one turn of the wall costs. A monitor turns a page of four, so nine
-     formations is three turns rather than nine — and the two numbers multiply,
+  /* What one turn of the wall costs. A monitor turns a page of two or four,
+     so nine formations on a Monitor 4 is three turns rather than nine — and the two numbers multiply,
      which nobody works out from a seconds field alone. */
   const cycleTurns = monitor
     ? monPages
@@ -511,11 +510,13 @@ export function DisplayAdminMenu({
                   {kind === "fleet" ? (
                     <TableCell>
                       <Badge
-                        variant={d.layout === "monitor" ? "info" : "neutral"}
+                        variant={isMonitorLayout(d.layout) ? "info" : "neutral"}
                       >
-                        {d.layout === "monitor"
-                          ? t.dspLayoutMonShort
-                          : t.dspLayoutSlideShort}
+                        {d.layout === "monitor-4"
+                          ? t.dspLayoutMon4Short
+                          : d.layout === "monitor-2"
+                            ? t.dspLayoutMon2Short
+                            : t.dspLayoutSlideShort}
                       </Badge>{" "}
                       <Badge variant="neutral">
                         {d.cardLayout === "identity"
@@ -683,15 +684,20 @@ export function DisplayAdminMenu({
               </p>
             ) : null}
 
-            {/* Above the fleet picker because it changes that picker's rules:
-                choosing `monitor` puts a ceiling of four on it and turns the
-                order into a layout. Asked after the picks, it would silently
-                discard some of them. */}
+            {/* Above the fleet picker because it changes what the picks mean:
+                on a monitor the order becomes a layout — which panel, which
+                page. Asked after the picks, that would be a surprise. */}
             {kind === "fleet" && !locked ? (
               <Field
                 label={t.dspLayout}
                 htmlFor="dsp-layout"
-                helper={monitor ? t.dspLayoutHelpMon : t.dspLayoutHelpSlide}
+                helper={
+                  fLayout === "monitor-4"
+                    ? t.dspLayoutHelpMon4
+                    : fLayout === "monitor-2"
+                      ? t.dspLayoutHelpMon2
+                      : t.dspLayoutHelpSlide
+                }
               >
                 <Select
                   id="dsp-layout"
@@ -699,7 +705,8 @@ export function DisplayAdminMenu({
                   onChange={(e) => setFLayout(e.target.value as DisplayLayout)}
                 >
                   <option value="slideshow">{t.dspLayoutSlideshow}</option>
-                  <option value="monitor">{t.dspLayoutMonitor}</option>
+                  <option value="monitor-2">{t.dspLayoutMonitor2}</option>
+                  <option value="monitor-4">{t.dspLayoutMonitor4}</option>
                 </Select>
               </Field>
             ) : null}
@@ -738,7 +745,7 @@ export function DisplayAdminMenu({
                     {/* Pages, because on a monitor the count alone no longer
                         says what the screen does: nine formations is three
                         turns of the wall, not nine. */}
-                    {monitor && fSel.length > MONITOR_FLEETS_PER_PAGE ? (
+                    {monitor && fSel.length > perPage ? (
                       <span className="text-xs font-normal text-(--text-tertiary)">
                         {monPages} {t.dspPagesWord}
                       </span>

@@ -1172,7 +1172,7 @@ describe("previewing one screen from a browser", () => {
     rotateSeconds: number,
     extra: {
       name?: string;
-      layout?: "slideshow" | "monitor";
+      layout?: "slideshow" | "monitor-2" | "monitor-4";
       cardLayout?: "overlay" | "identity";
     } = {}
   ) => {
@@ -1188,6 +1188,16 @@ describe("previewing one screen from a browser", () => {
     });
     return id;
   };
+
+  test("carries a four-formation monitor's layout", async () => {
+    const id = await makeScreen(30, { layout: "monitor-4" });
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/display?device=${id}`,
+      wall.cookie
+    );
+    expect(((await res.json()) as { layout: string }).layout).toBe("monitor-4");
+  });
 
   test("carries the screen's card layout", async () => {
     const id = await makeScreen(30, { cardLayout: "identity" });
@@ -1233,7 +1243,7 @@ describe("previewing one screen from a browser", () => {
     // back on the `?name=` a paired TV never sends.
     const id = await makeScreen(30, {
       name: "ZZ Ruang Kendali",
-      layout: "monitor",
+      layout: "monitor-2",
     });
     const res = await send(
       "GET",
@@ -1245,7 +1255,7 @@ describe("previewing one screen from a browser", () => {
       layout: string;
     };
     expect(body.deviceName).toBe("ZZ Ruang Kendali");
-    expect(body.layout).toBe("monitor");
+    expect(body.layout).toBe("monitor-2");
   });
 
   test("names no device when nobody named one", async () => {

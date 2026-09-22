@@ -205,7 +205,7 @@ describe("the support wall exists on its own and stays fixed", () => {
 
     for (const body of [
       { name: "Bukan Support" },
-      { layout: "monitor" },
+      { layout: "monitor-2" },
       { fleetIds: [crypto.randomUUID()] },
     ]) {
       const refused = await send(
@@ -275,7 +275,7 @@ describe("the spare wall exists on its own and stays fixed, like support", () =>
 
     for (const body of [
       { name: "Bukan Spare" },
-      { layout: "monitor" },
+      { layout: "monitor-2" },
       { fleetIds: [crypto.randomUUID()] },
     ]) {
       const refused = await send(
@@ -425,7 +425,7 @@ describe("how a screen spends itself", () => {
       id,
       name: tag,
       kind: "fleet",
-      layout: "monitor",
+      layout: "monitor-2",
     });
     const back = await send("PATCH", `/devices/${id}`, admin.cookie, {
       layout: "slideshow",
@@ -443,12 +443,43 @@ describe("how a screen spends itself", () => {
       id,
       name: tag,
       kind: "fleet",
-      layout: "monitor",
+      layout: "monitor-2",
     });
     const res = await send("PATCH", `/devices/${id}`, admin.cookie, {
       name: `${tag} renamed`,
     });
-    expect(((await res.json()) as { layout: string }).layout).toBe("monitor");
+    expect(((await res.json()) as { layout: string }).layout).toBe("monitor-2");
+  });
+
+  test("can be a four-formation monitor", async () => {
+    // A control room sits close to its screen and wants the whole shift on
+    // it; the two-formation monitor stays for walls read from further away.
+    const id = newId();
+    const made = await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+      layout: "monitor-4",
+    });
+    expect(((await made.json()) as { layout: string }).layout).toBe(
+      "monitor-4"
+    );
+    const back = await send("PATCH", `/devices/${id}`, admin.cookie, {
+      layout: "monitor-2",
+    });
+    expect(((await back.json()) as { layout: string }).layout).toBe(
+      "monitor-2"
+    );
+  });
+
+  test("the old unsized monitor value is refused", async () => {
+    const res = await send("POST", "/devices", admin.cookie, {
+      id: newId(),
+      name: tag,
+      kind: "fleet",
+      layout: "monitor",
+    });
+    expect(res.status).toBe(422);
   });
 
   test("takes more formations than fit one page", async () => {
@@ -460,7 +491,7 @@ describe("how a screen spends itself", () => {
       id,
       name: tag,
       kind: "fleet",
-      layout: "monitor",
+      layout: "monitor-2",
       fleetIds: fixtureFleets,
     });
     expect(res.status).toBe(201);
@@ -480,11 +511,11 @@ describe("how a screen spends itself", () => {
       fleetIds: fixtureFleets,
     });
     const res = await send("PATCH", `/devices/${id}`, admin.cookie, {
-      layout: "monitor",
+      layout: "monitor-2",
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { layout: string; fleetIds: string[] };
-    expect(body.layout).toBe("monitor");
+    expect(body.layout).toBe("monitor-2");
     expect(body.fleetIds).toHaveLength(5);
   });
 
@@ -497,7 +528,7 @@ describe("how a screen spends itself", () => {
       id,
       name: tag,
       kind: "fleet",
-      layout: "monitor",
+      layout: "monitor-2",
       fleetIds: picked,
     });
     expect(res.status).toBe(201);

@@ -344,6 +344,13 @@
       "when": 1790059943823,
       "tag": "0048_red_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790062429629,
+      "tag": "0049_monitor_sizes",
+      "breakpoints": true
     }
   ]
 }

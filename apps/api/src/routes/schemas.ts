@@ -50,6 +50,7 @@ export const DeviceKindSchema = t.UnionEnum(DEVICE_KINDS);
 export const DisplayLayoutSchema = t.Union([
   t.Literal(DISPLAY_LAYOUTS[0]),
   t.Literal(DISPLAY_LAYOUTS[1]),
+  t.Literal(DISPLAY_LAYOUTS[2]),
 ]);
 /*
  * A union of literals, not `t.UnionEnum`: the latter fills an omitted optional
@@ -1436,7 +1437,7 @@ export const FleetDisplaySchema = t.Object({
   /** Seconds one formation stays on screen — the screen's own setting. */
   rotateSeconds: t.Integer(),
   /**
-   * Whether the wall shows one formation at a time or four at once. Either
+   * Whether the wall shows one formation at a time, two, or four. Either
    * way the fleets below arrive in the order the screen shows them, and
    * `rotateSeconds` is the dwell it turns pages at.
    */
@@ -1467,7 +1468,7 @@ export const DeviceSchema = t.Object({
   active: t.Boolean(),
   /** Seconds one subject stays on screen before the display rotates. */
   rotateSeconds: t.Integer(),
-  /** How the wall spends itself: one formation at a time, or up to four. */
+  /** How the wall spends itself: one formation at a time, two, or four. */
   layout: DisplayLayoutSchema,
   /** How a fleet wall draws each unit's card. */
   cardLayout: CardLayoutSchema,
