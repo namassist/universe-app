@@ -17,13 +17,16 @@ export type AsyncOption<T = unknown> = {
 
 /* Combobox ber-search server (ADR 0051 fase B) — opsi diambil dari endpoint
    list saat dropdown dibuka/diketik, bukan dari store global. Nilai tersimpan
-   yang tak lagi ada di sumber tetap tampil sebagai teks kontrol. */
+   yang tak lagi ada di sumber tetap tampil sebagai teks kontrol.
+   Dengan `options` alih-alih `load`, daftarnya sudah ada di halaman: disaring
+   di tempat (substring label/sub), tanpa debounce dan tanpa request. */
 function AsyncSelect<T = unknown>({
   id,
   value,
   valueLabel,
   onChange,
   load,
+  options,
   placeholder = "—",
   searchPlaceholder,
   emptyText,
@@ -39,7 +42,9 @@ function AsyncSelect<T = unknown>({
   valueLabel?: string;
   onChange: (opt: AsyncOption<T> | null) => void;
   /** pengambil opsi dari server; identitas boleh berubah tiap render */
-  load: (search: string) => Promise<AsyncOption<T>[]>;
+  load?: (search: string) => Promise<AsyncOption<T>[]>;
+  /** opsi lokal — dipakai bila `load` tidak diisi */
+  options?: AsyncOption<T>[];
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
@@ -81,13 +86,12 @@ function AsyncSelect<T = unknown>({
      menjaga balasan lambat tidak menimpa hasil ketikan terbaru;
      setLoading di dalam timeout (pola halaman list ADR 0036) */
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !loadRef.current) return;
     const seq = ++seqRef.current;
     const timer = setTimeout(
       () => {
         setLoading(true);
-        loadRef
-          .current(q.trim())
+        loadRef.current!(q.trim())
           .then((r) => {
             if (seqRef.current !== seq) return;
             setOpts(r);
@@ -109,6 +113,22 @@ function AsyncSelect<T = unknown>({
     if (open) inputRef.current?.focus();
   }, [open]);
 
+  /* lokal: disaring saat render, bukan disalin ke state lewat effect */
+  const local = !load && options !== undefined;
+  const needle = q.trim().toLowerCase();
+  const shown: AsyncOption<T>[] = local
+    ? needle
+      ? options.filter(
+          (o) =>
+            o.label.toLowerCase().includes(needle) ||
+            Boolean(o.sub?.toLowerCase().includes(needle))
+        )
+      : options
+    : opts;
+  const label =
+    valueLabel ??
+    (local ? options.find((o) => o.value === value)?.label : undefined);
+
   function openUp() {
     setQ("");
     setOpts([]);
@@ -122,13 +142,13 @@ function AsyncSelect<T = unknown>({
     if (e.key === "Escape") setOpen(false);
     else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHi((i) => Math.min(i + 1, opts.length - 1));
+      setHi((i) => Math.min(i + 1, shown.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setHi((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (opts[hi]) pick(opts[hi]);
+      if (shown[hi]) pick(shown[hi]);
     }
   }
 
@@ -153,7 +173,7 @@ function AsyncSelect<T = unknown>({
         )}
       >
         <span className={cn("truncate", !value && "text-(--text-tertiary)")}>
-          {value ? (valueLabel ?? value) : placeholder}
+          {value ? (label ?? value) : placeholder}
         </span>
         <ChevronDown className="size-[15px] flex-none text-(--text-secondary)" />
       </button>
@@ -164,7 +184,10 @@ function AsyncSelect<T = unknown>({
             <input
               ref={inputRef}
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                if (local) setHi(0);
+              }}
               onKeyDown={onKey}
               placeholder={searchPlaceholder ?? "Cari…"}
               aria-autocomplete="list"
@@ -190,7 +213,7 @@ function AsyncSelect<T = unknown>({
                 </button>
               </li>
             ) : null}
-            {opts.map((o, i) => (
+            {shown.map((o, i) => (
               <li key={o.value}>
                 <button
                   type="button"
@@ -215,7 +238,7 @@ function AsyncSelect<T = unknown>({
                 </button>
               </li>
             ))}
-            {!loading && !opts.length ? (
+            {!loading && !shown.length ? (
               <li className="px-3 py-2 text-[13px] text-(--text-tertiary)">
                 {emptyText ?? "Tidak ada hasil"}
               </li>

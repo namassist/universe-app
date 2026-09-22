@@ -11,6 +11,7 @@ import {
 import { useI18n, type Dict } from "@/lib/i18n";
 import type { PlanBoard } from "@/lib/queries/fleet-allocation";
 import { rosterCodeLabel } from "@/lib/roster-data";
+import { AsyncSelect } from "@/components/ui/async-select";
 import { Badge } from "@/components/ui/badge";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import {
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/table";
 
 import { CheckFilter } from "./check-filter";
+import { inAllocation, worksShift, type ShiftChoice } from "./data";
 
 /** One operator, as a row states them. */
 export type CrewMember = {
@@ -82,13 +84,6 @@ export type CrewRow = {
   crew: CrewMember[];
 };
 
-/** Whether today's code puts them on a shift at all. */
-function works(code: RosterCode | null): boolean {
-  if (!code) return false;
-  const kind = rosterCodeKind(code);
-  return kind === "day" || kind === "night";
-}
-
 /** Sentinels for the two groups of units that carry no leader code. */
 const SUPPORT = "~support";
 const NO_FLEET = "~none";
@@ -101,12 +96,8 @@ function fleetKeyOf(row: CrewRow): string | null {
 }
 
 /** Whether the roster puts this operator on the shift being prepared. */
-function onShift(member: CrewMember, shift: string): boolean {
-  if (!member.rosterCode) return false;
-  return shift === "all"
-    ? works(member.rosterCode)
-    : rosterCodeKind(member.rosterCode) === shift;
-}
+const onShift = (member: CrewMember, shift: ShiftChoice): boolean =>
+  worksShift(member.rosterCode, shift);
 
 /**
  * A unit nobody will drive on the shift being prepared.
@@ -116,21 +107,8 @@ function onShift(member: CrewMember, shift: string): boolean {
  * just as empty at the morning muster as one whose crew is all on leave. With
  * "Semua shift" chosen it widens back to nobody working at all.
  */
-function vacant(row: CrewRow, shift: string): boolean {
+function vacant(row: CrewRow, shift: ShiftChoice): boolean {
   return row.inAllocation && !row.crew.some((c) => onShift(c, shift));
-}
-
-/**
- * Which shift the table opens on (owner, 2026-09-16).
- *
- * Whoever opens this screen is preparing the shift they are standing in, and
- * the answer is on the clock: before noon the day shift is the one being
- * mustered, after it the night one. Read once at mount, like the date filter
- * on the Actual tab — a table that re-filtered itself at 12:00 under a reader
- * who was mid-scroll would be worse than one that is briefly stale.
- */
-function shiftNow(): string {
-  return new Date().getHours() < 12 ? "day" : "night";
 }
 
 const memberOf = (person: {
@@ -162,8 +140,7 @@ export function crewRows(board: PlanBoard | undefined): CrewRow[] {
     unitCode: unit.code,
     fleetLeader: unit.fleet?.leaderCode ?? null,
     fleetSupport: unit.fleetSupport,
-    inAllocation:
-      unit.status !== "breakdown" && (unit.fleet !== null || unit.fleetSupport),
+    inAllocation: inAllocation(unit),
     area: unit.fleet ? (areaOf.get(unit.fleet.id) ?? null) : null,
     crew: unit.slots.map(memberOf),
   }));
@@ -203,7 +180,13 @@ const Dash = () => (
 );
 
 /** The roster code as a badge — colour follows whether it is a working day. */
-function RosterBadge({ t, code }: { t: Dict; code: RosterCode | null }) {
+export function RosterBadge({
+  t,
+  code,
+}: {
+  t: Dict;
+  code: RosterCode | null | undefined;
+}) {
   if (!code) return <Dash />;
   const kind = rosterCodeKind(code);
   const shift = kind === "day" || kind === "night";
@@ -230,7 +213,19 @@ function RosterBadge({ t, code }: { t: Dict; code: RosterCode | null }) {
  * carries the whole register and the whole pool, so a second, paginated
  * endpoint would only add a way for the two halves of one screen to disagree.
  */
-export function CrewTable({ board }: { board: PlanBoard | undefined }) {
+export function CrewTable({
+  board,
+  shift: shiftF,
+  onShift: setShiftF,
+  onLocate,
+}: {
+  board: PlanBoard | undefined;
+  /** Shared with the board above, so a card and its row call the same unit vacant. */
+  shift: ShiftChoice;
+  onShift: (shift: ShiftChoice) => void;
+  /** Brings the board to this unit's card — where its operator is changed. */
+  onLocate?: (unitCode: string) => void;
+}) {
   const { t } = useI18n();
   const all = React.useMemo(() => crewRows(board), [board]);
 
@@ -238,7 +233,6 @@ export function CrewTable({ board }: { board: PlanBoard | undefined }) {
   const [deptF, setDeptF] = React.useState("all");
   const [fleetF, setFleetF] = React.useState("all");
   const [kindF, setKindF] = React.useState("all");
-  const [shiftF, setShiftF] = React.useState(shiftNow);
   const [vacantF, setVacantF] = React.useState("all");
   const [skillF, setSkillF] = React.useState<string[]>([]);
 
@@ -350,7 +344,7 @@ export function CrewTable({ board }: { board: PlanBoard | undefined }) {
           wrapperClassName="min-w-[150px] flex-1"
           className="h-10 pr-9"
           value={shiftF}
-          onChange={(e) => setShiftF(e.target.value)}
+          onChange={(e) => setShiftF(e.target.value as ShiftChoice)}
         >
           <option value="all">{t.faCrewShiftAll}</option>
           <option value="day">{SHIFT_KIND_LABELS.day}</option>
@@ -377,39 +371,36 @@ export function CrewTable({ board }: { board: PlanBoard | undefined }) {
           value={skillF}
           onChange={setSkillF}
         />
+        {/* The two long lists — every department, every formation — are
+            searchable; scrolling a native list for one of forty was the
+            complaint. The short ones above stay native selects. */}
         {depts.length ? (
-          <Select
-            autoComplete="off"
-            aria-label={t.faDeptAll}
+          <AsyncSelect
+            ariaLabel={t.faDeptAll}
             wrapperClassName="min-w-[150px] flex-1"
-            className="h-10 pr-9"
             value={deptF}
-            onChange={(e) => setDeptF(e.target.value)}
-          >
-            <option value="all">{t.faDeptAll}</option>
-            {depts.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </Select>
+            onChange={(option) => option && setDeptF(option.value)}
+            searchPlaceholder={t.faSkillSearch}
+            emptyText={t.faSkillNoMatch}
+            options={[
+              { value: "all", label: t.faDeptAll },
+              ...depts.map((d) => ({ value: d, label: d })),
+            ]}
+          />
         ) : null}
         {fleets.length ? (
-          <Select
-            autoComplete="off"
-            aria-label={t.faFleetAll}
+          <AsyncSelect
+            ariaLabel={t.faFleetAll}
             wrapperClassName="min-w-[150px] flex-1"
-            className="h-10 pr-9"
             value={fleetF}
-            onChange={(e) => setFleetF(e.target.value)}
-          >
-            <option value="all">{t.faFleetAll}</option>
-            {fleets.map((f) => (
-              <option key={f} value={f}>
-                {fleetLabel(t, f)}
-              </option>
-            ))}
-          </Select>
+            onChange={(option) => option && setFleetF(option.value)}
+            searchPlaceholder={t.faSkillSearch}
+            emptyText={t.faSkillNoMatch}
+            options={[
+              { value: "all", label: t.faFleetAll },
+              ...fleets.map((f) => ({ value: f, label: fleetLabel(t, f) })),
+            ]}
+          />
         ) : null}
         <SearchInput
           className="min-w-[220px] flex-[2]"
@@ -449,7 +440,13 @@ export function CrewTable({ board }: { board: PlanBoard | undefined }) {
             </TableHeader>
             <TableBody>
               {pg.rows.map((r) => (
-                <UnitRows key={r.key} t={t} row={r} shift={shiftF} />
+                <UnitRows
+                  key={r.key}
+                  t={t}
+                  row={r}
+                  shift={shiftF}
+                  onLocate={onLocate}
+                />
               ))}
             </TableBody>
           </Table>
@@ -487,7 +484,17 @@ export function CrewTable({ board }: { board: PlanBoard | undefined }) {
  * unit nobody is paired to still renders its row — that is the whole point of
  * the unit being the row.
  */
-function UnitRows({ t, row, shift }: { t: Dict; row: CrewRow; shift: string }) {
+function UnitRows({
+  t,
+  row,
+  shift,
+  onLocate,
+}: {
+  t: Dict;
+  row: CrewRow;
+  shift: ShiftChoice;
+  onLocate?: (unitCode: string) => void;
+}) {
   const lines = Math.max(1, row.crew.length);
   const fleetKey = fleetKeyOf(row);
   const unitCells = (
@@ -514,10 +521,22 @@ function UnitRows({ t, row, shift }: { t: Dict; row: CrewRow; shift: string }) {
       <TableCell rowSpan={lines} className="whitespace-nowrap">
         {row.unitCode ? (
           <>
-            <b className="font-mono">{row.unitCode}</b>
-            {/* The unit is crewed, but today nobody on it works: this is the
-                vacancy the board cannot show, because there they are all
-                still paired to it. */}
+            {/* A link to the unit's card: this table is where somebody finds
+                the unit, the board is where its operator is changed. */}
+            {onLocate ? (
+              <button
+                type="button"
+                title={t.faLocate}
+                onClick={() => onLocate(row.unitCode!)}
+                className="cursor-pointer font-mono font-bold text-(--color-primary-bright) underline-offset-2 hover:underline"
+              >
+                {row.unitCode}
+              </button>
+            ) : (
+              <b className="font-mono">{row.unitCode}</b>
+            )}
+            {/* The unit is crewed, but nobody on it works the chosen shift —
+                the same rule the board's card applies (`vacantOn`). */}
             {vacant(row, shift) ? (
               <Badge variant="danger" className="ml-2">
                 {t.faCrewVacant}

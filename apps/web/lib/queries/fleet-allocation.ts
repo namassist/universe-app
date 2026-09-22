@@ -30,6 +30,23 @@ export const planCandidatesQueryOptions = (unitCode: string) =>
       ),
   });
 
+export const planHistoryKey = (unitCode: string) =>
+  ["fleet-allocation", "plan", "history", unitCode] as const;
+
+/** Every change to a unit's standing pairings, newest first. */
+export const planHistoryQueryOptions = (unitCode: string) =>
+  queryOptions({
+    queryKey: planHistoryKey(unitCode),
+    queryFn: () =>
+      unwrap(
+        api.v1["fleet-allocation"].plan.units({ code: unitCode }).history.get()
+      ),
+  });
+
+export type PlanHistoryRow = Awaited<
+  ReturnType<NonNullable<ReturnType<typeof planHistoryQueryOptions>["queryFn"]>>
+>[number];
+
 export type PlanBoard = Awaited<
   ReturnType<NonNullable<ReturnType<typeof planBoardQueryOptions>["queryFn"]>>
 >;

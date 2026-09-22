@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, UserPlus } from "lucide-react";
 
+import { SHIFT_KIND_LABELS } from "@universe/contracts";
+
 import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -12,10 +14,12 @@ import {
   planBoardQueryOptions,
   planCandidatesKey,
   planCandidatesQueryOptions,
+  planHistoryKey,
   type PlanBoard,
 } from "@/lib/queries/fleet-allocation";
 import { siteClock } from "@/lib/site-clock";
 import { cn } from "@/lib/utils";
+import { AsyncSelect } from "@/components/ui/async-select";
 import { Avatar, initialsOf } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,20 +45,24 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 
 import { CheckFilter } from "./check-filter";
-import { CrewTable } from "./crew-table";
+import { CrewTable, RosterBadge } from "./crew-table";
 import {
   ACTUAL_UNITS,
   CANDIDATES,
   deptAbbrev,
   FLEET_OPTIONS,
   ftwBadge,
+  shiftNow,
   SPARE_INIT,
   stBadge,
+  vacantOn,
   type BoardUnit,
   type Candidate,
+  type ShiftChoice,
   type Slot,
   type SpareRow,
 } from "./data";
+import { PlanHistoryDrawer } from "./plan-history";
 
 const FA_PLAN_MAX_OPS = 2;
 
@@ -128,7 +136,7 @@ const inSelectedFleet = (
  */
 const SPARE_SKILL_BADGES = 6;
 
-type Filter = "all" | "unalloc" | "alloc" | "issue";
+type Filter = "all" | "unalloc" | "alloc" | "vacant" | "issue";
 type Kind = "bd" | "none" | "warn" | "dt" | "ok";
 
 /** A dialog row — the static candidate shape plus the pair-shift flag the
@@ -308,6 +316,7 @@ function toBoardUnits(board: PlanBoard | undefined): BoardUnit[] {
     slots: u.slots.map((s) => ({
       nik: s.nik,
       name: s.name,
+      rosterCode: s.rosterCode as Slot["rosterCode"],
       ...(s.simperTypeName ? { simperJenis: s.simperTypeName } : {}),
     })),
   }));
@@ -392,6 +401,12 @@ export function AllocBoard({
   const [page, setPage] = React.useState(1);
   const [per, setPer] = React.useState("6");
   const [allocFor, setAllocFor] = React.useState<BoardUnit | null>(null);
+  const [historyFor, setHistoryFor] = React.useState<BoardUnit | null>(null);
+  /* One shift for the cards and the crew table under them — the table's
+     control and the board's drive the same value, so a unit cannot read
+     vacant in one and crewed in the other. */
+  const [shiftF, setShiftF] = React.useState<ShiftChoice>(shiftNow);
+  const boardTopRef = React.useRef<HTMLDivElement>(null);
 
   /**
    * The formation actually on screen.
@@ -424,6 +439,7 @@ export function AllocBoard({
       queryClient.invalidateQueries({
         queryKey: planCandidatesKey(unitCode),
       }),
+      queryClient.invalidateQueries({ queryKey: planHistoryKey(unitCode) }),
     ]);
 
   const assignM = useMutation({
@@ -508,12 +524,23 @@ export function AllocBoard({
     return "ok";
   }
 
+  /** PLAN only — ACTUAL cards carry their own outcome instead. */
+  const isVacant = (u: BoardUnit) =>
+    mode === "plan" && vacantOn({ ...u, crew: u.slots }, shiftF);
+
   const needle = q.trim().toLowerCase();
+  /* A search spans every fleet. Somebody typing "DT4014" is asking where that
+     machine is, and a board that answered "nowhere" because the unit sits in
+     a formation other than the one on screen sent them hunting through the
+     fleet list one entry at a time. */
+  const searching = needle.length > 0;
   const allFiltered = units.filter((u) => {
-    if (!inSelectedFleet(u, activeFleet, noFleetOffered)) return false;
+    if (!searching && !inSelectedFleet(u, activeFleet, noFleetOffered))
+      return false;
     const kind = kindOf(u);
     if (filter === "unalloc" && u.slots.length) return false;
     if (filter === "alloc" && !u.slots.length) return false;
+    if (filter === "vacant" && !isVacant(u)) return false;
     if (filter === "issue" && kind !== "bd" && kind !== "dt" && kind !== "warn")
       return false;
     if (!needle) return true;
@@ -587,6 +614,23 @@ export function AllocBoard({
     releaseM.mutate({ unitCode: unit.code, nik, name });
   }
 
+  /** From the crew table: bring this unit's card up, whatever fleet it is in. */
+  function locate(unitCode: string) {
+    setQ(unitCode);
+    setFilter("all");
+    setPage(1);
+    boardTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Every card on screen shares one formation unless the view spans several. */
+  const showFleetOnCard = searching || activeFleet === ALL_FLEETS;
+  const fleetOfCard = (u: BoardUnit) =>
+    u.fleet
+      ? `Fleet ${u.fleet.digger}`
+      : u.fleetSupport
+        ? t.faSupport
+        : t.faCrewNoFleet;
+
   /** The departments the spare pool spans — the filter offers what exists. */
   const spareDepts = React.useMemo(
     () =>
@@ -641,7 +685,7 @@ export function AllocBoard({
           follows rather than one more control, and putting it back in the
           control row is what forced the controls into a single right-aligned
           huddle in the first place. */}
-      <div>
+      <div ref={boardTopRef} className="scroll-mt-6">
         <span className="text-sm text-(--text-secondary)">
           <b className="font-semibold text-(--text-primary)">
             {summary.allocated}
@@ -660,7 +704,11 @@ export function AllocBoard({
             </>
           ) : null}
           {mode === "plan" ? (
-            <> · {t.faPlanHint}</>
+            <>
+              {" · "}
+              {t.faPlanHint}
+              {searching ? <> · {t.faSearchAllFleets}</> : null}
+            </>
           ) : (
             <>
               {" · "}
@@ -701,6 +749,9 @@ export function AllocBoard({
                 ["all", t.segAll],
                 ["unalloc", t.faFUnalloc],
                 ["alloc", t.faFAlloc],
+                ...(mode === "plan"
+                  ? ([["vacant", t.faCrewVacant]] as [Filter, string][])
+                  : []),
                 ["issue", t.faFIssue],
               ] as [Filter, string][]
             ).map(([f, label]) => (
@@ -721,34 +772,52 @@ export function AllocBoard({
               option is something someone configured, so choosing one names a
               decision rather than a leftover; "all" names all of those
               decisions and, deliberately, not the units left out of them. */}
-          <Select
-            aria-label="Filter fleet"
-            wrapperClassName="w-auto"
-            className="h-10 w-auto pr-9"
+          {/* Searchable: a yard with a dozen formations is a list somebody
+              scrolled for the one they wanted. The area rides on the option,
+              and a search matches it too — "Disposal" finds its fleet. */}
+          <AsyncSelect
+            ariaLabel="Filter fleet"
+            wrapperClassName="w-[300px] max-w-full"
             value={activeFleet}
-            onChange={(e) => {
-              setFleetF(e.target.value);
+            onChange={(option) => {
+              if (!option) return;
+              setFleetF(option.value);
               setPage(1);
             }}
-          >
-            <option value={ALL_FLEETS}>{t.faFleetAll}</option>
-            {/* The area rides on the option, so it is in front of you at the
-                moment you choose a formation — and the closed select goes on
-                stating it for the one you picked. */}
-            {fleetOptions.map((f) => (
-              <option key={f.id} value={f.id}>
-                Fleet {f.digger} — {f.area}
-              </option>
-            ))}
-            {/* PLAN only: on ACTUAL the board carries its own groups, and the
-                filter is built from those instead. */}
-            {supportOffered ? (
-              <option value={SUPPORT}>{t.faSupport}</option>
-            ) : null}
-            {noFleetOffered ? (
-              <option value={NO_FLEET}>{t.faNoFleet}</option>
-            ) : null}
-          </Select>
+            searchPlaceholder={t.faSkillSearch}
+            emptyText={t.faSkillNoMatch}
+            options={[
+              { value: ALL_FLEETS, label: t.faFleetAll },
+              ...fleetOptions.map((f) => ({
+                value: f.id,
+                label: `Fleet ${f.digger} — ${f.area}`,
+              })),
+              /* PLAN only: on ACTUAL the board carries its own groups, and the
+                 filter is built from those instead. */
+              ...(supportOffered
+                ? [{ value: SUPPORT, label: t.faSupport }]
+                : []),
+              ...(noFleetOffered
+                ? [{ value: NO_FLEET, label: t.faNoFleet }]
+                : []),
+            ]}
+          />
+          {/* The shift the vacancy is judged on — the same one the crew table
+              uses, driven from either place. */}
+          {mode === "plan" ? (
+            <Select
+              autoComplete="off"
+              aria-label={t.faCrewShiftAll}
+              wrapperClassName="w-auto"
+              className="h-10 w-auto pr-9"
+              value={shiftF}
+              onChange={(e) => setShiftF(e.target.value as ShiftChoice)}
+            >
+              <option value="all">{t.faCrewShiftAll}</option>
+              <option value="day">{SHIFT_KIND_LABELS.day}</option>
+              <option value="night">{SHIFT_KIND_LABELS.night}</option>
+            </Select>
+          ) : null}
           {canEdit ? (
             <Button
               variant="secondary"
@@ -793,9 +862,14 @@ export function AllocBoard({
                     {u.brand}
                   </span>
                 </div>
-                <Badge variant={st.variant} dot>
-                  {st.label}
-                </Badge>
+                <div className="flex flex-none flex-wrap justify-end gap-1.5">
+                  {isVacant(u) ? (
+                    <Badge variant="danger">{t.faCrewVacant}</Badge>
+                  ) : null}
+                  <Badge variant={st.variant} dot>
+                    {st.label}
+                  </Badge>
+                </div>
               </div>
 
               {/* What the machine demands of whoever is paired to it, in the
@@ -808,6 +882,9 @@ export function AllocBoard({
                   repeating it on every card in that fleet only crowded out the
                   three facts that differ between them. */}
               <div className="flex flex-wrap items-center gap-2">
+                {showFleetOnCard ? (
+                  <Badge variant="info">{fleetOfCard(u)}</Badge>
+                ) : null}
                 {/* Which department may operate it — GLOBAL means anyone. */}
                 {u.departmentName ? (
                   <Badge variant="accent" title={u.departmentName}>
@@ -839,6 +916,9 @@ export function AllocBoard({
                           {s.simperJenis ? ` · ${s.simperJenis}` : ""}
                         </span>
                       </div>
+                      {/* Today's roster, so whether this operator is on the
+                          shift is read off the card rather than the table. */}
+                      <RosterBadge t={t} code={s.rosterCode} />
                       {canEdit ? (
                         <button
                           type="button"
@@ -955,9 +1035,9 @@ export function AllocBoard({
                 </p>
               ) : null}
 
-              {canEdit ? (
+              {mode === "plan" ? (
                 <div className="mt-auto flex gap-2">
-                  {u.slots.length < FA_PLAN_MAX_OPS ? (
+                  {canEdit && u.slots.length < FA_PLAN_MAX_OPS ? (
                     <Button
                       className="h-[34px] flex-1 text-[13px]"
                       variant={u.slots.length ? "secondary" : "primary"}
@@ -966,6 +1046,13 @@ export function AllocBoard({
                       {u.slots.length ? t.faAddOp : t.faAssign}
                     </Button>
                   ) : null}
+                  <Button
+                    variant="ghost"
+                    className="h-[34px] flex-1 text-[13px]"
+                    onClick={() => setHistoryFor(u)}
+                  >
+                    {t.faHistBtn}
+                  </Button>
                 </div>
               ) : canIntervene && (kind === "dt" || kind === "none") ? (
                 <div className="mt-auto flex gap-2">
@@ -1015,7 +1102,26 @@ export function AllocBoard({
           PLAN reads the server and can answer that for both halves of the
           workforce at once; ACTUAL is still the static port, so it keeps the
           spare pool it has until its own generation engine lands. */}
-      {mode === "plan" ? <CrewTable board={planQ.data} /> : null}
+      {mode === "plan" ? (
+        <CrewTable
+          board={planQ.data}
+          shift={shiftF}
+          onShift={setShiftF}
+          onLocate={locate}
+        />
+      ) : null}
+
+      {mode === "plan" ? (
+        <PlanHistoryDrawer
+          /* Re-read from the board, so a change made while it is open shows. */
+          unit={
+            historyFor
+              ? (units.find((u) => u.code === historyFor.code) ?? historyFor)
+              : null
+          }
+          onClose={() => setHistoryFor(null)}
+        />
+      ) : null}
 
       {/* pool spare — operator kompeten yang belum dapat unit */}
       {mode === "plan" ? null : (

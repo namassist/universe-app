@@ -1,3 +1,5 @@
+import { rosterCodeKind, type RosterCode } from "@universe/contracts";
+
 import type { BadgeVariant } from "@/components/ui/badge";
 
 /**
@@ -19,6 +21,8 @@ export type Slot = {
   gugur?: "cuti" | "absen" | "ftw" | null;
   replacedName?: string;
   at?: string; // HH:mm
+  /** PLAN only: today's roster code, or null when the roster does not know them. */
+  rosterCode?: RosterCode | null;
 };
 
 /**
@@ -324,3 +328,61 @@ export const stBadge: Record<
   breakdown: { variant: "danger", label: "Breakdown" },
   standby: { variant: "warning", label: "Standby" },
 };
+
+/**
+ * The shift being prepared — or `all`, which asks whether anybody works at all.
+ *
+ * One rule for the board's cards and the crew table under them: the two read
+ * the same pairings, and a unit the table calls vacant while its card looks
+ * crewed is the disagreement that sent people from one to the other by hand.
+ */
+export type ShiftChoice = "all" | "day" | "night";
+
+/** Whether today's roster code puts somebody on the given shift. */
+export function worksShift(
+  code: RosterCode | null | undefined,
+  shift: ShiftChoice
+): boolean {
+  if (!code) return false;
+  const kind = rosterCodeKind(code);
+  return shift === "all" ? kind === "day" || kind === "night" : kind === shift;
+}
+
+/**
+ * Which shift a screen opens on (owner, 2026-09-16): before noon the day shift
+ * is the one being mustered, after it the night one. Read once at mount — a
+ * view that re-filtered itself at 12:00 under a reader mid-scroll would be
+ * worse than one that is briefly stale.
+ */
+export function shiftNow(): ShiftChoice {
+  return new Date().getHours() < 12 ? "day" : "night";
+}
+
+/**
+ * Whether allocation is about this machine at all — active, not broken down,
+ * and in a formation or flagged support (see `fleet-scope.ts`). A unit outside
+ * it is never called vacant: nobody will ever be sent to fill it.
+ */
+export function inAllocation(unit: {
+  status: UnitStatus;
+  fleet: unknown;
+  fleetSupport?: boolean;
+}): boolean {
+  return unit.status !== "breakdown" && (!!unit.fleet || !!unit.fleetSupport);
+}
+
+/** A unit in allocation that nobody paired to it works on the given shift. */
+export function vacantOn(
+  unit: {
+    status: UnitStatus;
+    fleet: unknown;
+    fleetSupport?: boolean;
+    crew: { rosterCode?: RosterCode | null }[];
+  },
+  shift: ShiftChoice
+): boolean {
+  return (
+    inAllocation(unit) &&
+    !unit.crew.some((c) => worksShift(c.rosterCode, shift))
+  );
+}

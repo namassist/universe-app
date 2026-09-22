@@ -266,10 +266,45 @@ fill the gap from the spare pool.
   shift being mustered, read from the clock at mount: Siang before noon, Malam
   after it. There is no filter on the roster code itself — the code is a
   column, so the _reason_ (CR, OFF, A, TGS) is read off the vacancy rather than
-  searched for. The vacancy is marked on the unit's row, which the board cannot do:
-  there its operators are still paired to it. The board's payload carries the
-  date it read the roster for, and the table states it, because the roster
-  column changes at midnight.
+  searched for. The board's payload carries the date it read the roster for,
+  and the table states it, because the roster column changes at midnight.
+- **The board reads the roster too** (owner, 2026-09-22). Each paired operator
+  on a card carries today's roster code, and a card whose unit nobody works on
+  the chosen shift is marked **Kosong** — by the same rule as the table
+  (`vacantOn` in `fleet-allocation/data.ts`), so a card and its row cannot
+  disagree. The shift is **one value for both**: the board has its own shift
+  control beside the fleet filter, the table keeps its own, and either drives
+  the other. The board's status filter gains **Kosong** (PLAN only).
+  Before this, somebody changing a standing operator read vacancy off the
+  table, then hunted the unit on the board — the complaint that started it.
+- **A search on the board spans every fleet** (owner, 2026-09-22). With text
+  in the search box the formation filter is set aside: "DT4014" is a question
+  about one machine, and answering "nowhere" because it sits in a formation
+  other than the one on screen sent people through the fleet list one entry at
+  a time. While a search (or "all fleets") is on screen each card names its
+  fleet, since the cards no longer share one. **A unit code in the crew table
+  is a link** to its card: it fills the board search with that code and
+  scrolls up to it.
+- **The long filters are searchable** — the board's fleet filter and the
+  table's fleet and department filters (`AsyncSelect` fed from the page's own
+  data; a search matches the fleet's area as well as its leader). Selects of
+  two or three options stay native.
+- **Standing-operator history** (owner, 2026-09-22). Every change to a unit's
+  PLAN pairings is kept in `fleet_plan_history` — assigned or released, the
+  operator (NIK and name as they were), from the board or an import, by whom,
+  when — so the operator a unit had before can be found and put back. An
+  import that moves an operator writes two lines: released from the old unit,
+  then assigned to the new. The history is written in the same transaction as
+  the pairing and read by nothing but its own route
+  (`GET /v1/fleet-allocation/plan/units/:code/history`); allocation, tickets
+  and the displays read `fleet_plan_slots` alone and are unchanged. Every card
+  opens it from a **Riwayat** button, in the same drawer and timeline as the
+  Unit Status history, headed by the unit's current pair. The pairings that
+  stood when the history began were recorded as its first lines (source
+  `migration`, dated from the pairing, no actor). No reason is asked for a
+  change (owner, 2026-09-22): the history records who, what and when on its
+  own, and assign/release stay one click. Putting a previous operator back is
+  an ordinary assignment, so it passes every pairing rule again.
 
 ### FTW + attendance ingestion — shipped
 
