@@ -1123,6 +1123,24 @@ export const DisplayContentSchema = t.Object({
   device: t.Nullable(t.String()),
   servedAt: t.String(),
   runTexts: t.Array(DeviceRunTextSchema),
+  /**
+   * The next sound to play, or null.
+   *
+   * An instant rather than "now": the screen polls once a minute, and it
+   * schedules against the time left between `servedAt` and `playAt`, so the
+   * sound lands on the second whatever the screen's own clock says. Null for
+   * a screen with sound switched off, and for a timeline with nothing due.
+   */
+  cue: t.Nullable(
+    t.Object({
+      /** Stage and date — a screen plays one cue once. */
+      id: t.String(),
+      soundId: t.String(),
+      /** What the sound announces, for the screen to caption if it wants. */
+      stageName: t.String(),
+      playAt: t.String(),
+    })
+  ),
 });
 
 export const SoundSchema = t.Object({
@@ -1147,6 +1165,8 @@ export const TimelineStageSchema = t.Object({
   /** Which half of the day the stage governs; null means neither. */
   shift: t.Nullable(ShiftKindSchema),
   active: t.Boolean(),
+  /** Played two minutes before the stage; null for a silent one. */
+  soundId: t.Nullable(t.String()),
   createdAt: t.String(),
 });
 
@@ -1472,6 +1492,8 @@ export const DeviceSchema = t.Object({
   layout: DisplayLayoutSchema,
   /** How a fleet wall draws each unit's card. */
   cardLayout: CardLayoutSchema,
+  /** Whether this screen plays the timeline's sounds. */
+  sound: t.Boolean(),
   /**
    * Fleet walls: which formations to show, in the order the screen shows them.
    * Empty means every fleet.

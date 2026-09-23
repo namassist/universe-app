@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import {
   BUILT_IN_FLEET_DEVICE_IDS,
@@ -25,6 +25,7 @@ import {
 import { db, isUniqueViolation, schema, type DeviceRow } from "../db";
 import { env } from "../env";
 import { redis } from "../redis";
+import { nextSoundCue } from "../sound-cue";
 import {
   CardLayoutSchema,
   DeviceKindSchema,
@@ -134,6 +135,7 @@ function toDevice(row: DeviceRow, fleetIds: string[] = []) {
     rotateSeconds: row.rotateSeconds,
     layout: row.layout,
     cardLayout: row.cardLayout,
+    sound: row.sound,
     /** Empty means every fleet — see `device_fleets`. */
     fleetIds,
     online,
@@ -356,6 +358,7 @@ export const devicesRoutes = new Elysia({
             ...(body.cardLayout !== undefined
               ? { cardLayout: body.cardLayout }
               : {}),
+            ...(body.sound !== undefined ? { sound: body.sound } : {}),
           })
           .returning();
         const refused = await replaceFleetPicks(
@@ -389,6 +392,7 @@ export const devicesRoutes = new Elysia({
         ),
         layout: t.Optional(DisplayLayoutSchema),
         cardLayout: t.Optional(CardLayoutSchema),
+        sound: t.Optional(t.Boolean()),
         /** Fleet walls only; empty or absent means every fleet. */
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
@@ -453,6 +457,9 @@ export const devicesRoutes = new Elysia({
         ...(body.cardLayout !== undefined &&
         body.cardLayout !== current.cardLayout
           ? { cardLayout: body.cardLayout }
+          : {}),
+        ...(body.sound !== undefined && body.sound !== current.sound
+          ? { sound: body.sound }
           : {}),
       };
 
@@ -523,6 +530,7 @@ export const devicesRoutes = new Elysia({
         ),
         layout: t.Optional(DisplayLayoutSchema),
         cardLayout: t.Optional(CardLayoutSchema),
+        sound: t.Optional(t.Boolean()),
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
       response: {
@@ -723,6 +731,32 @@ export const devicesRoutes = new Elysia({
  * row and deleting it would otherwise mean two different things that look the
  * same from here.
  */
+/**
+ * The next sound cue, read from the timeline the same way for every screen.
+ *
+ * The rule itself is pure (`sound-cue.ts`); this only fetches the stages. The
+ * cue names an instant rather than "play now", so a browser holding a
+ * minute-old response still plays on the second: it schedules against the time
+ * left between `servedAt` and `playAt`.
+ */
+async function dueSoundCue() {
+  const stages = await db
+    .select({
+      id: schema.timelineStages.id,
+      name: schema.timelineStages.name,
+      at: schema.timelineStages.at,
+      soundId: schema.timelineStages.soundId,
+      active: schema.timelineStages.active,
+    })
+    .from(schema.timelineStages)
+    .where(isNotNull(schema.timelineStages.soundId));
+  const cue = nextSoundCue(
+    stages.map((s) => ({ ...s, at: s.at.slice(0, 5) })),
+    new Date()
+  );
+  return cue ? { ...cue, playAt: cue.playAt.toISOString() } : null;
+}
+
 export async function effectiveRunTexts(
   deviceId: string | null
 ): Promise<{ text: string; color: RunTextColor }[]> {
@@ -813,6 +847,19 @@ export const displayRoutes = new Elysia({
           .where(eq(schema.devices.id, principal.id));
       }
 
+      /* Sound is per screen and off by default: several walls in one muster
+         room would play the same warning a beat apart. A person previewing a
+         kiosk in a browser is given the cue too, so the feature can be seen
+         without pairing a television. */
+      const plays =
+        principal.kind !== "device" ||
+        (await db
+          .select({ sound: schema.devices.sound })
+          .from(schema.devices)
+          .where(eq(schema.devices.id, principal.id))
+          .limit(1)
+          .then(([row]) => !!row?.sound));
+
       return {
         kind: params.kind,
         device: principal.kind === "device" ? principal.id : null,
@@ -820,6 +867,7 @@ export const displayRoutes = new Elysia({
         runTexts: await effectiveRunTexts(
           principal.kind === "device" ? principal.id : null
         ),
+        cue: plays ? await dueSoundCue() : null,
       };
     },
     {

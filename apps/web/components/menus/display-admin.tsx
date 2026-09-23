@@ -162,6 +162,7 @@ export function DisplayAdminMenu({
       rotateSeconds: number;
       layout: DisplayLayout;
       cardLayout: CardLayout;
+      sound: boolean;
       fleetIds: string[];
       runTexts: CustomRunText[];
     }) => {
@@ -172,6 +173,7 @@ export function DisplayAdminMenu({
             rotateSeconds: input.rotateSeconds,
             layout: input.layout,
             cardLayout: input.cardLayout,
+            sound: input.sound,
             fleetIds: input.fleetIds,
           })
         : await api.v1.devices.post({
@@ -182,6 +184,7 @@ export function DisplayAdminMenu({
             rotateSeconds: input.rotateSeconds,
             layout: input.layout,
             cardLayout: input.cardLayout,
+            sound: input.sound,
             fleetIds: input.fleetIds,
           });
       if (result.error) throw result.error;
@@ -268,6 +271,9 @@ export function DisplayAdminMenu({
   const [fRotate, setFRotate] = React.useState(DEFAULT_ROTATE);
   const [fLayout, setFLayout] = React.useState<DisplayLayout>("slideshow");
   const [fCardLayout, setFCardLayout] = React.useState<CardLayout>("overlay");
+  /* Per screen and off by default: sound belongs to the room, not the wall —
+     four screens in one muster room would play the same warning four times. */
+  const [fSound, setFSound] = React.useState(false);
   const [fleetQ, setFleetQ] = React.useState("");
 
   /* A monitor draws two or four formations at a time and pages through the
@@ -347,6 +353,7 @@ export function DisplayAdminMenu({
     setFRotate(DEFAULT_ROTATE);
     setFLayout("slideshow");
     setFCardLayout("overlay");
+    setFSound(false);
     setFleetQ("");
     setFRuntexts([]);
     setFActive(true);
@@ -363,6 +370,7 @@ export function DisplayAdminMenu({
     setFRotate(d.rotateSeconds);
     setFLayout(d.layout);
     setFCardLayout(d.cardLayout);
+    setFSound(d.sound);
     setFleetQ("");
     setFRuntexts([]);
     setFActive(d.active);
@@ -419,6 +427,7 @@ export function DisplayAdminMenu({
       rotateSeconds: fRotate,
       layout: kind === "fleet" ? fLayout : "slideshow",
       cardLayout: kind === "fleet" ? fCardLayout : "overlay",
+      sound: fSound,
       // Fleet walls only. Sending [] on the other kinds is how a screen stays
       // unscoped, and the API refuses a non-empty pick on them anyway.
       fleetIds: kind === "fleet" ? fSel : [],
@@ -959,6 +968,20 @@ export function DisplayAdminMenu({
                 </Button>
               </div>
             </Field>
+
+            {/* Every kind of screen may sound: the timeline's stages are the
+                muster's, not one wall's. */}
+            <ToggleRow htmlFor="dsp-sound">
+              <Checkbox
+                id="dsp-sound"
+                checked={fSound}
+                onChange={(e) => setFSound(e.target.checked)}
+              />
+              {t.dspSound}
+            </ToggleRow>
+            <p className="-mt-2 text-xs text-(--text-tertiary)">
+              {t.dspSoundHint}
+            </p>
 
             <ToggleRow htmlFor="dsp-active">
               <Checkbox

@@ -17,6 +17,7 @@ import {
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { soundsQueryOptions } from "@/lib/queries/sounds";
 import {
   timelineKey,
   timelineQueryOptions,
@@ -149,6 +150,13 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
 
   const listQ = useQuery(timelineQueryOptions());
   const entries = React.useMemo(() => listQ.data ?? [], [listQ.data]);
+  /* The master's sounds, for the optional cue a stage carries. Only the
+     active ones: a switched-off sound is one nobody wants played. */
+  const soundsQ = useQuery(soundsQueryOptions());
+  const sounds = React.useMemo(
+    () => (soundsQ.data ?? []).filter((s) => s.active),
+    [soundsQ.data]
+  );
 
   const [q, setQ] = React.useState("");
   const [stF, setStF] = React.useState("");
@@ -162,6 +170,8 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
   /** "" is the wire's `null`: a stage that governs neither shift. */
   const [fShift, setFShift] = React.useState<ShiftKind | "">("");
   const [fActive, setFActive] = React.useState(true);
+  /** "" is the wire's `null`: a stage that announces itself with nothing. */
+  const [fSound, setFSound] = React.useState("");
   const [errName, setErrName] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<TimelineStageRow | null>(
     null
@@ -178,6 +188,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       action: TimelineAction;
       shift: ShiftKind | null;
       active: boolean;
+      soundId: string | null;
     }) => {
       const body = {
         name: input.name,
@@ -185,6 +196,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
         action: input.action,
         shift: input.shift,
         active: input.active,
+        soundId: input.soundId,
       };
       const result = input.id
         ? await api.v1.timeline({ id: input.id }).patch(body)
@@ -239,6 +251,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     setFAction(TIMELINE_ACTIONS[0]);
     setFShift("");
     setFActive(true);
+    setFSound("");
     setErrName(false);
     setDlgOpen(true);
   }
@@ -249,6 +262,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     setFAction(r.action);
     setFShift(r.shift ?? "");
     setFActive(r.active);
+    setFSound(r.soundId ?? "");
     setErrName(false);
     setDlgOpen(true);
   }
@@ -276,6 +290,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       action: fAction,
       shift: fShift === "" ? null : fShift,
       active: fActive,
+      soundId: fSound === "" ? null : fSound,
     });
   }
 
@@ -470,6 +485,24 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
             </Select>
           </Field>
           <p className="mt-2 text-xs text-(--text-tertiary)">{t.tlShiftHint}</p>
+          {/* Optional, and most stages leave it empty. The screens play it two
+              minutes early — long enough to walk to the muster, short enough
+              that nobody forgets what it was for. */}
+          <Field className="mt-4" label={t.tlSound} htmlFor="tl-sound">
+            <Select
+              id="tl-sound"
+              value={fSound}
+              onChange={(e) => setFSound(e.target.value)}
+            >
+              <option value="">{t.tlSoundNone}</option>
+              {sounds.map((sound) => (
+                <option key={sound.id} value={sound.id}>
+                  {sound.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <p className="mt-2 text-xs text-(--text-tertiary)">{t.tlSoundHint}</p>
           <ToggleRow className="mt-4" htmlFor="tl-active">
             <Checkbox
               id="tl-active"

@@ -196,6 +196,16 @@ export const devices = pgTable("devices", {
    * how a card looks.
    */
   cardLayout: cardLayout("card_layout").notNull().default("overlay"),
+  /**
+   * Whether this screen plays the timeline's sounds (owner, 2026-09-23).
+   *
+   * Off by default and per device, because sound is about the room rather
+   * than the screen: four walls in one muster room would play the same
+   * warning four times, a beat apart. The one wired to a speaker is switched
+   * on. Editable on the built-in walls too — what they show is fixed, what
+   * they sound like is not.
+   */
+  sound: boolean("sound").notNull().default(false),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -1281,6 +1291,15 @@ export const timelineStages = pgTable("timeline_stages", {
   name: text("name").notNull(),
   at: time("at").notNull(),
   action: timelineAction("action").notNull(),
+  /**
+   * Played two minutes before this stage, or null for a silent one (owner,
+   * 2026-09-23). `set null` rather than `restrict`: deleting a sound is a
+   * master-data decision, and it should silence the stages that used it
+   * rather than being refused by them.
+   */
+  soundId: uuid("sound_id").references(() => sounds.id, {
+    onDelete: "set null",
+  }),
   /**
    * Which half of the day this stage governs.
    *

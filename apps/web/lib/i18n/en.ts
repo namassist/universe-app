@@ -369,6 +369,11 @@ export const en: Dict = {
   tlShift: "Shift",
   tlShiftNone: "Not shift-specific",
   tlShiftHint: "Leave empty if this stage governs neither shift in particular.",
+  tlSound: "Sound",
+  tlSoundNone: "No sound",
+  tlSoundHint:
+    "Optional. Played 2 minutes before this stage's time, on screens with sound switched on.",
+  tlSoundCol: "Sound",
   mfSub: "Fingerprint machine registry — what the monitoring screen reads",
   mfDlgB:
     "The IP address is how a machine is checked, so one IP is one machine.",
@@ -480,6 +485,13 @@ export const en: Dict = {
   dspPagesWord: "pages",
   dspLayoutCol: "Type",
   dspLayoutSlideShort: "Slideshow",
+  dspSound: "Play timeline sounds",
+  dspSoundHint:
+    "This screen sounds a timeline stage 2 minutes before its time. Switch it on only where a speaker is connected.",
+  dspSoundOn: "Sound",
+  dsAudioBlocked: "Enable sound",
+  dsAudioBlockedHint:
+    "The browser waits for one click before it may play audio. Click once, then leave this screen open.",
   dspCardLayout: "Card layout",
   dspCardOverlay: "Overlay",
   dspCardIdentity: "Identity",

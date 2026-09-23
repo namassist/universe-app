@@ -37,12 +37,35 @@ const toStage = (row: TimelineStageRow) => ({
   action: row.action,
   shift: row.shift,
   active: row.active,
+  soundId: row.soundId,
   createdAt: row.createdAt.toISOString(),
 });
 
 const notFound = {
   code: "stage_not_found",
   message: "Tahapan tidak ditemukan",
+};
+
+/**
+ * Whether a sound the caller named exists.
+ *
+ * Checked here rather than left to the foreign key: a stage naming a sound
+ * nobody uploaded is a mistake in a form, and "tahapan gagal disimpan" from a
+ * constraint says nothing about which field caused it.
+ */
+async function soundMissing(soundId: string | null | undefined) {
+  if (!soundId) return false;
+  const [row] = await db
+    .select({ id: schema.sounds.id })
+    .from(schema.sounds)
+    .where(eq(schema.sounds.id, soundId))
+    .limit(1);
+  return !row;
+}
+
+const soundNotFound = {
+  code: "validation_failed",
+  message: "Suara yang dipilih tidak ada di master Suara",
 };
 
 const AT_PATTERN = "^([01][0-9]|2[0-3]):[0-5][0-9]$";
@@ -181,6 +204,7 @@ export const timelineRoutes = new Elysia({
       });
       if (disorder)
         return status(422, { code: "stage_out_of_order", message: disorder });
+      if (await soundMissing(body.soundId)) return status(422, soundNotFound);
 
       const [row] = await db
         .insert(schema.timelineStages)
@@ -190,6 +214,7 @@ export const timelineRoutes = new Elysia({
           action: body.action,
           shift: body.shift ?? null,
           active: body.active ?? true,
+          soundId: body.soundId ?? null,
         })
         .returning();
       return status(201, toStage(row!));
@@ -210,6 +235,8 @@ export const timelineRoutes = new Elysia({
         // field is absent, which made an unspecified stage a day stage.
         shift: OptionalShiftKindSchema,
         active: t.Optional(t.Boolean()),
+        /** Optional and nullable: most stages are silent. */
+        soundId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
       }),
       response: {
         201: TimelineStageSchema,
@@ -241,6 +268,7 @@ export const timelineRoutes = new Elysia({
       });
       if (disorder)
         return status(422, { code: "stage_out_of_order", message: disorder });
+      if (await soundMissing(body.soundId)) return status(422, soundNotFound);
 
       const [row] = await db
         .update(schema.timelineStages)
@@ -250,6 +278,7 @@ export const timelineRoutes = new Elysia({
           ...(body.action !== undefined ? { action: body.action } : {}),
           ...(body.shift !== undefined ? { shift: body.shift } : {}),
           ...(body.active !== undefined ? { active: body.active } : {}),
+          ...(body.soundId !== undefined ? { soundId: body.soundId } : {}),
         })
         .where(eq(schema.timelineStages.id, params.id))
         .returning();
@@ -265,6 +294,7 @@ export const timelineRoutes = new Elysia({
         action: OptionalTimelineActionSchema,
         shift: OptionalShiftKindSchema,
         active: t.Optional(t.Boolean()),
+        soundId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
       }),
       response: {
         200: TimelineStageSchema,

@@ -252,7 +252,10 @@ export const soundsRoutes = new Elysia({ prefix: "/sounds", tags: ["sounds"] })
       });
     },
     {
-      auth: { menu: "sound", mode: "view" },
+      /* A paired kiosk fetches the bytes it was cued to play, so a device
+         session reaches this one route (owner, 2026-09-23). A device holds no
+         menu permission, and every other sound route stays staff-only. */
+      auth: { menu: "sound", mode: "view", allowDevice: true },
       params: t.Object({ id: t.String({ format: "uuid" }) }),
       // No 200 schema: the body is audio, and declaring a JSON shape for it
       // would have Elysia try to validate bytes as an object.

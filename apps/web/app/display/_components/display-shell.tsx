@@ -1,14 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Monitor, WifiOff } from "lucide-react";
+import { Monitor, Volume2, WifiOff } from "lucide-react";
 
 import type { DeviceKind } from "@universe/contracts";
 
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { LogoBadge } from "@/components/ui/logo";
 
 import { RunningTicker } from "./running-ticker";
+import { useSoundCue } from "./sound-cue";
 
 /* Shell layar kiosk TV (dilihat ±6 m) — kanvas lebar tetap 1920, TINGGI
    mengikuti rasio layar (tanpa letterbox) via transform:scale(); jam
@@ -63,6 +65,10 @@ export function DisplayShell({
   staleSince?: number | null;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
+  /* The timeline's sounds, played by whichever screen was switched on for
+     them. The cue and its instant come from the API with the content poll. */
+  const { blocked, unlock } = useSoundCue(displayKind);
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const [clock, setClock] = React.useState("--:--:--");
   const [dateLine, setDateLine] = React.useState("");
@@ -248,6 +254,20 @@ export function DisplayShell({
         {/* Running text — sabuk berjalan, isinya diputuskan server (kustom
             display kalau ada, kalau tidak master). Poll-nya sekaligus heartbeat
             perangkat ini. */}
+        {/* Only when the browser has refused audio: a screen that cannot sound
+            the muster says so rather than being quietly silent. One click on
+            it takes the permission for as long as the page stays open. */}
+        {blocked ? (
+          <button
+            type="button"
+            onClick={unlock}
+            title={t.dsAudioBlockedHint}
+            className="absolute top-6 right-6 z-2 flex cursor-pointer items-center gap-3 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-5 py-2 text-xl font-bold text-(--badge-warning-text)"
+          >
+            <Volume2 className="size-6" />
+            {t.dsAudioBlocked}
+          </button>
+        ) : null}
         <RunningTicker kind={displayKind} />
       </div>
     </div>

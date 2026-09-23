@@ -29,10 +29,12 @@ const made = {
   users: [] as string[],
   roles: [] as string[],
   stages: [] as string[],
+  sounds: [] as string[],
 };
 
 let admin: { cookie: string };
 let viewer: { cookie: string };
+let soundId = "";
 
 type Stage = {
   id: string;
@@ -41,6 +43,7 @@ type Stage = {
   action: string;
   shift: "day" | "night" | null;
   active: boolean;
+  soundId: string | null;
   createdAt: string;
 };
 
@@ -100,6 +103,18 @@ beforeAll(async () => {
   if (redis.status === "end") await redis.connect();
   admin = await makeUser("manage");
   viewer = await makeUser("view");
+
+  const [sound] = await db
+    .insert(schema.sounds)
+    .values({
+      name: `${tag} bunyi`,
+      fileName: `${uid()}.mp3`,
+      mimeType: "audio/mpeg",
+      sizeBytes: 1,
+    })
+    .returning({ id: schema.sounds.id });
+  soundId = sound!.id;
+  made.sounds.push(sound!.id);
 });
 
 afterAll(async () => {
@@ -107,10 +122,46 @@ afterAll(async () => {
     await db
       .delete(schema.timelineStages)
       .where(inArray(schema.timelineStages.id, made.stages));
+  if (made.sounds.length)
+    await db
+      .delete(schema.sounds)
+      .where(inArray(schema.sounds.id, made.sounds));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
     await db.delete(schema.roles).where(inArray(schema.roles.id, made.roles));
+});
+
+/* ----------------------------------------------------------------- sound */
+
+describe("the sound a stage announces itself with", () => {
+  test("is optional, survives a round trip, and can be cleared", async () => {
+    // Silent unless somebody says otherwise: every stage on the wall today.
+    const silent = (await (await create({})).json()) as Stage;
+    expect(silent.soundId).toBeNull();
+
+    const loud = (await (await create({ soundId })).json()) as Stage;
+    expect(loud.soundId).toBe(soundId);
+
+    const cleared = await send("PATCH", `/timeline/${loud.id}`, admin.cookie, {
+      soundId: null,
+    });
+    expect(cleared.status).toBe(200);
+    expect(((await cleared.json()) as Stage).soundId).toBeNull();
+  });
+
+  test("a patch about the time leaves the sound alone", async () => {
+    const stage = (await (await create({ soundId })).json()) as Stage;
+    const renamed = await send("PATCH", `/timeline/${stage.id}`, admin.cookie, {
+      at: "06:30",
+    });
+    expect(((await renamed.json()) as Stage).soundId).toBe(soundId);
+  });
+
+  test("a sound that does not exist is refused", async () => {
+    const response = await create({ soundId: crypto.randomUUID() });
+    expect(response.status).toBe(422);
+  });
 });
 
 /* ------------------------------------------------------------------ CRUD */

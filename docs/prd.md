@@ -1282,6 +1282,46 @@ until someone pressed Sync at 07:07 — although they were on time.
 - `lib/display-data.ts` — the last of the display sample data, four invented
   fleets whose selection was discarded on submit — is gone.
 
+### The timeline's sounds — shipped
+
+- **A timeline stage may name a sound** (`timeline_stages.sound_id` → `sounds`,
+  nullable, owner 2026-09-23), chosen in the Timeline menu from the Sound
+  master. Optional, and most stages stay silent. `set null` on delete: removing
+  a sound from the master silences the stages that used it rather than being
+  refused by them.
+- **It plays two minutes before the stage** (`SOUND_LEAD_SECONDS`, one constant
+  — no stage has yet wanted its own lead). A deadline at 05:21 sounds at 05:19.
+- **The screens play it; the server decides when.** The API has no speakers, so
+  playback is the kiosk's. But a wall must not work the moment out for itself:
+  kiosk clocks drift over the weeks they run, and a screen loading at 05:18:59
+  would either miss the cue or repeat it. So `GET /v1/display/:kind` — the poll
+  every display already makes, which also stamps the heartbeat — carries the
+  **next** cue: `{ id, soundId, stageName, playAt }`, where `id` is stage ×
+  date. The browser schedules against `playAt - servedAt` less the time the
+  response has been in hand, so the sound lands on the second at any clock
+  offset, and plays a given `id` once for the life of the page. The rule is
+  pure and tested without a database (`sound-cue.ts`).
+- **A cue already past is never played** (announcing a deadline that has
+  arrived is worse than silence) and one more than fifteen minutes out is not
+  carried yet — the screen will be told again, several times, before it
+  matters.
+- **Which screen sounds is a per-device switch** (`devices.sound`, default
+  off). Sound belongs to the room rather than the wall: four screens in one
+  muster room would play the same warning four times, a beat apart. Every kind
+  of screen may be switched on — the timeline's stages are the muster's, not
+  one wall's — including the built-in fleet walls, which are fixed in what they
+  show but not in how they sound.
+- **A paired television may fetch the bytes it was cued to play**: the sound
+  file route is the one sound route a device session reaches; every other stays
+  staff-only. The kiosk fetches it as a blob with its own session, the
+  convention this app already uses for binary.
+- **Browser autoplay is the one real obstacle.** A browser refuses audio until
+  somebody has interacted with the page, and a kiosk that rebooted overnight
+  has nobody to interact with it. When a play is refused the screen shows an
+  "Aktifkan suara" button — one click takes the permission for as long as the
+  page stays open — rather than going quietly silent. Players should also run
+  Chrome with `--autoplay-policy=no-user-gesture-required`.
+
 ### A fleet wall is a slideshow or a monitor — shipped
 
 - **Each fleet TV declares how it spends its screen** (`devices.layout`,

@@ -367,6 +367,11 @@ export const id = {
   tlShift: "Shift",
   tlShiftNone: "Tidak spesifik",
   tlShiftHint: "Kosongkan bila tahap ini tidak khusus untuk salah satu shift.",
+  tlSound: "Suara",
+  tlSoundNone: "Tanpa suara",
+  tlSoundHint:
+    "Opsional. Diputar 2 menit sebelum jam tahap ini, di layar yang suaranya dinyalakan.",
+  tlSoundCol: "Suara",
   mfSub: "Daftar mesin fingerprint — sumber data layar monitoring",
   mfDlgB: "Alamat IP dipakai untuk mengecek mesin, jadi satu IP satu mesin.",
   mfReach: "Jangkauan",
@@ -476,6 +481,13 @@ export const id = {
   dspPagesWord: "halaman",
   dspLayoutCol: "Tipe",
   dspLayoutSlideShort: "Slideshow",
+  dspSound: "Putar suara timeline",
+  dspSoundHint:
+    "Layar ini membunyikan suara tahap timeline 2 menit sebelum jamnya. Nyalakan hanya di layar yang tersambung speaker.",
+  dspSoundOn: "Suara",
+  dsAudioBlocked: "Aktifkan suara",
+  dsAudioBlockedHint:
+    "Browser menunggu satu klik sebelum boleh memutar audio. Klik sekali, lalu biarkan layar ini terbuka.",
   dspCardLayout: "Tampilan kartu",
   dspCardOverlay: "Overlay",
   dspCardIdentity: "Identity",
