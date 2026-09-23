@@ -21,7 +21,7 @@
  * a no-op until those modules exist.
  */
 
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, exists, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
@@ -82,6 +82,12 @@ const SlotSchema = t.Object({
   rosterCode: t.Nullable(t.String()),
   /** The SIMPER codes this operator holds, by name — what a unit matches on. */
   skills: t.Array(t.String()),
+  /**
+   * On light duty: the plan may hold them (owner, 2026-09-23), the engine may
+   * not seat them. The screen reads the unit as vacant on the strength of
+   * this, whatever the roster says.
+   */
+  standby: t.Boolean(),
 });
 
 /**
@@ -117,6 +123,12 @@ const BoardUnitSchema = t.Object({
    */
   fleetSupport: t.Boolean(),
   fleet: t.Nullable(t.Object({ id: t.String(), leaderCode: t.String() })),
+  /**
+   * In service. An inactive unit reaches this board only when the plan holds
+   * somebody on it (owner, 2026-09-23) — the pairing has to be visible to be
+   * released — and it is never counted as a vacancy.
+   */
+  active: t.Boolean(),
   slots: t.Array(SlotSchema),
 });
 
@@ -165,6 +177,11 @@ const CandidateSchema = t.Object({
   skillOk: t.Boolean(),
   /** True when the operator holds the code but their SIMPER has lapsed. */
   expired: t.Boolean(),
+  /**
+   * On light duty. Eligible for the plan (owner, 2026-09-23) and never seated
+   * by the engine, so the dialog says so beside the name.
+   */
+  standby: t.Boolean(),
 });
 
 /* ------------------------------------------------------------------ lookups */
@@ -214,10 +231,15 @@ export async function shiftKinds(
 }
 
 /**
- * The operators the plan may draw from: active people whose position enters
- * fleet allocation, with what eligibility needs to know about each.
+ * The operators the plan may draw from: people whose position enters fleet
+ * allocation, with what eligibility needs to know about each.
+ *
+ * `includeStandby` is the dialog's (owner, 2026-09-23): somebody on light duty
+ * may be planned onto a unit, so they have to be offered. The spare pool keeps
+ * to `aktif` — it answers "who could drive today", which is not the same
+ * question.
  */
-function allocatablePeople() {
+function allocatablePeople(includeStandby = false) {
   return db
     .select({
       id: schema.employees.id,
@@ -227,6 +249,7 @@ function allocatablePeople() {
       departmentName: schema.departments.name,
       simperExp: schema.employees.simperExp,
       simperTypeName: schema.simperTypes.name,
+      statusValue: schema.employees.status,
     })
     .from(schema.employees)
     .innerJoin(
@@ -243,7 +266,9 @@ function allocatablePeople() {
     )
     .where(
       and(
-        eq(schema.employees.status, "aktif"),
+        includeStandby
+          ? inArray(schema.employees.status, ["aktif", "standby"])
+          : eq(schema.employees.status, "aktif"),
         eq(schema.positions.fleetAllocation, true)
       )
     )
@@ -287,6 +312,8 @@ type SlotHolder = {
   name: string;
   simperTypeName: string | null;
   departmentName: string;
+  /** On light duty — planned, but never seated by the engine. */
+  standby: boolean;
 };
 
 /** unitId → slot holders, resolved for the board. */
@@ -299,6 +326,7 @@ async function slotsByUnit(): Promise<Map<string, SlotHolder[]>> {
       name: schema.employees.name,
       simperTypeName: schema.simperTypes.name,
       departmentName: schema.departments.name,
+      statusValue: schema.employees.status,
       createdAt: schema.fleetPlanSlots.createdAt,
     })
     .from(schema.fleetPlanSlots)
@@ -324,6 +352,7 @@ async function slotsByUnit(): Promise<Map<string, SlotHolder[]>> {
       name: row.name,
       simperTypeName: row.simperTypeName,
       departmentName: row.departmentName,
+      standby: row.statusValue === "standby",
     });
     map.set(row.unitId, list);
   }
@@ -376,8 +405,15 @@ async function recordPlanChanges(
   );
 }
 
-/** A unit as eligibility needs it, by code. */
-export async function unitByCode(code: string) {
+/**
+ * A unit as eligibility needs it, by code.
+ *
+ * Active only by default — a ticket or a board is about machines in service.
+ * The PLAN passes `includeInactive` (owner, 2026-09-23): a machine out for
+ * repair is still one somebody will crew when it returns, and planning that is
+ * the point of the plan.
+ */
+export async function unitByCode(code: string, includeInactive = false) {
   const [unit] = await db
     .select({
       id: schema.units.id,
@@ -396,7 +432,12 @@ export async function unitByCode(code: string) {
       schema.departments,
       eq(schema.departments.id, schema.units.departmentId)
     )
-    .where(and(eq(schema.units.code, code), eq(schema.units.active, true)))
+    .where(
+      and(
+        eq(schema.units.code, code),
+        ...(includeInactive ? [] : [eq(schema.units.active, true)])
+      )
+    )
     .limit(1);
   return unit;
 }
@@ -466,12 +507,25 @@ export function pairingRefusal(
     holdsCode: boolean;
     /** Site-local today, for the SIMPER expiry comparison. */
     today: string;
+    /**
+     * Whether this is the standing PLAN rather than a seat on a board.
+     *
+     * The plan records an intention — who holds which machine when both are
+     * in service — so it admits a `standby` operator (owner, 2026-09-23):
+     * somebody on light duty keeps their unit on paper, and the engine, which
+     * draws only from `aktif`, is what leaves the seat empty on the day. A
+     * board, a ticket and a manual intervention are about today and keep the
+     * stricter rule.
+     */
+    planning?: boolean;
   }
 ): string | null {
-  /* Positive, not `=== "nonaktif"`: only `aktif` is allocatable, so a status
-     added to the vocabulary is refused here by default. The message names the
-     status because "standby" and "nonaktif" call for different follow-ups. */
-  if (person.statusValue !== "aktif")
+  /* `nonaktif` is refused everywhere: they have left. `standby` is refused on
+     a board and allowed in the plan — see `facts.planning`. */
+  if (
+    person.statusValue === "nonaktif" ||
+    (!facts.planning && person.statusValue !== "aktif")
+  )
     return `Karyawan berstatus ${person.statusValue} — hanya karyawan aktif yang masuk alokasi`;
   if (!person.fleetAllocation)
     return `Posisi "${person.positionName}" tidak masuk alokasi fleet`;
@@ -485,7 +539,10 @@ export function pairingRefusal(
   return null;
 }
 
-/** `pairingRefusal` for one pairing, fetching the SIMPER fact it needs. */
+/**
+ * `pairingRefusal` for one PLAN pairing, fetching the SIMPER fact it needs.
+ * Both its callers — the dialog and the spreadsheet import — are planning.
+ */
 export async function refusePairing(
   unit: AllocUnit,
   person: AllocPerson
@@ -507,6 +564,7 @@ export async function refusePairing(
   return pairingRefusal(unit, person, {
     holdsCode,
     today: localDate(new Date()),
+    planning: true,
   });
 }
 
@@ -514,10 +572,12 @@ export async function refusePairing(
 
 /** Everything the parser needs to resolve codes and read the current plan. */
 async function planCatalogues(): Promise<PlanCatalogues> {
+  /* Inactive units included (owner, 2026-09-23): the plan may hold a machine
+     that is out of service, and the board shows that pairing rather than
+     hiding it. */
   const units = await db
     .select({ id: schema.units.id, code: schema.units.code })
-    .from(schema.units)
-    .where(eq(schema.units.active, true));
+    .from(schema.units);
   const people = await db
     .select({
       id: schema.employees.id,
@@ -561,8 +621,8 @@ type PlanImportOutcome = {
 
 /**
  * Parse, hold every surviving row against `refusePairing` — the same
- * function the dialog goes through — then judge capacity and the Day/Night
- * pair against the effective plan.
+ * function the dialog goes through — then judge capacity against the
+ * effective plan. The Day/Night pair left this path on 2026-09-23.
  */
 async function parsePlanImport(
   file: File
@@ -577,7 +637,7 @@ async function parsePlanImport(
   const errors = [...parsed.errors];
   const eligible: ParsedPlanRow[] = [];
   for (const row of parsed.rows) {
-    const unit = await unitByCode(row.preview.unit);
+    const unit = await unitByCode(row.preview.unit, true);
     const person = await personByNik(row.preview.nik);
     // Both resolved a moment ago in the parse; vanishing between the two
     // reads is a re-validate case, not a crash.
@@ -597,13 +657,7 @@ async function parsePlanImport(
     eligible.push(row);
   }
 
-  const today = localDate(new Date());
-  const involved = new Set<string>(eligible.map((r) => r.employeeId));
-  for (const held of catalogues.heldByUnit.values())
-    for (const id of held) involved.add(id);
-  const shiftOf = await shiftKinds([...involved], today);
-
-  const conflicts = pairingConflicts(eligible, catalogues, shiftOf);
+  const conflicts = pairingConflicts(eligible, catalogues);
   errors.push(...conflicts.errors);
   errors.sort((a, b) => Number(a.row) - Number(b.row));
 
@@ -661,6 +715,7 @@ export const fleetAllocationRoutes = new Elysia({
              what separates a dozer somebody has to crew from a forklift nobody
              does. */
           fleetSupport: schema.units.fleetSupport,
+          active: schema.units.active,
           fleetId: schema.fleets.id,
           leaderCode: digger.code,
           departmentName: schema.departments.name,
@@ -712,7 +767,21 @@ export const fleetAllocationRoutes = new Elysia({
          * time, with the no-fleet entry as its own option, so the register
          * being large costs nothing until somebody asks for it.
          */
-        .where(eq(schema.units.active, true))
+        /* The active register, plus any unit the plan still holds somebody on
+           (owner, 2026-09-23). A machine taken out of service keeps its
+           standing pairing until somebody releases it, and a pairing nobody
+           can see is one nobody can release. */
+        .where(
+          or(
+            eq(schema.units.active, true),
+            exists(
+              db
+                .select({ one: sql`1` })
+                .from(schema.fleetPlanSlots)
+                .where(eq(schema.fleetPlanSlots.unitId, schema.units.id))
+            )
+          )
+        )
         .orderBy(asc(schema.units.code));
 
       const slots = await slotsByUnit();
@@ -763,6 +832,7 @@ export const fleetAllocationRoutes = new Elysia({
             u.fleetId && u.leaderCode
               ? { id: u.fleetId, leaderCode: u.leaderCode }
               : null,
+          active: u.active,
           slots: (slots.get(u.id) ?? []).map((s) => ({
             nik: s.nik,
             name: s.name,
@@ -771,6 +841,7 @@ export const fleetAllocationRoutes = new Elysia({
             departmentName: s.departmentName,
             rosterCode: codes.get(s.employeeId) ?? null,
             skills: skills.get(s.employeeId) ?? [],
+            standby: s.standby,
           })),
         })),
         fleets: fleetRows.map((f) => ({ ...f, area: f.area ?? "" })),
@@ -802,11 +873,11 @@ export const fleetAllocationRoutes = new Elysia({
   .get(
     "/plan/candidates",
     async ({ query, status }) => {
-      const unit = await unitByCode(query.unit);
+      const unit = await unitByCode(query.unit, true);
       if (!unit) return status(404, unitNotFound);
       const today = localDate(new Date());
 
-      const people = await allocatablePeople();
+      const people = await allocatablePeople(true);
 
       // What blocks or clears each candidate, resolved in bulk: the unit the
       // plan already gave them, the skill the unit requires, and today's
@@ -864,12 +935,16 @@ export const fleetAllocationRoutes = new Elysia({
           simperTypeName: p.simperTypeName,
           departmentName: p.departmentName,
           rosterShift: kind,
-          eligible: !busy && skillOk && !expired && deptOk && !sameShift,
+          /* `sameShift` no longer blocks (owner, 2026-09-23): the plan may
+             pair two operators of one shift, and the flag stays as something
+             the dialog states beside them. */
+          eligible: !busy && skillOk && !expired && deptOk,
           busyAt: busy,
           sameShift,
           deptOk,
           skillOk,
           expired,
+          standby: p.statusValue === "standby",
         };
       });
     },
@@ -957,8 +1032,6 @@ export const fleetAllocationRoutes = new Elysia({
       const moved = writes.filter((r) => r.fromUnitId !== null);
       if (!writes.length) return { created: 0, moved: 0 };
 
-      const today = localDate(new Date());
-
       try {
         await db.transaction(async (tx) => {
           // The unit rows are the locks, taken in one sorted set so two
@@ -1022,8 +1095,8 @@ export const fleetAllocationRoutes = new Elysia({
 
           // The recheck under lock — validation read the plan a moment
           // before this transaction, and the dialog may have written in
-          // between. Capacity and the pair rule are re-judged on what the
-          // table now actually holds; a violation rolls the whole file back.
+          // between. Capacity is re-judged on what the table now actually
+          // holds; a violation rolls the whole file back.
           const targets = [...new Set(writes.map((r) => r.unitId))];
           const codeOf = new Map(writes.map((r) => [r.unitId, r.preview.unit]));
           const held = await tx
@@ -1047,25 +1120,6 @@ export const fleetAllocationRoutes = new Elysia({
                 "unit_full",
                 `Unit ${codeOf.get(unitId)} baru saja terisi penuh — validasi ulang filenya`
               );
-
-          const kinds = await shiftKinds(
-            held.map((h) => h.employeeId),
-            today
-          );
-          for (const [unitId, ids] of byUnit) {
-            if (ids.length < 2) continue;
-            const pair = ids
-              .map((id) => kinds.get(id))
-              .filter((k): k is "day" | "night" => k !== undefined);
-            if (pair.length === 2 && pair[0] === pair[1])
-              throw new PlanImportConflict(
-                422,
-                "validation_failed",
-                `Pasangan unit ${codeOf.get(unitId)} baru saja menjadi sama-sama shift ${
-                  pair[0] === "day" ? "pagi" : "malam"
-                } — validasi ulang filenya`
-              );
-          }
         });
       } catch (error) {
         if (error instanceof PlanImportConflict)
@@ -1106,7 +1160,7 @@ export const fleetAllocationRoutes = new Elysia({
   .post(
     "/plan/slots",
     async ({ body, status, principal }) => {
-      const unit = await unitByCode(body.unitCode);
+      const unit = await unitByCode(body.unitCode, true);
       if (!unit) return status(404, unitNotFound);
 
       const person = await personByNik(body.nik);
@@ -1121,8 +1175,6 @@ export const fleetAllocationRoutes = new Elysia({
 
       const refusal = await refusePairing(unit, person);
       if (refusal) return refuse(refusal);
-
-      const today = localDate(new Date());
 
       try {
         const outcome = await db.transaction(async (tx) => {
@@ -1140,21 +1192,6 @@ export const fleetAllocationRoutes = new Elysia({
             .where(eq(schema.fleetPlanSlots.unitId, unit.id));
           if (partners.length >= FA_PLAN_MAX_OPS)
             return { refusal: "full" as const };
-
-          // The pair is Day/Night: on today's roster, a partner on the same
-          // shift means this is not a pair but a queue.
-          if (partners.length) {
-            const kinds = await shiftKinds(
-              [...partners.map((p) => p.employeeId), person.id],
-              today
-            );
-            const mine = kinds.get(person.id);
-            const partnerKind = partners
-              .map((p) => kinds.get(p.employeeId))
-              .find((k) => k !== undefined);
-            if (mine && partnerKind && mine === partnerKind)
-              return { refusal: "same-shift" as const, kind: mine };
-          }
 
           await tx
             .insert(schema.fleetPlanSlots)
@@ -1181,12 +1218,6 @@ export const fleetAllocationRoutes = new Elysia({
             code: "unit_full",
             message: `Unit ${unit.code} sudah memegang ${FA_PLAN_MAX_OPS} operator`,
           });
-        if (outcome.refusal === "same-shift")
-          return refuse(
-            `${person.name} dan pasangan unit ini sama-sama shift ${
-              outcome.kind === "day" ? "pagi" : "malam"
-            } hari ini — pasangan unit harus Day/Night`
-          );
       } catch (error) {
         // The one race the checks cannot see: the operator was paired with
         // another unit between the read and this insert.

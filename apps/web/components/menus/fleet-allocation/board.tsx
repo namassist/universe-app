@@ -142,6 +142,7 @@ type Kind = "bd" | "none" | "warn" | "dt" | "ok";
 /** A dialog row — the static candidate shape plus the pair-shift flag the
  * server adds in plan mode. */
 type DialogRow = Candidate & {
+  standby?: boolean;
   sameShift?: boolean;
   deptOk?: boolean;
   skillOk?: boolean;
@@ -265,6 +266,11 @@ function AllocDialog({
                   {deptAbbrev(c.departmentName)}
                 </Badge>
               ) : null}
+              {c.standby ? (
+                <Badge variant="warning" title={t.faOpStandbyHint}>
+                  {t.faOpStandby}
+                </Badge>
+              ) : null}
               {c.complement ? (
                 <Badge variant="info" title={t.faComplement}>
                   {t.faComplement}
@@ -313,10 +319,12 @@ function toBoardUnits(board: PlanBoard | undefined): BoardUnit[] {
     departmentName: u.departmentName,
     fleet: u.fleet ? { id: u.fleet.id, digger: u.fleet.leaderCode } : null,
     fleetSupport: u.fleetSupport,
+    active: u.active,
     slots: u.slots.map((s) => ({
       nik: s.nik,
       name: s.name,
       rosterCode: s.rosterCode as Slot["rosterCode"],
+      standby: s.standby,
       ...(s.simperTypeName ? { simperJenis: s.simperTypeName } : {}),
     })),
   }));
@@ -508,6 +516,7 @@ export function AllocBoard({
           }
         : {}),
       sameShift: c.sameShift,
+      standby: c.standby,
       deptOk: c.deptOk,
       skillOk: c.skillOk,
       expired: c.expired,
@@ -863,6 +872,13 @@ export function AllocBoard({
                   </span>
                 </div>
                 <div className="flex flex-none flex-wrap justify-end gap-1.5">
+                  {/* Out of service: the card is here only because the plan
+                      still holds somebody on it. */}
+                  {u.active === false ? (
+                    <Badge variant="neutral" title={t.faUnitInactiveHint}>
+                      {t.faUnitInactive}
+                    </Badge>
+                  ) : null}
                   {isVacant(u) ? (
                     <Badge variant="danger">{t.faCrewVacant}</Badge>
                   ) : null}
@@ -916,6 +932,13 @@ export function AllocBoard({
                           {s.simperJenis ? ` · ${s.simperJenis}` : ""}
                         </span>
                       </div>
+                      {/* Planned but never seated by the engine, so the card
+                          says why its unit still reads empty. */}
+                      {s.standby ? (
+                        <Badge variant="warning" title={t.faOpStandbyHint}>
+                          {t.faOpStandby}
+                        </Badge>
+                      ) : null}
                       {/* Today's roster, so whether this operator is on the
                           shift is read off the card rather than the table. */}
                       <RosterBadge t={t} code={s.rosterCode} />

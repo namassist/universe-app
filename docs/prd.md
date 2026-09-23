@@ -187,18 +187,36 @@ fill the gap from the spare pool.
 ### Fleet allocation — Plan tab shipped, Actual deferred
 
 - **Plan** holds the standing unit ↔ operator pairs (`fleet_plan_slots`): at
-  most 2 operators per unit, one Day and one Night. On the assignment date,
-  two operators whose roster codes resolve to the same shift kind are
-  refused; an operator with no roster row is allowed and flagged
-  (`sameShift` in the candidate list). The board arrives composed from
+  most 2 operators per unit. The Day/Night pair rule was dropped on 2026-09-23
+  (owner): the plan says who holds a machine, and which of them drives today is
+  the engine's question against the roster. `sameShift` survives in the
+  candidate list as something the dialog states, not as a refusal. The board
+  arrives composed from
   `GET /v1/fleet-allocation/plan` — units with status/location/fleet embeds
   and resolved pairs, the fleet filter options, and the spare pool.
-- **Candidate eligibility:** employment status is `aktif`; position carries
-  `fleetAllocation`; if the unit requires a SIMPER code, the operator holds it
+- **Candidate eligibility:** employment status is `aktif` or `standby` (see
+  below); position carries `fleetAllocation`; if the unit requires a SIMPER code, the operator holds it
   (`employee_skills`) and their SIMPER is not expired; a unit owned by a
   department only accepts operators of that department (a unit with no
   department is global); an operator pairs with at most one unit.
-- **Only `aktif` is allocatable** (owner, 2026-09-03). `EMPLOYEE_STATUSES` is
+- **The plan admits what the day refuses** (owner, 2026-09-23). Three rules
+  were relaxed for the PLAN only, because a plan records an intention while a
+  board, a slip and a manual intervention are about today:
+  - a **`standby`** operator may be planned onto a unit (`nonaktif` still may
+    not, on any path). `pairingRefusal` takes a `planning` flag; the engine,
+    ticket issuing and the ACTUAL board pass nothing and keep `aktif`-only, so
+    such an operator is never seated or printed.
+  - an **inactive unit** may be planned (`unitByCode(code, includeInactive)`).
+    It reaches the PLAN board only when the plan holds somebody on it — a
+    pairing nobody can see is one nobody can release — badged **Nonaktif** and
+    never counted as a vacancy.
+  - **both read as vacant.** The board's cards and the crew table count a
+    standby holder as not filling the seat (`vacantOn`), and `inAllocation`
+    excludes an inactive unit, so the screen agrees with what the engine will
+    do on the day. The provisional wall already skipped standby holders
+    (2026-09-15).
+- **Only `aktif` is allocated** (owner, 2026-09-03, narrowed 2026-09-23 to the
+  day rather than the plan). `EMPLOYEE_STATUSES` is
   `aktif | standby | nonaktif`; `standby` is on the payroll but not to be given
   a unit — light duty, a lapsed permit, an investigation. Every gate spells the
   rule out positively (`status = 'aktif'`) rather than excluding `nonaktif`, so

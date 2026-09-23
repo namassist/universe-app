@@ -933,6 +933,12 @@ export const en: Dict = {
   faCrewSumB: "rows",
   faCrewNoCrew: "No standing operator yet.",
   faCrewSearch: "Search operator / unit…",
+  faUnitInactive: "Inactive",
+  faUnitInactiveHint:
+    "Inactive unit — still held in the PLAN, but never in the daily allocation.",
+  faOpStandby: "Standby",
+  faOpStandbyHint:
+    "Standby employee — may be planned, but is not allocated today.",
   faLocate: "Show its card on the board",
   faSearchAllFleets: "search covers every fleet",
   faHistBtn: "History",

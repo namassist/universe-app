@@ -932,6 +932,12 @@ export const id = {
   faCrewSumB: "baris",
   faCrewNoCrew: "Belum ada operator tetap.",
   faCrewSearch: "Cari operator / unit…",
+  faUnitInactive: "Nonaktif",
+  faUnitInactiveHint:
+    "Unit nonaktif — masih dipegang di PLAN, tapi tidak masuk alokasi harian.",
+  faOpStandby: "Standby",
+  faOpStandbyHint:
+    "Karyawan standby — boleh direncanakan, tapi tidak dialokasikan hari ini.",
   faLocate: "Tampilkan kartunya di papan",
   faSearchAllFleets: "pencarian mencakup semua fleet",
   faHistBtn: "Riwayat",

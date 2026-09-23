@@ -2,8 +2,9 @@
  * The PLAN board's eligibility contract, driven through the real routes.
  *
  * Position flag, qualification + expiry, department scoping, one unit per
- * operator, two operators per unit, and the Day/Night pair rule against the
- * roster. Needs the dev Postgres and Redis:
+ * operator, and two operators per unit. The Day/Night pair rule was dropped
+ * from the PLAN on 2026-09-23, and standby operators and inactive units are
+ * admitted to it — the engine, not the plan, is what refuses them a seat. Needs the dev Postgres and Redis:
  *   bun --env-file=.env test src/routes/fleet-allocation.test.ts
  */
 
@@ -52,11 +53,15 @@ let opDay: Person; //     roster: D today
 let opDay2: Person; //    roster: D today
 let opNight: Person; //   roster: N today
 let opFree: Person; //    no roster row
+let opStandby: Person; // employment status standby
+let opStandby2: Person; // ditto, for the inactive unit's card
+let opOff: Person; //     employment status nonaktif
 
 type Unit = { id: string; code: string };
 let unitReq: Unit; //  global, requires the skill code
 let unitDept: Unit; // owned by dept A, no requirement
 let unitFree: Unit; // global, no requirement
+let unitOff: Unit; //  global, deactivated in the register
 
 /** The formation every fixture unit hauls for — scaffolding, not subject. */
 let fleetId: string, fleetLeader: string;
@@ -114,6 +119,7 @@ type Candidate = {
   deptOk: boolean;
   skillOk: boolean;
   expired: boolean;
+  standby: boolean;
 };
 
 async function candidatesFor(unitCode: string): Promise<Candidate[]> {
@@ -179,6 +185,7 @@ beforeAll(async () => {
     positionId: string;
     skilled?: boolean;
     simperExp?: string | null;
+    status?: "aktif" | "standby" | "nonaktif";
   }): Promise<Person> => {
     const nik = `ZZA${uid()}`;
     const [row] = await db
@@ -190,6 +197,7 @@ beforeAll(async () => {
         departmentId: input.departmentId,
         positionId: input.positionId,
         simperExp: input.simperExp ?? null,
+        ...(input.status ? { status: input.status } : {}),
       })
       .returning({ id: schema.employees.id });
     made.employees.push(row!.id);
@@ -245,6 +253,24 @@ beforeAll(async () => {
     departmentId: deptA,
     positionId: operatorA,
   });
+  opStandby = await employee({
+    label: "Standby",
+    departmentId: deptA,
+    positionId: operatorA,
+    status: "standby",
+  });
+  opStandby2 = await employee({
+    label: "StandbyTwo",
+    departmentId: deptA,
+    positionId: operatorA,
+    status: "standby",
+  });
+  opOff = await employee({
+    label: "Off",
+    departmentId: deptA,
+    positionId: operatorA,
+    status: "nonaktif",
+  });
   opFree = await employee({
     label: "Free",
     departmentId: deptA,
@@ -278,6 +304,7 @@ beforeAll(async () => {
       simperCodeId: string;
       departmentId: string;
       breakdown: boolean;
+      active: boolean;
     }>
   ) => {
     const [row] = await db
@@ -309,7 +336,11 @@ beforeAll(async () => {
      hauls for that fleet. What scoping leaves *out* is pinned on its own
      below. */
   const unit = async (
-    extra: Partial<{ simperCodeId: string; departmentId: string }>
+    extra: Partial<{
+      simperCodeId: string;
+      departmentId: string;
+      active: boolean;
+    }>
   ) => {
     const row = await unitRow(extra);
     await db.insert(schema.fleetUnits).values({ fleetId, unitId: row.id });
@@ -319,6 +350,7 @@ beforeAll(async () => {
   unitReq = await unit({ simperCodeId: skillCode.id });
   unitDept = await unit({ departmentId: deptA });
   unitFree = await unit({});
+  unitOff = await unit({ active: false });
 
   // Today's roster for the pair rule: two on Day, one on Night, one absent
   // from the sheet entirely.
@@ -469,15 +501,18 @@ describe("who a unit may be paired with, and why not", () => {
 
 /* -------------------------------------------------------------- the pair */
 
-describe("a unit's two operators are a Day/Night pair", () => {
-  test("same shift is refused, opposite accepted, missing roster tolerated", async () => {
+describe("a unit holds two operators, whatever their shifts", () => {
+  test("a same-shift pair is allowed; the third operator is not", async () => {
     expect((await pair(unitFree.code, opDay.nik)).status).toBe(201);
 
-    // Two Day operators are a queue, not a pair.
-    const sameShift = await pair(unitFree.code, opDay2.nik);
-    expect(sameShift.status).toBe(422);
-    expect(((await sameShift.json()) as { message: string }).message).toContain(
-      "pagi"
+    /* Two Day operators used to be refused as "a queue, not a pair" (owner,
+       2026-09-23: dropped — the plan records an intention, and the engine is
+       what decides who drives today). */
+    expect((await pair(unitFree.code, opDay2.nik)).status).toBe(201);
+    await send(
+      "DELETE",
+      `/fleet-allocation/plan/slots/${unitFree.code}/${opDay2.nik}`,
+      admin.cookie
     );
 
     expect((await pair(unitFree.code, opNight.nik)).status).toBe(201);
@@ -486,6 +521,35 @@ describe("a unit's two operators are a Day/Night pair", () => {
     const full = await pair(unitFree.code, opFree.nik);
     expect(full.status).toBe(409);
     expect(await full.json()).toMatchObject({ code: "unit_full" });
+  });
+
+  test("a standby operator may be planned; a nonaktif one may not", async () => {
+    /* The plan is a plan (owner, 2026-09-23): somebody on light duty keeps
+       their machine on paper. The engine still refuses them a seat, so the
+       unit reads vacant on the day. */
+    expect((await pair(unitDept.code, opStandby.nik)).status).toBe(201);
+    const candidate = candidateOf(
+      await candidatesFor(unitDept.code),
+      opStandby
+    );
+    expect(candidate).toMatchObject({ standby: true });
+
+    const refused = await pair(unitReq.code, opOff.nik);
+    expect(refused.status).toBe(422);
+    expect(((await refused.json()) as { message: string }).message).toContain(
+      "nonaktif"
+    );
+  });
+
+  test("an inactive unit may be planned too", async () => {
+    // A machine out of service is still a machine somebody will crew when it
+    // returns; the board shows the pairing, marked, rather than hiding it.
+    expect((await pair(unitOff.code, opFree.nik)).status).toBe(201);
+    await send(
+      "DELETE",
+      `/fleet-allocation/plan/slots/${unitOff.code}/${opFree.nik}`,
+      admin.cookie
+    );
   });
 
   test("an operator pairs with one unit, and the second asks says which", async () => {
@@ -541,6 +605,33 @@ describe("the board composes what the screen renders", () => {
     expect(spares).not.toContain(opFit.nik);
     expect(spares).toContain(opFree.nik);
     expect(spares).not.toContain(clerk.nik);
+  });
+
+  test("a planned standby operator, and an inactive unit that holds one", async () => {
+    /* Both are admitted to the plan and both are outside allocation, so the
+       board has to say so: the screen reads the unit as vacant from these
+       two flags rather than from the roster alone. */
+    expect((await pair(unitOff.code, opStandby2.nik)).status).toBe(201);
+    const board = (await (
+      await send("GET", "/fleet-allocation/plan", viewer.cookie)
+    ).json()) as {
+      units: {
+        code: string;
+        active: boolean;
+        slots: { nik: string; standby: boolean }[];
+      }[];
+    };
+
+    const dept = board.units.find((u) => u.code === unitDept.code);
+    expect(dept?.active).toBe(true);
+    expect(dept?.slots.find((s) => s.nik === opStandby.nik)?.standby).toBe(
+      true
+    );
+
+    // An inactive unit reaches the board only because the plan holds someone.
+    const off = board.units.find((u) => u.code === unitOff.code);
+    expect(off?.active).toBe(false);
+    expect(off?.slots.map((s) => s.nik)).toEqual([opStandby2.nik]);
   });
 
   test("a spare carries the SIMPER codes they hold", async () => {

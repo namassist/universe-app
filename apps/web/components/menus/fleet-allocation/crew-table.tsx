@@ -44,6 +44,8 @@ export type CrewMember = {
   skills: string[];
   /** Today's roster code, or null when the roster does not know them. */
   rosterCode: RosterCode | null;
+  /** On light duty: planned, but never allocated a unit for the day. */
+  standby: boolean;
 };
 
 /**
@@ -79,6 +81,8 @@ export type CrewRow = {
    * nobody will ever be sent to fill it (see `fleet-scope.ts`).
    */
   inAllocation: boolean;
+  /** In service; an inactive unit is here only because the plan holds someone. */
+  active: boolean;
   area: string | null;
   /** A unit holds 0–2 of them; a spare row holds exactly himself. */
   crew: CrewMember[];
@@ -97,7 +101,7 @@ function fleetKeyOf(row: CrewRow): string | null {
 
 /** Whether the roster puts this operator on the shift being prepared. */
 const onShift = (member: CrewMember, shift: ShiftChoice): boolean =>
-  worksShift(member.rosterCode, shift);
+  !member.standby && worksShift(member.rosterCode, shift);
 
 /**
  * A unit nobody will drive on the shift being prepared.
@@ -117,12 +121,14 @@ const memberOf = (person: {
   departmentName: string;
   skills: string[];
   rosterCode: string | null;
+  standby?: boolean;
 }): CrewMember => ({
   nik: person.nik,
   name: person.name,
   departmentName: person.departmentName,
   skills: person.skills,
   rosterCode: (person.rosterCode as RosterCode | null) ?? null,
+  standby: !!person.standby,
 });
 
 /**
@@ -141,6 +147,7 @@ export function crewRows(board: PlanBoard | undefined): CrewRow[] {
     fleetLeader: unit.fleet?.leaderCode ?? null,
     fleetSupport: unit.fleetSupport,
     inAllocation: inAllocation(unit),
+    active: unit.active,
     area: unit.fleet ? (areaOf.get(unit.fleet.id) ?? null) : null,
     crew: unit.slots.map(memberOf),
   }));
@@ -161,6 +168,7 @@ export function crewRows(board: PlanBoard | undefined): CrewRow[] {
       fleetLeader: null,
       fleetSupport: false,
       inAllocation: false,
+      active: true,
       area: null,
       crew: [memberOf(s)],
     }))
@@ -545,6 +553,15 @@ function UnitRows({
             {/* Said out loud rather than left as the absence of the badge
                 above: without it a broken or unformed machine with its whole
                 crew on leave reads as quietly fine. */}
+            {row.active === false ? (
+              <Badge
+                variant="neutral"
+                className="ml-2"
+                title={t.faUnitInactiveHint}
+              >
+                {t.faUnitInactive}
+              </Badge>
+            ) : null}
             {row.inAllocation ? null : (
               <Badge
                 variant="neutral"
@@ -619,6 +636,15 @@ function UnitRows({
           </TableCell>
           <TableCell>
             <RosterBadge t={t} code={c.rosterCode} />
+            {c.standby ? (
+              <Badge
+                variant="warning"
+                className="ml-1.5"
+                title={t.faOpStandbyHint}
+              >
+                {t.faOpStandby}
+              </Badge>
+            ) : null}
           </TableCell>
           {i === 0 ? unitCells : null}
         </TableRow>

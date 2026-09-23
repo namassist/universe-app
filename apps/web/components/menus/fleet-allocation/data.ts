@@ -23,6 +23,11 @@ export type Slot = {
   at?: string; // HH:mm
   /** PLAN only: today's roster code, or null when the roster does not know them. */
   rosterCode?: RosterCode | null;
+  /**
+   * On light duty. The plan may hold them (owner, 2026-09-23) but the engine
+   * never seats them, so they do not fill the unit for the day.
+   */
+  standby?: boolean;
 };
 
 /**
@@ -46,6 +51,11 @@ export type BoardUnit = {
   fleet: { id: string; digger: string } | null;
   /** Crewed without a formation — a dozer, a water truck, a spare digger. */
   fleetSupport?: boolean;
+  /**
+   * In service. An inactive unit is on the board only because the plan still
+   * holds somebody on it, and allocation is never about it.
+   */
+  active?: boolean;
   downtime?: boolean;
   slots: Slot[];
 };
@@ -367,8 +377,14 @@ export function inAllocation(unit: {
   status: UnitStatus;
   fleet: unknown;
   fleetSupport?: boolean;
+  /** Absent means active — the board carried only active units until 2026-09-23. */
+  active?: boolean;
 }): boolean {
-  return unit.status !== "breakdown" && (!!unit.fleet || !!unit.fleetSupport);
+  return (
+    unit.active !== false &&
+    unit.status !== "breakdown" &&
+    (!!unit.fleet || !!unit.fleetSupport)
+  );
 }
 
 /** A unit in allocation that nobody paired to it works on the given shift. */
@@ -377,12 +393,15 @@ export function vacantOn(
     status: UnitStatus;
     fleet: unknown;
     fleetSupport?: boolean;
-    crew: { rosterCode?: RosterCode | null }[];
+    active?: boolean;
+    crew: { rosterCode?: RosterCode | null; standby?: boolean }[];
   },
   shift: ShiftChoice
 ): boolean {
+  /* A standby holder never fills the seat: the engine draws from `aktif`
+     alone, so their unit goes to a spare on the day however the roster reads. */
   return (
     inAllocation(unit) &&
-    !unit.crew.some((c) => worksShift(c.rosterCode, shift))
+    !unit.crew.some((c) => !c.standby && worksShift(c.rosterCode, shift))
   );
 }

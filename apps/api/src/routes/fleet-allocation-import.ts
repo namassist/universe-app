@@ -4,9 +4,9 @@
  * This module parses and checks what a file can prove about itself: the codes
  * it names, its own internal consistency (the same pairing twice, one
  * operator on two units), and — via `pairingConflicts`, run after the route
- * has filtered rows through `refusePairing` — the capacity and Day/Night
- * rules against the *effective* plan: what the database holds, minus what
- * the file moves away, plus what it adds.
+ * has filtered rows through `refusePairing` — capacity against the
+ * *effective* plan: what the database holds, minus what the file moves away,
+ * plus what it adds.
  */
 
 import ExcelJS from "exceljs";
@@ -29,7 +29,7 @@ const HEADER_ROW = 1;
 export const PLAN_MAX_OPS = 2;
 
 export type PlanCatalogues = {
-  /** Active units, keyed lowercase code. */
+  /** Every unit, keyed lowercase code — inactive ones may be planned too. */
   unitsByCode: Map<string, { id: string; code: string }>;
   /** Every employee, keyed NIK exactly as stored. */
   peopleByNik: Map<string, { id: string; nik: string; name: string }>;
@@ -216,17 +216,20 @@ export async function validatePlanWorkbook(
 }
 
 /**
- * Capacity and the Day/Night pair, judged against the effective plan.
+ * Capacity, judged against the effective plan.
  *
  * Walked in file order so the refusal lands on the row that overfilled the
- * unit or doubled the shift — the rows before it remain importable. Run this
- * on rows that already survived eligibility, or an ineligible row would be
- * blamed for a conflict its own refusal will dissolve.
+ * unit — the rows before it remain importable. Run this on rows that already
+ * survived eligibility, or an ineligible row would be blamed for a conflict
+ * its own refusal will dissolve.
+ *
+ * The Day/Night pair rule was here until 2026-09-23 (owner): a unit's two
+ * operators no longer have to be on opposite shifts, because the plan says
+ * who holds a machine rather than who drives it today.
  */
 export function pairingConflicts(
   rows: ParsedPlanRow[],
-  catalogues: PlanCatalogues,
-  shiftOf: Map<string, "day" | "night">
+  catalogues: PlanCatalogues
 ): { rows: ParsedPlanRow[]; errors: ImportErrorRow[] } {
   // What each unit holds once every move in the file has released its old
   // slot — additions then land on top of this.
@@ -256,23 +259,6 @@ export function pairingConflicts(
           row.preview.nik,
           row.preview.name,
           `Unit ${row.preview.unit} sudah memegang ${PLAN_MAX_OPS} operator`
-        )
-      );
-      continue;
-    }
-    const mine = shiftOf.get(row.employeeId);
-    const partnerKind = held
-      .map((id) => shiftOf.get(id))
-      .find((k) => k !== undefined);
-    if (mine && partnerKind && mine === partnerKind) {
-      errors.push(
-        danger(
-          row.preview.row,
-          row.preview.nik,
-          row.preview.name,
-          `${row.preview.name} dan pasangan unit ${row.preview.unit} sama-sama shift ${
-            mine === "day" ? "pagi" : "malam"
-          } hari ini — pasangan unit harus Day/Night`
         )
       );
       continue;

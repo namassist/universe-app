@@ -52,13 +52,16 @@ let opWrongDept: Person; // dept B, skilled
 let clerk: Person; //      dept A, position outside fleet allocation
 let opDay: Person; //      roster: D today
 let opDay2: Person; //     roster: D today
+let opStandby: Person; //  employment status standby
+let opOff: Person; //      employment status nonaktif
 let opNight: Person; //    roster: N today
 
 type Unit = { id: string; code: string };
 let unitReq: Unit; //  global, requires the skill code
 let unitDept: Unit; // owned by dept A, no requirement
 let unitFree: Unit; // global, no requirement
-let unitOther: Unit; // global, no requirement
+let unitOther: Unit;
+let unitOff: Unit; //      global, deactivated in the register
 
 /* ------------------------------------------------------------- fixtures */
 
@@ -184,6 +187,7 @@ beforeAll(async () => {
     positionId: string;
     skilled?: boolean;
     simperExp?: string | null;
+    status?: "aktif" | "standby" | "nonaktif";
   }): Promise<Person> => {
     const nik = `ZZI${uid()}`;
     const [row] = await db
@@ -195,6 +199,7 @@ beforeAll(async () => {
         departmentId: input.departmentId,
         positionId: input.positionId,
         simperExp: input.simperExp ?? null,
+        ...(input.status ? { status: input.status } : {}),
       })
       .returning({ id: schema.employees.id });
     made.employees.push(row!.id);
@@ -247,6 +252,18 @@ beforeAll(async () => {
     departmentId: deptA,
     positionId: operatorA,
   });
+  opStandby = await employee({
+    label: "Standby",
+    departmentId: deptA,
+    positionId: operatorA,
+    status: "standby",
+  });
+  opOff = await employee({
+    label: "Off",
+    departmentId: deptA,
+    positionId: operatorA,
+    status: "nonaktif",
+  });
   opDay2 = await employee({
     label: "DayTwo",
     departmentId: deptA,
@@ -277,7 +294,11 @@ beforeAll(async () => {
   made.catalogues.push(cls!.id, typ!.id, mdl!.id, brd!.id);
 
   const unit = async (
-    extra: Partial<{ simperCodeId: string; departmentId: string }>
+    extra: Partial<{
+      simperCodeId: string;
+      departmentId: string;
+      active: boolean;
+    }>
   ) => {
     const [row] = await db
       .insert(schema.units)
@@ -297,6 +318,7 @@ beforeAll(async () => {
   unitDept = await unit({ departmentId: deptA });
   unitFree = await unit({});
   unitOther = await unit({});
+  unitOff = await unit({ active: false });
 
   const today = localDate(new Date());
   const month = `${today.slice(0, 7)}-01`;
@@ -430,13 +452,27 @@ describe("every pairing rule refuses by row, with its reason", () => {
     expect(issues).toContain("baris");
   });
 
-  test("a Day/Day pair is refused even when both come from the file", async () => {
+  test("a Day/Day pair from the file is welcome too", async () => {
+    /* The pair rule left the plan on 2026-09-23 (owner): which of a unit's
+       two operators drives today is the engine's question, not the file's. */
     const preview = await validate([
       [unitFree.code, opDay.nik],
       [unitFree.code, opDay2.nik],
     ]);
+    expect(preview.errors).toEqual([]);
+    expect(preview.newCount).toBe(2);
+  });
+
+  test("an inactive unit and a standby operator are both plannable", async () => {
+    const preview = await validate([[unitOff.code, opStandby.nik]]);
+    expect(preview.errors).toEqual([]);
+    expect(preview.newCount).toBe(1);
+  });
+
+  test("a nonaktif employee is still refused", async () => {
+    const preview = await validate([[unitFree.code, opOff.nik]]);
     expect(preview.errorCount).toBe(1);
-    expect(preview.errors[0]!.issue).toContain("pagi");
+    expect(preview.errors[0]!.issue).toContain("nonaktif");
   });
 
   test("a Day/Night pair from the file is welcome", async () => {
@@ -559,10 +595,9 @@ describe("the commit writes the plan whole, or not at all", () => {
     expect(preview.errors[0]!.issue).toContain("2");
   });
 
-  test("the pair rule sees the partner already in the database", async () => {
-    // opDay holds unitFree; moving opDay2 (also Day) beside them by file must
-    // refuse the same way the dialog does. Free a slot first so capacity is
-    // not the rule that fires.
+  test("a same-shift partner already in the database is no obstacle", async () => {
+    // opDay holds unitFree; opDay2 is on the same shift and may join them.
+    // Free a slot first so capacity is not the rule that fires.
     const release = await app.handle(
       new Request(
         `http://localhost/fleet-allocation/plan/slots/${unitFree.code}/${opNight.nik}`,
@@ -572,7 +607,7 @@ describe("the commit writes the plan whole, or not at all", () => {
     expect(release.status).toBe(200);
 
     const preview = await validate([[unitFree.code, opDay2.nik]]);
-    expect(preview.errorCount).toBe(1);
-    expect(preview.errors[0]!.issue).toContain("pagi");
+    expect(preview.errors).toEqual([]);
+    expect(preview.newCount).toBe(1);
   });
 });
