@@ -81,7 +81,16 @@ const shiftOperators = (date: string, shift: ShiftKind) => sql`
     from ${schema.employees} e
     join ${schema.rosterDays} rd on rd.employee_id = e.id
     join ${schema.positions} p on p.id = e.position_id and p.fleet_allocation
-    left join ${schema.fleetPlanSlots} ps on ps.employee_id = e.id
+    /* Only a pairing the day can act on (owner, 2026-09-23, when the plan
+       began admitting inactive units): an operator whose standing unit is out
+       of service is a spare here, which is what the engine will make of them
+       and what the board will show. */
+    left join ${schema.fleetPlanSlots} ps
+      on ps.employee_id = e.id
+      and exists (
+        select 1 from ${schema.units} pu
+        where pu.id = ps.unit_id and pu.active
+      )
     left join lateral (
       select ${unitCategory} as category
       from ${schema.units} u
