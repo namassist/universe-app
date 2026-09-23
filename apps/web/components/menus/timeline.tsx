@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Clock, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 
 import {
   MENU_LABELS,
@@ -23,6 +23,7 @@ import {
   timelineQueryOptions,
   type TimelineStageRow,
 } from "@/lib/queries/timeline";
+import { siteClock } from "@/lib/site-clock";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -217,6 +218,26 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       pushToast("error", t.mdAdd, errorMessage(error, t.loginErr)),
   });
 
+  /* Re-arming is not a write to the schedule, so nothing is invalidated: what
+     changes is the muster's running windows, which no screen here reads. */
+  const rearm = useMutation({
+    mutationFn: async (shift: ShiftKind) => {
+      const result = await api.v1.timeline.reset({ shift }).post();
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: (data) =>
+      pushToast(
+        "success",
+        `${t.tlReset} ${SHIFT_KIND_LABELS[data.shift]}`,
+        data.listenUntil
+          ? `${t.tlResetUntil} ${siteClock(data.listenUntil)}`
+          : t.tlResetNothing
+      ),
+    onError: (error) =>
+      pushToast("error", t.tlReset, errorMessage(error, t.loginErr)),
+  });
+
   const del = useMutation({
     mutationFn: async (row: TimelineStageRow) => {
       const { error } = await api.v1.timeline({ id: row.id }).delete();
@@ -298,10 +319,29 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     <div className="flex flex-col gap-6">
       <PageTitle title={MENU_LABELS.timeline} sub={t.tlSub}>
         {canW ? (
-          <Button onClick={openAdd}>
-            <Plus />
-            {t.mdAdd}
-          </Button>
+          <>
+            {/* Re-arms a running muster against the schedule as it now reads:
+                the two long windows — collecting taps, holding the booths open
+                — were armed from the bus-departure time of the moment they
+                started, and an admin may move that time before it arrives.
+                It re-runs no stage, so the board is never rebuilt. */}
+            {SHIFT_KINDS.map((shift) => (
+              <Button
+                key={shift}
+                variant="secondary"
+                disabled={rearm.isPending}
+                onClick={() => rearm.mutate(shift)}
+                title={t.tlResetHint}
+              >
+                <RotateCcw />
+                {t.tlReset} {SHIFT_KIND_LABELS[shift]}
+              </Button>
+            ))}
+            <Button onClick={openAdd}>
+              <Plus />
+              {t.mdAdd}
+            </Button>
+          </>
         ) : null}
       </PageTitle>
 

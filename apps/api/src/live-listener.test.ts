@@ -16,6 +16,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db, schema } from "./db";
 import {
   activeListens,
+  retimeListenWindow,
   runListenWindow,
   forgetListens,
   listenableMachines,
@@ -222,6 +223,32 @@ describe("a scheduled window", () => {
     expect(result.failed).toBe(0);
     expect(fake.stopped).toBe(1);
     expect(activeListens().map((s) => s.ip)).not.toContain(booth.ip);
+  });
+
+  test("a window can be re-timed while it runs, and holds the booths longer", async () => {
+    /* The bus time is read once, when the window is armed. An admin moving it
+       mid-muster used to leave the booths closing at the old hour, with taps
+       silently going unheard — see the timeline reset. */
+    const booth = await addMachine({ last: 77, booth: true });
+    const fake = fakeOpener();
+
+    const window = runListenWindow(new Date(Date.now() + 40), {
+      open: fake.open,
+      everyMs: 20,
+    });
+    await Bun.sleep(10);
+    const extended = retimeListenWindow(new Date(Date.now() + 160));
+    expect(extended).toBe(true);
+
+    const startedAt = Date.now();
+    await window;
+    expect(Date.now() - startedAt).toBeGreaterThan(100);
+    expect(activeListens().map((s) => s.ip)).not.toContain(booth.ip);
+  });
+
+  test("re-timing when no window is open says so", () => {
+    // The caller uses this to tell "extended" from "needs opening".
+    expect(retimeListenWindow(new Date(Date.now() + 1000))).toBe(false);
   });
 
   /*

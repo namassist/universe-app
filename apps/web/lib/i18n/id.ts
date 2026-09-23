@@ -367,6 +367,11 @@ export const id = {
   tlShift: "Shift",
   tlShiftNone: "Tidak spesifik",
   tlShiftHint: "Kosongkan bila tahap ini tidak khusus untuk salah satu shift.",
+  tlReset: "Reset",
+  tlResetHint:
+    "Terapkan ulang jadwal ke muster yang sedang berjalan: penarikan tap dan pendengaran booth mengikuti jam bus terbaru. Papan alokasi tidak dibuat ulang.",
+  tlResetUntil: "Jendela muster berjalan sampai",
+  tlResetNothing: "Tidak ada jendela yang perlu disetel ulang saat ini.",
   tlSound: "Suara",
   tlSoundNone: "Tanpa suara",
   tlSoundHint:

@@ -1282,6 +1282,38 @@ until someone pressed Sync at 07:07 — although they were on time.
 - `lib/display-data.ts` — the last of the display sample data, four invented
   fleets whose selection was discarded on submit — is gone.
 
+### Re-arming a muster after a schedule change — shipped
+
+- **The rule (owner, 2026-09-23): a stage's time may be changed, but only
+  before that time arrives.** Moving a gate the muster has already passed
+  rewrites what everyone was judged against, and the people it judged have
+  already tapped. The Timeline menu now refuses such an edit
+  (`timeline-edit.ts`, `editRefused`).
+- **"Already passed" is about the running muster, not the clock.** An admin
+  preparing tomorrow's 05:00 stage at 20:00 is doing ordinary work, and a rule
+  reading "05:00 has gone by today" would refuse them; a night stage keeps its
+  muster across midnight for the same reason, in the other direction. The
+  boundary is the `shift-start` gate the walls already turn over on. Renaming
+  a passed stage is still allowed — only a change that moves _when it fires_
+  is refused.
+- **What actually got stuck, before this.** The markers take effect the moment
+  they are saved, because the walls and the verdicts read the timeline live.
+  Two things do not: **tap collection** (armed at `shift-start`) and **holding
+  the booths open** (armed at `finger-ingest`). Both end at bus departure _as
+  it read when they were armed_, so moving bus departure mid-muster left the
+  booths closing at the old hour and the taps after it unheard, with nothing on
+  any screen saying so.
+- **Reset re-arms those two windows** (`POST /v1/timeline/reset/:shift`,
+  manage access, a button per shift on the Timeline menu). Each window's end is
+  now read every pass rather than captured, so it can move under a running
+  window; a window that already closed is re-opened when the new bus time is
+  still ahead. The response says when the windows now run until, and the toast
+  repeats it.
+- **It re-runs no stage hook, deliberately.** Re-firing `spare-validate` would
+  rebuild the allocation board — discarding hand placements and reseating units
+  already printed on slips, the one thing an admin must never do out of turn
+  (owner, 2026-09-15). Re-arming is about the windows, not about the past.
+
 ### The timeline's sounds — shipped
 
 - **A timeline stage may name a sound** (`timeline_stages.sound_id` → `sounds`,

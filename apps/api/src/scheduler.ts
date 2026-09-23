@@ -39,7 +39,7 @@ import { notify } from "./notify";
 import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { pullClosesAt, stageTimeOf } from "./stage-time";
-import { runListenWindow } from "./live-listener";
+import { retimeListenWindow, runListenWindow } from "./live-listener";
 import { collectOnce, reportLogSizes } from "./device-taps";
 import { deriveDate } from "./derive";
 import { redis } from "./redis";
@@ -310,8 +310,28 @@ const collect: Hook = async (dispatch) => {
  * first pass so it describes the machines as we found them, not as we left
  * them.
  */
+/**
+ * When the running collection window closes, or null when none is open.
+ *
+ * Re-timable for the same reason the listening window is: both are armed
+ * earlier in the muster from the bus-departure time as it then read, and an
+ * admin may move that time before it arrives.
+ */
+let collectClosesAt: Date | null = null;
+
+/** Move the running collection window's end; false when none is running. */
+export function retimeCollection(endsAt: Date): boolean {
+  if (!collectClosesAt) return false;
+  collectClosesAt = endsAt;
+  return true;
+}
+
+/** When taps are being collected until, for whoever asks. */
+export const collectionWindowEnd = (): Date | null => collectClosesAt;
+
 async function runCollection(endsAt: Date): Promise<void> {
   const everyMs = env.DEVICE_COLLECT_SECONDS * 1000;
+  collectClosesAt = endsAt;
   try {
     await reportLogSizes("start");
     for (;;) {
@@ -344,13 +364,52 @@ async function runCollection(endsAt: Date): Promise<void> {
       } catch (error) {
         console.error("[taps] satu pass gagal, jendela diteruskan", error);
       }
-      if (Date.now() + everyMs > endsAt.getTime()) break;
+      /* Read each pass, so the end can move under a running window. */
+      if (Date.now() + everyMs > (collectClosesAt ?? endsAt).getTime()) break;
       await new Promise((r) => setTimeout(r, everyMs));
     }
     await reportLogSizes("end");
   } catch (error) {
     console.error("[taps] collection window failed", error);
+  } finally {
+    collectClosesAt = null;
   }
+}
+
+/**
+ * Re-arm a shift's windows against the timeline as it now reads.
+ *
+ * The muster's two long-running windows — collecting taps, and holding the
+ * booths open — are armed once, early, from the bus-departure time of that
+ * moment. Moving that time afterwards is a legitimate thing for an admin to
+ * do, and until this existed the windows kept the hour they were born with:
+ * the taps after it were never pulled, and nothing on any screen said so.
+ *
+ * Deliberately **not** a re-run of the stage hooks. Re-firing `spare-validate`
+ * would rebuild the allocation board, discarding hand placements and reseating
+ * units already printed on slips — the one thing an admin must never do
+ * out of turn (owner, 2026-09-15).
+ */
+export async function rearmShift(shift: ShiftKind): Promise<{
+  collectUntil: string | null;
+  listenUntil: string | null;
+}> {
+  const closes = await stageTimeOf("bus-depart", shift);
+  if (!closes) return { collectUntil: null, listenUntil: null };
+  const endsAt = todayAt(closes, env.DEVICE_COLLECT_GRACE_MINUTES);
+
+  /* Past already: nothing to hold open, and opening a window that closes in
+     the same breath would only churn the machines. */
+  if (endsAt.getTime() <= Date.now())
+    return { collectUntil: null, listenUntil: null };
+
+  if (!retimeCollection(endsAt)) void runCollection(endsAt);
+  if (!retimeListenWindow(endsAt)) void runListenWindow(endsAt);
+
+  return {
+    collectUntil: endsAt.toISOString(),
+    listenUntil: endsAt.toISOString(),
+  };
 }
 
 /** "HH:MM:SS" today, optionally pushed on by some minutes. */

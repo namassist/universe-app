@@ -21,9 +21,14 @@ import {
 
 import { requireAuth } from "../auth/macro";
 import { db, schema, type TimelineStageRow } from "../db";
+import { currentShift } from "../current-shift";
+import { rearmShift } from "../scheduler";
+import { shiftGates } from "../stage-time";
+import { editRefused, type RunningMuster } from "../timeline-edit";
 import {
   ErrorSchema,
   OptionalShiftKindSchema,
+  ShiftKindSchema,
   OptionalTimelineActionSchema,
   TimelineActionSchema,
   TimelineStageSchema,
@@ -62,6 +67,28 @@ async function soundMissing(soundId: string | null | undefined) {
     .limit(1);
   return !row;
 }
+
+/**
+ * The muster running now, for the edit guard — null between them.
+ *
+ * Read from the same `shift-start` gates the walls turn over on, so "the
+ * muster is on" means here exactly what it means on the yard's screens.
+ */
+async function runningMuster(now: Date): Promise<RunningMuster | null> {
+  const gates = await shiftGates();
+  const current = currentShift(now, gates);
+  if (!current) return null;
+  const startsAt = gates[current.shift];
+  return startsAt
+    ? { shift: current.shift, startsAt: startsAt.slice(0, 5) }
+    : null;
+}
+
+const editClosed = {
+  code: "stage_passed",
+  message:
+    "Tahap ini sudah lewat di muster yang sedang berjalan — jadwal hanya boleh diubah sebelum jamnya",
+};
 
 const soundNotFound = {
   code: "validation_failed",
@@ -260,6 +287,21 @@ export const timelineRoutes = new Elysia({
         .limit(1);
       if (!before) return status(404, notFound);
 
+      /* Only a change that moves when it fires: renaming a stage the muster
+         has passed is harmless, and refusing it would be a rule about the
+         wrong thing. */
+      const retimes = body.at !== undefined || body.active !== undefined;
+      if (
+        retimes &&
+        editRefused({
+          stageAt: before.at.slice(0, 5),
+          stageShift: before.shift,
+          running: await runningMuster(new Date()),
+          now: new Date(),
+        })
+      )
+        return status(422, editClosed);
+
       const disorder = await outOfOrder({
         at: body.at ?? before.at.slice(0, 5),
         action: body.action ?? before.action,
@@ -327,5 +369,36 @@ export const timelineRoutes = new Elysia({
         404: ErrorSchema,
       },
       detail: { summary: "Remove a stage" },
+    }
+  )
+
+  .post(
+    "/reset/:shift",
+    async ({ params }) => {
+      /* Re-arms the muster's two long-running windows against the timeline as
+         it now reads — nothing more. The stage hooks are deliberately not
+         re-run: `spare-validate` would rebuild the allocation board,
+         discarding hand placements and reseating units already printed on
+         slips (owner, 2026-09-15). */
+      const armed = await rearmShift(params.shift);
+      return { shift: params.shift, ...armed };
+    },
+    {
+      auth: { menu: "timeline", mode: "manage" },
+      params: t.Object({ shift: ShiftKindSchema }),
+      response: {
+        200: t.Object({
+          shift: ShiftKindSchema,
+          /** When taps will now be collected until; null when nothing runs. */
+          collectUntil: t.Nullable(t.String()),
+          /** When the booths will now be held open until. */
+          listenUntil: t.Nullable(t.String()),
+        }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: {
+        summary: "Re-arm a shift's collection and listening windows",
+      },
     }
   );

@@ -13,7 +13,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
@@ -130,6 +130,68 @@ afterAll(async () => {
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
     await db.delete(schema.roles).where(inArray(schema.roles.id, made.roles));
+});
+
+/* ----------------------------------------------------------------- reset */
+
+describe("re-arming a shift mid-muster", () => {
+  test("says nothing was armed when no bus-depart stage governs the shift", async () => {
+    /* The windows end at bus departure, so without one there is nothing to
+       hold open — and the route must say so rather than opening a window with
+       no end, which is the one thing collection must never do. Deactivated
+       for the length of this test so it cannot depend on the seed, and so no
+       real collection loop starts inside the test process. */
+    const governing = await db
+      .select({ id: schema.timelineStages.id })
+      .from(schema.timelineStages)
+      .where(
+        and(
+          eq(schema.timelineStages.action, "bus-depart"),
+          eq(schema.timelineStages.shift, "day"),
+          eq(schema.timelineStages.active, true)
+        )
+      );
+    if (governing.length)
+      await db
+        .update(schema.timelineStages)
+        .set({ active: false })
+        .where(
+          inArray(
+            schema.timelineStages.id,
+            governing.map((row) => row.id)
+          )
+        );
+    try {
+      const response = await send("POST", "/timeline/reset/day", admin.cookie);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        shift: "day",
+        collectUntil: null,
+        listenUntil: null,
+      });
+    } finally {
+      if (governing.length)
+        await db
+          .update(schema.timelineStages)
+          .set({ active: true })
+          .where(
+            inArray(
+              schema.timelineStages.id,
+              governing.map((row) => row.id)
+            )
+          );
+    }
+  });
+
+  test("view may not re-arm anything", async () => {
+    const response = await send("POST", "/timeline/reset/day", viewer.cookie);
+    expect(response.status).toBe(403);
+  });
+
+  test("a shift outside the vocabulary is refused", async () => {
+    const response = await send("POST", "/timeline/reset/sore", admin.cookie);
+    expect(response.status).toBe(422);
+  });
 });
 
 /* ----------------------------------------------------------------- sound */

@@ -269,6 +269,31 @@ export async function stopScheduledListens(): Promise<number> {
  * one conversation — and that session keeps running when the window closes,
  * because somebody asked for it by hand.
  */
+/**
+ * When the running window closes, or null when none is open.
+ *
+ * Module-level because the window is armed once — at first-finger ingest —
+ * from the bus-departure time *as it then read*. An admin moving that time
+ * mid-muster left the booths closing at the old hour and the taps after it
+ * unheard, so the end is re-timable in place (`retimeListenWindow`) rather
+ * than by starting a second window beside the first, which would have two
+ * loops fighting over the same machines.
+ */
+let closesAt: Date | null = null;
+
+/**
+ * Move the running window's end. False when none is running, which is the
+ * caller's cue to open one instead.
+ */
+export function retimeListenWindow(endsAt: Date): boolean {
+  if (!closesAt) return false;
+  closesAt = endsAt;
+  return true;
+}
+
+/** When the booths are being heard until, for whoever asks. */
+export const listenWindowEnd = (): Date | null => closesAt;
+
 export async function runListenWindow(
   endsAt: Date,
   options: { open?: OpenLive; everyMs?: number } = {}
@@ -276,6 +301,7 @@ export async function runListenWindow(
   const everyMs = options.everyMs ?? env.DEVICE_LISTEN_RETRY_SECONDS * 1000;
   let opened = 0;
   let failed = 0;
+  closesAt = endsAt;
 
   for (;;) {
     const booths = await boothsToHear();
@@ -297,10 +323,13 @@ export async function runListenWindow(
         );
       }
     }
-    if (Date.now() + everyMs >= endsAt.getTime()) break;
+    /* Read each pass rather than captured: this is what lets the end move
+       under a running window. */
+    if (Date.now() + everyMs >= (closesAt ?? endsAt).getTime()) break;
     await Bun.sleep(everyMs);
   }
 
+  closesAt = null;
   const closed = await stopScheduledListens();
   console.log(
     `[listen] jendela tutup — ${opened} sesi dibuka, ${failed} gagal, ${closed} ditutup`
