@@ -533,15 +533,13 @@ function UnitCard({
         "relative min-w-0 overflow-hidden rounded-card border border-(--glass-2-border)",
         cardLayout === "identity" && "flex flex-col bg-(--overlay-fill)",
         className,
+        /* An empty seat is red only on a real board. Before the line-up is
+           generated nobody has checked FTW or the tap, so an empty unit means
+           its standing operator is off today rather than a seat nobody
+           filled. */
         tone === "danger" &&
           !provisional &&
-          "border-[rgba(252,60,59,.55)] shadow-[0_0_28px_rgba(252,60,59,.25)]",
-        /* Unfinished, and it has to look it from across the yard: dimmed,
-           desaturated, dashed. Nobody has checked FTW or the tap yet, so an
-           empty unit here is not the red alarm it becomes on a real board —
-           only a unit whose standing operator is off today. */
-        provisional &&
-          "border-dashed border-(--border-input) opacity-55 saturate-50"
+          "border-[rgba(252,60,59,.55)] shadow-[0_0_28px_rgba(252,60,59,.25)]"
       )}
     >
       {cardLayout === "identity" ? (
@@ -1006,10 +1004,10 @@ export default function DisplayFleetPage() {
               Shift {shiftLabel}
             </span>
           ) : null}
-          {/* Said in words as well as in styling: dimmed cards tell a
-              passer-by that something is different, this tells them what.
-              Kept on both layouts because it is an alarm, not a label — the
-              wall is showing a line-up nobody has checked yet. */}
+          {/* The one thing that says this line-up is provisional, since the
+              cards stopped being dimmed for it (owner, 2026-09-23). Kept on
+              both layouts because it is an alarm, not a label — the wall is
+              showing a line-up nobody has checked yet. */}
           {data?.provisional ? (
             <span className="inline-flex flex-none items-center gap-2.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-4.5 py-1 font-bold text-(--badge-warning-text)">
               <Hourglass className="size-6" />
