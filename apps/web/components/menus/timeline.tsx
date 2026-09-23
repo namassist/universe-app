@@ -47,6 +47,7 @@ import {
   ToolbarTitle,
 } from "@/components/ui/panel";
 import { SearchInput } from "@/components/ui/search-input";
+import { Segmented, SegmentedButton } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { StateBox } from "@/components/ui/state-box";
 import {
@@ -177,6 +178,31 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
   const [delTarget, setDelTarget] = React.useState<TimelineStageRow | null>(
     null
   );
+  const [resetOpen, setResetOpen] = React.useState(false);
+  const [resetShift, setResetShift] = React.useState<ShiftKind>("day");
+  /* Which muster is on, by the same `shift-start` gates the walls turn over
+     on — so the dialog opens on the shift somebody pressing this means. Read
+     when the dialog opens rather than on a timer: nobody needs it to flip
+     under their hand mid-decision. */
+  const runningShift = React.useMemo<ShiftKind>(() => {
+    const startOf = (shift: ShiftKind) =>
+      entries.find(
+        (e) => e.action === "shift-start" && e.shift === shift && e.active
+      )?.at ?? null;
+    const minutes = (clock: string) => {
+      const [hours = "0", mins = "0"] = clock.split(":");
+      return Number(hours) * 60 + Number(mins);
+    };
+    const day = startOf("day");
+    const night = startOf("night");
+    const now = new Date().getHours() * 60 + new Date().getMinutes();
+    if (!day || !night) return now < 12 * 60 ? "day" : "night";
+    if (now >= minutes(night)) return "night";
+    if (now >= minutes(day)) return "day";
+    /* Before the day muster opens it is still last night's, which is the
+       answer somebody re-arming at 03:00 needs. */
+    return "night";
+  }, [entries]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: timelineKey });
@@ -226,14 +252,16 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       if (result.error) throw result.error;
       return result.data;
     },
-    onSuccess: (data) =>
+    onSuccess: (data) => (
+      setResetOpen(false),
       pushToast(
         "success",
         `${t.tlReset} ${SHIFT_KIND_LABELS[data.shift]}`,
         data.listenUntil
           ? `${t.tlResetUntil} ${siteClock(data.listenUntil)}`
           : t.tlResetNothing
-      ),
+      )
+    ),
     onError: (error) =>
       pushToast("error", t.tlReset, errorMessage(error, t.loginErr)),
   });
@@ -319,29 +347,31 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     <div className="flex flex-col gap-6">
       <PageTitle title={MENU_LABELS.timeline} sub={t.tlSub}>
         {canW ? (
-          <>
-            {/* Re-arms a running muster against the schedule as it now reads:
-                the two long windows — collecting taps, holding the booths open
-                — were armed from the bus-departure time of the moment they
-                started, and an admin may move that time before it arrives.
-                It re-runs no stage, so the board is never rebuilt. */}
-            {SHIFT_KINDS.map((shift) => (
-              <Button
-                key={shift}
-                variant="secondary"
-                disabled={rearm.isPending}
-                onClick={() => rearm.mutate(shift)}
-                title={t.tlResetHint}
-              >
-                <RotateCcw />
-                {t.tlReset} {SHIFT_KIND_LABELS[shift]}
-              </Button>
-            ))}
+          /* One flex item, not two: `PageTitle` spreads its children apart,
+             which left the reset stranded mid-header rather than beside the
+             action it belongs next to. */
+          <div className="flex flex-wrap items-center gap-3">
+            {/* One button, not one per shift (owner, 2026-09-23): this is a
+                rescue tool pressed once in a blue moon, and two wide buttons
+                beside "Tambah Entri" made the header read as though resetting
+                were half of what this screen does. Which shift is the
+                dialog's question, answered for you with the one running. */}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setResetShift(runningShift);
+                setResetOpen(true);
+              }}
+              title={t.tlResetHint}
+            >
+              <RotateCcw />
+              {t.tlReset}
+            </Button>
             <Button onClick={openAdd}>
               <Plus />
               {t.mdAdd}
             </Button>
-          </>
+          </div>
         ) : null}
       </PageTitle>
 
@@ -564,6 +594,48 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* What it does and, as plainly, what it does not: the board is the
+          thing an admin fears losing, and a rescue tool has to say it is safe
+          before anybody will reach for it mid-muster. */}
+      <Dialog
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        labelledBy="tlr-t"
+      >
+        <DialogIcon variant="info">
+          <RotateCcw />
+        </DialogIcon>
+        <DialogTitle id="tlr-t">{t.tlResetT}</DialogTitle>
+        <DialogBody>{t.tlResetB}</DialogBody>
+        <div className="mt-4">
+          <Segmented role="group" aria-label={t.tlShift}>
+            {SHIFT_KINDS.map((shift) => (
+              <SegmentedButton
+                key={shift}
+                type="button"
+                active={resetShift === shift}
+                onClick={() => setResetShift(shift)}
+              >
+                {SHIFT_KIND_LABELS[shift]}
+                {shift === runningShift ? ` · ${t.tlResetRunning}` : ""}
+              </SegmentedButton>
+            ))}
+          </Segmented>
+        </div>
+        <p className="mt-3 text-xs text-(--text-tertiary)">{t.tlResetSafe}</p>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setResetOpen(false)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            disabled={rearm.isPending}
+            onClick={() => rearm.mutate(resetShift)}
+          >
+            {rearm.isPending ? t.tlResetDoing : t.tlResetDo}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog

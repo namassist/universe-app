@@ -369,7 +369,14 @@ export const en: Dict = {
   tlShift: "Shift",
   tlShiftNone: "Not shift-specific",
   tlShiftHint: "Leave empty if this stage governs neither shift in particular.",
-  tlReset: "Reset",
+  tlReset: "Reset muster",
+  tlResetT: "Re-apply the schedule to the running muster?",
+  tlResetB:
+    "Tap collection and booth listening will follow the current bus time. No stage is run again.",
+  tlResetSafe: "The allocation board is not rebuilt.",
+  tlResetRunning: "running",
+  tlResetDo: "Re-apply",
+  tlResetDoing: "Applying…",
   tlResetHint:
     "Re-apply the schedule to the running muster: tap collection and booth listening follow the current bus time. The allocation board is not rebuilt.",
   tlResetUntil: "Muster windows now run until",
