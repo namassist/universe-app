@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
+import { apitallyPlugin } from "apitally/elysia";
 import { API_VERSION } from "@universe/contracts";
 
 import { env, isProd } from "./env";
@@ -84,7 +85,37 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(fingerprintMachineRoutes)
   .use(printerRoutes);
 
+/**
+ * Request metrics and logs to Apitally, when a client ID is configured.
+ *
+ * Mounted first so its onRequest hook starts the clock before CORS, auth or
+ * validation run — otherwise their time and their rejections go unmeasured.
+ *
+ * The SDK already masks passwords, tokens, secrets, cookies and Authorization.
+ * `sessionId` is added because a bearer login returns the session identifier
+ * in its body, and that identifier *is* the credential for thirty days.
+ */
+const monitoring = (app: Elysia) =>
+  env.APITALLY_CLIENT_ID
+    ? app.use(
+        apitallyPlugin({
+          clientId: env.APITALLY_CLIENT_ID,
+          env: env.APITALLY_ENV,
+          appVersion: API_VERSION,
+          requestLogging: {
+            enabled: env.APITALLY_REQUEST_LOGGING,
+            logRequestHeaders: true,
+            logRequestBody: true,
+            logResponseBody: true,
+            captureLogs: true,
+            maskBodyFields: [/^sessionId$/i],
+          },
+        })
+      )
+    : app;
+
 export const app = new Elysia()
+  .use(monitoring)
   .use(
     cors({
       origin: env.CORS_ORIGINS,

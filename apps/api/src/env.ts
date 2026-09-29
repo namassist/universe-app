@@ -246,6 +246,23 @@ export const env = {
    *  "upload it again", never to a wrong answer, because the commit re-parses
    *  what the client sends rather than trusting anything stored here. */
   IMPORT_DIR: required("IMPORT_DIR", "./storage/imports"),
+
+  /* ---- Apitally (API monitoring) ---- */
+
+  /** The Apitally client ID. Optional on purpose, unlike the stores above:
+   *  monitoring is an observer, not a dependency, so a machine without one —
+   *  a test run, a fresh checkout — boots exactly as before with the plugin
+   *  left off rather than refusing to start. */
+  APITALLY_CLIENT_ID: process.env.APITALLY_CLIENT_ID || undefined,
+  /** Which Apitally environment this process reports under. Explicit rather
+   *  than derived from NODE_ENV, so a staging box running a production build
+   *  does not pollute the "prod" dashboard. */
+  APITALLY_ENV: required("APITALLY_ENV", "dev"),
+  /** Whether request/response bodies, headers and console output are shipped
+   *  to Apitally alongside the metrics. Secrets are masked before sending (see
+   *  `index.ts`), but bodies still carry employee data, so this is its own
+   *  switch rather than implied by the client ID. */
+  APITALLY_REQUEST_LOGGING: boolean("APITALLY_REQUEST_LOGGING", "true"),
 } as const;
 
 export const isProd = env.NODE_ENV === "production";
