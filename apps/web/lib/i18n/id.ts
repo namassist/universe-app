@@ -1299,6 +1299,20 @@ export const id = {
     "Buka link ini sekali di TV yang bersangkutan. Sekali pakai dan kedaluwarsa dalam 15 menit.",
   dspPairCopy: "Salin",
   dspPairCopied: "Tersalin",
+  /* --- report menu --- */
+  rptSub: "Laporan hasil muster per tanggal dan shift",
+  rptPick: "Pilih laporan",
+  rptExport: "Export Excel",
+  rptShift: "Shift",
+  rptRows: "baris",
+  rptNoBoardT: "Papan belum dibuat",
+  rptNoBoardB:
+    "Papan alokasi untuk tanggal dan shift ini belum dibuat, jadi belum ada yang bisa dilaporkan.",
+  rptEmptyT: "Tidak ada yang dilaporkan",
+  rptEmptyB: "Tidak ada baris untuk tanggal, shift, dan departemen ini.",
+  rptLoadErr: "Gagal memuat laporan.",
+  rptNowNote:
+    "Kolom FTW dan finger dibaca sesuai data saat ini, sama seperti menu Fit To Work dan Attendance.",
 } as const;
 
 export type Dict = { [K in keyof typeof id]: string };
