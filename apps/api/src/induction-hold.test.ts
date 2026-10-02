@@ -16,7 +16,7 @@ import {
   expect,
   test,
 } from "bun:test";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { EmployeeStatus, RosterCode } from "@universe/contracts";
 
 import { db, schema } from "./db";
@@ -274,7 +274,7 @@ describe("reconcileInductionHolds", () => {
 
     const again = await reconcileInductionHolds("1999-06-10");
 
-    expect(again).toEqual({ held: 0, released: 0 });
+    expect(again).toEqual({ held: 0, released: 0, refused: 0 });
     expect(await statusOf(id)).toBe("standby");
     expect(await holdsOf(id)).toHaveLength(1);
   });
@@ -317,4 +317,83 @@ describe("reconcileInductionHolds", () => {
 
     expect(await statusOf(id)).toBe("standby");
   });
+});
+
+/**
+ * What keeps the check from reaching further into the engine than the people
+ * it holds: a run that would bench a crowd holds nobody, and switching it off
+ * hands every held seat back.
+ */
+describe("reconcileInductionHolds — guard rails", () => {
+  async function returners(count: number) {
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const id = await addEmployee();
+      await roster(id, "1999-06-09", ["CR", "D"]);
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  test("holds thirty back from leave — the floor of the cap", async () => {
+    const ids = await returners(30);
+
+    const result = await reconcileInductionHolds("1999-06-10");
+
+    expect(result).toEqual({ held: 30, released: 0, refused: 0 });
+    expect(await statusOf(ids[0]!)).toBe("standby");
+  });
+
+  test("holds nobody when more come back than the cap allows", async () => {
+    const ids = await returners(31);
+
+    const result = await reconcileInductionHolds("1999-06-10");
+
+    expect(result).toEqual({ held: 0, released: 0, refused: 31 });
+    for (const id of ids) expect(await statusOf(id)).toBe("aktif");
+    expect(await holdsOf(ids[0]!)).toEqual([]);
+  });
+
+  test("switched off, it holds nobody and releases every open hold", async () => {
+    const held = await addEmployee();
+    await roster(held, "1999-06-09", ["CR", "D"]);
+    await reconcileInductionHolds("1999-06-10");
+    const fresh = await addEmployee();
+    await roster(fresh, "1999-06-09", ["AL", "D"]);
+
+    const result = await reconcileInductionHolds("1999-06-10", {
+      enabled: false,
+    });
+
+    expect(result).toEqual({ held: 0, released: 1, refused: 0 });
+    expect(await statusOf(held)).toBe("aktif");
+    expect(await statusOf(fresh)).toBe("aktif");
+  });
+
+  test("gives up rather than wait on a row an admin is editing", async () => {
+    const id = await addEmployee();
+    await roster(id, "1999-06-09", ["CR", "D"]);
+
+    let release!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    let locked!: () => void;
+    const isLocked = new Promise<void>((r) => (locked = r));
+    const editing = db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select 1 from ${schema.employees} where ${schema.employees.id} = ${id} for update`
+      );
+      locked();
+      await released;
+    });
+    await isLocked;
+
+    const started = Date.now();
+    await expect(reconcileInductionHolds("1999-06-10")).rejects.toThrow();
+    const waited = Date.now() - started;
+    release();
+    await editing;
+
+    expect(waited).toBeLessThan(8_000);
+    expect(await statusOf(id)).toBe("aktif");
+  }, 15_000);
 });

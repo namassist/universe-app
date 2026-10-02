@@ -147,6 +147,11 @@ export const env = {
   ROSTER_SYNC_DAYS_BACK: number("ROSTER_SYNC_DAYS_BACK", "7"),
   ROSTER_SYNC_MONTHS_AHEAD: number("ROSTER_SYNC_MONTHS_AHEAD", "1"),
 
+  /** The first-day-back induction hold (`induction-hold.ts`). `false` holds
+   *  nobody and releases every open hold on the next run — the way to take
+   *  the check out of the morning without a deploy. */
+  INDUCTION_HOLD_ENABLED: boolean("INDUCTION_HOLD_ENABLED", "true"),
+
   /** How long an ingest stage keeps re-pulling **when the timeline cannot say
    *  otherwise**. A pull normally runs until its own deadline stage — see
    *  `pullClosesAt` — so this is the floor for a timeline missing that stage,

@@ -18,9 +18,22 @@
  *
  * Reconciling rather than applying: the roster is re-pulled twice a day, and a
  * return revised away upstream must stop holding the person this same day.
+ *
+ * It reaches the engine through those statuses and no other way, and three
+ * guards keep it to that:
+ *
+ * - **A cap.** A run that would hold more than `MAX_HOLD_FLOOR` or
+ *   `MAX_HOLD_SHARE` of today's scheduled operators holds nobody: October 2026
+ *   peaked at 27 returns, 4.1% of the day, so a crowd is bad data — a
+ *   re-pulled month reading CR for everyone — not a busy morning. Refusing
+ *   leaves the board exactly as it was before this check existed.
+ * - **Time limits.** The writes run under a lock and statement timeout, so a
+ *   row held by an admin's edit at 05:26 costs the holds, not the board.
+ * - **A switch.** `INDUCTION_HOLD_ENABLED=false` holds nobody and releases
+ *   every open hold on the next run — the rollback, without a deploy.
  */
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   DAY_SHIFT_CODE,
   INDUCTION_TRIGGER_CODES,
@@ -29,9 +42,20 @@ import {
 } from "@universe/contracts";
 
 import { db, schema } from "./db";
+import { env } from "./env";
 import { rosterDayInForce } from "./roster-in-force";
 
-export type InductionHoldResult = { held: number; released: number };
+export type InductionHoldResult = {
+  held: number;
+  released: number;
+  /** Back from leave but not held, because there were too many to be true. */
+  refused: number;
+};
+
+/** Never refuse fewer than this — a small site's normal Monday. */
+const MAX_HOLD_FLOOR = 30;
+/** Of today's scheduled operators; 2.4× the worst day on record. */
+const MAX_HOLD_SHARE = 0.1;
 
 /** The calendar day before a `YYYY-MM-DD` date. */
 function dayBefore(date: string): string {
@@ -54,14 +78,20 @@ async function rostered(date: string, codes: readonly RosterCode[]) {
   return new Set(rows.map((r) => r.employeeId));
 }
 
-/** Who is back from leave on `date`, among the people allocation reads. */
-async function firstDayBack(date: string): Promise<Set<string>> {
+/**
+ * Who is back from leave on `date`, among the people allocation reads — and
+ * how many of those people are scheduled at all, which is what the cap is a
+ * share of.
+ */
+async function firstDayBack(
+  date: string
+): Promise<{ back: Set<string>; scheduled: number }> {
   const [today, yesterday] = await Promise.all([
     rostered(date, [DAY_SHIFT_CODE, NIGHT_SHIFT_CODE]),
     rostered(dayBefore(date), INDUCTION_TRIGGER_CODES),
   ]);
-  const back = [...today].filter((id) => yesterday.has(id));
-  if (!back.length) return new Set();
+  if (![...today].some((id) => yesterday.has(id)))
+    return { back: new Set(), scheduled: today.size };
 
   const operators = await db
     .select({ id: schema.employees.id })
@@ -72,11 +102,14 @@ async function firstDayBack(date: string): Promise<Set<string>> {
     )
     .where(
       and(
-        inArray(schema.employees.id, back),
+        inArray(schema.employees.id, [...today]),
         eq(schema.positions.fleetAllocation, true)
       )
     );
-  return new Set(operators.map((o) => o.id));
+  return {
+    back: new Set(operators.map((o) => o.id).filter((id) => yesterday.has(id))),
+    scheduled: operators.length,
+  };
 }
 
 /**
@@ -89,11 +122,31 @@ async function firstDayBack(date: string): Promise<Set<string>> {
  * what keeps a later run from overruling an admin who reactivated somebody.
  */
 export async function reconcileInductionHolds(
-  date: string
+  date: string,
+  { enabled = env.INDUCTION_HOLD_ENABLED }: { enabled?: boolean } = {}
 ): Promise<InductionHoldResult> {
-  const back = await firstDayBack(date);
+  let back = new Set<string>();
+  let refused = 0;
+  if (enabled) {
+    const found = await firstDayBack(date);
+    const cap = Math.max(
+      MAX_HOLD_FLOOR,
+      Math.floor(found.scheduled * MAX_HOLD_SHARE)
+    );
+    if (found.back.size > cap) {
+      refused = found.back.size;
+      console.error(
+        `[induction] ${date}: ${refused} back from leave of ${found.scheduled} ` +
+          `scheduled is over the cap of ${cap} — holding nobody; check the roster`
+      );
+    } else back = found.back;
+  }
 
   return db.transaction(async (tx) => {
+    /* Local to this transaction: whatever it waits on, the board waits on. */
+    await tx.execute(sql`set local lock_timeout = '5s'`);
+    await tx.execute(sql`set local statement_timeout = '15s'`);
+
     const open = await tx
       .select({
         id: schema.inductionHolds.id,
@@ -163,6 +216,6 @@ export async function reconcileInductionHolds(
       }
     }
 
-    return { held, released: ending.length };
+    return { held, released: ending.length, refused };
   });
 }

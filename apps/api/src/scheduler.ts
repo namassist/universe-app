@@ -164,11 +164,14 @@ function timeOfDay(at: Date): string {
  */
 async function holdInductions(dispatch: Dispatch): Promise<void> {
   try {
-    const { held, released } = await reconcileInductionHolds(dispatch.date);
-    if (held || released)
+    const { held, released, refused } = await reconcileInductionHolds(
+      dispatch.date
+    );
+    if (held || released || refused)
       record(
         dispatch,
-        `induction: ${held} back from leave held on standby, ${released} released`
+        `induction: ${held} back from leave held on standby, ${released} released` +
+          (refused ? `, ${refused} refused over the cap` : "")
       );
   } catch (error) {
     console.error(`[scheduler] ${dispatch.date} induction holds failed`, error);
