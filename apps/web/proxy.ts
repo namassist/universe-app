@@ -55,7 +55,12 @@ export const config = {
      * audio is uploaded now and served by the API out of `SOUND_DIR`, a path
      * this matcher never governed. Keeping the exclusion would advertise an
      * unauthenticated route that no longer exists.
+     *
+     * `ops` is the Operations Center, which is opened with its own password
+     * rather than an account (owner, 2026-10-02): redirecting it to /login
+     * would ask for a credential it does not use. The API's ops session is
+     * the boundary there, as the user session is everywhere else.
      */
-    "/((?!login|change-password|_next/static|_next/image|favicon.ico|icon1.png|icon2.png|apple-icon.png|logoV1.svg|android-chrome).*)",
+    "/((?!login|change-password|ops|_next/static|_next/image|favicon.ico|icon1.png|icon2.png|apple-icon.png|logoV1.svg|android-chrome).*)",
   ],
 };
