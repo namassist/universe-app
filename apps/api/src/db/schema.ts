@@ -1139,6 +1139,44 @@ export const rosterDays = pgTable(
 );
 
 /**
+ * The system's own `aktif → standby` writes for a first day back from leave
+ * (owner, 2026-10-02), so the next day's run can undo exactly those.
+ *
+ * A ledger rather than a second status value: allocation, tickets and the
+ * screens already treat `standby` as "not on a unit today", and they keep
+ * reading the one column they read. What `employees.status` cannot say is
+ * *who* set it — without this, releasing a hold would also reactivate somebody
+ * an admin put on light duty by hand.
+ *
+ * `unique(employee_id, date)` because a hold is a fact about one day; a
+ * released row stays, which is also what stops a re-run that same day from
+ * overruling an admin who reactivated the person. `cascade` to the employee:
+ * the row means nothing once they are gone.
+ */
+export const inductionHolds = pgTable(
+  "induction_holds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** The first day back — the day the hold is for. */
+    date: date("date").notNull(),
+    appliedAt: timestamp("applied_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Null while the hold stands. */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("induction_holds_employee_date_idx").on(
+      table.employeeId,
+      table.date
+    ),
+  ]
+);
+
+/**
  * A submission: one operator, one moment, N entries (design D10).
  *
  * `code` is the readable identifier (`REV-0001`) the screens show, generated

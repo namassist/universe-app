@@ -186,6 +186,21 @@ export const ENDED_CODES = ROSTER_CODES.filter(
   (code) => ROSTER_CODE_KIND[code] === "ended"
 );
 
+/**
+ * Codes that, rostered yesterday, make a scheduled today the first day back —
+ * the day an operator sits induction and drives nothing (owner, 2026-10-02).
+ *
+ * "Yesterday" and not "the last day off" because the roster never leaves a gap:
+ * in unggul_att's October 2026 every one of the 369 returns went straight from
+ * one of these to `D`, and the only `LWP` run that came back to work did so
+ * through a `TRV`.
+ */
+export const INDUCTION_TRIGGER_CODES = [
+  "CR",
+  "TRV",
+  "AL",
+] as const satisfies readonly RosterCode[];
+
 /* -------------------------------------------------------------- legend groups */
 
 /**

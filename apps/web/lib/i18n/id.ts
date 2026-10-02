@@ -269,6 +269,9 @@ export const id = {
   dirtyLeave: "Buang perubahan",
   stNonaktif: "Nonaktif",
   stStandby: "Standby",
+  stStandbyInduction: "Standby · Induksi",
+  stStandbyInductionHint:
+    "Standby otomatis: hari pertama kembali dari cuti, ikut induksi. Aktif lagi besok.",
   ftwSub:
     "Kelayakan kerja operator berdasarkan log tidur — ambang fit: ≥ 6 jam.",
   ftwLog: "Log tidur operator",

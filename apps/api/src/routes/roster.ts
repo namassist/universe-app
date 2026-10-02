@@ -44,6 +44,8 @@ import { db, schema } from "../db";
 import { monthDays, monthToFirstDay } from "./roster-month";
 import { rosterWorkbook } from "./roster-export";
 import { syncRoster } from "../roster-sync";
+import { reconcileInductionHolds } from "../induction-hold";
+import { localDate } from "../scheduler";
 
 /** Same wording as the readiness sync routes: one failure, one sentence. */
 const sourceUnreachable = {
@@ -609,6 +611,15 @@ export const rosterRoutes = new Elysia({
     async ({ status }) => {
       try {
         const result = await syncRoster();
+        /* The scheduled pull re-checks who is back from leave, and so must
+           this one: a roster pulled by hand is the same new roster. Not fatal
+           — the pull succeeded, and the next stage retries the holds. */
+        await reconcileInductionHolds(localDate(new Date())).catch((error) =>
+          console.error(
+            "[roster] induction holds after manual sync failed",
+            error
+          )
+        );
         return { ...result, syncedAt: new Date().toISOString() };
       } catch (error) {
         console.error("[roster] manual sync failed", error);

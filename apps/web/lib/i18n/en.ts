@@ -271,6 +271,9 @@ export const en: Dict = {
   dirtyLeave: "Discard changes",
   stNonaktif: "Inactive",
   stStandby: "Standby",
+  stStandbyInduction: "Standby · Induction",
+  stStandbyInductionHint:
+    "Automatic standby: first day back from leave, at induction. Active again tomorrow.",
   ftwSub:
     "Operator fitness for work based on sleep logs — fit threshold: ≥ 6 hours.",
   ftwLog: "Operator sleep log",

@@ -169,6 +169,14 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
       standby: { v: "warning", l: t.stStandby },
       nonaktif: { v: "danger", l: t.stNonaktif },
     };
+    /* Info, not warning: a standby the system set for today's induction ends
+       by itself tomorrow, and the admin should not mistake it for theirs. */
+    if (row.inductionHold)
+      return (
+        <Badge variant="info" dot title={t.stStandbyInductionHint}>
+          {t.stStandbyInduction}
+        </Badge>
+      );
     const m = map[row.status];
     return (
       <Badge variant={m.v} dot>

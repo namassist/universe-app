@@ -34,6 +34,7 @@ import { env } from "./env";
 // both sides only reach through the binding inside function bodies, never at
 // module init.
 import { buildBoard, storeBoard } from "./allocation";
+import { reconcileInductionHolds } from "./induction-hold";
 import { runIngestWindow, type IngestKind } from "./ingest";
 import { notify } from "./notify";
 import { runRosterSync } from "./roster-sync";
@@ -153,6 +154,28 @@ function timeOfDay(at: Date): string {
 }
 
 /**
+ * The first day back from leave, put on standby before anything reads status
+ * (`induction-hold.ts`). Run after each roster pull and again right before each
+ * board, so the board never depends on when the pull was scheduled.
+ *
+ * Never fatal: a board built without the holds seats somebody who should be at
+ * induction, which a supervisor can still move; no board at all leaves the
+ * yard with nothing. The failure is logged and the caller carries on.
+ */
+async function holdInductions(dispatch: Dispatch): Promise<void> {
+  try {
+    const { held, released } = await reconcileInductionHolds(dispatch.date);
+    if (held || released)
+      record(
+        dispatch,
+        `induction: ${held} back from leave held on standby, ${released} released`
+      );
+  } catch (error) {
+    console.error(`[scheduler] ${dispatch.date} induction holds failed`, error);
+  }
+}
+
+/**
  * ── The allocation engine. ────────────────────────────────────────────────
  *
  * Builds the shift's board and stores it: planned operators who passed keep
@@ -221,6 +244,8 @@ const allocate: Hook = async (dispatch) => {
    * rejection — logged by the runtime, mentioned to nobody, on the one stage
    * whose silence is hardest to notice.
    */
+  await holdInductions(dispatch);
+
   try {
     /* The readings rebuilt from every tap first (2026-09-15). They were only
        rebuilt when a pull stored something new, so a tap heard live seconds
@@ -484,8 +509,10 @@ const HOOKS: Record<TimelineAction, Hook> = {
    * than no second source at all.
    */
   "finger-ingest": listen,
-  "roster-ingest": async () => {
+  "roster-ingest": async (dispatch) => {
     await runRosterSync();
+    /* The roster just changed, so who is back from leave may have too. */
+    await holdInductions(dispatch);
   },
   "spare-validate": allocate,
 };

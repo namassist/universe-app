@@ -226,7 +226,10 @@ export function EmployeeDetail({ nik }: { nik: string }) {
     standby: { v: "warning", l: t.stStandby },
     nonaktif: { v: "danger", l: t.stNonaktif },
   };
-  const st = statusMap[emp.status];
+  /* The list's rule: today's induction hold reads apart from a hand-set standby. */
+  const st = emp.inductionHold
+    ? { v: "info" as const, l: t.stStandbyInduction }
+    : statusMap[emp.status];
 
   return (
     <div className="flex flex-col gap-6">
@@ -243,7 +246,11 @@ export function EmployeeDetail({ nik }: { nik: string }) {
               NIK {emp.nik} · {emp.companyName}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Badge variant={st.v} dot>
+              <Badge
+                variant={st.v}
+                dot
+                title={emp.inductionHold ? t.stStandbyInductionHint : undefined}
+              >
                 {st.l}
               </Badge>
               {emp.simperTypeName ? (

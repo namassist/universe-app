@@ -1078,6 +1078,8 @@ export const EmployeeSchema = t.Object({
   /** The generated storage name, not the one the client uploaded. Null if none. */
   photoFileName: t.Nullable(t.String()),
   status: EmployeeStatusSchema,
+  /** `standby` set by today's induction hold rather than by an admin. */
+  inductionHold: t.Boolean(),
   /** What this person may operate. Empty for anyone who operates nothing. */
   skills: t.Array(EmployeeSkillSchema),
   createdAt: t.String(),

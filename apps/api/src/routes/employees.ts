@@ -109,6 +109,14 @@ const employeeColumns = {
   emergency: emp.emergency,
   photoFileName: emp.photoFileName,
   status: emp.status,
+  /* Standby because the system held them for induction today, not because an
+     admin put them there (`induction-hold.ts`) — the screens colour the two
+     apart. Read with the status so the two can never disagree on the row. */
+  inductionHold: sql<boolean>`(${emp.status} = 'standby' and exists (
+    select 1 from ${schema.inductionHolds}
+    where ${schema.inductionHolds.employeeId} = ${emp.id}
+      and ${schema.inductionHolds.releasedAt} is null
+  ))`,
   createdAt: emp.createdAt,
 };
 
