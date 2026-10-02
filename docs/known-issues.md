@@ -69,6 +69,31 @@ booths that have dropped out of `boothsToHear()` as well as open the new
 ones. A restart already recomputes its window (`resumeListening`); this makes
 a running window behave the same way.
 
+### A spare's slip can wait for a unit the board will never give him
+
+Low priority (owner, 2026-10-02). A spare whose FTW is already a final no
+prints SPARE at his first tap, unless some unit in allocation that asks no FTW
+wants a SIMPER he holds. Then his slip waits for the second finger, because the
+board might seat him there. That check (`cannotBeSeated` in `ticket-issue.ts`)
+restates eligibility in SQL. It checks that he holds the code but not that his
+SIMPER is in date, nor that the unit's department is his. `pairingRefusal`,
+which the board uses, checks both.
+
+**Symptom:** an operator taps at 05:10, gets nothing, taps again after 05:28,
+and receives `UNIT: SPARE`. The board was never going to seat him. The
+allocation is right; only the extra tap is wrong.
+
+Why it is rare: on production every operator's SIMPER codes are either all for
+FTW units or all for non-FTW units. An FTW-unit operator has no non-FTW unit to
+wait for, so he prints at once, correctly. It needs a non-FTW-unit operator
+whose FTW is a final no (a failed upload, or no upload and a tap between
+`ftw-deadline` and `finger-in`) **and** an expired SIMPER or a department
+mismatch.
+
+Closing it: have `cannotBeSeated` ask `pairingRefusal` for the candidate units
+instead of its own SQL, so the slip and the board cannot disagree. Revisit
+first if operators start holding codes for both kinds of unit.
+
 ### Signing a low-privileged account into a paired TV's browser darkens it
 
 `/display/*` now admits a user session as well as the device cookie, and the
