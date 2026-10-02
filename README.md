@@ -271,23 +271,20 @@ bun run lint:fix       # eslint --fix every package
 - **`.editorconfig` + `.vscode/`** are committed: install the recommended
   extensions and format-on-save matches the hook, so you rarely hit it.
 
-## AI coding skills
+## AI coding workflow (ECC)
 
-The project pins the official [ElysiaJS agent skill](https://github.com/elysiajs/skills)
-so an AI agent (Claude Code, OpenCode) reasons about Elysia from its real docs —
-routing, validation, lifecycle, plugins, and Eden — instead of guessing.
-
-The skill files themselves are per-machine (materialized under `.claude/`, which
-is gitignored like `node_modules`). The shared, tracked artifact is
-`skills-lock.json` at the root — a pinned source + content hash. To set it up on
-your machine:
+Agent work follows [ECC](https://github.com/affaan-m/ECC). A curated subset —
+commands, agents, skills and rules for this stack — is committed under
+`.claude/`, so every machine runs the same workflow. The root `CLAUDE.md` is the
+playbook for adding a feature: `/plan` → test-first on the API → verify →
+`/code-review` → update `docs/`. `.claude/ECC.md` lists what is vendored.
 
 ```bash
-bunx skills add elysiajs/skills   # installs into .claude/skills/elysiajs
+scripts/sync-ecc.sh                # update the vendored ECC subset, then review the diff
+bunx skills add elysiajs/skills    # per machine: the ElysiaJS skill (pinned in skills-lock.json)
 ```
 
-A newly installed skill is picked up by the _next_ agent session, not the one
-that installed it. Bump it later with `bunx skills update`.
+A newly installed skill or command is picked up by the _next_ agent session.
 
 ## Database
 

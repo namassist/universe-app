@@ -28,8 +28,8 @@ export default defineConfig([
     "**/next-env.d.ts",
     // Drizzle-generated SQL + snapshot metadata — never hand-edited.
     "apps/api/drizzle/**",
-    // Personal AI-workflow files: the SDLC framework, its agents, and vendored
-    // skills. Owned by the developer / upstream, not linted as project code.
+    // ECC agent workflow (vendored from upstream) and per-machine skills —
+    // markdown and upstream code, not linted as project code.
     ".claude/**",
   ]),
 

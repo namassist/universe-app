@@ -1,8 +1,8 @@
 # Product requirements — durable record
 
-OpenSpec (`openspec/specs/`) is frozen as the historical requirement archive.
-Requirements agreed after that freeze accumulate here, per feature area, and
-each change keeps this file and the per-app `docs/` up to date.
+This file is the requirement record, per feature area. Each change keeps it
+and the per-app `docs/` up to date. (The earlier OpenSpec archive was retired;
+it lives on in git history before the `chore/ecc` change.)
 
 ## Asset & Fleet
 
