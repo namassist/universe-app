@@ -2105,3 +2105,68 @@ and bus on the right.
   scheduled window is visible. When the fleet is fully paired, the tab goes and
   the Excel export moves to Attendance. `device_taps` itself stays either way —
   `derive.ts` reads it to build `finger_readings`.
+
+## Operations Center — shipped
+
+**Goal:** one page that says whether the application is healthy and whether
+this shift's muster is running, without reading a server log (owner,
+2026-10-02, after a reference page from another site).
+
+- **Opened with its own password, outside roles and menus** (owner,
+  2026-10-02). Not a menu slug and not an account: one shared password, kept
+  only as an argon2id hash in `OPS_PASSWORD_HASH`. Unset, the page does not
+  exist — every `/v1/ops` route answers 404. Its session is its own (Redis
+  `ops-session:`, cookie `universe_ops`, SameSite=Strict, twelve hours, never
+  sliding) and opens nothing else; a user or device session does not open it
+  either.
+- **Guessing is bounded.** Five attempts per client address per fifteen
+  minutes, and the attempt is **counted before the password is checked**, in
+  one atomic step with its expiry (security review, 2026-10-02): counting
+  afterwards let a burst of parallel guesses all read "no failures yet". A
+  success clears the count. At most four argon2 checks run at once; the rest
+  queue. Failed and refused logins, and each new session, are logged with
+  the address (never the password).
+- **Rotating the password ends every session** opened with the old one at
+  once: a session holds a digest of the hash it was opened under. The address is the socket's, or the
+  last `X-Forwarded-For` entry when `TRUST_PROXY=true` (the deploy, where only
+  Caddy publishes a port).
+- **Read-only.** Nothing on the page changes data. It polls every 15 s.
+- **What it shows:**
+  - infrastructure: Postgres, Redis, the three storage directories, the
+    scheduler's last tick and the prober's last probe — a heartbeat older
+    than its own cadence reads as stalled;
+  - API, last 60 minutes: requests, 4xx and 5xx, error rate, average and
+    slowest duration, per minute (charts) and per route pattern;
+  - the muster: every timeline stage on **the date of the muster it belongs
+    to** — yesterday's for a night shift still under way after midnight —
+    whether the scheduler claimed it, how its last run ended, and
+    _Terlewat_ for a stage whose time has come and which never fired; plus
+    the boards generated, readings and slips;
+  - devices: every TV with its heartbeat, fingerprint machines online and the
+    offline ones by name, printers, and the booths this API process is
+    listening to;
+  - **every signed-in user of the last 24 hours** (owner, 2026-10-02, chose
+    this over counts): name, NIK, role, address, browser, last route and its
+    status, when, and their request and error counts;
+  - one alert feed: server errors, stage runs that failed or refused, and
+    amber/red notifications; and the scheduler's own log for yesterday and
+    today.
+- **Kept in Redis, a day at most.** Request counters are per-minute hashes
+  (25 h), user activity expires 24 h after a user's last request, stage runs
+  three days. Nothing is written to Postgres for it.
+- **Never a message, never a body.** A server error is listed by its error's
+  _name_; a stage run by the scheduler's own sentence. A driver's message
+  routinely carries a connection string, and the full error stays in the
+  server log. No request body or header beyond the user agent is kept.
+- **Not counted:** `/health` (the container probe would drown everything),
+  `/openapi`, and the Operations Center's own polling. A request with a
+  method outside GET/POST/PUT/PATCH/DELETE/HEAD is counted as `OTHER`: the
+  method is the one part of a label a client writes, and an open set let
+  anyone mint labels without bound.
+- **Never cached:** every `/v1/ops` response is `Cache-Control: no-store`.
+- **Known limits.** Over plain HTTP the password and its cookie cross the
+  network in the clear — the same gap as every login here until TLS lands
+  (README → _Not done yet_). The lockout is per client address, so it is
+  only as good as Caddy's view of that address (see `docs/deploy.md`).
+- **Deferred:** request metrics for longer than a day, push alerts, and
+  mobile-upload monitoring (there is no mobile client yet).

@@ -23,6 +23,11 @@ src/
     principal.ts  # who is calling (user or kiosk device)
     scope.ts      # all / dept / self scope resolution
     password.ts   # hashing
+  ops/
+    session.ts    # Operations Center password sessions + login lockout
+    metrics.ts    # per-request counters, slow/error lists, user activity (Redis)
+    stage-log.ts  # scheduler runs + heartbeat, for the Operations Center
+    overview.ts   # composes GET /v1/ops/overview (read-only)
   db/
     schema.ts     # Drizzle schema — source of truth for the database
     index.ts      # client + isUniqueViolation
@@ -44,6 +49,22 @@ src/
    always) and talk to Postgres through Drizzle.
 4. Non-2xx responses use the shared `ApiError` shape
    (`{ code, message }` from `@universe/contracts`).
+
+## Operations Center
+
+`/v1/ops/*` is the one surface outside the auth macro, by design: it is opened
+with a shared password (`OPS_PASSWORD_HASH`), not an account, and its session
+(`ops-session:` in Redis, cookie `universe_ops`) opens nothing else — nor does
+a user or device session open it. Unset, every route there is 404. Five wrong
+passwords lock a client address out for fifteen minutes; the address comes
+from `X-Forwarded-For` only with `TRUST_PROXY=true`.
+
+`ops/metrics.ts` is mounted first on the root app. Its hooks are global and run
+after the response, never awaited by it: every request bumps a per-minute
+Redis hash (count, 4xx, 5xx, duration sum and max, per route pattern), slow
+requests and 5xx land in short lists (an error by its _name_, never its
+message), and a signed-in user's last route, address and browser are kept for
+a day. `/health`, `/openapi` and `/v1/ops/*` are not counted.
 
 ## Type export
 

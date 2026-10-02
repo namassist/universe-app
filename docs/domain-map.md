@@ -55,6 +55,9 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
   or **deleted** **before** the running muster passes it (`timeline-edit.ts`,
   `editRefused`, applied in `routes/timeline.ts`). Renaming is always allowed. Reset re-arms listen/collect windows
   and **never** re-runs `spare-validate`.
+- Every stage run is also logged to Redis for the Operations Center
+  (`ops/stage-log.ts`), with `ok: false` for a refusal or a throw; the
+  scheduler's heartbeat is stamped every tick. Logging never blocks a hook.
 - Hooks: `scheduler.ts` (`HOOKS`). Sound cues 2 min before a stage:
   `sound-cue.ts`.
 - PRD: _Readiness on both shifts_, _Re-arming a muster_, _The timeline's sounds_.

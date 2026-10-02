@@ -279,6 +279,14 @@ bun run lint:fix       # eslint --fix every package
 - **`.editorconfig` + `.vscode/`** are committed: install the recommended
   extensions and format-on-save matches the hook, so you rarely hit it.
 
+## Operations Center
+
+`/ops` is a read-only monitoring page — infrastructure, API traffic, today's
+muster, devices and active users — opened with its own password rather than an
+account. It is off until `OPS_PASSWORD_HASH` is set (`bun run --cwd apps/api
+ops:hash` prints one); see `docs/prd.md` → _Operations Center_ and
+`docs/deploy.md`.
+
 ## AI coding workflow (ECC)
 
 Agent work follows [ECC](https://github.com/affaan-m/ECC). A curated subset —
