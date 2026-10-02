@@ -171,8 +171,8 @@ Fleet wall rules:
   timeline (`current-shift.ts`). A night board is filed under the date it began.
 - From `shift-start` until `spare-validate` it shows the **provisional PLAN**
   read through the roster (`D`/`N`), badged "Line-up sementara". After that it
-  shows the board. Before the board, an empty card has no red frame or glow
-  (the small "Kosong" seat chip still uses the danger tone).
+  shows the board. Before the board, an empty card has no red frame or glow,
+  but its small "Kosong" seat chip stays red on purpose (owner, 2026-10-02).
 - No-fleet units never reach a TV. Breakdown units are absent. Idle units keep
   a full red card and are **never** summarised away. Header counts are the
   formation's own, never the site's.

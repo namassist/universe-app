@@ -1191,9 +1191,11 @@ until someone pressed Sync at 07:07 — although they were on time.
   desaturated and dashed until 2026-09-23, when the owner asked for the
   ordinary card: at six metres the faded version cost more legibility than
   the header badge was buying, and the badge says the same thing in words.
-  The empty seat is still not red here (`UnitCard`) — before the line-up is
-  generated nobody has checked FTW or the tap, so an empty unit means its
-  standing operator is off today. There is a real ten-minute gap twice a day, and it is the exact
+  The empty card is not framed in red here (`UnitCard`) — before the line-up
+  is generated nobody has checked FTW or the tap, so an empty unit means its
+  standing operator is off today. Its small **Kosong** seat chip does stay
+  red, as on the board (owner, 2026-10-02): a quiet reminder that the seat is
+  open, without the alarm of a red card. There is a real ten-minute gap twice a day, and it is the exact
   window in which arriving operators most want to know their unit; a blank
   screen there is the least useful thing the wall could do. The provisional
   state persisting past `spare-validate` is also the standing alarm that
