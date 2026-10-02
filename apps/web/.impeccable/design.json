@@ -1,0 +1,302 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-02T00:00:00+07:00",
+  "title": "Design System: UNIVERSE",
+  "extensions": {
+    "colorMeta": {
+      "night-navy": {
+        "role": "neutral",
+        "displayName": "Night Navy",
+        "canonical": "var(--color-bg)"
+      },
+      "muster-cyan": {
+        "role": "primary",
+        "displayName": "Muster Cyan",
+        "canonical": "var(--color-primary)"
+      },
+      "cyan-bright": {
+        "role": "primary",
+        "displayName": "Cyan Bright",
+        "canonical": "var(--color-primary-bright)"
+      },
+      "cta-navy-ink": {
+        "role": "primary",
+        "displayName": "CTA Navy Ink",
+        "canonical": "var(--color-on-cta)"
+      },
+      "deep-signal-blue": {
+        "role": "secondary",
+        "displayName": "Deep Signal Blue",
+        "canonical": "var(--color-secondary)"
+      },
+      "console-blue": {
+        "role": "secondary",
+        "displayName": "Console Blue",
+        "canonical": "var(--color-accent)"
+      },
+      "badge-accent-text": {
+        "role": "tertiary",
+        "displayName": "Tag Violet",
+        "canonical": "var(--badge-accent-text)"
+      },
+      "ready-green": {
+        "role": "status",
+        "displayName": "Ready Green",
+        "canonical": "var(--color-success)"
+      },
+      "hold-amber": {
+        "role": "status",
+        "displayName": "Hold Amber",
+        "canonical": "var(--color-warning)"
+      },
+      "idle-red": {
+        "role": "status",
+        "displayName": "Idle Red",
+        "canonical": "var(--color-danger)"
+      },
+      "light-paper-blue": {
+        "role": "neutral",
+        "displayName": "Paper Blue (light theme bg)",
+        "canonical": "var(--color-bg) in [data-theme=light]"
+      },
+      "light-ink": {
+        "role": "neutral",
+        "displayName": "Light Ink (light theme text)",
+        "canonical": "var(--text-primary) in [data-theme=light]"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Stat-card numbers, tabular."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles (PageTitle)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Toolbar and dialog titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Table cells, inputs, panel copy."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase table headers; badges and metadata in sentence case."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Codes, NIKs, timestamps, counters — tabular."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-panel",
+        "value": "var(--shadow-panel)",
+        "purpose": "Tier-1 glass: panels, sidebar, table cards."
+      },
+      {
+        "name": "shadow-card-glow",
+        "value": "var(--shadow-card-glow)",
+        "purpose": "Tier-2 glass: stat cards and floating cards."
+      },
+      {
+        "name": "shadow-modal",
+        "value": "var(--shadow-modal)",
+        "purpose": "Dialogs over the scrim."
+      },
+      {
+        "name": "glow-cta",
+        "value": "var(--glow-cta)",
+        "purpose": "Primary buttons only."
+      },
+      {
+        "name": "glow-pill",
+        "value": "var(--glow-pill)",
+        "purpose": "Inset cyan glow on pill highlights."
+      }
+    ],
+    "motion": [
+      {
+        "name": "pop-in",
+        "value": "pop-in 0.32s cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "An element settling into a frame (cropped photo)."
+      },
+      {
+        "name": "rise-in",
+        "value": "rise-in 0.24s cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "A row appearing beneath existing content."
+      },
+      {
+        "name": "toast-in",
+        "value": "toast-in 0.25s ease",
+        "purpose": "Toast entrance from the right."
+      },
+      {
+        "name": "shimmer",
+        "value": "shimmer 1.4s infinite linear",
+        "purpose": "Skeleton loading."
+      },
+      {
+        "name": "rot",
+        "value": "rot 0.7s linear infinite",
+        "purpose": "Spinner; slowed to 1.6s under reduced motion."
+      },
+      {
+        "name": "control-transition",
+        "value": "150ms",
+        "purpose": "Button and input state changes."
+      },
+      {
+        "name": "kswipe",
+        "value": "kswipe 0.5s ease-out",
+        "purpose": "Wall: next fleet slides in."
+      },
+      {
+        "name": "kflip",
+        "value": "kflip-out / kflip-in",
+        "purpose": "Wall monitor layouts: each quadrant flips in place."
+      },
+      {
+        "name": "pxshift",
+        "value": "8-minute cycle, up to 8px",
+        "purpose": "Wall anti burn-in stage shift."
+      }
+    ],
+    "breakpoints": [
+      { "name": "wall-canvas", "value": "1920px fixed width, scaled to screen" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one lit action on a screen: cyan gradient, navy ink, cyan glow.",
+      "html": "<button class=\"ds-btn-primary\">Simpan</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-control, 10px); background: var(--gradient-cta); color: var(--color-on-cta); font-family: var(--font-sans); font-size: 14px; font-weight: 700; letter-spacing: var(--tracking-brand); box-shadow: var(--glow-cta); cursor: pointer; transition: box-shadow 150ms, background-color 150ms, border-color 150ms, transform 150ms; } .ds-btn-primary:hover { transform: translateY(-1px); background: var(--gradient-cta-hover); box-shadow: 0 10px 28px rgba(0,212,255,.5); } .ds-btn-primary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet glass action; border turns cyan on hover.",
+      "html": "<button class=\"ds-btn-secondary\">Batal</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border: 1px solid var(--border-btn-secondary); border-radius: var(--radius-control, 10px); background: var(--fill-hover); color: var(--text-primary); font-family: var(--font-sans); font-size: 14px; font-weight: 500; letter-spacing: var(--tracking-brand); backdrop-filter: blur(24px); cursor: pointer; transition: background-color 150ms, border-color 150ms; } .ds-btn-secondary:hover { border-color: rgba(0,212,255,.45); background: var(--divider); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Danger badge recipe as an action.",
+      "html": "<button class=\"ds-btn-destructive\">Hapus</button>",
+      "css": ".ds-btn-destructive { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border: 1px solid var(--badge-danger-border); border-radius: var(--radius-control, 10px); background: var(--badge-danger-fill); color: var(--color-danger-text); font-family: var(--font-sans); font-size: 14px; font-weight: 600; letter-spacing: var(--tracking-brand); cursor: pointer; transition: background-color 150ms, border-color 150ms; } .ds-btn-destructive:hover { border-color: rgba(252,60,59,.6); background: rgba(252,60,59,.28); } .ds-btn-destructive:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Glass control; cyan border and ring on focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Cari NIK atau nama\" />",
+      "css": ".ds-input { width: 100%; height: 40px; padding: 0 16px; border: 1px solid var(--border-input); border-radius: var(--radius-control, 10px); background: var(--fill-input); color: var(--text-primary); font-family: var(--font-sans); font-size: 14px; letter-spacing: var(--tracking-brand); backdrop-filter: blur(12px); transition: border-color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--text-tertiary); } .ds-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(0,212,255,.22), 0 5px 15px rgba(0,212,255,.25); }"
+    },
+    {
+      "name": "Status Badges",
+      "kind": "chip",
+      "refersTo": "badge-neutral",
+      "description": "Status always carries a word; violet accent is organisational only.",
+      "html": "<span class=\"ds-badge ds-badge-success\">Siap</span> <span class=\"ds-badge ds-badge-warning\">Belum FTW</span> <span class=\"ds-badge ds-badge-danger\">Kosong</span> <span class=\"ds-badge ds-badge-neutral\">Standby</span> <span class=\"ds-badge ds-badge-accent\">MINING OPERATION</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid; border-radius: var(--radius-chip, 6px); font-family: var(--font-sans); font-size: 12px; font-weight: 600; white-space: nowrap; } .ds-badge-success { border-color: var(--badge-success-border); background: var(--badge-success-fill); color: var(--badge-success-text); } .ds-badge-warning { border-color: var(--badge-warning-border); background: var(--badge-warning-fill); color: var(--badge-warning-text); } .ds-badge-danger { border-color: var(--badge-danger-border); background: var(--badge-danger-fill); color: var(--badge-danger-text); } .ds-badge-neutral { border-color: var(--badge-neutral-border); background: var(--badge-neutral-fill); color: var(--badge-neutral-text); } .ds-badge-accent { border-color: var(--badge-accent-border); background: var(--badge-accent-fill); color: var(--badge-accent-text); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "nav",
+      "refersTo": "segmented-active",
+      "description": "Filter group; active option in cyan.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg-btn is-active\">Plan</button><button class=\"ds-seg-btn\">Actual</button></div>",
+      "css": ".ds-seg { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--divider); border-radius: var(--radius-control, 10px); background: var(--fill-input); } .ds-seg-btn { padding: 7px 14px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-secondary); font-family: var(--font-sans); font-size: 13px; font-weight: 600; letter-spacing: var(--tracking-brand); cursor: pointer; } .ds-seg-btn:hover { background: var(--fill-hover); color: var(--text-primary); } .ds-seg-btn.is-active { border-color: rgba(0,212,255,.4); background: rgba(0,212,255,.12); color: var(--color-primary-bright); } .ds-seg-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }"
+    },
+    {
+      "name": "Stat Card",
+      "kind": "card",
+      "refersTo": "stat-card",
+      "description": "Tier-2 glass with a tabular display number.",
+      "html": "<div class=\"ds-stat\"><div class=\"ds-stat-n\">312</div><div class=\"ds-stat-l\">Unit dalam alokasi</div><div class=\"ds-stat-f\"><b>6</b> kosong</div></div>",
+      "css": ".ds-stat { padding: 20px; border: 1px solid var(--glass-2-border); border-radius: var(--radius-card, 20px); background: var(--glass-2-fill); backdrop-filter: blur(25px); box-shadow: var(--shadow-card-glow); font-family: var(--font-sans); color: var(--text-primary); } .ds-stat-n { font-size: 32px; line-height: 1.25; font-weight: 700; font-variant-numeric: tabular-nums; } .ds-stat-l { margin-top: 2px; font-size: 14px; color: var(--text-secondary); } .ds-stat-f { margin-top: 8px; font-size: 12px; color: var(--text-tertiary); } .ds-stat-f b { font-weight: 600; color: var(--text-primary); }"
+    },
+    {
+      "name": "Active Nav Item",
+      "kind": "nav",
+      "refersTo": "panel",
+      "description": "Sidebar current item: cyan-to-blue wash, cyan hairline and glow.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item is-active\">Fleet Allocation</a><a class=\"ds-nav-item\">Roster Data</a></nav>",
+      "css": ".ds-nav { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--glass-1-border); border-radius: var(--radius-panel, 28px); background: var(--glass-1-fill); backdrop-filter: blur(12px); box-shadow: var(--shadow-panel); } .ds-nav-item { display: block; padding: 10px 14px; border: 1px solid transparent; border-radius: var(--radius-control, 10px); color: var(--text-secondary); font-family: var(--font-sans); font-size: 14px; text-decoration: none; cursor: pointer; } .ds-nav-item:hover { background: var(--fill-hover); color: var(--text-primary); text-decoration: none; } .ds-nav-item.is-active { border-color: rgba(0,212,255,.5); background: var(--gradient-nav-active); color: var(--text-primary); font-weight: 600; box-shadow: 0 0 10px rgba(0,212,255,.4); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pre-Dawn Control Room",
+    "overview": "UNIVERSE is a control room at four in the morning. The room is dark by default (Night Navy, `#010416`), and the work happens on layers of glass floating above it. One color glows: Muster Cyan. It marks what you can press, what has focus, where you are in the navigation, and what is current. The rest of the time it stays quiet so that it keeps meaning something.\n\nThe character is glowing but disciplined. The primary action is a cyan gradient that lifts by a pixel and brightens its glow on hover. Everything else is calm, translucent glass whose corners soften as the surface grows, from a 6px chip to a 28px panel. Status color is kept for status alone: green ready, amber holding, red idle. It is always paired with a word, and on the walls it becomes a thin wash across a whole row rather than a loud fill.\n\nThe system has two surfaces. The console (app shell, menus, dialogs) comes in both dark and light themes and is dense enough for fast work at a desk. The walls (`app/display/*`) are dark-only, drawn on a fixed 1920px canvas scaled to the TV, and read from about six meters away. Where the two pull in different directions, the wall's legibility wins.",
+    "keyCharacteristics": [
+      "Dark navy by default, with a complete light theme for the console. Walls are always dark.",
+      "Three tiers of glass: background gradient, then a 12px-blur panel, then a 25px-blur floating card.",
+      "One luminous accent (cyan) for action, focus, the current item and info.",
+      "Status colors that always come with words and never stand in for a data series.",
+      "Corners that soften as surfaces grow (6 → 10 → 14 → 20 → 28px).",
+      "Instrument Sans with slightly open tracking (0.02em), and Geist Mono with tabular figures for codes, NIKs and times."
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "Cyan means *act here*, *you are here* or *this is current*. A decorative cyan dilutes the one thing the room is lit for.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two-Theme Rule",
+        "body": "Every console token exists in the dark block and the light block. A color that exists in only one theme does not exist.",
+        "section": "colors"
+      },
+      {
+        "name": "The Status-Is-Not-a-Series Rule",
+        "body": "Status colors never stand in for a data category, and categorical slots never carry a status. Green and red are never placed next to each other; amber sits between them, and every segment carries its own number.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "Any number that is compared, counted or ticks (stats, times, NIKs, unit codes) uses tabular figures, so columns and clocks do not jitter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Never-Blank Rule",
+        "body": "Every waiting, empty or failed state has a shape: a skeleton, a state box, or on a wall a sentence saying why there is nothing to show.",
+        "section": "layout"
+      },
+      {
+        "name": "The Glow-Is-Earned Rule",
+        "body": "Glow belongs to the primary action, the focused control, the current nav item and the topmost layer. A resting surface gets glass, not glow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** take every color from a token in `app/globals.css`, consumed as `text-(--text-primary)`, `bg-(--fill-subtle)`, `border-(--divider)`.",
+      "**Do** add a missing color to both the dark and the light block before using it.",
+      "**Do** reuse the exact `rgba(0, 212, 255, …)` values when matching the cyan glow. It is the one literal color allowed.",
+      "**Do** extend an existing `components/ui/*` component with a cva variant or a prop before creating a new one.",
+      "**Do** pair every status color with a word (\"Belum…\", \"Tidak…\", \"Kosong\"), and give every chart segment its own number.",
+      "**Do** use tabular figures for anything counted, compared or ticking.",
+      "**Do** honor `prefers-reduced-motion`. Entrance animations stop, the walls' pixel shift and flips stop, and scrolling and marquees slow down.",
+      "**Do** use lucide-react for every icon."
+    ],
+    "donts": [
+      "**Don't** write an arbitrary hex value in className (`bg-[#fff]`). ESLint rejects it.",
+      "**Don't** add Radix or any other headless UI library. Every primitive here is hand-rolled.",
+      "**Don't** use a status color as a chart series, or a chart slot as a status.",
+      "**Don't** use Tag Violet for anything but organisational tags.",
+      "**Don't** fill a whole wall row at badge strength. Use `--wall-*-wash`.",
+      "**Don't** give a resting surface a glow. Glow is for the primary action, focus, the current item and the topmost layer.",
+      "**Don't** theme a wall light. `app/display/*` is dark-only.",
+      "**Don't** fork the shell per role. Role looks come from tokens."
+    ]
+  }
+}
