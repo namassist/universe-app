@@ -56,9 +56,13 @@ const num = (v: unknown) => (typeof v === "number" ? v : 0);
  * The row holds what happened and the facts about it; the wording is this
  * client's, in the language it is set to. An unknown kind falls back to its
  * own name — an older page against a newer API should say "something happened
- * I do not recognise", not render blank.
+ * I do not recognise", not render blank — which is also why `kind` is any
+ * string: the ops feed carries kinds this union may not know yet.
  */
-export function notifText(n: Notif, lang: Lang): string {
+export function notifText(
+  n: { kind: string; params: Notif["params"] },
+  lang: Lang
+): string {
   const p = n.params ?? {};
   const shift = SHIFT[lang][str(p.shift)] ?? str(p.shift);
   const date = str(p.date);

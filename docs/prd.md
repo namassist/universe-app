@@ -2148,8 +2148,11 @@ this shift's muster is running, without reading a server log (owner,
   - the muster: every timeline stage on **the date of the muster it belongs
     to** — yesterday's for a night shift still under way after midnight —
     whether the scheduler claimed it, how its last run ended, and
-    _Terlewat_ for a stage whose time has come and which never fired; plus
-    the boards generated, readings and slips;
+    _Terlewat_ for a stage whose time has come and which never fired, a
+    failed run's note shown whole; plus readings, slips and the running
+    shift's board, read from its `spare-validate` stage: built at HH:MM,
+    not due yet, failed (with the run's note), missed, or not scheduled —
+    never a bare "none yet" that hides which;
   - devices: every TV with its heartbeat, fingerprint machines online and the
     offline ones by name, printers, and the booths this API process is
     listening to;
@@ -2158,8 +2161,9 @@ this shift's muster is running, without reading a server log (owner,
     and their request and error counts. **Never their NIK or address**
     (owner, 2026-10-02): a user is told apart by name and role, and only
     devices — fingerprint machines, booths — are shown with an IP;
-  - one alert feed: server errors, stage runs that failed or refused, and
-    amber/red notifications; and the scheduler's own log for yesterday and
+  - one alert feed: server errors and stage runs that failed or refused (both
+    red), and amber/red notifications in the bell's own wording, so a failed
+    board says why; and the scheduler's own log for yesterday and
     today.
 - **Kept in Redis, a day at most.** Request counters are per-minute hashes
   (25 h), user activity expires 24 h after a user's last request, stage runs

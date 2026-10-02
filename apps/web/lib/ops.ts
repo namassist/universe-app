@@ -4,6 +4,7 @@
  * tested rather than eyeballed.
  */
 
+import { notifText } from "@/lib/notifications-data";
 import type { BadgeVariant } from "@/components/ui/badge";
 
 /** How long ago, in the shorthand a status page is scanned at. */
@@ -62,12 +63,17 @@ export function freshness(
  * the night muster under way began yesterday and a bare clock comparison
  * reads its gates as still ahead.
  */
-export function stageStatus(stage: {
+type StageState = {
   due: boolean;
   active: boolean;
   fired: boolean;
   lastRun: { at: string; ok: boolean; note: string } | null;
-}): { label: string; tone: BadgeVariant } {
+};
+
+export function stageStatus(stage: StageState): {
+  label: string;
+  tone: BadgeVariant;
+} {
   if (!stage.active) return { label: "Nonaktif", tone: "neutral" };
   if (stage.fired && stage.lastRun?.ok === false)
     return { label: "Gagal", tone: "danger" };
@@ -110,6 +116,44 @@ const clockOf = (iso: string) => {
   ).padStart(2, "0")}`;
 };
 
+/**
+ * Whether the running shift's board exists, and if not, why not.
+ *
+ * `stage` is that shift's `spare-validate` stage — the one that builds the
+ * board. "Belum ada" alone cannot tell a board that is not due yet from one
+ * that failed or was never attempted, and those call for different people.
+ */
+export function boardState(input: {
+  stage:
+    (StageState & { date: string; shift: string | null; at: string }) | null;
+  boards: { date: string; shift: string; generatedAt: string }[];
+}): { label: string; tone: BadgeVariant } {
+  const { stage } = input;
+  if (!stage) return { label: "Tidak dijadwalkan", tone: "neutral" };
+  const board = input.boards.find(
+    (b) => b.date === stage.date && b.shift === stage.shift
+  );
+  if (board)
+    return {
+      label: `Sudah dibuat ${clockOf(board.generatedAt)}`,
+      tone: "success",
+    };
+  const status = stageStatus(stage);
+  switch (status.label) {
+    case "Nonaktif":
+      return { label: "Tidak dijadwalkan", tone: "neutral" };
+    case "Gagal":
+      return { label: `Gagal — ${stage.lastRun?.note}`, tone: "danger" };
+    case "Terlewat":
+      return { label: "Terlewat — stage tidak jalan", tone: "warning" };
+    case "Menunggu":
+      return { label: `Belum waktunya · ${stage.at}`, tone: "neutral" };
+    default:
+      // Ran cleanly, yet no board for this muster is on record.
+      return { label: "Sudah jalan, board tidak ditemukan", tone: "warning" };
+  }
+}
+
 /** Chart rows: successes, client errors and server errors stack to the total. */
 export function minuteRows(minutes: Minute[]) {
   return minutes.map((m) => ({
@@ -148,12 +192,6 @@ export function browserOf(userAgent: string | null): string {
   return system ? `${browser} · ${system}` : browser;
 }
 
-const NOTIFICATION_TEXT: Record<string, string> = {
-  "allocation-generated": "Board alokasi dibuat",
-  "allocation-failed": "Board alokasi gagal dibuat",
-  "device-log-sizes": "Ukuran log mesin dilaporkan",
-};
-
 export type AlertItem = {
   at: string;
   tone: "danger" | "warning";
@@ -189,7 +227,7 @@ export function alertFeed(input: {
       .filter((run) => !run.ok)
       .map((run) => ({
         at: run.at,
-        tone: "warning" as const,
+        tone: "danger" as const,
         source: "Timeline" as const,
         text: `${run.name}: ${run.note}`,
       })),
@@ -199,7 +237,7 @@ export function alertFeed(input: {
         at: n.createdAt,
         tone: n.tone as "danger" | "warning",
         source: "Notifikasi" as const,
-        text: NOTIFICATION_TEXT[n.kind] ?? n.kind,
+        text: notifText(n, "id"),
       })),
   ];
   return items.sort((a, b) => b.at.localeCompare(a.at));

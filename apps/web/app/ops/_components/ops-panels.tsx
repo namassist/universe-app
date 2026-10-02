@@ -9,10 +9,16 @@ import {
   Users,
 } from "lucide-react";
 
-import { alertFeed, browserOf, sinceLabel, stageStatus } from "@/lib/ops";
+import {
+  alertFeed,
+  boardState,
+  browserOf,
+  sinceLabel,
+  stageStatus,
+} from "@/lib/ops";
 import type { OpsOverview } from "@/lib/queries/ops";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Panel, SectionTitle } from "@/components/ui/panel";
 import { StateBox } from "@/components/ui/state-box";
 import {
@@ -62,6 +68,14 @@ function Empty({ text }: { text: string }) {
 
 export function MusterPanel({ data, now }: { data: OpsOverview; now: Date }) {
   const { muster } = data;
+  // The stage that builds the running shift's board.
+  const builder =
+    muster.stages.find(
+      (stage) =>
+        stage.action === "spare-validate" &&
+        stage.shift === data.runningShift?.shift
+    ) ?? null;
+  const board = boardState({ stage: builder, boards: muster.boards });
   return (
     <Panel className="min-w-0">
       <SectionTitle className="flex-wrap">
@@ -75,19 +89,7 @@ export function MusterPanel({ data, now }: { data: OpsOverview; now: Date }) {
       </SectionTitle>
 
       <div className="mb-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <Fact
-          label="Board dibuat"
-          value={
-            muster.boards.length
-              ? muster.boards
-                  .map(
-                    (b) =>
-                      `${SHIFT_LABEL[b.shift]} ${b.date.slice(5)} ${clock(b.generatedAt).slice(0, 5)}`
-                  )
-                  .join(" · ")
-              : "Belum ada"
-          }
-        />
+        <Fact label="Board dibuat" value={board.label} tone={board.tone} />
         <Fact label="FTW terbaca" value={String(muster.readings.ftw)} />
         <Fact
           label="Finger terbaca"
@@ -134,7 +136,7 @@ export function MusterPanel({ data, now }: { data: OpsOverview; now: Date }) {
                       {status.label}
                     </Badge>
                   </TableCell>
-                  <TableCell className="max-w-90 text-xs text-(--text-secondary)">
+                  <TableCell className="max-w-90 text-xs break-words text-(--text-secondary)">
                     {stage.lastRun
                       ? `${clock(stage.lastRun.at).slice(0, 5)} — ${stage.lastRun.note}`
                       : "—"}
@@ -156,15 +158,17 @@ function Fact({
 }: {
   label: string;
   value: string;
-  tone?: "danger";
+  tone?: BadgeVariant | null;
 }) {
   return (
     <div className="rounded-card border border-(--divider) bg-(--fill-subtle) px-3 py-2.5">
       <div className="text-xs text-(--text-tertiary)">{label}</div>
       <div
         className={cn(
-          "mt-0.5 font-semibold tabular-nums",
-          tone === "danger" && "text-(--color-danger-text)"
+          "mt-0.5 font-semibold break-words tabular-nums",
+          tone === "danger" && "text-(--color-danger-text)",
+          tone === "warning" && "text-(--badge-warning-text)",
+          tone === "success" && "text-(--badge-success-text)"
         )}
       >
         {value}

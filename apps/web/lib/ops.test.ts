@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   alertFeed,
   apiTotals,
+  boardState,
   browserOf,
   clockAt,
   freshness,
@@ -248,5 +249,106 @@ describe("alertFeed", () => {
     expect(feed.every((item) => (item.tone as string) !== "success")).toBe(
       true
     );
+  });
+
+  const quiet = { api: { errors: [] }, stageLog: [], notifications: [] };
+
+  test("says why a board failed, in the notification's own words", () => {
+    const [item] = alertFeed({
+      ...quiet,
+      notifications: [
+        {
+          createdAt: "2026-10-02T05:35:00.000Z",
+          kind: "allocation-failed",
+          tone: "danger",
+          params: {
+            reason: "no-finger-deadline",
+            shift: "day",
+            date: "2026-10-02",
+          },
+        },
+      ],
+    });
+    expect(item?.text).toContain("stage Batas Finger In tidak aktif");
+  });
+
+  test("a stage run that failed is danger, not warning", () => {
+    const [item] = alertFeed({
+      ...quiet,
+      stageLog: [
+        {
+          at: "2026-10-02T05:26:00.000Z",
+          name: "Validasi Spare",
+          ok: false,
+          note: "no finger-in",
+        },
+      ],
+    });
+    expect(item?.tone).toBe("danger");
+  });
+});
+
+describe("boardState", () => {
+  const stage = {
+    date: "2026-10-02",
+    shift: "day" as const,
+    at: "05:30",
+    due: false,
+    active: true,
+    fired: false,
+    lastRun: null,
+  };
+  const generatedAt = new Date("2026-10-02T05:31:00").toISOString();
+
+  test("names when the running shift's board was built", () => {
+    expect(
+      boardState({
+        stage: { ...stage, due: true, fired: true },
+        boards: [
+          {
+            date: "2026-10-01",
+            shift: "night",
+            generatedAt: "2026-10-01T17:31:00.000Z",
+          },
+          { date: "2026-10-02", shift: "day", generatedAt },
+        ],
+      })
+    ).toEqual({ label: "Sudah dibuat 05:31", tone: "success" });
+  });
+
+  test("is not scheduled when the stage is missing or switched off", () => {
+    const expected = { label: "Tidak dijadwalkan", tone: "neutral" } as const;
+    expect(boardState({ stage: null, boards: [] })).toEqual(expected);
+    expect(
+      boardState({ stage: { ...stage, active: false }, boards: [] })
+    ).toEqual(expected);
+  });
+
+  test("carries the failed run's note", () => {
+    expect(
+      boardState({
+        stage: {
+          ...stage,
+          due: true,
+          fired: true,
+          lastRun: { at: generatedAt, ok: false, note: "no finger-in stage" },
+        },
+        boards: [],
+      })
+    ).toEqual({ label: "Gagal — no finger-in stage", tone: "danger" });
+  });
+
+  test("says the stage never ran once its moment has passed", () => {
+    expect(boardState({ stage: { ...stage, due: true }, boards: [] })).toEqual({
+      label: "Terlewat — stage tidak jalan",
+      tone: "warning",
+    });
+  });
+
+  test("says when it is due while the moment is still ahead", () => {
+    expect(boardState({ stage, boards: [] })).toEqual({
+      label: "Belum waktunya · 05:30",
+      tone: "neutral",
+    });
   });
 });
