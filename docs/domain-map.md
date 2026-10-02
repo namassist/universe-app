@@ -33,19 +33,21 @@ Stages are **data** (`timeline_stages`, edited on the Timeline menu), one row
 per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 `readiness.ts`). Seeded schedule (`db/seed-master.ts`), night = +12 h:
 
-| Time  | Action           | What happens                                                            |
-| ----- | ---------------- | ----------------------------------------------------------------------- |
-| 04:00 | `shift-start`    | Walls turn over to this shift; tap collection arms                      |
-| 04:00 | `ftw-ingest`     | FTW pull begins, re-pulls every minute until `ftw-deadline`             |
-| 04:30 | `finger-ingest`  | Live listening opens on "Universe only" booths                          |
-| 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                       |
-| 05:25 | `finger-in`      | A first IN tap at/after this is `late`                                  |
-| 05:26 | `spare-validate` | **The board is built** (one minute after `finger-in`, never on it)      |
-| 05:28 | `finger-second`  | Marker. Spares' slips print from this time (`ticket-issue.ts` reads it) |
-| 05:30 | `bus-depart`     | Listening/collection windows end (plus grace)                           |
+| Time  | Action           | What happens                                                        |
+| ----- | ---------------- | ------------------------------------------------------------------- |
+| 04:00 | `shift-start`    | Walls turn over to this shift; tap collection arms                  |
+| 04:00 | `ftw-ingest`     | FTW pull begins, re-pulls every minute until `ftw-deadline`         |
+| 04:30 | `finger-ingest`  | Live listening opens on "Universe only" booths                      |
+| 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                   |
+| 05:25 | `finger-in`      | A first IN tap at/after this is `late`                              |
+| 05:26 | `spare-validate` | **The board is built** (one minute after `finger-in`, never on it)  |
+| 05:28 | `finger-second`  | No hook. A spare's slip is held until this time (`ticket-issue.ts`) |
+| 05:30 | `bus-depart`     | Listening/collection windows end (plus grace)                       |
 
 - **Missing gate = refuse, never default.** No `finger-in` or `ftw-deadline`
   stage means no board, no "late", and the walls say the timeline cannot decide.
+  Tickets also need `finger-second`. Without it nothing prints
+  (`issueTicket` returns `no-deadline`).
 - A stage's time may only change **before** the running muster passes it
   (`timeline-edit.ts`, `editRefused`). Reset re-arms listen/collect windows
   and **never** re-runs `spare-validate`.
@@ -216,18 +218,8 @@ Tests: `ticket-rules.test.ts`, `ticket-issue.test.ts`, `ticket-escpos.test.ts`,
 `live-listener.test.ts`, `routes/tickets.test.ts`.
 PRD: _Live capture and muster tickets_ (all subsections).
 
-## Known drift (fix when touching these)
+## Keeping this file true
 
-- `README.md` → _The timeline_ still lists the original 04:45/05:20/05:21/05:25
-  schedule. The seeded times above are current.
-- `README.md` → _PLAN vs ACTUAL_ says PLAN pairs are one day and one night
-  operator. That rule was dropped on 2026-09-23. The roster decides who drives.
-- `apps/api/src/allocation.ts` header comment: "every unit holding a PLAN slot,
-  minus breakdown and standby" is outdated. The board is driven by `units`, and
-  standby units are allocated.
-- `docs/prd.md` → _Fleet allocation — Plan tab shipped, Actual deferred_ and
-  _Deferred until the Actual-tab engine exists_. The engine and the Actual tab
-  have shipped (see _The allocation engine_).
-- `packages/contracts/src/master.ts` and `scheduler.ts` call `finger-second` a
-  marker with printing "a later phase". Its time already gates spare slips in
-  `ticket-issue.ts`.
+When a change moves a gate, a rule, an endpoint, or a file named here, update
+this file in the same commit. Stale guidance here is worse than none, because an
+agent will trust it.

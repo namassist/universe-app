@@ -184,7 +184,7 @@ fill the gap from the spare pool.
   formation all carry their leader's, so the reading is unchanged for them —
   what changed is that a unit outside every formation now has one too.
 
-### Fleet allocation — Plan tab shipped, Actual deferred
+### Fleet allocation — Plan tab shipped (Actual: see _The Actual tab_)
 
 - **Plan** holds the standing unit ↔ operator pairs (`fleet_plan_slots`): at
   most 2 operators per unit. The Day/Night pair rule was dropped on 2026-09-23
@@ -1485,16 +1485,13 @@ until someone pressed Sync at 07:07 — although they were on time.
   first member — a rename would otherwise put an identity-first wall back on
   the overlay.
 
-### Deferred until the Actual-tab engine exists
+### Formerly deferred: the Actual-tab engine — shipped
 
-- **Actual tab:** generated per shift by Manpower — assigned operators who
-  pass FTW/attendance keep their unit; vacancies fill from the spare pool
-  **FCFS by the moment they pass** FTW + fingerprint, subject to the same
-  SIMPER and department rules. Consumes `ftw_readings` + `finger_readings`;
-  needs no new external queries. Some units require FTW + fingerprint; others
-  fingerprint only (`units.ftw` flag).
-- The scheduler's `spare-validate` hook (05:25) stays no-op until this engine
-  lands.
+Both items once listed here have shipped: the engine is _The allocation
+engine_ and the screen is _The Actual tab_. The rule they shipped with differs
+from the one first sketched here — spares are ordered unattached-first, then by
+tap (_Spares are offered in two tiers_), and vacancies by _Allocation
+priority_ — so read those sections, not this one.
 
 ## Notifications
 

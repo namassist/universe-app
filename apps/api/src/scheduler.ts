@@ -468,9 +468,8 @@ const HOOKS: Record<TimelineAction, Hook> = {
   "shift-start": collect,
   "ftw-deadline": marker,
   "finger-in": marker,
-  /* Nothing attached yet: it names the tap that collects a printed ticket, and
-     the printing is a later phase. On the timeline now so the schedule the
-     application runs matches the one the yard works to. */
+  /* No hook: printing is driven by the tap. Its *time* is what holds a
+     spare's slip until the board exists (`ticket-issue.ts`). */
   "finger-second": marker,
   "bus-depart": marker,
   other: marker,
