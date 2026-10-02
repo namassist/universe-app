@@ -28,9 +28,10 @@ export default defineConfig([
     "**/next-env.d.ts",
     // Drizzle-generated SQL + snapshot metadata — never hand-edited.
     "apps/api/drizzle/**",
-    // ECC agent workflow (vendored from upstream) and per-machine skills —
-    // markdown and upstream code, not linted as project code.
+    // Agent workflow and skills vendored from upstream (ECC, elysiajs) —
+    // markdown and upstream examples, not linted as project code.
     ".claude/**",
+    ".agents/**",
   ]),
 
   // Backend (Elysia on Bun) and shared packages: plain TypeScript, no JSX.

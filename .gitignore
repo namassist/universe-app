@@ -16,11 +16,10 @@ build/
 
 # AI workflow: ECC (https://github.com/affaan-m/ECC). The curated agents,
 # commands, skills and rules under .claude/ are committed so every machine runs
-# the same workflow — see .claude/ECC.md. Only per-machine state stays out:
-# personal settings and the elysiajs skill, which is restored from
-# skills-lock.json with `bunx skills add elysiajs/skills`.
+# the same workflow — see .claude/ECC.md. The elysiajs skill is committed too,
+# under .agents/skills/ (pinned in skills-lock.json). Only personal settings
+# stay out.
 .claude/settings.local.json
-.claude/skills/elysiajs/
 CLAUDE.local.md
 
 # codebase-memory-mcp index, when CBM_CACHE_DIR points into the repo

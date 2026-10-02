@@ -19,10 +19,11 @@ packs this stack does not use, `orch-build-mvp` (needs `/gan-build`; the app
 already exists) and `/orch-review` (needs ECC's separate Workflow runtime;
 `/code-review` covers it).
 
-Per machine, alongside ECC:
+Alongside ECC:
 
-- `skills/elysiajs/` (gitignored) — `bunx skills add elysiajs/skills`, pinned
-  in `skills-lock.json`.
+- `skills/elysiajs` — not ECC: a link to the ElysiaJS skill committed under
+  `.agents/skills/elysiajs/`, managed by `bunx skills` and pinned in
+  `skills-lock.json` (update with `bunx skills update`).
 - [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) —
   the code-graph MCP server. Its installer configures Claude Code itself
   (`~/.claude.json`, hooks, skill); nothing for it is vendored here. How agents

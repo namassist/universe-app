@@ -292,7 +292,7 @@ what is vendored.
 
 ```bash
 scripts/sync-ecc.sh                # update the vendored ECC subset, then review the diff
-bunx skills add elysiajs/skills    # per machine: the ElysiaJS skill (pinned in skills-lock.json)
+bunx skills update                 # bump the committed ElysiaJS skill (.agents/skills/elysiajs, pinned in skills-lock.json)
 ```
 
 Code navigation uses [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp),

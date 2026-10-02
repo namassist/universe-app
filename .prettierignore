@@ -14,6 +14,8 @@ apps/api/drizzle
 next-env.d.ts
 *.tsbuildinfo
 
-# Vendored ECC workflow + per-machine skills — owned upstream; keep them
-# byte-identical so `scripts/sync-ecc.sh` diffs stay clean
+# Vendored agent workflow and skills (ECC, elysiajs) — owned upstream; keep
+# them byte-identical so `scripts/sync-ecc.sh` and `bunx skills update` diffs
+# stay clean
 .claude
+.agents
