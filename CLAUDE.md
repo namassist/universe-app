@@ -32,15 +32,17 @@ call chains, `get_code_snippet` / `get_file_outline` to read, and
    → `apps/api` (schema, migration, routes) → `apps/web` (queries, menus, UI).
 4. **Test-first on the API.** Use the `tdd-workflow` skill: write the failing
    `bun test` case next to the code (`apps/api/src/*.test.ts`), make it pass,
-   refactor. `apps/web` has no test runner yet — verify it through typecheck,
-   lint and build, and do not add a test framework without asking.
+   refactor. In `apps/web`, pure logic gets a `bun test` file beside it (e.g.
+   `components/menus/fleet-allocation/crew-rows.test.ts`); there are no
+   component tests — verify UI through typecheck, lint and build, and do not
+   add a test framework without asking.
 5. **Database changes** go through Drizzle: edit `apps/api/src/db/schema.ts`,
    then `bun run db:generate`; never hand-edit `apps/api/drizzle/`. Have
    `database-reviewer` look at schema and query changes.
 6. **Verify** (the `verification-loop` skill), all from the repo root:
    ```bash
    bun run format:check && bun run lint && bun run typecheck
-   (cd apps/api && bun test)
+   (cd apps/api && bun test) && (cd apps/web && bun test)
    bun run build            # web changes: rm -rf apps/web/.next first
    ```
    A failing build or type error → `/build-fix`.
@@ -57,8 +59,8 @@ call chains, `get_code_snippet` / `get_file_outline` to read, and
 - **Package manager is Bun.** Use `bun run`, `bun test`, `bunx` — not `npm`,
   `npx`, `jest` or `vitest`, even where an ECC command suggests them.
 - **Coverage / E2E.** ECC's "80% coverage, unit + integration + E2E all
-  required" is a target, not a gate: new API logic gets tests; there is no E2E
-  suite and the web app has no unit tests yet.
+  required" is a target, not a gate: new logic gets tests; there is no E2E
+  suite and no component tests.
 - **UI.** Never add Radix or another headless UI library, and never inline a
   color — extend `components/ui/*` with variants and use tokens from
   `app/globals.css` (see `apps/web/AGENTS.md`).

@@ -18,14 +18,14 @@ extend the existing components instead.
 
 ## Layers (dependency flows downward only)
 
-| Layer         | Path                         | Role                                                                                                                    |
-| ------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Routes        | `app/{role}/{menu}/page.tsx` | Thin wrappers only — set `metadata`, render a menu component with its access `mode`. Never put logic here.              |
-| Pages         | `components/menus/*`         | One component per menu/sub-page. Owns its sample data + local state. Registered in `components/menus/registry.tsx`.     |
-| Shell         | `components/layout/*`        | Sidebar, topbar, role shell. Filtered by `lib/access.ts` — never hardcode per-role UI here.                             |
-| Design system | `components/ui/*`            | 24 vendored compound components. **Backend/data-agnostic — never import from `menus/`, `lib/access`, or data modules.** |
-| Contexts      | `components/providers/*`     | Theme, i18n, toast, role. No data stores.                                                                               |
-| Data & rules  | `lib/*`                      | `access.ts` (role matrix — single source of truth), `nav.ts`, static sample data modules, `i18n/`.                      |
+| Layer         | Path                        | Role                                                                                                                    |
+| ------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Routes        | `app/(app)/{menu}/page.tsx` | Thin wrappers only — set `metadata`, render a menu component. Never put logic here.                                     |
+| Pages         | `components/menus/*`        | One component per menu/sub-page. Owns local state, fetches through `lib/queries`. Registered in `menus/registry.tsx`.   |
+| Shell         | `components/layout/*`       | Sidebar, topbar, role shell. Filtered by `lib/access.ts` — never hardcode per-role UI here.                             |
+| Design system | `components/ui/*`           | 24 vendored compound components. **Backend/data-agnostic — never import from `menus/`, `lib/access`, or data modules.** |
+| Contexts      | `components/providers/*`    | Theme, i18n, toast, role. No data stores.                                                                               |
+| Data & rules  | `lib/*`                     | `api.ts`, `queries/*`, `access.ts` (re-export from contracts), `nav.ts`, `i18n/`. Full map: `docs/architecture.md`.     |
 
 Compound examples already in the system — follow this shape:
 `Dialog/DialogIcon/DialogTitle/DialogBody/DialogActions`,
