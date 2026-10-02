@@ -45,9 +45,12 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 | 05:30 | `bus-depart`     | Listening/collection windows end (plus grace)                       |
 
 - **Missing gate = refuse, never default.** No `finger-in` or `ftw-deadline`
-  stage means no board, no "late", and the walls say the timeline cannot decide.
-  Tickets also need `finger-second`. Without it nothing prints
-  (`issueTicket` returns `no-deadline`).
+  stage means `spare-validate` builds no board and notifies
+  (`no-finger-deadline`). The fleet wall stays on the provisional line-up and
+  drops its readiness badges. Tickets need `finger-in`, `ftw-deadline` and
+  `finger-second`; without any of them nothing prints (`issueTicket` returns
+  `no-deadline`), though the tap is still recorded. Only a missing
+  `shift-start`/`ftw-ingest` pair makes a wall say the timeline cannot decide.
 - A stage's time may only change **before** the running muster passes it
   (`timeline-edit.ts`, `editRefused`). Reset re-arms listen/collect windows
   and **never** re-runs `spare-validate`.
@@ -81,19 +84,27 @@ Gaps are filled from the spare pool.
 ### Eligibility: may this person take _this_ unit?
 
 `pairingRefusal()` in `routes/fleet-allocation.ts` (pure; `refusePairing` is
-its fetching wrapper, so there is **one** implementation for PLAN, engine,
-tickets and manual placement):
+its fetching wrapper). PLAN, the engine, plan seats on slips and the manual
+placement candidates all call it. **One exception:** `cannotBeSeated` in
+`ticket-issue.ts` restates part of eligibility in SQL (SIMPER held, `ftw =
+false`, seatable), so a new eligibility rule must be added there too. The
+rule checks:
 
 - the employee is `aktif` (PLAN alone also admits `standby`, via the `planning` flag)
 - their position has `fleetAllocation`
 - they hold the unit's SIMPER code, unexpired
 - a department-owned unit takes only that department
-- one unit per operator
+
+"One unit per operator" is not in `pairingRefusal`. It is enforced by the
+engine's `taken` set, the PLAN routes, and a partial unique index on the board
+(a 409 naming the unit).
 
 ### Scope: which units the board is about
 
-`takesPartInAllocation()` in `fleet-scope.ts`: **active, not breakdown, and
-(in a formation or `fleet_support`)**. Standby units **are** allocated (since
+**Active, not breakdown, and (in a formation or `fleet_support`)**. The
+formation/support half is `takesPartInAllocation()` in `fleet-scope.ts`; each
+caller adds `active` and `breakdown` itself, so check both halves when writing
+a new query. Standby units **are** allocated (since
 2026-09-15). The web mirror is `inAllocation` / `vacantOn` in
 `components/menus/fleet-allocation/data.ts`. Keep both in step.
 
@@ -106,8 +117,10 @@ tickets and manual placement):
 3. The spare pool (rostered `aktif` allocatable operators not seated, finger
    passed) is sorted **unattached first, then standing-elsewhere** (ordering,
    never filtering), then by tap, then NIK.
-4. Vacancies are sorted by **Prioritas Alokasi rank** (a (unit class, SIMPER
-   code) pair; unranked last), then by the database's `asc(code)` index.
+4. Vacancies are sorted by **Prioritas Alokasi rank**, then by the database's
+   `asc(code)` index. The rank is stored per `units.description` (matched
+   exactly, as spelled; `allocation_priorities`), the text the PRD describes as
+   a (unit class, SIMPER code) pair. Unranked descriptions sort last.
 5. Spares already holding a slip for a vacancy keep it. Then each vacancy takes
    the first spare that is ready for that unit and eligible (`source: spare`).
 
@@ -158,7 +171,8 @@ Fleet wall rules:
   timeline (`current-shift.ts`). A night board is filed under the date it began.
 - From `shift-start` until `spare-validate` it shows the **provisional PLAN**
   read through the roster (`D`/`N`), badged "Line-up sementara". After that it
-  shows the board. Before the board, an empty seat is not red.
+  shows the board. Before the board, an empty card has no red frame or glow
+  (the small "Kosong" seat chip still uses the danger tone).
 - No-fleet units never reach a TV. Breakdown units are absent. Idle units keep
   a full red card and are **never** summarised away. Header counts are the
   formation's own, never the site's.

@@ -31,6 +31,13 @@ the Timeline menu is edited. Worth doing the day these numbers are audited.
 
 ### A window already open ignores edits made while it runs
 
+> **Partly addressed (2026-09-23):** a gate the running muster has passed can
+> no longer be moved (`editRefused`), and the Timeline menu's **Reset**
+> (`POST /v1/timeline/reset/:shift`) re-arms the collection and listen windows
+> against the current `bus-depart`. A moved `bus-depart` still needs that
+> Reset to take effect; the FTW pull window and the machine-side twin below
+> are unchanged.
+
 Three windows fix their closing time **once, when they open**, and keep it to
 the end: the FTW pull (opened by `ftw-ingest`, closes at `ftw-deadline`), the
 live listen (opened by `finger-ingest`) and the tap collection (opened by
