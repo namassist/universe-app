@@ -24,6 +24,7 @@ COMMANDS=(
   plan feature-dev code-review build-fix react-review test-coverage
   refactor-clean update-docs security-scan learn checkpoint save-session
   resume-session
+  orch-add-feature orch-change-feature orch-fix-defect orch-refine-code
 )
 SKILLS=(
   tdd-workflow verification-loop coding-standards backend-patterns
@@ -31,6 +32,8 @@ SKILLS=(
   accessibility postgres-patterns redis-patterns database-migrations
   docker-patterns deployment-patterns security-review security-scan
   search-first git-workflow error-handling strategic-compact
+  orch-pipeline orch-add-feature orch-change-feature orch-fix-defect
+  orch-refine-code
 )
 RULES=(common typescript react web)
 

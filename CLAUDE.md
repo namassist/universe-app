@@ -25,14 +25,31 @@ call chains, `get_code_snippet` / `get_file_outline` to read, and
 
 ## Adding or changing a feature
 
-1. **Plan first.** `/plan <feature>` (planner agent). For a feature that spans
-   apps or touches unfamiliar code, use `/feature-dev` instead — it explores
-   with `code-explorer` (backed by codebase-memory) and designs with
-   `code-architect`. Wait for the user to confirm the plan before writing code.
-2. **Read the requirement record.** `docs/domain-map.md` for orientation,
-   then the `docs/prd.md` section it points to, plus the relevant
-   `apps/*/docs/` (architecture, design, rules, schema). Agreed changes to
-   behavior are written there as part of the change, not afterwards.
+Start from the ECC `orch-*` command that matches the kind of work:
+
+| Work                                     | Command                       |
+| ---------------------------------------- | ----------------------------- |
+| A capability that does not exist yet     | `/orch-add-feature <what>`    |
+| Working behavior that should differ      | `/orch-change-feature <what>` |
+| Behavior that is broken or wrong         | `/orch-fix-defect <what>`     |
+| Structure to improve, behavior unchanged | `/orch-refine-code <what>`    |
+
+They classify the size, then run Research → Plan → TDD → Review → Commit with
+two stops for the user: **approve the plan** before any implementation, and
+**confirm the commit** before anything is committed. Honor both. `/plan` and
+`/feature-dev` remain for planning without the rest of the pipeline.
+
+The steps below are how each phase is done in this repo, and they override the
+pipeline's generic defaults:
+
+1. **Research = this repo first.** Before any library or web search, read
+   `docs/domain-map.md`, the `docs/prd.md` section it points to, and explore
+   the code through codebase-memory (`code-explorer`). Search GitHub, docs or
+   package registries only when the plan needs a new dependency.
+2. **The requirement record is part of the plan.** Read the relevant
+   `apps/*/docs/` (architecture, design, rules, schema) too. Agreed changes to
+   behavior are written into `docs/prd.md` as part of the change, not
+   afterwards.
 3. **Build in dependency order.** `packages/contracts` (shared types and enums)
    → `apps/api` (schema, migration, routes) → `apps/web` (queries, menus, UI).
 4. **Test-first on the API.** Use the `tdd-workflow` skill: write the failing

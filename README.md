@@ -283,9 +283,12 @@ bun run lint:fix       # eslint --fix every package
 
 Agent work follows [ECC](https://github.com/affaan-m/ECC). A curated subset —
 commands, agents, skills and rules for this stack — is committed under
-`.claude/`, so every machine runs the same workflow. The root `CLAUDE.md` is the
-playbook for adding a feature: `/plan` → test-first on the API → verify →
-`/code-review` → update `docs/`. `.claude/ECC.md` lists what is vendored.
+`.claude/`, so every machine runs the same workflow. Work starts from the
+`orch-*` command that fits it — `/orch-add-feature`, `/orch-change-feature`,
+`/orch-fix-defect` or `/orch-refine-code` — which plans, waits for approval,
+builds test-first, reviews, and waits again before committing. The root
+`CLAUDE.md` says how each step is done in this repo; `.claude/ECC.md` lists
+what is vendored.
 
 ```bash
 scripts/sync-ecc.sh                # update the vendored ECC subset, then review the diff

@@ -8,14 +8,16 @@ do not hand-edit these files (project guidance belongs in the root
 
 | Kind | Where | What |
 | --- | --- | --- |
-| Commands | `commands/` | `/plan`, `/feature-dev`, `/code-review`, `/react-review`, `/build-fix`, `/test-coverage`, `/refactor-clean`, `/update-docs`, `/security-scan`, `/checkpoint`, `/learn`, `/save-session`, `/resume-session` |
+| Commands | `commands/` | `/orch-add-feature`, `/orch-change-feature`, `/orch-fix-defect`, `/orch-refine-code`, `/plan`, `/feature-dev`, `/code-review`, `/react-review`, `/build-fix`, `/test-coverage`, `/refactor-clean`, `/update-docs`, `/security-scan`, `/checkpoint`, `/learn`, `/save-session`, `/resume-session` |
 | Agents | `agents/` | planner, architect, code-explorer, code-architect, code-reviewer, typescript-reviewer, react-reviewer, database-reviewer, security-reviewer, build-error-resolver, tdd-guide, refactor-cleaner, doc-updater, silent-failure-hunter |
-| Skills | `skills/` | tdd-workflow, verification-loop, coding-standards, backend-patterns, frontend-patterns, api-design, bun-runtime, react-patterns, react-testing, accessibility, postgres-patterns, redis-patterns, database-migrations, docker-patterns, deployment-patterns, security-review, security-scan, search-first, git-workflow, error-handling, strategic-compact |
+| Skills | `skills/` | tdd-workflow, verification-loop, coding-standards, backend-patterns, frontend-patterns, api-design, bun-runtime, react-patterns, react-testing, accessibility, postgres-patterns, redis-patterns, database-migrations, docker-patterns, deployment-patterns, security-review, security-scan, search-first, git-workflow, error-handling, strategic-compact, orch-pipeline, orch-add-feature, orch-change-feature, orch-fix-defect, orch-refine-code |
 | Rules | `rules/ecc/` | `common` (always loaded), `typescript`, `react`, `web` (path-scoped, loaded only for matching files) |
 
 Not vendored on purpose: the ECC hook runtime (the repo's own husky +
-lint-staged already formats and lints on commit), MCP configs, and the
-language packs this stack does not use.
+lint-staged already formats and lints on commit), MCP configs, the language
+packs this stack does not use, `orch-build-mvp` (needs `/gan-build`; the app
+already exists) and `/orch-review` (needs ECC's separate Workflow runtime;
+`/code-review` covers it).
 
 Per machine, alongside ECC:
 
