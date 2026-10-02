@@ -2131,6 +2131,14 @@ this shift's muster is running, without reading a server log (owner,
   last `X-Forwarded-For` entry when `TRUST_PROXY=true` (the deploy, where only
   Caddy publishes a port).
 - **Read-only.** Nothing on the page changes data. It polls every 15 s.
+- **A failed poll never blanks the page.** The last answer stays up, marked
+  "Gagal memuat ulang — menampilkan data terakhir" (announced politely to
+  screen readers) with the freshness dot gone amber, and every "… lalu" age
+  keeps counting on the browser's clock from the server's last moment, so a
+  dead feed cannot go on saying _baru saja_. With nothing to show yet, the
+  error offers _Coba lagi_. A session that runs out under an open page
+  returns to the password form with "Sesi berakhir, masukkan password lagi";
+  _Keluar_ drops the cached answer first, so it returns to the plain form.
 - **What it shows:**
   - infrastructure: Postgres, Redis, the three storage directories, the
     scheduler's last tick and the prober's last probe — a heartbeat older

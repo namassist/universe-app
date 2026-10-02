@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { CircleAlert, Eye, EyeOff, Lock, ServerCog } from "lucide-react";
+import {
+  CircleAlert,
+  Clock3,
+  Eye,
+  EyeOff,
+  Lock,
+  ServerCog,
+} from "lucide-react";
 
 import { api, errorMessage } from "@/lib/api";
 import { Button, Spinner } from "@/components/ui/button";
@@ -15,7 +22,15 @@ import { Panel } from "@/components/ui/panel";
  * tries, an Operations Center switched off — and this form only repeats its
  * words, so the two can never disagree about why the page did not open.
  */
-export function OpsLogin({ onOpened }: { onOpened: () => void }) {
+export function OpsLogin({
+  onOpened,
+  notice,
+}: {
+  onOpened: () => void;
+  /** Why the form is back, e.g. a session that ran out under an open page. */
+  notice?: string;
+}) {
+  const noticeId = React.useId();
   const [password, setPassword] = React.useState("");
   const [show, setShow] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -54,6 +69,16 @@ export function OpsLogin({ onOpened }: { onOpened: () => void }) {
           </div>
         </div>
 
+        {notice ? (
+          <p
+            id={noticeId}
+            className="mb-5 flex items-center gap-2 rounded-control border border-(--badge-warning-border) bg-(--badge-warning-fill) px-3 py-2.5 text-sm text-(--badge-warning-text)"
+          >
+            <Clock3 className="size-4 shrink-0" />
+            {notice}
+          </p>
+        ) : null}
+
         <form onSubmit={submit} className="flex flex-col gap-4">
           <label className="flex flex-col gap-2 text-sm font-medium">
             Password
@@ -67,6 +92,7 @@ export function OpsLogin({ onOpened }: { onOpened: () => void }) {
                 onChange={(event) => setPassword(event.target.value)}
                 className="pr-11 pl-10"
                 aria-invalid={error ? true : undefined}
+                aria-describedby={notice ? noticeId : undefined}
               />
               <button
                 type="button"

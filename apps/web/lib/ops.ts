@@ -21,6 +21,24 @@ export function sinceLabel(iso: string | null, now = new Date()): string {
   return `${Math.floor(hours / 24)} h lalu`;
 }
 
+/**
+ * The moment ages on the page are read against.
+ *
+ * While polls succeed it is the server's own `generatedAt`, so a skewed
+ * browser clock cannot age anything. Once they fail (`tick` is the browser's
+ * running clock) it keeps moving from that moment by the time elapsed since
+ * the answer arrived — otherwise a dead feed would read "baru saja" forever.
+ */
+export function clockAt(
+  generatedAt: string,
+  receivedAt: number,
+  tick: number | null
+): Date {
+  const base = new Date(generatedAt).getTime();
+  if (tick === null) return new Date(base);
+  return new Date(base + Math.max(0, tick - receivedAt));
+}
+
 export type Freshness = "fresh" | "stale" | "missing";
 
 /** Whether a heartbeat is recent enough to believe. */

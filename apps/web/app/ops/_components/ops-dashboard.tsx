@@ -16,7 +16,13 @@ import {
 } from "lucide-react";
 
 import { api } from "@/lib/api";
-import { apiTotals, freshness, sinceLabel, type Freshness } from "@/lib/ops";
+import {
+  apiTotals,
+  clockAt,
+  freshness,
+  sinceLabel,
+  type Freshness,
+} from "@/lib/ops";
 import type { OpsOverview } from "@/lib/queries/ops";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +38,7 @@ import {
   StageLogPanel,
   UsersPanel,
 } from "./ops-panels";
+import { useNow } from "./use-now";
 
 /* The dashboard's own icon wells, from the badge tokens. */
 const GOOD = {
@@ -63,6 +70,8 @@ const heartbeatStyle = (state: Freshness) =>
 const SCHEDULER_STALE_SECONDS = 3 * 60;
 /** The prober cycles every 30 s; two minutes without a probe is an outage. */
 const PROBER_STALE_SECONDS = 2 * 60;
+/** Ages read in minutes; a stale page re-reads them this often. */
+const STALE_TICK_MS = 10_000;
 
 export function OpsDashboard({
   data,
@@ -70,6 +79,7 @@ export function OpsDashboard({
   stale,
   updatedAt,
   onRefresh,
+  onSignedOut,
 }: {
   data: OpsOverview;
   refreshing: boolean;
@@ -77,8 +87,13 @@ export function OpsDashboard({
   stale: boolean;
   updatedAt: number;
   onRefresh: () => void;
+  /** The ops session was closed on purpose — drop what is cached. */
+  onSignedOut: () => void;
 }) {
-  const now = new Date(data.generatedAt);
+  /* Fresh data is read against the server's moment; stale data keeps ageing
+     on the browser's clock, so a dead feed cannot go on saying "baru saja". */
+  const tick = useNow(stale, STALE_TICK_MS);
+  const now = clockAt(data.generatedAt, updatedAt, tick);
   const totals = apiTotals(data.api.perMinute);
   const scheduler = freshness(
     data.checks.schedulerLastTick,
@@ -102,7 +117,7 @@ export function OpsDashboard({
       await api.v1.ops.session.delete();
     } finally {
       setLeaving(false);
-      onRefresh();
+      onSignedOut();
     }
   }
 
@@ -114,11 +129,11 @@ export function OpsDashboard({
       >
         <div className="flex flex-wrap items-center gap-3">
           {stale ? (
-            <Badge variant="warning" dot>
+            <Badge variant="warning" dot role="status" aria-live="polite">
               Gagal memuat ulang — menampilkan data terakhir
             </Badge>
           ) : null}
-          <Fresh>
+          <Fresh tone={stale ? "stale" : "live"}>
             Diperbarui{" "}
             {new Date(updatedAt).toLocaleTimeString("id-ID", {
               hour: "2-digit",

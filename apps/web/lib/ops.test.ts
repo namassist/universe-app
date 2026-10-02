@@ -4,6 +4,7 @@ import {
   alertFeed,
   apiTotals,
   browserOf,
+  clockAt,
   freshness,
   minuteRows,
   sinceLabel,
@@ -24,6 +25,30 @@ describe("sinceLabel", () => {
     expect(sinceLabel(new Date("2026-10-02T03:20:00").toISOString(), now)).toBe(
       "2 j 20 m lalu"
     );
+  });
+});
+
+describe("clockAt", () => {
+  const generatedAt = "2026-10-02T05:40:00.000Z";
+  const receivedAt = Date.parse("2026-10-02T05:40:02.000Z"); // client clock, 2 s ahead
+
+  test("is the server's own moment while the data is current", () => {
+    expect(clockAt(generatedAt, receivedAt, null).toISOString()).toBe(
+      generatedAt
+    );
+  });
+
+  test("keeps ticking from the server's moment once the data goes stale", () => {
+    const tick = receivedAt + 5 * 60_000;
+    expect(clockAt(generatedAt, receivedAt, tick).toISOString()).toBe(
+      "2026-10-02T05:45:00.000Z"
+    );
+  });
+
+  test("never runs behind the answer it was given", () => {
+    expect(
+      clockAt(generatedAt, receivedAt, receivedAt - 1000).toISOString()
+    ).toBe(generatedAt);
   });
 });
 

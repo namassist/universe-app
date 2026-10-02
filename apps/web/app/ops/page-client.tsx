@@ -1,11 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { CircleAlert } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CircleAlert, RefreshCw } from "lucide-react";
 
 import { isStatus } from "@/lib/api";
-import { opsOverviewQueryOptions } from "@/lib/queries/ops";
-import { Spinner } from "@/components/ui/button";
+import { opsOverviewKey, opsOverviewQueryOptions } from "@/lib/queries/ops";
+import { Button, Spinner } from "@/components/ui/button";
 import { StateBox } from "@/components/ui/state-box";
 
 import { OpsDashboard } from "./_components/ops-dashboard";
@@ -18,6 +18,7 @@ import { OpsLogin } from "./_components/ops-login";
  * Center" (no `OPS_PASSWORD_HASH`), which no password can change.
  */
 export default function PageClient() {
+  const queryClient = useQueryClient();
   const overview = useQuery(opsOverviewQueryOptions());
 
   if (overview.isPending)
@@ -27,8 +28,18 @@ export default function PageClient() {
       </main>
     );
 
+  /* A 401 with an answer still in hand is a session that ran out under an
+     open page — say so. Signing out resets the cache first, so it lands here
+     with no data and the plain form. */
   if (overview.isError && isStatus(overview.error, 401))
-    return <OpsLogin onOpened={() => overview.refetch()} />;
+    return (
+      <OpsLogin
+        onOpened={() => overview.refetch()}
+        notice={
+          overview.data ? "Sesi berakhir, masukkan password lagi." : undefined
+        }
+      />
+    );
 
   /* A failed poll keeps the last good picture on screen: this page is left
      open on a second monitor, and one blip must not blank it. */
@@ -45,9 +56,18 @@ export default function PageClient() {
           body={
             isStatus(overview.error, 404)
               ? "Deployment ini belum mengatur OPS_PASSWORD_HASH."
-              : "Periksa koneksi ke API, lalu muat ulang halaman."
+              : "Periksa koneksi ke API, lalu coba lagi."
           }
-        />
+        >
+          <Button
+            variant="secondary"
+            onClick={() => overview.refetch()}
+            disabled={overview.isFetching}
+          >
+            {overview.isFetching ? <Spinner /> : <RefreshCw />}
+            Coba lagi
+          </Button>
+        </StateBox>
       </main>
     );
 
@@ -58,6 +78,7 @@ export default function PageClient() {
       stale={overview.isError}
       updatedAt={overview.dataUpdatedAt}
       onRefresh={() => overview.refetch()}
+      onSignedOut={() => queryClient.resetQueries({ queryKey: opsOverviewKey })}
     />
   );
 }

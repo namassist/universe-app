@@ -120,7 +120,15 @@ function PageTitle({
 }
 
 /* Indikator kesegaran data (fresh + fdot) */
-function Fresh({ className, children, ...props }: React.ComponentProps<"div">) {
+function Fresh({
+  className,
+  children,
+  tone = "live",
+  ...props
+}: React.ComponentProps<"div"> & {
+  /** "stale": the data shown is older than it should be — amber, no glow. */
+  tone?: "live" | "stale";
+}) {
   return (
     <div
       data-slot="fresh"
@@ -130,7 +138,14 @@ function Fresh({ className, children, ...props }: React.ComponentProps<"div">) {
       )}
       {...props}
     >
-      <span className="size-[7px] rounded-full bg-success shadow-[0_0_6px_rgba(23,206,100,.8)]" />
+      <span
+        className={cn(
+          "size-[7px] rounded-full",
+          tone === "stale"
+            ? "bg-warning"
+            : "bg-success shadow-[0_0_6px_rgba(23,206,100,.8)]"
+        )}
+      />
       {children}
     </div>
   );
