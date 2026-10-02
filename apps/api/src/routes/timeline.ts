@@ -84,6 +84,20 @@ async function runningMuster(now: Date): Promise<RunningMuster | null> {
     : null;
 }
 
+/** Whether the running muster has already reached this stage. */
+async function passed(stage: {
+  at: string;
+  shift: ShiftKind | null;
+}): Promise<boolean> {
+  const now = new Date();
+  return editRefused({
+    stageAt: stage.at.slice(0, 5),
+    stageShift: stage.shift,
+    running: await runningMuster(now),
+    now,
+  });
+}
+
 const editClosed = {
   code: "stage_passed",
   message:
@@ -287,20 +301,19 @@ export const timelineRoutes = new Elysia({
         .limit(1);
       if (!before) return status(404, notFound);
 
-      /* Only a change that moves when it fires: renaming a stage the muster
-         has passed is harmless, and refusing it would be a rule about the
-         wrong thing. */
-      const retimes = body.at !== undefined || body.active !== undefined;
-      if (
-        retimes &&
-        editRefused({
-          stageAt: before.at.slice(0, 5),
-          stageShift: before.shift,
-          running: await runningMuster(new Date()),
-          now: new Date(),
-        })
-      )
-        return status(422, editClosed);
+      /* Only a change to when it fires or what it governs: renaming a stage
+         the muster has passed, or giving it a sound, is harmless, and
+         refusing it would be a rule about the wrong thing. Turning a passed
+         `finger-in` into `other`, or moving it to the other shift, is as
+         final for the muster as deleting it. A real change, not a field
+         present: the Timeline menu sends the whole row back on every save,
+         so an unchanged value is not one. */
+      const retimes =
+        (body.at !== undefined && body.at !== before.at.slice(0, 5)) ||
+        (body.active !== undefined && body.active !== before.active) ||
+        (body.action !== undefined && body.action !== before.action) ||
+        (body.shift !== undefined && body.shift !== before.shift);
+      if (retimes && (await passed(before))) return status(422, editClosed);
 
       const disorder = await outOfOrder({
         at: body.at ?? before.at.slice(0, 5),
@@ -352,6 +365,17 @@ export const timelineRoutes = new Elysia({
   .delete(
     "/:id",
     async ({ params, status }) => {
+      /* The same rule as an edit: deleting a gate the running muster has
+         passed — today's `finger-in` at 05:40, say — takes the board and
+         every slip for the shift with it. */
+      const [before] = await db
+        .select()
+        .from(schema.timelineStages)
+        .where(eq(schema.timelineStages.id, params.id))
+        .limit(1);
+      if (!before) return status(404, notFound);
+      if (await passed(before)) return status(422, editClosed);
+
       const [row] = await db
         .delete(schema.timelineStages)
         .where(eq(schema.timelineStages.id, params.id))
@@ -367,6 +391,7 @@ export const timelineRoutes = new Elysia({
         401: ErrorSchema,
         403: ErrorSchema,
         404: ErrorSchema,
+        422: ErrorSchema,
       },
       detail: { summary: "Remove a stage" },
     }

@@ -1296,8 +1296,13 @@ until someone pressed Sync at 07:07 — although they were on time.
   reading "05:00 has gone by today" would refuse them; a night stage keeps its
   muster across midnight for the same reason, in the other direction. The
   boundary is the `shift-start` gate the walls already turn over on. Renaming
-  a passed stage is still allowed — only a change that moves _when it fires_
-  is refused.
+  a passed stage, or giving it a sound, is still allowed. Refused are a change
+  that moves _when it fires_ or _what it governs_ (time, active, action,
+  shift) and **deleting** it (2026-10-02): turning today's passed `finger-in`
+  into `other`, or deleting it, stops the board and every slip for the shift
+  as surely as moving it. Only a value that actually differs counts, since the
+  Timeline menu sends the whole row back on every save. Before this, renaming
+  a passed stage from the menu was refused too.
 - **What actually got stuck, before this.** The markers take effect the moment
   they are saved, because the walls and the verdicts read the timeline live.
   Two things do not: **tap collection** (armed at `shift-start`) and **holding

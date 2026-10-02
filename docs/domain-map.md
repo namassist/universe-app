@@ -51,8 +51,9 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
   `finger-second`; without any of them nothing prints (`issueTicket` returns
   `no-deadline`), though the tap is still recorded. Only a missing
   `shift-start`/`ftw-ingest` pair makes a wall say the timeline cannot decide.
-- A stage's time may only change **before** the running muster passes it
-  (`timeline-edit.ts`, `editRefused`). Reset re-arms listen/collect windows
+- A stage may only be retimed, switched on/off, given another action or shift,
+  or **deleted** **before** the running muster passes it (`timeline-edit.ts`,
+  `editRefused`, applied in `routes/timeline.ts`). Renaming is always allowed. Reset re-arms listen/collect windows
   and **never** re-runs `spare-validate`.
 - Hooks: `scheduler.ts` (`HOOKS`). Sound cues 2 min before a stage:
   `sound-cue.ts`.
