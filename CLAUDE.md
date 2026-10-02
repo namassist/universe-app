@@ -5,6 +5,10 @@ every unit the moment a shift starts. Read `README.md` for the domain model and
 "Conventions worth keeping"; per-app rules live in `apps/api/AGENTS.md` (Elysia
 on Bun) and `apps/web/AGENTS.md` (Next.js, vendored compound components).
 
+**Before touching allocation, the walls (`/display/*`) or tickets, read
+`docs/domain-map.md`.** It has the glossary, the timeline gates, the rules
+that must not break, and where each lives in code, tests and `docs/prd.md`.
+
 The workflow is **ECC** — a curated subset under `.claude/` (see
 `.claude/ECC.md`). Where an ECC rule and this file disagree, this file and the
 per-app `AGENTS.md` win.
@@ -25,7 +29,8 @@ call chains, `get_code_snippet` / `get_file_outline` to read, and
    apps or touches unfamiliar code, use `/feature-dev` instead — it explores
    with `code-explorer` (backed by codebase-memory) and designs with
    `code-architect`. Wait for the user to confirm the plan before writing code.
-2. **Read the requirement record.** `docs/prd.md` plus the relevant
+2. **Read the requirement record.** `docs/domain-map.md` for orientation,
+   then the `docs/prd.md` section it points to, plus the relevant
    `apps/*/docs/` (architecture, design, rules, schema). Agreed changes to
    behavior are written there as part of the change, not afterwards.
 3. **Build in dependency order.** `packages/contracts` (shared types and enums)
@@ -49,8 +54,9 @@ call chains, `get_code_snippet` / `get_file_outline` to read, and
 7. **Review.** `/code-review` on the diff; `/react-review` when `apps/web`
    changed; `security-reviewer` for anything touching auth, RBAC, sessions,
    uploads or request validation.
-8. **Docs.** Update `docs/prd.md` and the touched `apps/*/docs/` (`/update-docs`
-   or the `doc-updater` agent) in the same change.
+8. **Docs.** Update `docs/prd.md`, the touched `apps/*/docs/`, and
+   `docs/domain-map.md` when a rule, gate, endpoint or file it names changes
+   (`/update-docs` or the `doc-updater` agent), in the same change.
 9. **Commit** small, conventional messages scoped by area, as in the history:
    `feat(reports): …`, `fix(api): …`, `docs(web): …`.
 
