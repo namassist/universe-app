@@ -9,12 +9,22 @@ The workflow is **ECC** — a curated subset under `.claude/` (see
 `.claude/ECC.md`). Where an ECC rule and this file disagree, this file and the
 per-app `AGENTS.md` win.
 
+## Code navigation: codebase-memory-mcp
+
+When the [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
+server is connected, explore through its graph before grepping: `get_architecture`
+for the layout, `search_graph` / `search_code` to find symbols, `trace_path` for
+call chains, `get_code_snippet` / `get_file_outline` to read, and
+`detect_changes` to see what a diff touches. This applies to ECC agents too —
+`code-explorer`, `planner` and the reviewers should use it when available. If
+`index_status` says the repo is stale or missing, run `index_repository` first.
+
 ## Adding or changing a feature
 
 1. **Plan first.** `/plan <feature>` (planner agent). For a feature that spans
    apps or touches unfamiliar code, use `/feature-dev` instead — it explores
-   with `code-explorer` and designs with `code-architect`. Wait for the user to
-   confirm the plan before writing code.
+   with `code-explorer` (backed by codebase-memory) and designs with
+   `code-architect`. Wait for the user to confirm the plan before writing code.
 2. **Read the requirement record.** `docs/prd.md` plus the relevant
    `apps/*/docs/` (architecture, design, rules, schema). Agreed changes to
    behavior are written there as part of the change, not afterwards.

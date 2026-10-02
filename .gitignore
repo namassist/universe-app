@@ -23,6 +23,10 @@ build/
 .claude/skills/elysiajs/
 CLAUDE.local.md
 
+# codebase-memory-mcp index, when CBM_CACHE_DIR points into the repo
+# (per-machine, rebuild with index_repository)
+.codebase-memory/
+
 # Uploaded sound files (SOUND_DIR). Runtime data, not source.
 apps/api/storage/
 

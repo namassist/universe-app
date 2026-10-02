@@ -284,6 +284,14 @@ scripts/sync-ecc.sh                # update the vendored ECC subset, then review
 bunx skills add elysiajs/skills    # per machine: the ElysiaJS skill (pinned in skills-lock.json)
 ```
 
+Code navigation uses [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp),
+a code-graph MCP server installed per machine:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh | bash
+codebase-memory-mcp cli index_repository --repo-path "$PWD"   # or ask the agent to "index this project"
+```
+
 A newly installed skill or command is picked up by the _next_ agent session.
 
 ## Database

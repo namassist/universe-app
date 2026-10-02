@@ -17,8 +17,14 @@ Not vendored on purpose: the ECC hook runtime (the repo's own husky +
 lint-staged already formats and lints on commit), MCP configs, and the
 language packs this stack does not use.
 
-Per machine (gitignored): `skills/elysiajs/` — restore it with
-`bunx skills add elysiajs/skills` (pinned in `skills-lock.json`).
+Per machine, alongside ECC:
+
+- `skills/elysiajs/` (gitignored) — `bunx skills add elysiajs/skills`, pinned
+  in `skills-lock.json`.
+- [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) —
+  the code-graph MCP server. Its installer configures Claude Code itself
+  (`~/.claude.json`, hooks, skill); nothing for it is vendored here. How agents
+  use it is in the root `CLAUDE.md`.
 
 ## Updating
 
