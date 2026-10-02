@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
 
 import { redis } from "../redis";
+import { opsKey } from "./keys";
 import {
   flushOpsMetrics,
   forgetOpsTraffic,
@@ -147,24 +148,40 @@ describe("requests", () => {
 });
 
 describe("who is using it", () => {
-  test("a signed-in user is listed with where they came from and what they did last", async () => {
+  test("a signed-in user is listed with their role, browser and what they did last — never their NIK or address", async () => {
     await get(`/v1/${tag}/me`, {
       "x-forwarded-for": "192.168.151.20",
       "user-agent": "UjiBrowser/1.0",
     });
-    await get(`/v1/${tag}/me`, { "x-forwarded-for": "192.168.151.21" });
+    await get(`/v1/${tag}/me`, {
+      "x-forwarded-for": "192.168.151.21",
+      "user-agent": "UjiBrowser/1.0",
+    });
     await flushOpsMetrics();
 
     const { users } = await readOpsMetrics();
     const me = users.find((u) => u.userId === userId);
     expect(me).toBeDefined();
     expect(me!.name).toBe("Uji Ops");
-    expect(me!.nik).toBe("990001");
     expect(me!.roleName).toBe("Manpower");
-    expect(me!.ip).toBe("192.168.151.21");
+    expect(me!.userAgent).toBe("UjiBrowser/1.0");
     expect(me!.lastRoute).toBe(routeOf("/me"));
     expect(me!.lastStatus).toBe(200);
     expect(me!.requests).toBe(2);
+    expect(me).not.toHaveProperty("nik");
+    expect(me).not.toHaveProperty("ip");
+  });
+
+  test("neither the NIK nor the address is written to Redis", async () => {
+    await get(`/v1/${tag}/me`, { "x-forwarded-for": "192.168.151.22" });
+    await flushOpsMetrics();
+
+    const stored = await redis.hgetall(opsKey(`user:${userId}`));
+    expect(stored.name).toBe("Uji Ops");
+    expect(stored).not.toHaveProperty("nik");
+    expect(stored).not.toHaveProperty("ip");
+    expect(JSON.stringify(stored)).not.toContain("990001");
+    expect(JSON.stringify(stored)).not.toContain("192.168.151.22");
   });
 
   test("an anonymous request lists nobody", async () => {
@@ -185,12 +202,5 @@ describe("hardening (security review, 2026-10-02)", () => {
     const { routes } = await readOpsMetrics();
     expect(routes.some((r) => r.route.includes(`ZZ${tag}`))).toBe(false);
     expect(routes.some((r) => r.route.includes(`X|`))).toBe(false);
-  });
-
-  test("an address that is not an IP is not stored as one", async () => {
-    await get(`/v1/${tag}/me`, { "x-forwarded-for": "<script>x</script>" });
-    await flushOpsMetrics();
-    const me = (await readOpsMetrics()).users.find((u) => u.userId === userId);
-    expect(me?.ip).toBeNull();
   });
 });

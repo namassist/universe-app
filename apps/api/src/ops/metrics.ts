@@ -13,17 +13,16 @@
  * worse than no monitoring page.
  *
  * **What it keeps about people** (owner, 2026-10-02): for each signed-in user,
- * their name, NIK, role, last address and browser, the last route they called
- * and when, and how many requests and errors they made — for a day. Never a
- * request body, a header beyond the user agent, or an error's message: a
- * driver's message routinely carries a connection string.
+ * their name, role and browser, the last route they called and when, and how
+ * many requests and errors they made — for a day. Never their NIK or address
+ * (owner, 2026-10-02), a request body, a header beyond the user agent, or an
+ * error's message: a driver's message routinely carries a connection string.
  */
 
 import { Elysia } from "elysia";
 import { OPS_WINDOW_MINUTES } from "@universe/contracts";
 
 import { redis } from "../redis";
-import { clientIp } from "./client-ip";
 import { opsKey } from "./keys";
 
 /** Counters live a little over a day, so "the last 24 hours" is always whole. */
@@ -93,7 +92,6 @@ type UserPrincipal = {
   kind: "user";
   id: string;
   name: string;
-  nik: string | null;
   roleName: string;
 };
 
@@ -110,7 +108,6 @@ export type RequestRecord = {
   status: number;
   ms: number;
   errorName: string | null;
-  ip: string | null;
   userAgent: string | null;
   user: UserPrincipal | null;
 };
@@ -156,14 +153,14 @@ async function record(entry: RequestRecord, slowMs: number): Promise<void> {
     const key = userKey(entry.user.id);
     batch.hset(key, {
       name: entry.user.name,
-      nik: entry.user.nik ?? "",
       roleName: entry.user.roleName,
-      ip: entry.ip ?? "",
       userAgent: (entry.userAgent ?? "").slice(0, 200),
       lastRoute: entry.route,
       lastStatus: String(entry.status),
       lastSeenAt: at,
     });
+    // Recorded before the owner ruled them out; gone on the user's next request.
+    batch.hdel(key, "nik", "ip");
     batch.hincrby(key, "requests", 1);
     if (is4xx || is5xx) batch.hincrby(key, "errors", 1);
     batch.expire(key, USER_WINDOW_SECONDS);
@@ -234,7 +231,7 @@ export function opsMetrics(options: { slowMs?: number } = {}) {
       })
       .onAfterResponse({ as: "global" }, (context) => {
         try {
-          const { request, path, set, server } = context;
+          const { request, path, set } = context;
           if (ignored(path, request.method)) return;
           const begun = started.get(request);
           const status = typeof set.status === "number" ? set.status : 200;
@@ -250,7 +247,6 @@ export function opsMetrics(options: { slowMs?: number } = {}) {
               status,
               ms: begun === undefined ? 0 : performance.now() - begun,
               errorName: errorNames.get(request) ?? null,
-              ip: clientIp(request, server),
               userAgent: request.headers.get("user-agent"),
               user: userOf(context),
             },
@@ -293,9 +289,7 @@ export type OpsError = {
 export type OpsUser = {
   userId: string;
   name: string;
-  nik: string | null;
   roleName: string;
-  ip: string | null;
   userAgent: string | null;
   lastRoute: string;
   lastStatus: number;
@@ -430,9 +424,7 @@ export async function readOpsMetrics(now = Date.now()): Promise<{
       {
         userId,
         name: hash.name ?? "",
-        nik: hash.nik || null,
         roleName: hash.roleName ?? "",
-        ip: hash.ip || null,
         userAgent: hash.userAgent || null,
         lastRoute: hash.lastRoute ?? "",
         lastStatus: int(hash.lastStatus),

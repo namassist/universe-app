@@ -2146,8 +2146,10 @@ this shift's muster is running, without reading a server log (owner,
     offline ones by name, printers, and the booths this API process is
     listening to;
   - **every signed-in user of the last 24 hours** (owner, 2026-10-02, chose
-    this over counts): name, NIK, role, address, browser, last route and its
-    status, when, and their request and error counts;
+    this over counts): name, role, browser, last route and its status, when,
+    and their request and error counts. **Never their NIK or address**
+    (owner, 2026-10-02): a user is told apart by name and role, and only
+    devices — fingerprint machines, booths — are shown with an IP;
   - one alert feed: server errors, stage runs that failed or refused, and
     amber/red notifications; and the scheduler's own log for yesterday and
     today.

@@ -63,8 +63,8 @@ from `X-Forwarded-For` only with `TRUST_PROXY=true`.
 after the response, never awaited by it: every request bumps a per-minute
 Redis hash (count, 4xx, 5xx, duration sum and max, per route pattern), slow
 requests and 5xx land in short lists (an error by its _name_, never its
-message), and a signed-in user's last route, address and browser are kept for
-a day. `/health`, `/openapi` and `/v1/ops/*` are not counted.
+message), and a signed-in user's name, role, browser and last route are kept
+for a day — never their NIK or address. `/health`, `/openapi` and `/v1/ops/*` are not counted.
 
 ## Type export
 

@@ -178,9 +178,7 @@ const OpsOverviewSchema = t.Object({
     t.Object({
       userId: t.String(),
       name: t.String(),
-      nik: t.Nullable(t.String()),
       roleName: t.String(),
-      ip: t.Nullable(t.String()),
       userAgent: t.Nullable(t.String()),
       lastRoute: t.String(),
       lastStatus: t.Number(),
@@ -203,7 +201,7 @@ const OpsOverviewSchema = t.Object({
 
 export const opsRoutes = new Elysia({ prefix: "/ops", tags: ["ops"] })
   .use(requireOps)
-  /* The overview carries names, NIKs and addresses: never let a browser or a
+  /* The overview carries names and device addresses: never let a browser or a
      proxy keep a copy (security review, 2026-10-02). */
   .onRequest(({ request, set }) => {
     if (/^(\/v1)?\/ops\//.test(new URL(request.url).pathname))

@@ -283,7 +283,6 @@ export function UsersPanel({ data, now }: { data: OpsOverview; now: Date }) {
               <TableRow>
                 <TableHead>User</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>IP</TableHead>
                 <TableHead>Perangkat</TableHead>
                 <TableHead>Request terakhir</TableHead>
                 <TableHead>Status</TableHead>
@@ -295,17 +294,9 @@ export function UsersPanel({ data, now }: { data: OpsOverview; now: Date }) {
             <TableBody>
               {data.users.map((user) => (
                 <TableRow key={user.userId}>
-                  <TableCell>
-                    <div className="font-medium">{user.name}</div>
-                    <div className="font-mono text-xs text-(--text-tertiary)">
-                      {user.nik ?? "—"}
-                    </div>
-                  </TableCell>
+                  <TableCell className="font-medium">{user.name}</TableCell>
                   <TableCell className="text-(--text-secondary)">
                     {user.roleName}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {user.ip ?? "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-(--text-secondary)">
                     {browserOf(user.userAgent)}
