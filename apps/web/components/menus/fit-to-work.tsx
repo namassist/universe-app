@@ -13,12 +13,14 @@ import {
   Search,
 } from "lucide-react";
 
+import type { EmployeeStatus } from "@universe/contracts";
+
 import type { AccessMode } from "@/lib/access";
 import { errorMessage, fetchBlob } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ftwQueryOptions, syncFtw, type FtwRow } from "@/lib/queries/readiness";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
@@ -143,6 +145,28 @@ function SortHead({
 
 export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
   const { t, lang } = useI18n();
+
+  /* The Karyawan screen's badge, so a person reads the same colour on both. */
+  function empStatusBadge(row: FtwRow) {
+    if (!row.employeeStatus) return "—";
+    if (row.inductionHold)
+      return (
+        <Badge variant="info" dot title={t.stStandbyInductionHint}>
+          {t.stStandbyInduction}
+        </Badge>
+      );
+    const map: Record<EmployeeStatus, { v: BadgeVariant; l: string }> = {
+      aktif: { v: "success", l: t.stAktif },
+      standby: { v: "warning", l: t.stStandby },
+      nonaktif: { v: "danger", l: t.stNonaktif },
+    };
+    const m = map[row.employeeStatus];
+    return (
+      <Badge variant={m.v} dot>
+        {m.l}
+      </Badge>
+    );
+  }
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
 
@@ -504,11 +528,11 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
               <TableHeader>
                 <tr>
                   <TableHead>{t.thOperator}</TableHead>
-                  <TableHead>NIK</TableHead>
                   <TableHead>{t.thCompany}</TableHead>
                   <TableHead>{t.thDept}</TableHead>
                   <TableHead>{t.thPos}</TableHead>
                   <TableHead>Mess</TableHead>
+                  <TableHead>{t.thEmpStatus}</TableHead>
                   <TableHead>{t.thRoster}</TableHead>
                   <TableHead>{t.thShift}</TableHead>
                   <SortHead
@@ -541,14 +565,28 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                   const bad = strip.filter((s) => s === "bad").length;
                   return (
                     <TableRow key={`${r.nik}-${r.date}`}>
-                      <TableCell className="font-semibold">{r.name}</TableCell>
-                      <TableCell className="font-mono text-(--text-secondary) tabular-nums">
-                        {r.nik}
+                      {/* Name over NIK in one cell, as the allocation plan
+                          shows its crew. */}
+                      <TableCell>
+                        <b
+                          className="block truncate text-[13px] font-semibold"
+                          title={r.name}
+                        >
+                          {r.name}
+                        </b>
+                        <span className="block font-mono text-xs text-(--text-tertiary) tabular-nums">
+                          {r.nik}
+                        </span>
                       </TableCell>
                       <TableCell>{r.company ?? "—"}</TableCell>
                       <TableCell>{r.department ?? "—"}</TableCell>
                       <TableCell>{r.position ?? "—"}</TableCell>
                       <TableCell>{r.mess ?? "—"}</TableCell>
+                      {/* Whether this person is on a unit today at all. On
+                          2026-10-03 two of the fifteen refusals here were
+                          standby for induction — no unit, so not on the
+                          dashboard's count — and nothing on the row said so. */}
+                      <TableCell>{empStatusBadge(r)}</TableCell>
                       {/* The roster's own code, beside the upload's half of
                           the day, because the two answer different questions:
                           this one says which shift the person was on, and the

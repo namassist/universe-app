@@ -1188,6 +1188,7 @@ export const en: Dict = {
   searchEmp: "Search name / NIK…",
   export: "Export",
   thRoster: "Roster",
+  thEmpStatus: "Employee status",
   thIn: "Check-in",
   bHadir: "Present",
   bLate: "Late",

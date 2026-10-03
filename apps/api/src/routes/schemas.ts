@@ -1728,6 +1728,13 @@ export const FtwReadingSchema = t.Object({
    * the roster holds nothing for them — not everybody who uploads is on it.
    */
   rosterCode: t.Nullable(RosterCodeSchema),
+  /**
+   * The employee's status now — not on the row's date. Null when the NIK
+   * matches no employee.
+   */
+  employeeStatus: t.Nullable(EmployeeStatusSchema),
+  /** Standby because the system held them for today's induction. */
+  inductionHold: t.Boolean(),
 });
 
 export const FtwListSchema = t.Object({

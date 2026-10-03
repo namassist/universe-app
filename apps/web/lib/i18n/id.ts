@@ -1187,6 +1187,7 @@ export const id = {
   searchEmp: "Cari nama / NIK…",
   export: "Export",
   thRoster: "Roster",
+  thEmpStatus: "Status Karyawan",
   thIn: "Check-in",
   bHadir: "Hadir",
   bLate: "Terlambat",

@@ -14,8 +14,22 @@
  * Sync requires `manage`; reading only `view`.
  */
 
-import { and, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
-import type { RosterCode, ShiftKind } from "@universe/contracts";
+import {
+  and,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
+import type {
+  EmployeeStatus,
+  RosterCode,
+  ShiftKind,
+} from "@universe/contracts";
 import ExcelJS from "exceljs";
 import { Elysia, t } from "elysia";
 
@@ -61,6 +75,7 @@ const FTW_EXPORT_COLUMNS = [
   "putusan_ftw",
   "waktu_kirim",
   "telat",
+  "status_karyawan",
 ] as const;
 
 /** One row of the FTW list — an upload, or somebody who owes one. */
@@ -96,6 +111,18 @@ type FtwListRow = {
    * is on it.
    */
   rosterCode: RosterCode | null;
+  /**
+   * The employee's status as it stands now — not on the row's date; the
+   * register keeps no history of it.
+   *
+   * On 2026-10-03 this page counted 15 "Tidak Boleh Bekerja + Istirahat"
+   * where the dashboard counted 13. The two were standby — held for induction
+   * on their first day back, and given no unit — which nothing here said.
+   * Null when the NIK matches no employee.
+   */
+  employeeStatus: EmployeeStatus | null;
+  /** Standby because the system held them for induction (`induction-hold.ts`). */
+  inductionHold: boolean;
 };
 
 type FtwExportRow = FtwListRow;
@@ -138,6 +165,9 @@ async function ftwWorkbook(rows: FtwExportRow[]): Promise<Buffer> {
       putusan_ftw: r.ftwDecision ?? "",
       waktu_kirim: r.sentAt ? r.sentAt.slice(11, 19) : "",
       telat: r.late ? "YA" : "",
+      status_karyawan: r.inductionHold
+        ? "standby (induksi)"
+        : (r.employeeStatus ?? ""),
     });
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -294,9 +324,40 @@ async function unfiledRows(from: string, to: string): Promise<FtwListRow[]> {
         late: false,
         rosterShift: r.code === "N" ? ("night" as const) : ("day" as const),
         rosterCode: r.code,
+        employeeStatus: null,
+        inductionHold: false,
       },
     ];
   });
+}
+
+/**
+ * nik → status now, read as the Karyawan screen reads it so the two colour a
+ * person alike. One query for the whole range, whatever its length.
+ */
+async function employeeStatusOf(
+  niks: string[]
+): Promise<Map<string, { status: EmployeeStatus; inductionHold: boolean }>> {
+  if (!niks.length) return new Map();
+  /* A join, not an `exists`: drizzle leaves the columns of a join-less select
+     unqualified, and `id` inside the subquery would bind to the hold's own. */
+  const rows = await db
+    .select({
+      nik: schema.employees.nik,
+      status: schema.employees.status,
+      inductionHold: sql<boolean>`(${schema.employees.status} = 'standby'
+        and ${schema.inductionHolds.id} is not null)`,
+    })
+    .from(schema.employees)
+    .leftJoin(
+      schema.inductionHolds,
+      and(
+        eq(schema.inductionHolds.employeeId, schema.employees.id),
+        isNull(schema.inductionHolds.releasedAt)
+      )
+    )
+    .where(inArray(schema.employees.nik, niks));
+  return new Map(rows.map((r) => [r.nik, r]));
 }
 
 /**
@@ -357,9 +418,19 @@ async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
       late: isLate(r.sentAt),
       rosterShift: null,
       rosterCode: rosterCodes.get(`${r.nik}|${r.date}`) ?? null,
+      employeeStatus: null,
+      inductionHold: false,
     })),
     ...(await unfiledRows(from, to)),
   ];
+
+  const status = await employeeStatusOf([...new Set(rows.map((r) => r.nik))]);
+  for (const row of rows) {
+    const known = status.get(row.nik);
+    if (!known) continue;
+    row.employeeStatus = known.status;
+    row.inductionHold = known.inductionHold;
+  }
   return rows.sort(
     (a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)
   );

@@ -373,6 +373,71 @@ describe("the FTW list names who owed an upload and sent none", () => {
       ["90000032", "N"],
     ]);
   });
+
+  test("each row says whether the person is aktif or standby", async () => {
+    /* The page counted 15 "Tidak Boleh Bekerja + Istirahat" on 2026-10-03
+       where the dashboard counted 13: two of them were standby, held for
+       induction and given no unit, and nothing on the page said so. */
+    const viewer = await makeUser("fit-to-work", "view");
+    const [held] = await db
+      .select({ id: schema.employees.id })
+      .from(schema.employees)
+      .where(eq(schema.employees.nik, "90000036"));
+    await db
+      .insert(schema.inductionHolds)
+      .values({ employeeId: held!.id, date: D3 });
+    await db.insert(schema.ftwReadings).values([
+      {
+        nik: "90000036",
+        date: D3,
+        name: `${tag} 90000036`,
+        sleepMinutes: 300,
+        sleepCategory: "Tidak Boleh Bekerja",
+        ftwDecision: "FTW aman",
+        sentAt: `${D3} 04:15:00`,
+      },
+      /* Not everybody who uploads is an employee here. */
+      {
+        nik: "90000099",
+        date: D3,
+        name: `${tag} 90000099`,
+        sleepMinutes: 400,
+        sleepCategory: "Dapat Bekerja",
+        ftwDecision: "FTW aman",
+        sentAt: `${D3} 04:20:00`,
+      },
+    ]);
+
+    const res = await send(
+      "GET",
+      `/fit-to-work/?from=${D3}&to=${D3}`,
+      viewer.cookie
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rows: {
+        nik: string;
+        employeeStatus: string | null;
+        inductionHold: boolean;
+      }[];
+    };
+    const of = (nik: string) => body.rows.find((r) => r.nik === nik);
+
+    expect(of("90000036")).toMatchObject({
+      employeeStatus: "standby",
+      inductionHold: true,
+    });
+    expect(of("90000033")).toMatchObject({
+      employeeStatus: "aktif",
+      inductionHold: false,
+    });
+    // Unfiled rows carry it too — they are all aktif by the obliged rule.
+    expect(of("90000031")?.employeeStatus).toBe("aktif");
+    expect(of("90000099")).toMatchObject({
+      employeeStatus: null,
+      inductionHold: false,
+    });
+  });
 });
 
 describe("the attendance list", () => {
