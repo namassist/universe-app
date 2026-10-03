@@ -42,7 +42,11 @@ import { scopeWhere } from "../auth/scope";
 import { deskShift } from "../current-shift";
 import { db, schema } from "../db";
 import { ftwObligedWhere } from "../ftw-obliged";
-import { FTW_PASS_CATEGORY, FTW_PASS_DECISION } from "../readiness";
+import {
+  FTW_PASS_CATEGORY,
+  FTW_PASS_DECISION,
+  ftwDeadline,
+} from "../readiness";
 import { rosterDayInForce } from "../roster-in-force";
 import { dashboardAnalytics } from "./dashboard-analytics";
 import { DashboardSchema, ErrorSchema } from "./schemas";
@@ -85,17 +89,34 @@ const rosterCodeOf = (shift: ShiftKind) => (shift === "night" ? "N" : "D");
  * summary of the other.
  *
  * `judgeFtw` in TypeScript and this in SQL are the same rule written twice,
- * which is why both read the vocabulary from one place. What is deliberately
- * *not* here is lateness: `judgeFtw` also fails a filing sent after the
- * deadline, but that is an allocation gate rather than anything about the
- * person's fitness, and this card sends its reader to the Fit To Work menu to
- * look for a health reason.
+ * which is why both read the vocabulary from one place. Lateness is the third
+ * half of that rule and lives in `ftwOnTime` below, because it needs the
+ * shift's deadline and this does not.
  *
  * Compared through `lower(btrim(…))` for the same reason `key` exists: casing
  * and padding are savera's presentation, not data.
  */
 const ftwPassed = sql`lower(btrim(${schema.ftwReadings.ftwDecision})) = ${FTW_PASS_DECISION}
   and lower(btrim(${schema.ftwReadings.sleepCategory})) = ${FTW_PASS_CATEGORY}`;
+
+/**
+ * A filing that arrived before the shift's `ftw-deadline`.
+ *
+ * This card once left lateness out, as an allocation gate rather than a
+ * health reason. But a late upload gets no unit (`judgeFtw`), the Fit To Work
+ * wall counts it as "tidak lolos FTW", and the owner wants the card to say the
+ * same (2026-10-03) — that day two "FTW aman / Dapat Bekerja" uploads at 05:23
+ * and 05:34 against 05:22 were on the wall and not here.
+ *
+ * Same tests as `judgeFtw`: a null `sent_at` is on time, "HH:MM:SS" compares
+ * as text, the deadline itself is already late, and with no deadline set
+ * nothing is late.
+ */
+const ftwOnTime = (deadline: string | null) =>
+  deadline
+    ? sql`(${schema.ftwReadings.sentAt} is null
+        or to_char(${schema.ftwReadings.sentAt}, 'HH24:MI:SS') < ${deadline})`
+    : sql`true`;
 
 /**
  * The IN column that shift's arrival lives in — never `a ?? b`.
@@ -292,6 +313,7 @@ export const dashboardRoutes = new Elysia({
        * A denominator that included people whose filings were never counted
        * would make "240 fit of 332" arithmetic nobody could reproduce.
        */
+      const deadline = await ftwDeadline(now.shift);
       const ftw = holds(permissions, "fit-to-work")
         ? (
             await db
@@ -303,7 +325,7 @@ export const dashboardRoutes = new Elysia({
                    supposed to be pointing at. */
                 followUp: sql<number>`count(*) filter (
                   where ${schema.ftwReadings.nik} is not null
-                    and (${ftwPassed}) is not true)::int`,
+                    and (${ftwPassed} and ${ftwOnTime(deadline)}) is not true)::int`,
                 missing: sql<number>`count(*) filter (
                   where ${schema.ftwReadings.nik} is null)::int`,
               })

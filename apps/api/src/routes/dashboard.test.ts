@@ -382,7 +382,12 @@ describe("which shift the numbers are about", () => {
 
 describe("what counts as a filing that passed", () => {
   /** A reading for this person today, in savera's own words. */
-  const file = async (nik: string, decision: string, category: string) => {
+  const file = async (
+    nik: string,
+    decision: string,
+    category: string,
+    sentAt?: string
+  ) => {
     made.ftwNiks.push(nik);
     await db.insert(schema.ftwReadings).values({
       nik,
@@ -390,6 +395,7 @@ describe("what counts as a filing that passed", () => {
       date: NOW.date,
       ftwDecision: decision,
       sleepCategory: category,
+      sentAt: sentAt ? `${NOW.date} ${sentAt}` : null,
     });
   };
 
@@ -446,6 +452,20 @@ describe("what counts as a filing that passed", () => {
 
     expect(after.passed).toBe(before.passed + 1);
     expect(after.followUp).toBe(before.followUp);
+  });
+
+  test("a clean filing sent after the deadline did not pass", async () => {
+    /* The card read 13 on 2026-10-03 while two "FTW aman / Dapat Bekerja"
+       uploads at 05:23 and 05:34 — against a 05:22 deadline — got no unit and
+       stood on the wall as "tidak lolos FTW". */
+    const [late, onTime] = await rosteredWithoutAccount(2);
+    const before = await ftwOf();
+    await file(late!.nik, "FTW aman", "Dapat Bekerja", "23:59:59");
+    await file(onTime!.nik, "FTW aman", "Dapat Bekerja", "00:00:01");
+    const after = await ftwOf();
+
+    expect(after.followUp).toBe(before.followUp + 1);
+    expect(after.passed).toBe(before.passed + 1);
   });
 });
 
