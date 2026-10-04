@@ -24,6 +24,7 @@ import {
   loadUser,
   type CachedUser,
 } from "./principal";
+import { identifyConsumer } from "./consumer";
 import { DEVICE_COOKIE, resolveSession, SESSION_COOKIE } from "./session";
 
 export type AuthOptions = {
@@ -115,10 +116,9 @@ export const requireSession = new Elysia({ name: "auth/session" }).macro({
             const user = await loadUser(record.subjectId);
             // Deactivation takes effect on the next request, not at expiry.
             if (!user || !user.active) return status(401, unauthorized);
-            return {
-              sessionId: ids.user,
-              principal: toPrincipal(user),
-            };
+            const principal = toPrincipal(user);
+            identifyConsumer(principal);
+            return { sessionId: ids.user, principal };
           }
         }
 
@@ -127,15 +127,14 @@ export const requireSession = new Elysia({ name: "auth/session" }).macro({
           if (record?.kind === "device") {
             const device = await loadDevice(record.subjectId);
             if (!device || !device.active) return status(401, unauthorized);
-            return {
-              sessionId: ids.device,
-              principal: {
-                kind: "device" as const,
-                id: device.id,
-                name: device.name,
-                deviceKind: device.kind,
-              },
+            const principal = {
+              kind: "device" as const,
+              id: device.id,
+              name: device.name,
+              deviceKind: device.kind,
             };
+            identifyConsumer(principal);
+            return { sessionId: ids.device, principal };
           }
         }
 
@@ -162,6 +161,10 @@ export const requireAuth = new Elysia({ name: "auth/macro" }).macro({
           if (record?.kind === "user") {
             const user = await loadUser(record.subjectId);
             if (!user || !user.active) return status(401, unauthorized);
+            // Identified before the permission checks, so a 403 is counted
+            // against the account that was refused, not as anonymous.
+            const principal = toPrincipal(user);
+            identifyConsumer(principal);
 
             // Authenticates fine, refused everywhere but logout / session /
             // change-password — which do not carry this macro.
@@ -174,7 +177,7 @@ export const requireAuth = new Elysia({ name: "auth/macro" }).macro({
             const permissions = await loadPermissions(user.roleId);
             if (!granted(permissions, options)) return status(403, forbidden);
 
-            return { principal: toPrincipal(user), permissions };
+            return { principal, permissions };
           }
         }
 
@@ -183,18 +186,17 @@ export const requireAuth = new Elysia({ name: "auth/macro" }).macro({
           if (record?.kind === "device") {
             const device = await loadDevice(record.subjectId);
             if (!device || !device.active) return status(401, unauthorized);
+            const principal = {
+              kind: "device" as const,
+              id: device.id,
+              name: device.name,
+              deviceKind: device.kind,
+            };
+            identifyConsumer(principal);
             // A device is read-only and confined to display routes: refused on
             // anything not marked, and on any write regardless of path.
             if (!options.allowDevice || mutating) return status(403, forbidden);
-            return {
-              principal: {
-                kind: "device" as const,
-                id: device.id,
-                name: device.name,
-                deviceKind: device.kind,
-              },
-              permissions: {},
-            };
+            return { principal, permissions: {} };
           }
         }
 

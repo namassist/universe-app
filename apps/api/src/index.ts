@@ -4,6 +4,7 @@ import { openapi } from "@elysiajs/openapi";
 import { apitallyPlugin } from "apitally/elysia";
 import { API_VERSION } from "@universe/contracts";
 
+import { trackConsumers } from "./auth/consumer";
 import { env, isProd } from "./env";
 import { pingDb } from "./db";
 import { pingRedis } from "./redis";
@@ -91,27 +92,32 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
  * Mounted first so its onRequest hook starts the clock before CORS, auth or
  * validation run — otherwise their time and their rejections go unmeasured.
  *
+ * `trackConsumers` attributes each request to the signed-in account or device;
+ * see `auth/consumer.ts` for why it is not the SDK's documented assignment.
+ *
  * The SDK already masks passwords, tokens, secrets, cookies and Authorization.
  * `sessionId` is added because a bearer login returns the session identifier
  * in its body, and that identifier *is* the credential for thirty days.
  */
 const monitoring = (app: Elysia) =>
   env.APITALLY_CLIENT_ID
-    ? app.use(
-        apitallyPlugin({
-          clientId: env.APITALLY_CLIENT_ID,
-          env: env.APITALLY_ENV,
-          appVersion: API_VERSION,
-          requestLogging: {
-            enabled: env.APITALLY_REQUEST_LOGGING,
-            logRequestHeaders: true,
-            logRequestBody: true,
-            logResponseBody: true,
-            captureLogs: true,
-            maskBodyFields: [/^sessionId$/i],
-          },
-        })
-      )
+    ? app
+        .use(
+          apitallyPlugin({
+            clientId: env.APITALLY_CLIENT_ID,
+            env: env.APITALLY_ENV,
+            appVersion: API_VERSION,
+            requestLogging: {
+              enabled: env.APITALLY_REQUEST_LOGGING,
+              logRequestHeaders: true,
+              logRequestBody: true,
+              logResponseBody: true,
+              captureLogs: true,
+              maskBodyFields: [/^sessionId$/i],
+            },
+          })
+        )
+        .use(trackConsumers)
     : app;
 
 export const app = new Elysia()
