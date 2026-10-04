@@ -287,7 +287,7 @@ Everything here was arranged so this stays a small change:
    publicly resolvable.
 2. In `deploy/Caddyfile`, replace `:80` with that hostname; Caddy handles the
    redirect and, for a public name, the certificate.
-3. Set `COOKIE_SECURE=true` on the `api` service, and publish 443 as well as 80.
+3. Set `COOKIE_SECURE=true` in `.env`, and publish 443 as well as 80.
 4. Update `PUBLIC_ORIGIN` to `https://…` and **rebuild the web image**.
 
 Step 3 matters and is easy to get backwards: a browser silently discards a
@@ -295,6 +295,40 @@ Step 3 matters and is easy to get backwards: a browser silently discards a
 terminates in front of the API breaks login with no error message anywhere —
 which is why the flag is explicit configuration instead of something derived
 from `NODE_ENV`.
+
+## Deploying on Coolify
+
+The same compose file runs under [Coolify](https://coolify.io) on a server that
+already hosts other sites. Coolify's own proxy owns ports 80 and 443 there and
+terminates HTTPS, so Caddy stays inside, unpublished, and Coolify routes a
+hostname to it.
+
+1. **DNS.** Point a hostname at the server — an `A` record for a subdomain of a
+   domain you already serve, such as `universe.example.com`.
+2. **Resource.** New resource → your Git repository → build pack **Docker
+   Compose**. Base directory `/`, compose file `/deploy/docker-compose.yml`.
+3. **Domain.** On the `proxy` service, set the domain to
+   `https://universe.example.com:80`. The `:80` is Caddy's port _inside_ the
+   container, not a published one; Coolify issues the certificate.
+4. **Environment variables.** Coolify lists the variables this file names;
+   fill them from `deploy/.env.example`, plus:
+
+   | Variable        | Value                          | Why                                                          |
+   | --------------- | ------------------------------ | ------------------------------------------------------------ |
+   | `PUBLIC_ORIGIN` | `https://universe.example.com` | Baked into the web bundle — exact, no trailing slash.        |
+   | `HTTP_BIND`     | `127.0.0.1`                    | Keeps Caddy's port off the network.                          |
+   | `HTTP_PORT`     | a free port, e.g. `8080`       | Coolify's proxy already holds 80.                            |
+   | `COOKIE_SECURE` | `true`                         | HTTPS terminates at Coolify's proxy, so the cookie survives. |
+
+   Compose refuses to start while a required one is blank, naming it.
+   Optional tuning (`ROSTER_SYNC_DAYS_BACK` and the rest) can be added the same
+   way; anything unset keeps the API's default.
+
+5. **Deploy**, then create the first account from the `api` container's
+   terminal in Coolify: `bun run db:bootstrap`.
+
+Changing `PUBLIC_ORIGIN` later needs a redeploy that rebuilds the `web` image,
+as in [Changing the address](#changing-the-address).
 
 ## If `bun install` hangs during the build
 

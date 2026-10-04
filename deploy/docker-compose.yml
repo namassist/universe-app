@@ -76,9 +76,24 @@ services:
       dockerfile: apps/api/Dockerfile
     image: universe-api:latest
     restart: unless-stopped
-    env_file: .env
+    # Optional so a host that keeps settings in its own store and interpolates
+    # them into this file (Coolify) deploys without one; the settings the API
+    # cannot boot without are named below, so they reach it either way.
+    env_file:
+      - path: .env
+        required: false
     environment:
       PORT: 3001
+      NODE_ENV: ${NODE_ENV:-production}
+      # `:?` makes compose refuse to start with the variable unset, rather than
+      # handing the API an empty string its own check would accept.
+      SUPERADMIN_IDENTIFIER: ${SUPERADMIN_IDENTIFIER:-superadmin}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:?set SUPERADMIN_PASSWORD}
+      DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD:?set DEFAULT_USER_PASSWORD}
+      ATTENDANCE_SOURCE_URL: ${ATTENDANCE_SOURCE_URL:?set ATTENDANCE_SOURCE_URL}
+      FTW_SOURCE_URL: ${FTW_SOURCE_URL:?set FTW_SOURCE_URL}
+      ROSTER_SOURCE_URL: ${ROSTER_SOURCE_URL:?set ROSTER_SOURCE_URL}
+      ROSTER_SOURCE_SC: ${ROSTER_SOURCE_SC:?set ROSTER_SOURCE_SC}
       # Shift boundaries, roster dates and every scheduler stage are compared
       # against the *process's* local clock. A container defaults to UTC, which
       # silently shifts every one of them by the site's offset: at 20:40 WITA
@@ -89,10 +104,11 @@ services:
       # Same origin through Caddy, so this is belt-and-braces rather than the
       # thing that makes requests work.
       CORS_ORIGINS: ${PUBLIC_ORIGIN}
-      # Plain HTTP for now: a browser silently discards a Secure cookie over
+      # Off by default: a browser silently discards a Secure cookie over plain
       # HTTP, so turning this on before TLS terminates in front breaks login
-      # with no error anywhere. See docs/deploy.md.
-      COOKIE_SECURE: "false"
+      # with no error anywhere. Turn it on behind HTTPS — Coolify's proxy, or
+      # Caddy with a certificate. See docs/deploy.md.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SOUND_DIR: /data/sounds
       PHOTO_DIR: /data/photos
       IMPORT_DIR: /data/imports
@@ -133,7 +149,7 @@ services:
       args:
         # Baked into the browser bundle at build time — changing it means
         # rebuilding this image, not restarting the container.
-        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN}
+        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
     image: universe-web:latest
     restart: unless-stopped
     environment:
@@ -149,8 +165,11 @@ services:
   proxy:
     image: caddy:2-alpine
     restart: unless-stopped
+    # HTTP_BIND=127.0.0.1 keeps the port off the network, for when another
+    # proxy on the host already owns 80/443 (Coolify) and reaches Caddy over
+    # the Docker network instead.
     ports:
-      - "${HTTP_PORT:-80}:80"
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-80}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
