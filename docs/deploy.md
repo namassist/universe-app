@@ -322,7 +322,7 @@ hostname to it.
    | --------------- | ------------------------------ | ------------------------------------------------------------ |
    | `PUBLIC_ORIGIN` | `https://universe.example.com` | Baked into the web bundle — exact, no trailing slash.        |
    | `HTTP_BIND`     | `127.0.0.1`                    | Keeps Caddy's port off the network.                          |
-   | `HTTP_PORT`     | a free port, e.g. `8080`       | Coolify's proxy already holds 80.                            |
+   | `HTTP_PORT`     | a free port, e.g. `18080`      | Coolify's proxy already holds 80.                            |
    | `COOKIE_SECURE` | `true`                         | HTTPS terminates at Coolify's proxy, so the cookie survives. |
 
    The API refuses to boot while a required one is blank, naming it in the
