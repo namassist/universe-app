@@ -96,6 +96,13 @@ services:
       SOUND_DIR: /data/sounds
       PHOTO_DIR: /data/photos
       IMPORT_DIR: /data/imports
+      # Spelled out rather than left to env_file so a host that builds its
+      # settings form from this file (Coolify) lists them. Empty client ID
+      # leaves monitoring off; the env defaults to "prod" because this file is
+      # the production deploy, unlike the API's own "dev" default.
+      APITALLY_CLIENT_ID: ${APITALLY_CLIENT_ID:-}
+      APITALLY_ENV: ${APITALLY_ENV:-prod}
+      APITALLY_REQUEST_LOGGING: ${APITALLY_REQUEST_LOGGING:-true}
     volumes:
       # Named volume, not a container layer: the database stores only the file
       # *name*, so losing this directory leaves rows pointing at photos that no
