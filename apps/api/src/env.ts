@@ -1,8 +1,13 @@
 /**
  * Fail fast on boot rather than at the first request that needs a missing var.
+ *
+ * Empty counts as missing. A compose file that passes `X: ${X:-}` hands the
+ * process an empty string for an unset variable, and a blank password or
+ * source URL is never what anyone meant — it should take the fallback or stop
+ * the boot, not be accepted.
  */
 function required(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback;
+  const value = process.env[name] || fallback;
   if (value === undefined) throw new Error(`Missing required env var: ${name}`);
   return value;
 }

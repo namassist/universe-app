@@ -286,7 +286,8 @@ Everything here was arranged so this stays a small change:
    closed network, and Caddy will do Let's Encrypt on its own if the host is
    publicly resolvable.
 2. In `deploy/Caddyfile`, replace `:80` with that hostname; Caddy handles the
-   redirect and, for a public name, the certificate.
+   redirect and, for a public name, the certificate. The Caddyfile is baked
+   into the `proxy` image, so `docker compose build proxy` afterwards.
 3. Set `COOKIE_SECURE=true` in `.env`, and publish 443 as well as 80.
 4. Update `PUBLIC_ORIGIN` to `https://…` and **rebuild the web image**.
 
@@ -306,7 +307,11 @@ hostname to it.
 1. **DNS.** Point a hostname at the server — an `A` record for a subdomain of a
    domain you already serve, such as `universe.example.com`.
 2. **Resource.** New resource → your Git repository → build pack **Docker
-   Compose**. Base directory `/`, compose file `/deploy/docker-compose.yml`.
+   Compose**. Base directory **`/deploy`**, compose file
+   **`/docker-compose.yml`**. Not `/` and `/deploy/docker-compose.yml`:
+   Coolify resolves the file's relative paths from the base directory, so
+   `context: ..` would then point above the repository and the build fails
+   with `lstat /artifacts/apps: no such file or directory`.
 3. **Domain.** On the `proxy` service, set the domain to
    `https://universe.example.com:80`. The `:80` is Caddy's port _inside_ the
    container, not a published one; Coolify issues the certificate.
@@ -320,9 +325,15 @@ hostname to it.
    | `HTTP_PORT`     | a free port, e.g. `8080`       | Coolify's proxy already holds 80.                            |
    | `COOKIE_SECURE` | `true`                         | HTTPS terminates at Coolify's proxy, so the cookie survives. |
 
-   Compose refuses to start while a required one is blank, naming it.
-   Optional tuning (`ROSTER_SYNC_DAYS_BACK` and the rest) can be added the same
+   The API refuses to boot while a required one is blank, naming it in the
+   `api` container's log. Optional tuning (`ROSTER_SYNC_DAYS_BACK` and the rest) can be added the same
    way; anything unset keeps the API's default.
+
+   Untick **Available at Buildtime** on every variable except
+   `PUBLIC_ORIGIN`, the only one a build reads. The others are runtime
+   settings, and a build that sees them carries passwords into build
+   metadata — and `NODE_ENV=production` into the web build's install, which
+   then skips the dev dependencies the build needs.
 
 5. **Deploy**, then create the first account from the `api` container's
    terminal in Coolify: `bun run db:bootstrap`.
