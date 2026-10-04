@@ -86,14 +86,16 @@ services:
       PORT: 3001
       NODE_ENV: ${NODE_ENV:-production}
       # `:?` makes compose refuse to start with the variable unset, rather than
-      # handing the API an empty string its own check would accept.
+      # handing the API an empty string its own check would accept. Bare, with
+      # no message: Coolify reads `:?message` as a default value and would fill
+      # the field with the message text.
       SUPERADMIN_IDENTIFIER: ${SUPERADMIN_IDENTIFIER:-superadmin}
-      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:?set SUPERADMIN_PASSWORD}
-      DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD:?set DEFAULT_USER_PASSWORD}
-      ATTENDANCE_SOURCE_URL: ${ATTENDANCE_SOURCE_URL:?set ATTENDANCE_SOURCE_URL}
-      FTW_SOURCE_URL: ${FTW_SOURCE_URL:?set FTW_SOURCE_URL}
-      ROSTER_SOURCE_URL: ${ROSTER_SOURCE_URL:?set ROSTER_SOURCE_URL}
-      ROSTER_SOURCE_SC: ${ROSTER_SOURCE_SC:?set ROSTER_SOURCE_SC}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:?}
+      DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD:?}
+      ATTENDANCE_SOURCE_URL: ${ATTENDANCE_SOURCE_URL:?}
+      FTW_SOURCE_URL: ${FTW_SOURCE_URL:?}
+      ROSTER_SOURCE_URL: ${ROSTER_SOURCE_URL:?}
+      ROSTER_SOURCE_SC: ${ROSTER_SOURCE_SC:?}
       # Shift boundaries, roster dates and every scheduler stage are compared
       # against the *process's* local clock. A container defaults to UTC, which
       # silently shifts every one of them by the site's offset: at 20:40 WITA
@@ -149,7 +151,7 @@ services:
       args:
         # Baked into the browser bundle at build time — changing it means
         # rebuilding this image, not restarting the container.
-        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN:?}
     image: universe-web:latest
     restart: unless-stopped
     environment:
