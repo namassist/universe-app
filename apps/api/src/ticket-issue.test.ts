@@ -297,6 +297,7 @@ describe("the first tap of the shift", () => {
  */
 describe("which plan seat reaches the paper", () => {
   const fixture = {
+    fleets: [] as string[],
     slots: [] as string[],
     units: [] as string[],
     employees: [] as string[],
@@ -306,6 +307,11 @@ describe("which plan seat reaches the paper", () => {
   const day = "2026-01-09";
 
   afterAll(async () => {
+    /* Before the units: a fleet's leader is held by a restricting key. */
+    if (fixture.fleets.length)
+      await db
+        .delete(schema.fleets)
+        .where(inArray(schema.fleets.id, fixture.fleets));
     if (fixture.slots.length)
       await db
         .delete(schema.fleetPlanSlots)
@@ -428,13 +434,52 @@ describe("which plan seat reaches the paper", () => {
       .returning({ id: schema.fleetPlanSlots.id });
     fixture.slots.push(slot!.id);
 
-    return { nik: personNik, unit: unit!.code };
+    return { nik: personNik, unit: unit!.code, unitId: unit!.id };
+  };
+
+  /** A formation led by one standing operator's unit and hauled for by another's. */
+  const formation = async () => {
+    const leader = await standing({});
+    const member = await standing({});
+    /* Out of support: the formation is what puts them in allocation now. */
+    await db
+      .update(schema.units)
+      .set({ fleetSupport: false })
+      .where(inArray(schema.units.id, [leader.unitId, member.unitId]));
+    const [fleet] = await db
+      .insert(schema.fleets)
+      .values({ leaderUnitId: leader.unitId })
+      .returning({ id: schema.fleets.id });
+    fixture.fleets.push(fleet!.id);
+    await db
+      .insert(schema.fleetUnits)
+      .values({ fleetId: fleet!.id, unitId: member.unitId });
+    return { leader, member };
   };
 
   test("a unit the board is about prints, and its operator is standing", async () => {
     const op = await standing({});
     expect(await roleOf(op.nik)).toBe("standing");
     expect((await seatOf(op.nik, day, "day"))?.seat.unit).toBe(op.unit);
+  });
+
+  test("a hauler's slip names the formation by its leader", async () => {
+    const { leader, member } = await formation();
+    expect((await seatOf(member.nik, day, "day"))?.seat.fleet).toBe(
+      leader.unit
+    );
+  });
+
+  /*
+   * The trial of 2026-10-05: Muhammad Iwan on EX5001 got FLEET "-" at the
+   * first finger, while the board named EX5001 for the same unit an hour
+   * later. The leader is the formation's identity, not one of its member rows.
+   */
+  test("the leader's own slip names its formation too", async () => {
+    const { leader } = await formation();
+    expect((await seatOf(leader.nik, day, "day"))?.seat.fleet).toBe(
+      leader.unit
+    );
   });
 
   test("a unit on standby is still allocated, so it still prints", async () => {

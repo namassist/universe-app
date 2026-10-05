@@ -262,6 +262,9 @@ export async function seatOf(
       area: schema.units.workArea,
       bus: sql<string | null>`transport.code`,
       fleet: leader.leaderCode,
+      /* A leader is no member row of its own formation, so `leader` never
+         finds it; it names the formation itself (2026-10-05). */
+      leads: schema.fleets.id,
       requiresFtw: schema.units.ftw,
     })
     .from(schema.fleetPlanSlots)
@@ -275,6 +278,7 @@ export async function seatOf(
       sql`transport.id = ${schema.units.transportUnitId}`
     )
     .leftJoin(leader, eq(leader.unitId, schema.units.id))
+    .leftJoin(schema.fleets, eq(schema.fleets.leaderUnitId, schema.units.id))
     .where(
       and(
         eq(schema.employees.nik, nik),
@@ -293,7 +297,7 @@ export async function seatOf(
     seat: {
       unit: fromPlan.unit,
       bus: fromPlan.bus ?? null,
-      fleet: fromPlan.fleet ?? null,
+      fleet: fromPlan.fleet ?? (fromPlan.leads ? fromPlan.unit : null),
       area: fromPlan.area ?? null,
     },
     requiresFtw: fromPlan.requiresFtw,
