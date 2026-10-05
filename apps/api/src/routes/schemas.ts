@@ -1611,6 +1611,45 @@ export const RosterGridRowSchema = t.Object({
   nik: t.String(),
   name: t.String(),
   codes: t.Array(t.Nullable(RosterCodeSchema)),
+  /**
+   * The days on this row an admin set by hand, so the grid can mark them.
+   *
+   * Sparse — a list rather than a second positional array — because a month
+   * holds a handful of corrections against two thousand cells. Only on a
+   * document in force: an archived grid shows what it held, not today's word.
+   */
+  corrections: t.Array(
+    t.Object({
+      date: t.String(),
+      fromCode: t.Nullable(RosterCodeSchema),
+      toCode: RosterCodeSchema,
+      reason: t.String(),
+      createdByName: t.String(),
+      createdAt: t.String(),
+    })
+  ),
+});
+
+/**
+ * One correction, live or withdrawn, as the Koreksi Roster screen lists it.
+ *
+ * Names rather than ids for who made and withdrew it: the list is read by
+ * people asking "who changed this", and a uuid answers nobody.
+ */
+export const RosterCorrectionSchema = t.Object({
+  id: t.String(),
+  employeeId: t.String(),
+  nik: t.String(),
+  name: t.String(),
+  departmentName: t.String(),
+  date: t.String(),
+  fromCode: t.Nullable(RosterCodeSchema),
+  toCode: RosterCodeSchema,
+  reason: t.String(),
+  createdByName: t.String(),
+  createdAt: t.String(),
+  revokedByName: t.Nullable(t.String()),
+  revokedAt: t.Nullable(t.String()),
 });
 
 /**

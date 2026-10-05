@@ -16,6 +16,7 @@ export const MENU_SLUGS = [
   "scan-id",
   "employees",
   "roster-data",
+  "roster-correction",
   "attendance",
   "tiket",
   "fit-to-work",
@@ -60,6 +61,9 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   "scan-id": "Scan ID Card",
   employees: "Karyawan",
   "roster-data": "Data Roster",
+  // A day's roster, set by hand above what unggul_att says — the emergency
+  // swap that reaches unggul_att only after the shift has started.
+  "roster-correction": "Koreksi Roster",
   attendance: "Attendance",
   tiket: "Tiket",
   "fit-to-work": "Fit To Work",

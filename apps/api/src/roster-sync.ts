@@ -28,7 +28,7 @@
  *   A NIK we do not hold is skipped and counted, never invented.
  */
 
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { isRosterCode, type RosterCode } from "@universe/contracts";
 
 import { db, schema } from "./db";
@@ -175,6 +175,108 @@ async function documentFor(
   return created.id;
 }
 
+/**
+ * Re-apply the corrections made or withdrawn while a pull was running.
+ *
+ * The pull reads the live corrections once, before it writes, and a pull runs
+ * for a while — an admin correcting a day at 03:00:30 while the 03:00 pull is
+ * still writing would have his `D` overwritten with the source's `N` until the
+ * next pull at 15:00, which is after the muster it was for. So the days touched
+ * since the pull began are settled again once it has finished: a live
+ * correction's code, or for one withdrawn meanwhile, the source's.
+ *
+ * Only in documents this pull wrote; the rest it never touched, and the
+ * correction route's own write stands there.
+ */
+export async function settleCorrectionsMadeDuring(
+  started: Date,
+  range: { from: string; to: string },
+  wanted: Map<string, Map<string, { code: RosterCode }>>,
+  deferred: string[],
+  overlaid: Map<string, RosterCode | null>
+): Promise<void> {
+  const touched = await db
+    .select({
+      employeeId: schema.rosterCorrections.employeeId,
+      date: schema.rosterCorrections.date,
+      toCode: schema.rosterCorrections.toCode,
+      revokedAt: schema.rosterCorrections.revokedAt,
+      departmentId: schema.employees.departmentId,
+    })
+    .from(schema.rosterCorrections)
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.rosterCorrections.employeeId)
+    )
+    .where(
+      and(
+        gte(schema.rosterCorrections.date, range.from),
+        lte(schema.rosterCorrections.date, range.to),
+        or(
+          gte(schema.rosterCorrections.createdAt, started),
+          gte(schema.rosterCorrections.revokedAt, started)
+        )
+      )
+    );
+  if (!touched.length) return;
+
+  /* A day corrected and withdrawn within one run has two rows; the live one,
+     if any, is the word that stands. */
+  const settled = new Map<string, (typeof touched)[number]>();
+  for (const row of touched) {
+    const cell = `${row.employeeId} ${row.date}`;
+    const seen = settled.get(cell);
+    if (!seen || (seen.revokedAt && !row.revokedAt)) settled.set(cell, row);
+  }
+
+  for (const [cell, row] of settled) {
+    const key = `${row.departmentId}|${monthOf(row.date)}`;
+    const cells = wanted.get(key);
+    if (!cells || deferred.includes(key)) continue;
+    const [document] = await db
+      .select({ id: schema.rosterDocuments.id })
+      .from(schema.rosterDocuments)
+      .where(
+        and(
+          eq(schema.rosterDocuments.departmentId, row.departmentId),
+          eq(schema.rosterDocuments.month, monthOf(row.date)),
+          eq(schema.rosterDocuments.status, "aktif")
+        )
+      )
+      .limit(1);
+    if (!document) continue;
+
+    const code = row.revokedAt
+      ? overlaid.has(cell)
+        ? overlaid.get(cell)!
+        : (cells.get(cell)?.code ?? null)
+      : row.toCode;
+    const where = and(
+      eq(schema.rosterDays.documentId, document.id),
+      eq(schema.rosterDays.employeeId, row.employeeId),
+      eq(schema.rosterDays.date, row.date)
+    );
+    if (code === null) await db.delete(schema.rosterDays).where(where);
+    else
+      await db
+        .insert(schema.rosterDays)
+        .values({
+          documentId: document.id,
+          employeeId: row.employeeId,
+          date: row.date,
+          code,
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.rosterDays.documentId,
+            schema.rosterDays.employeeId,
+            schema.rosterDays.date,
+          ],
+          set: { code },
+        });
+  }
+}
+
 export async function syncRoster(
   range?: { from: string; to: string },
   fetch: RosterFetcher = fetchRosterRows
@@ -223,6 +325,59 @@ export async function syncRoster(
       code: row.code,
     });
     wanted.set(key, cells);
+  }
+
+  /*
+   * An admin's correction outranks the source for its day (owner, 2026-10-05).
+   *
+   * Laid over the pulled cells before anything is written, so the upsert
+   * writes the corrected code and the reconciliation below keeps it: there is
+   * no moment between two statements where the board could read the source's
+   * `N` back. A day the source does not carry is added for the same reason —
+   * otherwise reconciliation would withdraw it.
+   *
+   * Only onto a department-month this pull carries. One it does not is
+   * written by nobody here, and the correction already sits in the document
+   * in force; adding the key would have the mirror create a document for a
+   * month somebody uploaded — and stand the upload down.
+   *
+   * With no live correction in the window this adds nothing, and the pull
+   * writes exactly what it wrote before corrections existed.
+   */
+  const started = new Date();
+  /** What the source said for each overlaid day, for a withdrawal mid-run. */
+  const overlaid = new Map<string, RosterCode | null>();
+  const corrections = await db
+    .select({
+      employeeId: schema.rosterCorrections.employeeId,
+      date: schema.rosterCorrections.date,
+      code: schema.rosterCorrections.toCode,
+      departmentId: schema.employees.departmentId,
+    })
+    .from(schema.rosterCorrections)
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.rosterCorrections.employeeId)
+    )
+    .where(
+      and(
+        isNull(schema.rosterCorrections.revokedAt),
+        gte(schema.rosterCorrections.date, from),
+        lte(schema.rosterCorrections.date, to)
+      )
+    );
+  for (const correction of corrections) {
+    const cells = wanted.get(
+      `${correction.departmentId}|${monthOf(correction.date)}`
+    );
+    if (!cells) continue;
+    const cell = `${correction.employeeId} ${correction.date}`;
+    overlaid.set(cell, cells.get(cell)?.code ?? null);
+    cells.set(cell, {
+      employeeId: correction.employeeId,
+      date: correction.date,
+      code: correction.code,
+    });
   }
 
   let upserted = 0;
@@ -289,6 +444,14 @@ export async function syncRoster(
       deleted += slice.length;
     }
   }
+
+  await settleCorrectionsMadeDuring(
+    started,
+    { from, to },
+    wanted,
+    deferred,
+    overlaid
+  );
 
   return {
     fetched: rows.length,

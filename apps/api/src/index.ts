@@ -40,6 +40,7 @@ import { idCardRoutes } from "./routes/id-card";
 import { masterRoutes } from "./routes/master";
 import { rolesRoutes } from "./routes/roles";
 import { rosterRoutes } from "./routes/roster";
+import { rosterCorrectionRoutes } from "./routes/roster-corrections";
 import { timelineRoutes } from "./routes/timeline";
 import { unitStatusRoutes } from "./routes/unit-status";
 import { busSchedulesRoutes, unitsRoutes } from "./routes/units";
@@ -62,6 +63,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(masterRoutes)
   .use(employeesRoutes)
   .use(rosterRoutes)
+  .use(rosterCorrectionRoutes)
   .use(unitsRoutes)
   .use(busSchedulesRoutes)
   .use(fleetsRoutes)
