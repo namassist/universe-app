@@ -25,6 +25,7 @@ import {
   SHIFT_KIND_LABELS,
   SLIDE_COLS,
   SLIDE_ROWS,
+  SLIDE_ROWS_OF,
   SLIDE_SIZE,
   SPARE_DEVICE_NAME,
   SUPPORT_DEVICE_NAME,
@@ -209,6 +210,9 @@ function fingerBadge(unit: FleetDisplayUnit, gates: Gates): Chip {
  * Now every slide is `SLIDE_COLS` x `SLIDE_ROWS` — formations and support
  * alike — and one short of units fills the rest with blanks (owner,
  * 2026-09-04). A card is therefore one size for the life of the screen.
+ *
+ * The support and spare walls may take a third row (owner, 2026-10-06) —
+ * still fixed, chosen per screen, so the bargain holds.
  */
 
 /**
@@ -248,18 +252,20 @@ type Page = {
   parts: number;
 };
 
-function paginate(fleets: FleetDisplayFleet[]): Page[] {
+/* `size` is the screen's own slide: twelve, or eighteen on a built-in wall
+   set to three rows. */
+function paginate(fleets: FleetDisplayFleet[], size: number): Page[] {
   return fleets.flatMap((fleet) => {
-    const parts = Math.max(1, Math.ceil(fleet.units.length / SLIDE_SIZE));
+    const parts = Math.max(1, Math.ceil(fleet.units.length / size));
     return Array.from({ length: parts }, (_, i) => {
-      const units = fleet.units.slice(i * SLIDE_SIZE, (i + 1) * SLIDE_SIZE);
+      const units = fleet.units.slice(i * size, (i + 1) * size);
       return {
         key: `${fleet.id ?? "none"}-${i}`,
         fleet,
         /* Padded to a full grid rather than cut short: the empty cells are
            what keep the eleventh card in the same place whether the formation
            has eleven units or five. */
-        cells: Array.from({ length: SLIDE_SIZE }, (_, j) => units[j] ?? null),
+        cells: Array.from({ length: size }, (_, j) => units[j] ?? null),
         part: i + 1,
         parts,
       };
@@ -454,6 +460,8 @@ function UnitCard({
   compact = false,
   /** A Monitor 4 card — smaller again than a Monitor 2 one. */
   dense = false,
+  /** A three-row slide's 4:5 card, whose photo is a wider box than 3:4. */
+  wide = false,
   /**
    * Show where this unit is working.
    *
@@ -480,6 +488,7 @@ function UnitCard({
   gates: Gates;
   compact?: boolean;
   dense?: boolean;
+  wide?: boolean;
   showArea?: boolean;
   cardLayout: CardLayout;
   className?: string;
@@ -494,9 +503,12 @@ function UnitCard({
       src={fleetPhotoUrl(unit)}
       compact={compact}
       /* A Monitor 4 identity photo is a short, wide box, and pinned to its
-         top edge it showed foreheads. Framed lower, it shows the face. */
+         top edge it showed foreheads. Framed lower, it shows the face. A
+         three-row slide's card is the same shape. */
       imgClassName={
-        dense && cardLayout === "identity" ? "object-[center_30%]" : undefined
+        (dense || wide) && cardLayout === "identity"
+          ? "object-[center_30%]"
+          : undefined
       }
     />
   ) : (
@@ -826,6 +838,17 @@ export default function DisplayFleetPage() {
   const CLOSE_TOTAL = closeTotal(perPage);
   const OPEN_TOTAL = openTotal(perPage);
   const cardLayout: CardLayout = data?.cardLayout ?? "overlay";
+  /* Two rows, or three on a built-in wall that chose them (owner,
+     2026-10-06). Slideshow only — the support and spare walls are always one. */
+  const slideRows = SLIDE_ROWS_OF[data?.slideGrid ?? "6x2"];
+  /* 3:4 on two rows. On three a row is too short for a 3:4 card to reach
+     across the screen, so the card is 4:5 — still portrait, a little wider —
+     and the remaining width falls evenly between the cells (owner,
+     2026-10-06). */
+  const wideSlide = slideRows > SLIDE_ROWS;
+  const slideCard = wideSlide
+    ? "aspect-[4/5] w-[min(100cqw,80cqh)]"
+    : PORTRAIT_CARD;
   /* Both false until the first response lands, which is the same thing the
      badges say when the timeline cannot name a gate: nothing has closed yet,
      so nothing is written off yet. */
@@ -835,8 +858,8 @@ export default function DisplayFleetPage() {
   };
 
   const pages = React.useMemo(
-    () => paginate(data?.fleets ?? []),
-    [data?.fleets]
+    () => paginate(data?.fleets ?? [], SLIDE_COLS * slideRows),
+    [data?.fleets, slideRows]
   );
 
   /**
@@ -1157,7 +1180,7 @@ export default function DisplayFleetPage() {
           className="kswipe-in grid min-h-0 flex-1 gap-5"
           style={{
             gridTemplateColumns: `repeat(${SLIDE_COLS}, minmax(0,1fr))`,
-            gridTemplateRows: `repeat(${SLIDE_ROWS}, minmax(0,1fr))`,
+            gridTemplateRows: `repeat(${slideRows}, minmax(0,1fr))`,
           }}
         >
           {/* Each cell is its own size container, and the card inside is sized
@@ -1176,10 +1199,14 @@ export default function DisplayFleetPage() {
                   gates={gates}
                   showArea={page.fleet.kind === "support"}
                   cardLayout={cardLayout}
-                  className={PORTRAIT_CARD}
+                  /* Three rows: the monitor's tighter details, so the photo
+                     above them keeps most of the card (owner, 2026-10-06). */
+                  compact={wideSlide}
+                  wide={wideSlide}
+                  className={slideCard}
                 />
               ) : (
-                <BlankCard className={PORTRAIT_CARD} />
+                <BlankCard className={slideCard} />
               )}
             </div>
           ))}

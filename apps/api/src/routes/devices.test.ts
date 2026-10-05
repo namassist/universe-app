@@ -603,6 +603,66 @@ describe("which card a fleet screen draws", () => {
 });
 
 /**
+ * How many rows a built-in wall's slide holds (owner, 2026-10-06): the six by
+ * two every wall drew, or six by three — eighteen cards a turn, for a yard
+ * whose support gear or spare crew would otherwise take many turns to show.
+ */
+describe("how many rows a built-in wall's slide holds", () => {
+  type Row = { slideGrid: string };
+
+  test("is two unless somebody chose three", async () => {
+    // Two rows is what every wall drew before the setting existed.
+    const fresh = await send("POST", "/devices", admin.cookie, {
+      id: newId(),
+      name: tag,
+      kind: "fleet",
+    });
+    expect(((await fresh.json()) as Row).slideGrid).toBe("6x2");
+  });
+
+  for (const id of [SUPPORT_DEVICE_ID, SPARE_DEVICE_ID]) {
+    test(`${id} can be set to three rows and back`, async () => {
+      try {
+        const three = await send("PATCH", `/devices/${id}`, admin.cookie, {
+          slideGrid: "6x3",
+        });
+        expect(three.status).toBe(200);
+        expect(((await three.json()) as Row).slideGrid).toBe("6x3");
+
+        // A dwell change must not quietly put the wall back on two rows.
+        const dwell = await send("PATCH", `/devices/${id}`, admin.cookie, {
+          rotateSeconds: 25,
+        });
+        expect(((await dwell.json()) as Row).slideGrid).toBe("6x3");
+      } finally {
+        const back = await send("PATCH", `/devices/${id}`, admin.cookie, {
+          slideGrid: "6x2",
+        });
+        expect(((await back.json()) as Row).slideGrid).toBe("6x2");
+      }
+    });
+  }
+
+  test("a formation wall is refused three rows", async () => {
+    /* A formation holds at most eleven units, so a third row would be blank
+       on every turn — and shrink every card to make room for it. */
+    const id = newId();
+    await send("POST", "/devices", admin.cookie, {
+      id,
+      name: tag,
+      kind: "fleet",
+    });
+    const refused = await send("PATCH", `/devices/${id}`, admin.cookie, {
+      slideGrid: "6x3",
+    });
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toMatchObject({
+      code: "slide_grid_built_in_only",
+    });
+  });
+});
+
+/**
  * What the ticker actually shows once hazards are rows rather than a sentence.
  *
  * Eight locations stored one a row is right for the ticket and for the admin

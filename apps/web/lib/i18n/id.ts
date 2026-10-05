@@ -510,11 +510,16 @@ export const id = {
     "Foto operator memenuhi kartu; unit, nama dan status di bagian bawah foto.",
   dspCardHelpIdentity:
     "Foto operator di atas, garis cyan, lalu unit, nama dan status di bawahnya.",
+  dspSlideGrid: "Baris per slide",
+  dspSlideGrid2: "2 baris · 12 kartu",
+  dspSlideGrid3: "3 baris · 18 kartu",
+  dspSlideGridHelp:
+    "Tiga baris menampilkan lebih banyak unit per slide, jadi putaran lebih cepat — dengan kartu lebih kecil.",
   dspLayoutMon2Short: "Monitor 2",
   dspLayoutMon4Short: "Monitor 4",
   dspPicked: "dipilih",
   dspSupportLocked:
-    "Layar bawaan — isinya otomatis mengikuti unit fleet support. Hanya durasi slide yang bisa diubah.",
+    "Layar bawaan — isinya otomatis mengikuti unit fleet support. Hanya durasi slide, tampilan kartu dan baris per slide yang bisa diubah.",
   dspSelAll: "Pilih semua",
   dspFleetSearch: "Cari fleet…",
   dspFleetAllNote: "kosong = semua fleet",

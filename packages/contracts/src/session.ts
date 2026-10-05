@@ -161,6 +161,22 @@ export const SLIDE_COLS = 6;
 export const SLIDE_ROWS = 2;
 export const SLIDE_SIZE = SLIDE_COLS * SLIDE_ROWS;
 
+/**
+ * How many rows a built-in wall's slide holds (owner, 2026-10-06).
+ *
+ * `6x2` is the slide above, and every wall's default. `6x3` is offered on the
+ * support and spare walls only: neither has a size limit, so a yard with many
+ * support units or a long spare list turns over in fewer slides at eighteen a
+ * slide, for cards two thirds the height. A formation holds at most eleven
+ * units, so a third row there would only ever be blank.
+ */
+export const SLIDE_GRIDS = ["6x2", "6x3"] as const;
+export type SlideGrid = (typeof SLIDE_GRIDS)[number];
+export const SLIDE_ROWS_OF: Record<SlideGrid, number> = {
+  "6x2": SLIDE_ROWS,
+  "6x3": 3,
+};
+
 /** Which transport a login wants its session delivered over. */
 export const SESSION_TRANSPORTS = ["cookie", "bearer"] as const;
 export type SessionTransport = (typeof SESSION_TRANSPORTS)[number];

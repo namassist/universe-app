@@ -28,6 +28,7 @@ import { redis } from "../redis";
 import { nextSoundCue } from "../sound-cue";
 import {
   CardLayoutSchema,
+  SlideGridSchema,
   DeviceKindSchema,
   DeviceRunTextSchema,
   DeviceSchema,
@@ -135,6 +136,7 @@ function toDevice(row: DeviceRow, fleetIds: string[] = []) {
     rotateSeconds: row.rotateSeconds,
     layout: row.layout,
     cardLayout: row.cardLayout,
+    slideGrid: row.slideGrid,
     sound: row.sound,
     /** Empty means every fleet — see `device_fleets`. */
     fleetIds,
@@ -458,6 +460,9 @@ export const devicesRoutes = new Elysia({
         body.cardLayout !== current.cardLayout
           ? { cardLayout: body.cardLayout }
           : {}),
+        ...(body.slideGrid !== undefined && body.slideGrid !== current.slideGrid
+          ? { slideGrid: body.slideGrid }
+          : {}),
         ...(body.sound !== undefined && body.sound !== current.sound
           ? { sound: body.sound }
           : {}),
@@ -482,6 +487,18 @@ export const devicesRoutes = new Elysia({
           code: "device_locked",
           message:
             "Layar fleet bawaan hanya bisa diubah durasi slide-nya — isinya mengikuti setting fleet",
+        });
+
+      /*
+       * Three rows only where they can fill. A formation holds at most eleven
+       * units, so on its wall a third row is blank on every turn and only
+       * shrinks the cards above it; support and spare have no such limit.
+       */
+      if (!locked && patch.slideGrid === "6x3")
+        return status(422, {
+          code: "slide_grid_built_in_only",
+          message:
+            "Tiga baris hanya tersedia untuk layar Fleet Support dan Fleet Spare",
         });
 
       // A request that changes only the fleet picks touches no device column,
@@ -530,6 +547,7 @@ export const devicesRoutes = new Elysia({
         ),
         layout: t.Optional(DisplayLayoutSchema),
         cardLayout: t.Optional(CardLayoutSchema),
+        slideGrid: t.Optional(SlideGridSchema),
         sound: t.Optional(t.Boolean()),
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),

@@ -514,11 +514,16 @@ export const en: Dict = {
     "The operator's photo fills the card; unit, name and status sit over its lower edge.",
   dspCardHelpIdentity:
     "The operator's photo on top, a cyan rule, then unit, name and status beneath it.",
+  dspSlideGrid: "Rows per slide",
+  dspSlideGrid2: "2 rows · 12 cards",
+  dspSlideGrid3: "3 rows · 18 cards",
+  dspSlideGridHelp:
+    "Three rows show more units a slide, so the wall turns over sooner — at smaller cards.",
   dspLayoutMon2Short: "Monitor 2",
   dspLayoutMon4Short: "Monitor 4",
   dspPicked: "selected",
   dspSupportLocked:
-    "Built-in screen — its contents follow the fleet support units automatically. Only the slide duration can be changed.",
+    "Built-in screen — its contents follow the fleet support units automatically. Only the slide duration, card layout and rows per slide can be changed.",
   dspSelAll: "Select all",
   dspFleetSearch: "Search fleets…",
   dspFleetAllNote: "empty = every fleet",
