@@ -14,6 +14,7 @@ export * from "./fleet-import";
 export * from "./master";
 export * from "./master-import";
 export * from "./notifications";
+export * from "./report";
 export * from "./roster";
 export * from "./session";
 

@@ -1310,4 +1310,18 @@ export const en: Dict = {
     "Open this link once on the TV in question. Single-use, and it expires in 15 minutes.",
   dspPairCopy: "Copy",
   dspPairCopied: "Copied",
+  /* --- report menu --- */
+  rptSub: "Muster reports by date and shift",
+  rptPick: "Choose a report",
+  rptExport: "Export Excel",
+  rptShift: "Shift",
+  rptRows: "rows",
+  rptNoBoardT: "Board not generated yet",
+  rptNoBoardB:
+    "The allocation board for this date and shift has not been generated, so there is nothing to report yet.",
+  rptEmptyT: "Nothing to report",
+  rptEmptyB: "No rows for this date, shift and department.",
+  rptLoadErr: "Could not load the report.",
+  rptNowNote:
+    "FTW and finger columns read the data as it stands now, the same as the Fit To Work and Attendance menus.",
 };
