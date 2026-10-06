@@ -44,10 +44,14 @@ const made = {
   positions: [] as string[],
   docs: [] as string[],
   rosterDocs: [] as string[],
+  simperCodes: [] as string[],
 };
 
 let deptA: string, deptB: string;
 let nikPlaced: string, nikLeftA: string, nikLeftB: string;
+/** Spares the board left seatless whose SIMPERs reach only units that ask no
+    FTW, or reach both kinds (owner, 2026-10-06). */
+let nikDozerOnly: string, nikBoth: string;
 let unitPlaced: string,
   unitEmptyA: string,
   unitEmptyB: string,
@@ -165,9 +169,28 @@ beforeAll(async () => {
   ];
   made.units.push(...units.map((u) => u.id));
 
+  /* Department B's empty seat asks for FTW; the site's own does not — a
+     dozer, say. Each wants its own SIMPER code. */
+  const codes = await db
+    .insert(schema.simperCodes)
+    .values([{ name: `${tag} OHT` }, { name: `${tag} DZ` }])
+    .returning({ id: schema.simperCodes.id });
+  const [codeFtw, codeNoFtw] = codes.map((c) => c.id) as [string, string];
+  made.simperCodes.push(codeFtw, codeNoFtw);
+  await db
+    .update(schema.units)
+    .set({ ftw: true, simperCodeId: codeFtw })
+    .where(eq(schema.units.id, unitEmptyB));
+  await db
+    .update(schema.units)
+    .set({ ftw: false, simperCodeId: codeNoFtw })
+    .where(eq(schema.units.id, unitGlobal));
+
   nikPlaced = `9881${digits()}`;
   nikLeftA = `9882${digits()}`;
   nikLeftB = `9883${digits()}`;
+  nikDozerOnly = `9884${digits()}`;
+  nikBoth = `9885${digits()}`;
   const people = await db
     .insert(schema.employees)
     .values([
@@ -192,14 +215,35 @@ beforeAll(async () => {
         departmentId: deptB,
         positionId: posB,
       },
+      {
+        nik: nikDozerOnly,
+        name: `${tag} Dozer Only`,
+        companyId: co!.id,
+        departmentId: deptA,
+        positionId: posA,
+      },
+      {
+        nik: nikBoth,
+        name: `${tag} Both`,
+        companyId: co!.id,
+        departmentId: deptA,
+        positionId: posA,
+      },
     ])
     .returning({ id: schema.employees.id });
   made.employees.push(...people.map((p) => p.id));
-  const [opPlaced, opLeftA, opLeftB] = people.map((p) => p.id) as [
-    string,
-    string,
-    string,
-  ];
+  const [opPlaced, opLeftA, opLeftB, opDozerOnly, opBoth] = people.map(
+    (p) => p.id
+  ) as [string, string, string, string, string];
+  await db.insert(schema.employeeSkills).values([
+    /* The two left without a seat can reach an FTW seat, so the No FTW
+       report holds them to it. */
+    { employeeId: opLeftA, simperCodeId: codeFtw },
+    { employeeId: opLeftB, simperCodeId: codeFtw },
+    { employeeId: opDozerOnly, simperCodeId: codeNoFtw },
+    { employeeId: opBoth, simperCodeId: codeFtw },
+    { employeeId: opBoth, simperCodeId: codeNoFtw },
+  ]);
 
   all = await makeUser({ scope: "all" });
   deptAdmin = await makeUser({ scope: "dept", nik: nikLeftA });
@@ -240,6 +284,18 @@ beforeAll(async () => {
       {
         documentId: docOf(deptB),
         employeeId: opLeftB,
+        date,
+        code: "D" as const,
+      },
+      {
+        documentId: docOf(deptA),
+        employeeId: opDozerOnly,
+        date,
+        code: "D" as const,
+      },
+      {
+        documentId: docOf(deptA),
+        employeeId: opBoth,
         date,
         code: "D" as const,
       },
@@ -292,6 +348,10 @@ afterAll(async () => {
       .where(inArray(schema.employees.id, made.employees));
   if (made.units.length)
     await db.delete(schema.units).where(inArray(schema.units.id, made.units));
+  if (made.simperCodes.length)
+    await db
+      .delete(schema.simperCodes)
+      .where(inArray(schema.simperCodes.id, made.simperCodes));
   for (const c of made.cat)
     await db.delete(schema[c.table]).where(eq(schema[c.table].id, c.id));
   if (made.positions.length)
@@ -473,6 +533,33 @@ describe("the person reports", () => {
     const status = new Map(body.rows.map((r) => [r.nik, r.saveraStatus]));
     expect(status.get(nikLeftA)).toBe("Tidak Boleh Bekerja");
     expect(status.get(nikLeftB)).toBe("Belum FTW");
+  });
+
+  /*
+   * The trial of 2026-10-05: dozer and small-exca spares the board left
+   * seatless were listed "Belum FTW", though no seat they could fill asks for
+   * FTW — the engine never held it against them. With no seat and no
+   * standing unit, FTW applies only if a unit they hold a SIMPER for asks
+   * for it (owner, 2026-10-06).
+   */
+  test("Operator No FTW leaves out a spare whose every unit asks no FTW", async () => {
+    const body = await person("operator-no-ftw");
+    if (!body) return;
+    const niks = body.rows.map((r) => r.nik);
+    expect(niks).not.toContain(nikDozerOnly);
+    /* One FTW seat within reach is enough: FTW is what kept him off it. */
+    expect(niks).toContain(nikBoth);
+  });
+
+  test("…and on a date with no board, by the units in service", async () => {
+    const res = await get(
+      `/reports/operator-no-ftw?date=${NO_BOARD_DATE}&shift=day`,
+      all
+    );
+    if (res.status === 422) return;
+    const niks = (await read(res)).rows.map((r) => r.nik);
+    expect(niks).not.toContain(nikDozerOnly);
+    expect(niks).toContain(nikBoth);
   });
 
   test("Operator No Finger reads No Finger for nobody tapping", async () => {
