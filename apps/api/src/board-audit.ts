@@ -122,6 +122,62 @@ async function standingUnits(ids: string[]) {
 }
 
 /**
+ * Who, of these people, holds a SIMPER for a unit that asks for FTW — the
+ * rule for somebody with no seat and no standing unit (owner, 2026-10-06).
+ *
+ * Such a person could have been seated only where their SIMPER reaches, and
+ * the engine judges FTW only where the unit asks for it. So a spare whose
+ * every reachable unit asks for none was never held to FTW, and the No FTW
+ * report must not list him: the trial of 2026-10-05 printed dozer and
+ * small-exca spares as "Belum FTW" for a seat that never needed it.
+ *
+ * The units are the board's when there is one — what could have been filled
+ * that shift, read after Fleet Setting has since changed — and the units in
+ * service otherwise.
+ */
+async function reachesFtwUnit(
+  ids: string[],
+  date: string,
+  shift: ShiftKind
+): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const [board] = await db
+    .select({ id: schema.fleetActualDocuments.id })
+    .from(schema.fleetActualDocuments)
+    .where(
+      and(
+        eq(schema.fleetActualDocuments.date, date),
+        eq(schema.fleetActualDocuments.shift, shift)
+      )
+    )
+    .limit(1);
+  const units = board
+    ? inArray(
+        schema.units.id,
+        db
+          .select({ id: schema.fleetActualSlots.unitId })
+          .from(schema.fleetActualSlots)
+          .where(eq(schema.fleetActualSlots.documentId, board.id))
+      )
+    : and(eq(schema.units.active, true), eq(schema.units.breakdown, false));
+  const rows = await db
+    .selectDistinct({ employeeId: schema.employeeSkills.employeeId })
+    .from(schema.employeeSkills)
+    .innerJoin(
+      schema.units,
+      eq(schema.units.simperCodeId, schema.employeeSkills.simperCodeId)
+    )
+    .where(
+      and(
+        inArray(schema.employeeSkills.employeeId, ids),
+        eq(schema.units.ftw, true),
+        units
+      )
+    );
+  return new Set(rows.map((r) => r.employeeId));
+}
+
+/**
  * employeeId → the seat the board gave them, and *its* formation — not their
  * standing unit's. A spare who filled a seat in EX4001 worked EX4001 today.
  *
@@ -236,16 +292,19 @@ export async function boardAudit(
   if (!ids.length)
     return { kind: "ok", boardGenerated: actual !== null, lines: [] };
 
-  const [plan, skills] = await Promise.all([
+  const [plan, skills, ftwReach] = await Promise.all([
     standingUnits(ids),
     skillNamesByEmployee(ids),
+    reachesFtwUnit(ids, date, shift),
   ]);
 
   /* Which unit's rule applies to this person: the one they were placed on, or
-     failing that their standing unit. With neither, the pool's default
-     (required) stands. */
+     failing that their standing unit. With neither, whether any unit their
+     SIMPER reaches asks for FTW (`reachesFtwUnit`). */
   const requiresFtwFor = (id: string): boolean =>
-    actual?.get(id)?.requiresFtw ?? plan.get(id)?.requiresFtw ?? true;
+    actual?.get(id)?.requiresFtw ??
+    plan.get(id)?.requiresFtw ??
+    ftwReach.has(id);
 
   const lines = ids.map((id): AuditLine => {
     const entry = pool.get(id)!;
