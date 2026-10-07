@@ -36,7 +36,8 @@ export const REPORT_LABELS: Record<ReportKind, string> = {
 /** The card's one-line answer to "what is this for". */
 export const REPORT_DESCRIPTIONS: Record<ReportKind, string> = {
   "equipment-no-operator": "Unit di papan yang tidak mendapat operator",
-  "operator-no-equipment": "Operator terjadwal yang tidak mendapat unit",
+  "operator-no-equipment":
+    "Operator yang sudah finger dan FTW-nya oke, tetapi tidak mendapat unit",
   "operator-no-ftw": "Operator terjadwal yang tidak lolos Fit To Work",
   "operator-no-finger": "Operator terjadwal yang tidak tap atau terlambat tap",
   "final-validation": "Hasil akhir alokasi: setiap operator dan unitnya",
@@ -124,6 +125,7 @@ export const REPORT_COLUMNS: Record<ReportKind, readonly ReportColumn[]> = {
     { key: "name", header: "NAME" },
     { key: "position", header: "POSITION" },
     { key: "department", header: "DEPARTMENT" },
+    { key: "jamIn", header: "JAM FINGER IN" },
     { key: "unit", header: "UNIT" },
     { key: "fleet", header: "FLEET" },
     { key: "bus", header: "NO BUS" },

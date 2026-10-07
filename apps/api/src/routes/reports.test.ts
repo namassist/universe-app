@@ -518,13 +518,20 @@ describe("the person reports", () => {
     expect(byNik.has(nikLeftB)).toBe(false);
   });
 
-  test("Operator No Equipment lists the unplaced, ready or not", async () => {
+  /* Nobody in these fixtures tapped in: the unplaced are the No Finger
+     report's, not this one's (owner, 2026-10-07). The rule's other halves
+     are proven case by case in reports.test.ts. */
+  test("Operator No Equipment leaves out whoever never tapped in", async () => {
     const body = await person("operator-no-equipment");
     if (!body) return;
     const niks = body.rows.map((r) => r.nik);
-    expect(niks).toContain(nikLeftA);
-    expect(niks).toContain(nikLeftB);
+    expect(niks).not.toContain(nikLeftA);
+    expect(niks).not.toContain(nikLeftB);
     expect(niks).not.toContain(nikPlaced);
+    const noFinger = await person("operator-no-finger");
+    const absent = noFinger!.rows.map((r) => r.nik);
+    expect(absent).toContain(nikLeftA);
+    expect(absent).toContain(nikLeftB);
   });
 
   test("Operator No FTW prints savera's category, or Belum FTW", async () => {
