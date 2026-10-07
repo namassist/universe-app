@@ -70,9 +70,14 @@ const byName = (a: AuditLine, b: AuditLine) =>
   a.row.name.localeCompare(b.row.name, "id", { sensitivity: "base" });
 
 /**
- * Everyone the board placed nowhere — ready and seatless, or turned away
- * (owner, 2026-09-24). The FTW and finger reports say *why* for the second
- * group; this one says who was left standing.
+ * Everyone who came to work and was cleared to, yet got no unit (owner,
+ * 2026-10-07): rostered for the shift — which every audit line is — tapped in,
+ * on time or late, and FTW passed or not asked of them.
+ *
+ * It used to list everyone the board placed nowhere, which put somebody who
+ * never came beside somebody left without a seat. Those now have their own
+ * reports — no tap is No Finger's, FTW holding them back is No FTW's — and
+ * this one is the shortfall of units for people who were there.
  */
 export function operatorNoEquipmentRows(
   lines: AuditLine[],
@@ -80,7 +85,10 @@ export function operatorNoEquipmentRows(
 ): ReportRow[] {
   return lines
     .filter(
-      (l) => l.row.decision === "no-seat" || l.row.decision === "not-ready"
+      (l) =>
+        (l.row.decision === "no-seat" || l.row.decision === "not-ready") &&
+        l.row.finger !== "missing" &&
+        (l.row.ftw === "pass" || l.row.ftw === "not-required")
     )
     .sort(byName)
     .map((l) => ({
@@ -174,6 +182,8 @@ export function finalValidationRows(
     const placed = l.row.actualUnitCode !== null;
     return {
       ...personCells(l, departments),
+      /* The first tap, late or not — the arrival the slip states. */
+      jamIn: l.row.tappedAt ? hhmm(l.row.tappedAt) : NO_FINGER_LABEL,
       unit: l.row.actualUnitCode ?? SPARE_UNIT_LABEL,
       fleet: placed
         ? fleetLabel(l.row.fleetLeaderCode, l.row.fleetSupport)

@@ -60,16 +60,44 @@ function line(
 }
 
 describe("Operator No Equipment", () => {
-  test("lists every operator the board placed nowhere, ready or not", () => {
+  /*
+   * Rostered, tapped in (on time or late), FTW not standing in the way, and
+   * no unit (owner, 2026-10-07). Somebody who never tapped is the No Finger
+   * report's, and somebody held back by FTW is the No FTW report's.
+   */
+  test("lists who tapped in and was clear of FTW, yet got no unit", () => {
     const rows = operatorNoEquipmentRows(
       [
         line({ name: "Kept", decision: "kept", actualUnitCode: "DT1" }),
         line({ name: "Seatless", decision: "no-seat" }),
-        line({ name: "Unready", decision: "not-ready", finger: "missing" }),
+        line({
+          name: "Late",
+          decision: "not-ready",
+          finger: "late",
+          tappedAt: "05:40:00",
+        }),
+        line({
+          name: "No FTW needed",
+          decision: "no-seat",
+          ftw: "not-required",
+        }),
+        line({
+          name: "Never tapped",
+          decision: "not-ready",
+          finger: "missing",
+          tappedAt: null,
+        }),
+        line({ name: "FTW failed", decision: "not-ready", ftw: "fail" }),
+        line({ name: "FTW missing", decision: "not-ready", ftw: "missing" }),
+        line({ name: "FTW late", decision: "not-ready", ftw: "late" }),
       ],
       DEPTS
     );
-    expect(rows.map((r) => r.name)).toEqual(["Seatless", "Unready"]);
+    expect(rows.map((r) => r.name)).toEqual([
+      "Late",
+      "No FTW needed",
+      "Seatless",
+    ]);
   });
 
   test("prints the SIMPER codes they hold as the matrix", () => {
@@ -230,6 +258,7 @@ describe("Final Validation", () => {
         name: "Left over",
         position: "HD 90-100T Operator",
         department: "Hauling",
+        jamIn: "05:01",
         unit: "SPARE",
         fleet: "",
         bus: "",
@@ -240,12 +269,24 @@ describe("Final Validation", () => {
         name: "Placed",
         position: "HD 90-100T Operator",
         department: "Mining Operation",
+        jamIn: "05:01",
         unit: "EX7011",
         fleet: "EX7011",
         bus: "UD BU 09",
         location: "KASTURI - KOLAM",
       },
     ]);
+  });
+
+  test("the first tap reads as its time, and no tap as No Finger", () => {
+    const rows = finalValidationRows(
+      [
+        line({ name: "A late one", finger: "late", tappedAt: "05:40:12" }),
+        line({ name: "B absent", finger: "missing", tappedAt: null }),
+      ],
+      DEPTS
+    );
+    expect(rows.map((r) => r.jamIn)).toEqual(["05:40", "No Finger"]);
   });
 
   test("a support seat names the support group as its fleet", () => {

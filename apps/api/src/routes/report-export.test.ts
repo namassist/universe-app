@@ -26,9 +26,9 @@ describe("reportWorkbook", () => {
       })
     );
     expect(ws.getCell("A1").value).toBe("FINAL VALIDATION REPORT");
-    /* NO + eight columns: the title spans A..I. */
+    /* NO + nine columns: the title spans A..J. */
     expect(ws.getCell("A1").isMerged).toBe(true);
-    expect(ws.getCell("I1").master.address).toBe("A1");
+    expect(ws.getCell("J1").master.address).toBe("A1");
     expect(ws.getCell("B3").value).toBe("Date");
     expect(ws.getCell("C3").value).toEqual(new Date("2026-09-11T00:00:00Z"));
     expect(ws.getCell("C3").numFmt).toBe("d mmmm yyyy");
