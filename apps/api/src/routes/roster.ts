@@ -26,6 +26,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNull,
   lte,
   or,
   sql,
@@ -57,6 +58,7 @@ import {
   OptionalRosterCodeSchema,
   OptionalRosterDocumentStatusSchema,
   RosterDocumentSchema,
+  RosterGridRowSchema,
   RosterGridSchema,
   RosterInForceSchema,
   RosterSyncResultSchema,
@@ -454,7 +456,7 @@ export const rosterRoutes = new Elysia({
     "/:id/days",
     async ({ params, query, principal, status }) => {
       const [document] = await db
-        .select({ id: doc.id, month: doc.month })
+        .select({ id: doc.id, month: doc.month, status: doc.status })
         .from(doc)
         .where(and(eq(doc.id, params.id), await documentScope(principal)))
         .limit(1);
@@ -555,6 +557,51 @@ export const rosterRoutes = new Elysia({
         row.set(cell.date, cell.code as RosterCode);
       }
 
+      /* The days on this page an admin set by hand. Only on the document in
+         force: that is the one a correction is written into, and an archived
+         grid is a record of what it held. */
+      const corrected = new Map<string, RosterGridCorrection[]>();
+      if (document.status === "aktif" && days.length) {
+        const rows = await db
+          .select({
+            employeeId: schema.rosterCorrections.employeeId,
+            date: schema.rosterCorrections.date,
+            fromCode: schema.rosterCorrections.fromCode,
+            toCode: schema.rosterCorrections.toCode,
+            reason: schema.rosterCorrections.reason,
+            createdByName: schema.users.name,
+            createdAt: schema.rosterCorrections.createdAt,
+          })
+          .from(schema.rosterCorrections)
+          .innerJoin(
+            schema.users,
+            eq(schema.users.id, schema.rosterCorrections.createdBy)
+          )
+          .where(
+            and(
+              isNull(schema.rosterCorrections.revokedAt),
+              inArray(
+                schema.rosterCorrections.employeeId,
+                pageRows.map((p) => p.id)
+              ),
+              gte(schema.rosterCorrections.date, days[0]!),
+              lte(schema.rosterCorrections.date, days[days.length - 1]!)
+            )
+          );
+        for (const row of rows) {
+          const list = corrected.get(row.employeeId) ?? [];
+          list.push({
+            date: row.date,
+            fromCode: row.fromCode,
+            toCode: row.toCode,
+            reason: row.reason,
+            createdByName: row.createdByName,
+            createdAt: row.createdAt.toISOString(),
+          });
+          corrected.set(row.employeeId, list);
+        }
+      }
+
       return {
         days,
         rows: pageRows.map((person) => {
@@ -565,6 +612,7 @@ export const rosterRoutes = new Elysia({
             name: person.name,
             // Positional, aligned to `days` — see `RosterGridRowSchema`.
             codes: days.map((d) => codes?.get(d) ?? null),
+            corrections: corrected.get(person.id) ?? [],
           };
         }),
         total,
@@ -637,6 +685,9 @@ export const rosterRoutes = new Elysia({
       detail: { summary: "Mirror the roster from unggul_att now (one pass)" },
     }
   );
+
+type RosterGridCorrection =
+  (typeof RosterGridRowSchema.static)["corrections"][number];
 
 /* Shared with the roster export so both resolve a document, its month, and
    its scope the same way. */

@@ -194,6 +194,10 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
        department, which his scope already narrows it to (owner, 2026-09-20).
        View: the screen reads the register and writes nothing to it. */
     { slug: "scan-id", mode: "view", roles: ["manpower", "manajer"] },
+    /* Correcting a day above unggul_att (owner, 2026-10-05): the admin who
+       keeps his department's roster, and manpower, who runs the muster the
+       correction is for. Admin's `dept` scope keeps him to his own people. */
+    { slug: "roster-correction", mode: "manage", roles: ["admin", "manpower"] },
     /* The reports read what the muster decided and write nothing, so view is
        the whole grant. Manpower runs the muster; admin and manajer answer for
        their own department, which their `dept` scope narrows the reports to. */

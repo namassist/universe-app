@@ -22,6 +22,7 @@ import { MonitoringTapMenu } from "./monitoring-tap";
 import { MenuPlaceholder } from "./placeholder";
 import { PrintersMenu } from "./printers";
 import { ReportMenu } from "./report";
+import { RosterCorrectionMenu } from "./roster-correction";
 import { RosterDataMenu } from "./roster-data";
 import { RunTextsMenu } from "./run-texts";
 import { ScanIdMenu } from "./scan-id";
@@ -42,6 +43,7 @@ type MenuComponent = ComponentType<{ mode: AccessMode }>;
 const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   dashboard: DashboardMenu,
   "roster-data": RosterDataMenu,
+  "roster-correction": RosterCorrectionMenu,
   attendance: AttendanceMenu,
   employees: EmployeesMenu,
   "fit-to-work": FitToWorkMenu,

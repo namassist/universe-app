@@ -366,15 +366,33 @@ export function RosterDetail() {
                     <TableCell className="font-semibold whitespace-nowrap">
                       {r.name}
                     </TableCell>
-                    {r.codes.map((c, i) => (
-                      <TableCell
-                        key={i}
-                        className="px-1.5 py-3 text-center font-mono text-xs"
-                        style={{ color: rosterCodeColor(c ?? "") }}
-                      >
-                        {c ?? "—"}
-                      </TableCell>
-                    ))}
+                    {r.codes.map((c, i) => {
+                      /* Set by hand above unggul_att (Koreksi Roster): marked
+                         so nobody reads it as the source's word. */
+                      const fix = r.corrections.find(
+                        (k) => k.date === grid.days[i]
+                      );
+                      return (
+                        <TableCell
+                          key={i}
+                          className="px-1.5 py-3 text-center font-mono text-xs"
+                          style={{ color: rosterCodeColor(c ?? "") }}
+                          title={
+                            fix
+                              ? `Dikoreksi ${fix.fromCode ?? "—"} → ${fix.toCode} oleh ${fix.createdByName}: ${fix.reason}`
+                              : undefined
+                          }
+                        >
+                          {fix ? (
+                            <span className="border-b-2 border-dashed border-(--color-warning) px-0.5 font-bold">
+                              {c ?? "—"}
+                            </span>
+                          ) : (
+                            (c ?? "—")
+                          )}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 ))}
               </TableBody>

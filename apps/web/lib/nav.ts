@@ -88,6 +88,9 @@ export const NAV: NavEntry[] = [
        machine. Attendance gives the answer, this gives the working. */
     children: [
       leaf("roster-data"),
+      /* Beside the roster it corrects: the screen an admin opens when the
+         03:00 pull still has somebody on the wrong shift. */
+      leaf("roster-correction"),
       leaf("attendance"),
       leaf("monitoring-tap"),
       leaf("tiket"),

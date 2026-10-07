@@ -1148,6 +1148,57 @@ export const rosterDays = pgTable(
 );
 
 /**
+ * One person's day, set by hand above what unggul_att says (owner, 2026-10-05).
+ *
+ * unggul_att owns the roster, but it is revised in the office during the day:
+ * an operator rostered `N` who is called in for the morning shows `N` in the
+ * 03:00 pull and `D` only by noon, after he has already worked. A correction
+ * is how an admin says so before the muster, and it takes effect at once —
+ * there is no approval step at that hour.
+ *
+ * Kept as its own row rather than as an edit to `roster_days`, because the
+ * mirror reconciles: it would put `N` back on its next pull. The correction is
+ * written into the day in force *and* laid over every pull that covers its
+ * date (`roster-sync.ts`), so every reader of `roster_days` — the board, the
+ * slip, the walls — sees it without knowing it exists.
+ *
+ * `from_code` is what was in force when the correction was made, null where
+ * the source held no cell; withdrawing the correction puts it back. A
+ * withdrawn row stays as the record of who changed what, and at most one row
+ * per person-day is live.
+ */
+export const rosterCorrections = pgTable(
+  "roster_corrections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "restrict" }),
+    date: date("date").notNull(),
+    fromCode: rosterCode("from_code"),
+    toCode: rosterCode("to_code").notNull(),
+    reason: text("reason").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    revokedBy: uuid("revoked_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("roster_corrections_live_idx")
+      .on(table.employeeId, table.date)
+      .where(sql`${table.revokedAt} is null`),
+    /** The mirror reads the live ones by date window on every pull. */
+    index("roster_corrections_date_idx").on(table.date),
+  ]
+);
+
+/**
  * The system's own `aktif → standby` writes for a first day back from leave
  * (owner, 2026-10-02), so the next day's run can undo exactly those.
  *

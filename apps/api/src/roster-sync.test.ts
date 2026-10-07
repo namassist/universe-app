@@ -20,7 +20,7 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { syncRoster } from "./roster-sync";
+import { settleCorrectionsMadeDuring, syncRoster } from "./roster-sync";
 import type { RosterSourceRow } from "./sources/unggul";
 
 const tag = "ZZ Roster Sync";
@@ -116,6 +116,11 @@ beforeEach(wipeDocuments);
 
 afterAll(async () => {
   await wipeDocuments();
+  /* Before the employees and the user: a correction holds both. */
+  if (employees.length)
+    await db
+      .delete(schema.rosterCorrections)
+      .where(inArray(schema.rosterCorrections.employeeId, employees));
   if (employees.length)
     await db
       .delete(schema.employees)
@@ -375,5 +380,234 @@ describe("syncRoster", () => {
     expect(result.documents).toBe(2);
     expect(await held(deptA, "1999-05-01")).toEqual([`${nik} 1999-05-31=D`]);
     expect(await held(deptA, "1999-06-01")).toEqual([`${nik} 1999-06-01=N`]);
+  });
+});
+
+/*
+ * An admin's correction outranks the source (owner, 2026-10-05).
+ *
+ * The case it exists for: rostered N, called in for the morning, and the
+ * source learns of it only at noon — so the 03:00 pull, and any pull before
+ * noon, still says N. The correction must survive every one of them.
+ */
+describe("syncRoster with a correction", () => {
+  /* Each test's corrections are its own: one left live would be laid over the
+     next test's pull too. */
+  beforeEach(async () => {
+    if (employees.length)
+      await db
+        .delete(schema.rosterCorrections)
+        .where(inArray(schema.rosterCorrections.employeeId, employees));
+  });
+
+  const correct = async (
+    employeeId: string,
+    date: string,
+    toCode: "D" | "N",
+    revoked = false
+  ) => {
+    await db.insert(schema.rosterCorrections).values({
+      employeeId,
+      date,
+      fromCode: toCode === "D" ? "N" : "D",
+      toCode,
+      reason: `${tag} dipanggil masuk pagi`,
+      createdBy: userId,
+      ...(revoked ? { revokedAt: new Date(), revokedBy: userId } : {}),
+    });
+  };
+
+  test("a pull still saying N writes the corrected D", async () => {
+    const nik = `9921${uid().slice(0, 4)}`;
+    const id = await addEmployee(nik, deptA);
+    await syncRoster(RANGE, from([{ nik, date: "1999-05-06", code: "N" }]));
+    await correct(id, "1999-05-06", "D");
+
+    await syncRoster(RANGE, from([{ nik, date: "1999-05-06", code: "N" }]));
+
+    expect(await held(deptA)).toEqual([`${nik} 1999-05-06=D`]);
+  });
+
+  test("a corrected day the source does not carry is not withdrawn", async () => {
+    const nik = `9922${uid().slice(0, 4)}`;
+    const id = await addEmployee(nik, deptA);
+    await correct(id, "1999-05-07", "D");
+
+    await syncRoster(RANGE, from([{ nik, date: "1999-05-08", code: "N" }]));
+
+    expect(await held(deptA)).toEqual([
+      `${nik} 1999-05-07=D`,
+      `${nik} 1999-05-08=N`,
+    ]);
+  });
+
+  test("a withdrawn correction gives the day back to the source", async () => {
+    const nik = `9923${uid().slice(0, 4)}`;
+    const id = await addEmployee(nik, deptA);
+    await correct(id, "1999-05-09", "D", true);
+
+    await syncRoster(RANGE, from([{ nik, date: "1999-05-09", code: "N" }]));
+
+    expect(await held(deptA)).toEqual([`${nik} 1999-05-09=N`]);
+  });
+
+  test("a correction outside the window is left alone", async () => {
+    const nik = `9924${uid().slice(0, 4)}`;
+    const id = await addEmployee(nik, deptA);
+    await correct(id, "1999-06-10", "D");
+
+    const result = await syncRoster(
+      RANGE,
+      from([{ nik, date: "1999-05-10", code: "N" }])
+    );
+
+    expect(result.documents).toBe(1);
+    expect(await held(deptA, "1999-06-01")).toEqual([]);
+  });
+
+  /* The other days of the same pull are the source's, untouched. */
+  test("only the corrected person-day differs from the source", async () => {
+    const nik = `9925${uid().slice(0, 4)}`;
+    const other = `9926${uid().slice(0, 4)}`;
+    const id = await addEmployee(nik, deptA);
+    await addEmployee(other, deptA);
+    await correct(id, "1999-05-11", "D");
+
+    const result = await syncRoster(
+      RANGE,
+      from([
+        { nik, date: "1999-05-11", code: "N" },
+        { nik, date: "1999-05-12", code: "N" },
+        { nik: other, date: "1999-05-11", code: "N" },
+      ])
+    );
+
+    expect(result.fetched).toBe(3);
+    expect(result.upserted).toBe(3);
+    expect(await held(deptA)).toEqual(
+      [
+        `${nik} 1999-05-11=D`,
+        `${nik} 1999-05-12=N`,
+        `${other} 1999-05-11=N`,
+      ].sort()
+    );
+  });
+
+  /*
+   * A correction for a month the pull does not carry must not make the mirror
+   * take that month over: the upload in force would be stood down and the
+   * department's month replaced by a single corrected day.
+   */
+  test("a correction in a month only an upload carries leaves the upload alone", async () => {
+    const mirrored = `9927${uid().slice(0, 4)}`;
+    const uploaded = `9928${uid().slice(0, 4)}`;
+    await addEmployee(mirrored, deptA);
+    const uploadedId = await addEmployee(uploaded, deptB);
+    const [upload] = await db
+      .insert(schema.rosterDocuments)
+      .values({
+        departmentId: deptB,
+        month: "1999-05-01",
+        fileName: `${tag}-upload.xlsx`,
+        source: "upload",
+        uploadedBy: userId,
+      })
+      .returning({ id: schema.rosterDocuments.id });
+    await db.insert(schema.rosterDays).values([
+      {
+        documentId: upload!.id,
+        employeeId: uploadedId,
+        date: "1999-05-13",
+        code: "D",
+      },
+      {
+        documentId: upload!.id,
+        employeeId: uploadedId,
+        date: "1999-05-14",
+        code: "N",
+      },
+    ]);
+    await correct(uploadedId, "1999-05-14", "D");
+    await db
+      .update(schema.rosterDays)
+      .set({ code: "D" })
+      .where(
+        and(
+          eq(schema.rosterDays.documentId, upload!.id),
+          eq(schema.rosterDays.date, "1999-05-14")
+        )
+      );
+
+    await syncRoster(
+      RANGE,
+      from([{ nik: mirrored, date: "1999-05-13", code: "D" }])
+    );
+
+    const docs = await db
+      .select({
+        source: schema.rosterDocuments.source,
+        status: schema.rosterDocuments.status,
+      })
+      .from(schema.rosterDocuments)
+      .where(eq(schema.rosterDocuments.departmentId, deptB));
+    expect(docs).toEqual([{ source: "upload", status: "aktif" }]);
+    expect(await held(deptB)).toEqual([
+      `${uploaded} 1999-05-13=D`,
+      `${uploaded} 1999-05-14=D`,
+    ]);
+  });
+
+  /*
+   * The race the settling exists for: an admin corrects a day while the pull
+   * is still writing, after it read the corrections. Simulated by running the
+   * pull first and correcting after — the pull wrote the source's N over a day
+   * it did not know was corrected — then settling from when it began.
+   */
+  test("a correction made while the pull ran is put back after it", async () => {
+    const nik = `9929${uid().slice(0, 4)}`;
+    const id = await addEmployee(nik, deptA);
+    const rows = [{ nik, date: "1999-05-15", code: "N" }];
+    const started = new Date();
+    await syncRoster(RANGE, from(rows));
+    await correct(id, "1999-05-15", "D");
+    expect(await held(deptA)).toEqual([`${nik} 1999-05-15=N`]);
+
+    const wanted = new Map([
+      [
+        `${deptA}|1999-05-01`,
+        new Map([[`${id} 1999-05-15`, { code: "N" as const }]]),
+      ],
+    ]);
+    await settleCorrectionsMadeDuring(started, RANGE, wanted, [], new Map());
+
+    expect(await held(deptA)).toEqual([`${nik} 1999-05-15=D`]);
+  });
+
+  test("a correction withdrawn while the pull ran gives the day back to the source", async () => {
+    const nik = `9930${uid().slice(0, 4)}`;
+    const id = await addEmployee(nik, deptA);
+    await correct(id, "1999-05-16", "D");
+    const started = new Date();
+    /* The pull laid the live correction over the source's N and wrote D. */
+    await syncRoster(RANGE, from([{ nik, date: "1999-05-16", code: "N" }]));
+    expect(await held(deptA)).toEqual([`${nik} 1999-05-16=D`]);
+    /* Withdrawn mid-run: the route put N back, the pull's D landed after. */
+    await db
+      .update(schema.rosterCorrections)
+      .set({ revokedAt: new Date(), revokedBy: userId })
+      .where(eq(schema.rosterCorrections.employeeId, id));
+
+    const cell = `${id} 1999-05-16`;
+    await settleCorrectionsMadeDuring(
+      started,
+      RANGE,
+      new Map([
+        [`${deptA}|1999-05-01`, new Map([[cell, { code: "D" as const }]])],
+      ]),
+      [],
+      new Map([[cell, "N" as const]])
+    );
+
+    expect(await held(deptA)).toEqual([`${nik} 1999-05-16=N`]);
   });
 });
