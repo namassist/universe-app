@@ -28,6 +28,7 @@ import {
   ROSTER_DOCUMENT_STATUSES,
   ROSTER_REVISION_STATUSES,
   SHIFT_KINDS,
+  SLIDE_GRIDS,
   RUNTEXT_COLORS,
   RUNTEXT_KINDS,
   SCOPES,
@@ -61,6 +62,11 @@ export const DisplayLayoutSchema = t.Union([
 export const CardLayoutSchema = t.Union([
   t.Literal(CARD_LAYOUTS[0]),
   t.Literal(CARD_LAYOUTS[1]),
+]);
+/* Literals again, so a dwell change cannot put a three-row wall back on two. */
+export const SlideGridSchema = t.Union([
+  t.Literal(SLIDE_GRIDS[0]),
+  t.Literal(SLIDE_GRIDS[1]),
 ]);
 export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
@@ -1466,6 +1472,8 @@ export const FleetDisplaySchema = t.Object({
   layout: DisplayLayoutSchema,
   /** How each unit's card is drawn — the screen's own setting. */
   cardLayout: CardLayoutSchema,
+  /** How many rows a slideshow's slide holds — the screen's own setting. */
+  slideGrid: SlideGridSchema,
   /**
    * The registered screen's own name, or null when nobody named a device — a
    * person previewing the site-wide board. A monitor heads itself with it.
@@ -1494,6 +1502,8 @@ export const DeviceSchema = t.Object({
   layout: DisplayLayoutSchema,
   /** How a fleet wall draws each unit's card. */
   cardLayout: CardLayoutSchema,
+  /** How many rows a slide holds; three only on the built-in walls. */
+  slideGrid: SlideGridSchema,
   /** Whether this screen plays the timeline's sounds. */
   sound: t.Boolean(),
   /**

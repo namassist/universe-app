@@ -1590,6 +1590,58 @@ reads "-".
   manual NIK field carries it meanwhile; that field is also what a scuffed
   card, a desk without a camera, and a QR reader that types the number use.
 
+## Reports (Laporan) — shipped
+
+- **A menu of its own** (owner, 2026-09-24), slug `report`, label _Laporan_.
+  Granted `view` to `manpower`, `manajer` and `admin` (seeded through
+  `NEW_SLUG_GRANTS`, so existing installs gain it on the next `db:seed`);
+  `superadmin` has it by reconciliation. Read-only: nothing on it writes.
+- **Five reports, one date × shift each**, their columns and titles taken word
+  for word from the site's templates (`docs/template_reports/`), held once in
+  `@universe/contracts` (`REPORT_COLUMNS`) so the screen and the workbook cannot
+  drift:
+  - **Equipment No Operator**: every seat on the generated board nobody was put
+    on. Fleet is the board's own formation copy; location the formation's work
+    area, falling back to the unit's.
+  - **Operator No Equipment**: every rostered operator the board placed
+    nowhere, **ready or not** (owner, 2026-09-24): audit decisions `no-seat` and
+    `not-ready`. MATRIX SIMPER lists the codes they hold.
+  - **Operator No FTW**: FTW not passed for the unit that applied to them (a
+    unit with `ftw = false` puts nobody here). STATUS SAVERA is savera's category
+    as savera spelled it; **no reading, or savera's own "Belum mengisi FTW",
+    reads _Belum FTW_** (owner, 2026-09-24); a late upload reads _Terlambat FTW
+    (HH:MM)_.
+  - **Operator No Finger**: no tap reads _No Finger_, **a late tap reads its
+    time** (owner, 2026-09-24).
+  - **Final Validation**: every rostered operator and the seat they ended on.
+    Someone placed nowhere reads **SPARE** and nothing else: printing their
+    standing formation beside it would say they worked there.
+- **Built on the board's audit lines** (`board-audit.ts`), the same lines the
+  Actual tab's audit table shows, extracted from that route so a sheet and the
+  screen cannot name a different outcome for one operator. The readiness
+  columns are therefore read as they stand now, not as the engine saw them.
+- **A board that was never generated is said, not shown as empty.** The three
+  reports that read the board (`REPORT_NEEDS_BOARD`) show _Papan belum dibuat_;
+  the FTW and finger reports stand on readiness alone and render either way.
+  A shift with no deadline on the timeline is a 422, as on the audit table.
+- **Department scope is the server's.** An `all` role picks any department or
+  the whole site; a `dept` role (admin, manajer) reads its own, and asking for
+  another is a 403 rather than a silent swap; a `self` role reads nothing. Person
+  reports narrow by the operator's department, Equipment No Operator by the
+  unit's, and a unit with no department appears only site-wide. The department
+  list comes from `GET /v1/reports/departments`, scoped the same way, because
+  admin and manajer hold no grant on the master catalogue.
+- **The workbook is the template rebuilt in code** (owner, 2026-09-24), not the
+  template files filled in: title across row 1, Date/Shift in B3:C4, header on
+  row 6 in white on `#4E73DF`, rows from 7, header frozen, NIK written as text.
+  One addition: **Department** on row 5, since a sheet narrowed to one
+  department that did not say so reads as the whole site. The shift reads
+  **Siang / Malam**, the app's own words, not the templates' _Pagi_ (owner,
+  2026-09-24).
+- **Rows read by name** in the person reports — a printed list is searched for
+  a person — and board-order (formation, support, no fleet; unit code within)
+  in Equipment No Operator.
+
 ## Kiosk access
 
 **A kiosk admits two kinds of viewer, because it has two.** A wall-mounted TV

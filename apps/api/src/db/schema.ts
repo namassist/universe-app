@@ -35,6 +35,7 @@ import {
   SCOPES,
   RUNTEXT_KINDS,
   SHIFT_KINDS,
+  SLIDE_GRIDS,
   TIMELINE_ACTIONS,
   UNIT_STATUSES,
 } from "@universe/contracts";
@@ -45,6 +46,7 @@ export const accessMode = pgEnum("access_mode", ACCESS_MODES);
 export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const displayLayout = pgEnum("display_layout", DISPLAY_LAYOUTS);
 export const cardLayout = pgEnum("card_layout", CARD_LAYOUTS);
+export const slideGrid = pgEnum("slide_grid", SLIDE_GRIDS);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const notificationKind = pgEnum("notification_kind", NOTIFICATION_KINDS);
 export const notificationTone = pgEnum("notification_tone", NOTIFICATION_TONES);
@@ -196,6 +198,13 @@ export const devices = pgTable("devices", {
    * how a card looks.
    */
   cardLayout: cardLayout("card_layout").notNull().default("overlay"),
+  /**
+   * How many rows a slide holds (owner, 2026-10-06). Default `6x2`, the slide
+   * every wall drew before this column. Only the built-in support and spare
+   * walls may choose `6x3` — the API refuses it elsewhere, since a formation
+   * never fills a third row.
+   */
+  slideGrid: slideGrid("slide_grid").notNull().default("6x2"),
   /**
    * Whether this screen plays the timeline's sounds (owner, 2026-09-23).
    *

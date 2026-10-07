@@ -1174,6 +1174,7 @@ describe("previewing one screen from a browser", () => {
       name?: string;
       layout?: "slideshow" | "monitor-2" | "monitor-4";
       cardLayout?: "overlay" | "identity";
+      slideGrid?: "6x2" | "6x3";
     } = {}
   ) => {
     const id = `ZZW${uid().toUpperCase()}`;
@@ -1185,9 +1186,29 @@ describe("previewing one screen from a browser", () => {
       rotateSeconds,
       ...(extra.layout ? { layout: extra.layout } : {}),
       ...(extra.cardLayout ? { cardLayout: extra.cardLayout } : {}),
+      ...(extra.slideGrid ? { slideGrid: extra.slideGrid } : {}),
     });
     return id;
   };
+
+  test("carries the screen's slide grid", async () => {
+    const id = await makeScreen(30, { slideGrid: "6x3" });
+    const res = await send(
+      "GET",
+      `/fleet-allocation/actual/display?device=${id}`,
+      wall.cookie
+    );
+    expect(((await res.json()) as { slideGrid: string }).slideGrid).toBe("6x3");
+  });
+
+  test("an unnamed preview draws two rows", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      wall.cookie
+    );
+    expect(((await res.json()) as { slideGrid: string }).slideGrid).toBe("6x2");
+  });
 
   test("carries a four-formation monitor's layout", async () => {
     const id = await makeScreen(30, { layout: "monitor-4" });

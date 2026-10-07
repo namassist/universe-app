@@ -59,6 +59,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "unit-status",
       "fleet-allocation",
       "fleet-setting",
+      "report",
     ],
     manage: ["employees", "roster-data", "attendance"],
   },
@@ -79,6 +80,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "unit-status",
       "fleet-allocation",
       "fleet-setting",
+      "report",
     ],
     manage: ["roster-data"],
   },
@@ -90,7 +92,7 @@ const ROLE_SEEDS: RoleSeed[] = [
     description: "Konfigurasi display, fleet, dan master operasional",
     scope: "all",
     locked: false,
-    view: [],
+    view: ["report"],
     manage: [
       "dashboard",
       "display-attendance",
@@ -196,6 +198,10 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
        keeps his department's roster, and manpower, who runs the muster the
        correction is for. Admin's `dept` scope keeps him to his own people. */
     { slug: "roster-correction", mode: "manage", roles: ["admin", "manpower"] },
+    /* The reports read what the muster decided and write nothing, so view is
+       the whole grant. Manpower runs the muster; admin and manajer answer for
+       their own department, which their `dept` scope narrows the reports to. */
+    { slug: "report", mode: "view", roles: ["manpower", "manajer", "admin"] },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */

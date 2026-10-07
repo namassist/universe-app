@@ -21,6 +21,7 @@ import { MasterMenu } from "./master";
 import { MonitoringTapMenu } from "./monitoring-tap";
 import { MenuPlaceholder } from "./placeholder";
 import { PrintersMenu } from "./printers";
+import { ReportMenu } from "./report";
 import { RosterCorrectionMenu } from "./roster-correction";
 import { RosterDataMenu } from "./roster-data";
 import { RunTextsMenu } from "./run-texts";
@@ -54,6 +55,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "fleet-allocation": FleetAllocationMenu,
   "fleet-setting": FleetSettingMenu,
   "allocation-priority": AllocationPriorityMenu,
+  report: ReportMenu,
   "monitoring-tap": MonitoringTapMenu,
   "scan-id": ScanIdMenu,
   tiket: TicketsMenu,

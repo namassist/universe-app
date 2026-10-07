@@ -27,6 +27,7 @@ import {
   type DeviceKind,
   type DisplayLayout,
   type RunTextColor,
+  type SlideGrid,
 } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
@@ -162,6 +163,7 @@ export function DisplayAdminMenu({
       rotateSeconds: number;
       layout: DisplayLayout;
       cardLayout: CardLayout;
+      slideGrid: SlideGrid;
       sound: boolean;
       fleetIds: string[];
       runTexts: CustomRunText[];
@@ -173,6 +175,7 @@ export function DisplayAdminMenu({
             rotateSeconds: input.rotateSeconds,
             layout: input.layout,
             cardLayout: input.cardLayout,
+            slideGrid: input.slideGrid,
             sound: input.sound,
             fleetIds: input.fleetIds,
           })
@@ -271,6 +274,7 @@ export function DisplayAdminMenu({
   const [fRotate, setFRotate] = React.useState(DEFAULT_ROTATE);
   const [fLayout, setFLayout] = React.useState<DisplayLayout>("slideshow");
   const [fCardLayout, setFCardLayout] = React.useState<CardLayout>("overlay");
+  const [fSlideGrid, setFSlideGrid] = React.useState<SlideGrid>("6x2");
   /* Per screen and off by default: sound belongs to the room, not the wall —
      four screens in one muster room would play the same warning four times. */
   const [fSound, setFSound] = React.useState(false);
@@ -353,6 +357,7 @@ export function DisplayAdminMenu({
     setFRotate(DEFAULT_ROTATE);
     setFLayout("slideshow");
     setFCardLayout("overlay");
+    setFSlideGrid("6x2");
     setFSound(false);
     setFleetQ("");
     setFRuntexts([]);
@@ -370,6 +375,7 @@ export function DisplayAdminMenu({
     setFRotate(d.rotateSeconds);
     setFLayout(d.layout);
     setFCardLayout(d.cardLayout);
+    setFSlideGrid(d.slideGrid);
     setFSound(d.sound);
     setFleetQ("");
     setFRuntexts([]);
@@ -427,6 +433,7 @@ export function DisplayAdminMenu({
       rotateSeconds: fRotate,
       layout: kind === "fleet" ? fLayout : "slideshow",
       cardLayout: kind === "fleet" ? fCardLayout : "overlay",
+      slideGrid: fSlideGrid,
       sound: fSound,
       // Fleet walls only. Sending [] on the other kinds is how a screen stays
       // unscoped, and the API refuses a non-empty pick on them anyway.
@@ -532,6 +539,16 @@ export function DisplayAdminMenu({
                           ? t.dspCardIdentity
                           : t.dspCardOverlay}
                       </Badge>
+                      {BUILT_IN_FLEET_DEVICE_IDS.includes(d.id) ? (
+                        <>
+                          {" "}
+                          <Badge variant="neutral">
+                            {d.slideGrid === "6x3"
+                              ? t.dspSlideGrid3
+                              : t.dspSlideGrid2}
+                          </Badge>
+                        </>
+                      ) : null}
                       <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
                         {d.fleetIds.length
                           ? d.fleetIds
@@ -739,6 +756,25 @@ export function DisplayAdminMenu({
                 >
                   <option value="overlay">{t.dspCardOverlay}</option>
                   <option value="identity">{t.dspCardIdentity}</option>
+                </Select>
+              </Field>
+            ) : null}
+
+            {/* The built-in walls only: they are the two with no size limit.
+                A formation never fills a third row, and the API refuses it. */}
+            {locked ? (
+              <Field
+                label={t.dspSlideGrid}
+                htmlFor="dsp-slide-grid"
+                helper={t.dspSlideGridHelp}
+              >
+                <Select
+                  id="dsp-slide-grid"
+                  value={fSlideGrid}
+                  onChange={(e) => setFSlideGrid(e.target.value as SlideGrid)}
+                >
+                  <option value="6x2">{t.dspSlideGrid2}</option>
+                  <option value="6x3">{t.dspSlideGrid3}</option>
                 </Select>
               </Field>
             ) : null}

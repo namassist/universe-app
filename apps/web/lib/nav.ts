@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   Database,
+  FileSpreadsheet,
   Heart,
   LayoutDashboard,
   Monitor,
@@ -111,6 +112,10 @@ export const NAV: NavEntry[] = [
       leaf("allocation-priority"),
     ],
   },
+  /* A menu of its own rather than a leaf under Asset & Fleet: the reports
+     read the muster as a whole — the FTW and the finger as much as the fleet —
+     and they are opened by roles that see none of the fleet screens. */
+  item("report", FileSpreadsheet),
   {
     kind: "group",
     key: "master",
