@@ -99,6 +99,21 @@ unggul_att administrators for the key, and do not copy it out of an API
 collection into the repository. Only the standing key goes in `.env`; the JWT
 it buys lives an hour and is fetched per run.
 
+`OPS_PASSWORD_HASH` is optional and turns on the Operations Center at
+`/ops` — a read-only monitoring page opened with one shared password rather
+than an account. Leave it out and the page does not exist. To set it, build
+first (step 3), then run `docker compose run --rm api bun run ops:hash`, type
+the password, and paste the printed hash into `.env` **in single quotes**. The
+hash is full of `$`, and unquoted Compose reads those as variables and mangles
+it without a word — the symptom is a password that is never accepted.
+
+Its login locks an address out after five wrong tries, which assumes Caddy
+sees each client's real address. With Docker's userland proxy (rootless
+Docker, Docker Desktop) every client can arrive as one gateway address, and
+then one person's typos lock everyone out for fifteen minutes. After the
+first login, check that the API log's `[ops] session opened from …` line
+shows the browser's own address.
+
 ## 3. Build and start
 
 ```sh

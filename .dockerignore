@@ -16,7 +16,6 @@ dist
 .vscode
 .claude
 .agents
-openspec
 **/.env
 **/.env.*
 !**/.env.example

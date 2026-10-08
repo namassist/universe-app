@@ -14,10 +14,8 @@ apps/api/drizzle
 next-env.d.ts
 *.tsbuildinfo
 
-# Vendored agent skills — owned upstream, and reformatting breaks their hash
+# Vendored agent workflow and skills (ECC, elysiajs) — owned upstream; keep
+# them byte-identical so `scripts/sync-ecc.sh` and `bunx skills update` diffs
+# stay clean
 .claude
-
-# Personal global-workflow files at the root only (leading slash = repo root).
-# Per-app apps/*/AGENTS.md are project files and stay formatted.
-/AGENTS.md
-/CLAUDE.md
+.agents

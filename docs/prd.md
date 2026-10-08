@@ -1,8 +1,8 @@
 # Product requirements — durable record
 
-OpenSpec (`openspec/specs/`) is frozen as the historical requirement archive.
-Requirements agreed after that freeze accumulate here, per feature area, and
-each change keeps this file and the per-app `docs/` up to date.
+This file is the requirement record, per feature area. Each change keeps it
+and the per-app `docs/` up to date. (The earlier OpenSpec archive was retired;
+it lives on in git history before the `chore/ecc` change.)
 
 ## Asset & Fleet
 
@@ -184,7 +184,7 @@ fill the gap from the spare pool.
   formation all carry their leader's, so the reading is unchanged for them —
   what changed is that a unit outside every formation now has one too.
 
-### Fleet allocation — Plan tab shipped, Actual deferred
+### Fleet allocation — Plan tab shipped (Actual: see _The Actual tab_)
 
 - **Plan** holds the standing unit ↔ operator pairs (`fleet_plan_slots`): at
   most 2 operators per unit. The Day/Night pair rule was dropped on 2026-09-23
@@ -1191,9 +1191,11 @@ until someone pressed Sync at 07:07 — although they were on time.
   desaturated and dashed until 2026-09-23, when the owner asked for the
   ordinary card: at six metres the faded version cost more legibility than
   the header badge was buying, and the badge says the same thing in words.
-  The empty seat is still not red here (`UnitCard`) — before the line-up is
-  generated nobody has checked FTW or the tap, so an empty unit means its
-  standing operator is off today. There is a real ten-minute gap twice a day, and it is the exact
+  The empty card is not framed in red here (`UnitCard`) — before the line-up
+  is generated nobody has checked FTW or the tap, so an empty unit means its
+  standing operator is off today. Its small **Kosong** seat chip does stay
+  red, as on the board (owner, 2026-10-02): a quiet reminder that the seat is
+  open, without the alarm of a red card. There is a real ten-minute gap twice a day, and it is the exact
   window in which arriving operators most want to know their unit; a blank
   screen there is the least useful thing the wall could do. The provisional
   state persisting past `spare-validate` is also the standing alarm that
@@ -1294,8 +1296,13 @@ until someone pressed Sync at 07:07 — although they were on time.
   reading "05:00 has gone by today" would refuse them; a night stage keeps its
   muster across midnight for the same reason, in the other direction. The
   boundary is the `shift-start` gate the walls already turn over on. Renaming
-  a passed stage is still allowed — only a change that moves _when it fires_
-  is refused.
+  a passed stage, or giving it a sound, is still allowed. Refused are a change
+  that moves _when it fires_ or _what it governs_ (time, active, action,
+  shift) and **deleting** it (2026-10-02): turning today's passed `finger-in`
+  into `other`, or deleting it, stops the board and every slip for the shift
+  as surely as moving it. Only a value that actually differs counts, since the
+  Timeline menu sends the whole row back on every save. Before this, renaming
+  a passed stage from the menu was refused too.
 - **What actually got stuck, before this.** The markers take effect the moment
   they are saved, because the walls and the verdicts read the timeline live.
   Two things do not: **tap collection** (armed at `shift-start`) and **holding
@@ -1485,16 +1492,13 @@ until someone pressed Sync at 07:07 — although they were on time.
   first member — a rename would otherwise put an identity-first wall back on
   the overlay.
 
-### Deferred until the Actual-tab engine exists
+### Formerly deferred: the Actual-tab engine — shipped
 
-- **Actual tab:** generated per shift by Manpower — assigned operators who
-  pass FTW/attendance keep their unit; vacancies fill from the spare pool
-  **FCFS by the moment they pass** FTW + fingerprint, subject to the same
-  SIMPER and department rules. Consumes `ftw_readings` + `finger_readings`;
-  needs no new external queries. Some units require FTW + fingerprint; others
-  fingerprint only (`units.ftw` flag).
-- The scheduler's `spare-validate` hook (05:25) stays no-op until this engine
-  lands.
+Both items once listed here have shipped: the engine is _The allocation
+engine_ and the screen is _The Actual tab_. The rule they shipped with differs
+from the one first sketched here — spares are ordered unattached-first, then by
+tap (_Spares are offered in two tiers_), and vacancies by _Allocation
+priority_ — so read those sections, not this one.
 
 ## Notifications
 
@@ -2153,3 +2157,82 @@ and bus on the right.
   scheduled window is visible. When the fleet is fully paired, the tab goes and
   the Excel export moves to Attendance. `device_taps` itself stays either way —
   `derive.ts` reads it to build `finger_readings`.
+
+## Operations Center — shipped
+
+**Goal:** one page that says whether the application is healthy and whether
+this shift's muster is running, without reading a server log (owner,
+2026-10-02, after a reference page from another site).
+
+- **Opened with its own password, outside roles and menus** (owner,
+  2026-10-02). Not a menu slug and not an account: one shared password, kept
+  only as an argon2id hash in `OPS_PASSWORD_HASH`. Unset, the page does not
+  exist — every `/v1/ops` route answers 404. Its session is its own (Redis
+  `ops-session:`, cookie `universe_ops`, SameSite=Strict, twelve hours, never
+  sliding) and opens nothing else; a user or device session does not open it
+  either.
+- **Guessing is bounded.** Five attempts per client address per fifteen
+  minutes, and the attempt is **counted before the password is checked**, in
+  one atomic step with its expiry (security review, 2026-10-02): counting
+  afterwards let a burst of parallel guesses all read "no failures yet". A
+  success clears the count. At most four argon2 checks run at once; the rest
+  queue. Failed and refused logins, and each new session, are logged with
+  the address (never the password).
+- **Rotating the password ends every session** opened with the old one at
+  once: a session holds a digest of the hash it was opened under. The address is the socket's, or the
+  last `X-Forwarded-For` entry when `TRUST_PROXY=true` (the deploy, where only
+  Caddy publishes a port).
+- **Read-only.** Nothing on the page changes data. It polls every 15 s.
+- **A failed poll never blanks the page.** The last answer stays up, marked
+  "Gagal memuat ulang — menampilkan data terakhir" (announced politely to
+  screen readers) with the freshness dot gone amber, and every "… lalu" age
+  keeps counting on the browser's clock from the server's last moment, so a
+  dead feed cannot go on saying _baru saja_. With nothing to show yet, the
+  error offers _Coba lagi_. A session that runs out under an open page
+  returns to the password form with "Sesi berakhir, masukkan password lagi";
+  _Keluar_ drops the cached answer first, so it returns to the plain form.
+- **What it shows:**
+  - infrastructure: Postgres, Redis, the three storage directories, the
+    scheduler's last tick and the prober's last probe — a heartbeat older
+    than its own cadence reads as stalled;
+  - API, last 60 minutes: requests, 4xx and 5xx, error rate, average and
+    slowest duration, per minute (charts) and per route pattern;
+  - the muster: every timeline stage on **the date of the muster it belongs
+    to** — yesterday's for a night shift still under way after midnight —
+    whether the scheduler claimed it, how its last run ended, and
+    _Terlewat_ for a stage whose time has come and which never fired, a
+    failed run's note shown whole; plus readings, slips and the running
+    shift's board, read from its `spare-validate` stage: built at HH:MM,
+    not due yet, failed (with the run's note), missed, or not scheduled —
+    never a bare "none yet" that hides which;
+  - devices: every TV with its heartbeat, fingerprint machines online and the
+    offline ones by name, printers, and the booths this API process is
+    listening to;
+  - **every signed-in user of the last 24 hours** (owner, 2026-10-02, chose
+    this over counts): name, role, browser, last route and its status, when,
+    and their request and error counts. **Never their NIK or address**
+    (owner, 2026-10-02): a user is told apart by name and role, and only
+    devices — fingerprint machines, booths — are shown with an IP;
+  - one alert feed: server errors and stage runs that failed or refused (both
+    red), and amber/red notifications in the bell's own wording, so a failed
+    board says why; and the scheduler's own log for yesterday and
+    today.
+- **Kept in Redis, a day at most.** Request counters are per-minute hashes
+  (25 h), user activity expires 24 h after a user's last request, stage runs
+  three days. Nothing is written to Postgres for it.
+- **Never a message, never a body.** A server error is listed by its error's
+  _name_; a stage run by the scheduler's own sentence. A driver's message
+  routinely carries a connection string, and the full error stays in the
+  server log. No request body or header beyond the user agent is kept.
+- **Not counted:** `/health` (the container probe would drown everything),
+  `/openapi`, and the Operations Center's own polling. A request with a
+  method outside GET/POST/PUT/PATCH/DELETE/HEAD is counted as `OTHER`: the
+  method is the one part of a label a client writes, and an open set let
+  anyone mint labels without bound.
+- **Never cached:** every `/v1/ops` response is `Cache-Control: no-store`.
+- **Known limits.** Over plain HTTP the password and its cookie cross the
+  network in the clear — the same gap as every login here until TLS lands
+  (README → _Not done yet_). The lockout is per client address, so it is
+  only as good as Caddy's view of that address (see `docs/deploy.md`).
+- **Deferred:** request metrics for longer than a day, push alerts, and
+  mobile-upload monitoring (there is no mobile client yet).

@@ -96,6 +96,10 @@ services:
       SOUND_DIR: /data/sounds
       PHOTO_DIR: /data/photos
       IMPORT_DIR: /data/imports
+      # Only Caddy publishes a port, so every request reaches the API through
+      # it and the address it writes into X-Forwarded-For is the client's.
+      # The Operations Center's login lockout and user list depend on that.
+      TRUST_PROXY: "true"
     volumes:
       # Named volume, not a container layer: the database stores only the file
       # *name*, so losing this directory leaves rows pointing at photos that no

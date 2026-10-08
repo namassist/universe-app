@@ -5,9 +5,9 @@ lifecycle hooks, and the Eden client behave differently from other Node
 frameworks, and the API surface moves fast. Before writing or changing a route,
 consult the authoritative sources instead of relying on training data:
 
-- The **`elysiajs`** agent skill under `.claude/skills/elysiajs/` — examples,
-  plugins, integrations (Drizzle, Eden), and references (lifecycle, validation,
-  testing). If it is not present, install it: `bunx skills add elysiajs/skills`.
+- The **`elysiajs`** agent skill, committed under `.agents/skills/elysiajs/`
+  (linked from `.claude/skills/elysiajs`) — examples, plugins, integrations
+  (Drizzle, Eden), and references (lifecycle, validation, testing).
 - [`elysiajs.com/llms.txt`](https://elysiajs.com/llms.txt) for the current API.
 
 ## Project rules the framework docs will not tell you

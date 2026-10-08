@@ -21,7 +21,8 @@
     "db:seed:fresh": "SEED_FRESH=1 bun --env-file=.env src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "stage:rearm": "bun scripts/rearm-stage.ts",
-    "photos:upload": "bun scripts/upload-photos.ts"
+    "photos:upload": "bun scripts/upload-photos.ts",
+    "ops:hash": "bun scripts/ops-hash.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.2",

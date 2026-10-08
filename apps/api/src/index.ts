@@ -8,6 +8,7 @@ import { pingDb } from "./db";
 import { pingRedis } from "./redis";
 import { startProber } from "./prober";
 import { startScheduler } from "./scheduler";
+import { opsMetrics } from "./ops/metrics";
 import {
   pingImportStorage,
   pingPhotoStorage,
@@ -25,6 +26,7 @@ import { fleetActualRoutes } from "./routes/fleet-actual";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { allocationPriorityRoutes } from "./routes/allocation-priority";
 import { notificationRoutes } from "./routes/notifications";
+import { opsRoutes } from "./routes/ops";
 import { monitoringTapRoutes } from "./routes/monitoring-tap";
 import { ticketRoutes } from "./routes/tickets";
 import { fleetsRoutes } from "./routes/fleets";
@@ -86,9 +88,13 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(timelineRoutes)
   .use(fingerprintMachineRoutes)
   .use(printerRoutes)
-  .use(reportRoutes);
+  .use(reportRoutes)
+  .use(opsRoutes);
 
 export const app = new Elysia()
+  /* First, so its clock starts before CORS, auth and validation run — their
+     time and their rejections are part of what the Operations Center shows. */
+  .use(opsMetrics())
   .use(
     cors({
       origin: env.CORS_ORIGINS,
@@ -126,6 +132,10 @@ export const app = new Elysia()
           {
             name: "fingerprint",
             description: "Fingerprint machine registry for the monitoring TV",
+          },
+          {
+            name: "ops",
+            description: "Operations Center (its own password, outside roles)",
           },
         ],
       },

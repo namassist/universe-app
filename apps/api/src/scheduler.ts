@@ -44,6 +44,7 @@ import { retimeListenWindow, runListenWindow } from "./live-listener";
 import { collectOnce, reportLogSizes } from "./device-taps";
 import { deriveDate } from "./derive";
 import { redis } from "./redis";
+import { markSchedulerTick, recordStageRun } from "./ops/stage-log";
 
 /** One tick per minute: the schedule is specified to the minute. */
 const TICK_MS = 60_000;
@@ -58,7 +59,9 @@ const TICK_MS = 60_000;
  */
 const CLAIM_TTL_SECONDS = 26 * 60 * 60;
 
-const claimKey = (stageId: string, date: string) => `stage:${stageId}:${date}`;
+/** Exported for the Operations Center, which reads whether a stage fired today. */
+export const claimKey = (stageId: string, date: string) =>
+  `stage:${stageId}:${date}`;
 
 /** Local calendar date — the schedule is a fact about the site's morning. */
 export function localDate(now: Date): string {
@@ -96,11 +99,19 @@ export type Dispatch = {
 type Hook = (dispatch: Dispatch) => Promise<void>;
 
 /** Every dispatch says so, because the log is the only observer today. */
-function record(dispatch: Dispatch, note: string): void {
+function record(dispatch: Dispatch, note: string, ok = true): void {
   console.log(
     `[scheduler] ${dispatch.date} fired "${dispatch.stage.name}" ` +
       `(${dispatch.stage.action}) — ${note}`
   );
+  /* Also kept for the Operations Center. Detached and swallowed: losing a
+     line of history must never stop a stage that is doing real work. */
+  void recordStageRun({
+    date: dispatch.date,
+    stage: dispatch.stage,
+    note,
+    ok,
+  }).catch(() => {});
 }
 
 const marker: Hook = async (dispatch) => {
@@ -208,7 +219,7 @@ const allocate: Hook = async (dispatch) => {
    * not. The full error stays in the log line beside it.
    */
   const failed = async (reason: AllocationFailure, note: string) => {
-    record(dispatch, note);
+    record(dispatch, note, false);
     await notify("allocation-failed", "danger", {
       date: dispatch.date,
       shift: dispatch.stage.shift,
@@ -309,14 +320,16 @@ const collect: Hook = async (dispatch) => {
   if (!shift)
     return record(
       dispatch,
-      "stage carries no shift — cannot tell which muster to collect for"
+      "stage carries no shift — cannot tell which muster to collect for",
+      false
     );
 
   const closes = await stageTimeOf("bus-depart", shift);
   if (!closes)
     return record(
       dispatch,
-      `no active bus-depart stage for the ${shift} shift — nothing says when collecting should stop, and collecting without an end is the one thing this must not do`
+      `no active bus-depart stage for the ${shift} shift — nothing says when collecting should stop, and collecting without an end is the one thing this must not do`,
+      false
     );
 
   const endsAt = new Date();
@@ -476,14 +489,16 @@ const listen: Hook = async (dispatch) => {
   if (!shift)
     return record(
       dispatch,
-      "stage carries no shift — cannot tell which muster to listen for"
+      "stage carries no shift — cannot tell which muster to listen for",
+      false
     );
 
   const endsAt = await listenClosesAt(shift);
   if (!endsAt)
     return record(
       dispatch,
-      `no active bus-depart stage for the ${shift} shift — listening without an end is the one thing this must not do`
+      `no active bus-depart stage for the ${shift} shift — listening without an end is the one thing this must not do`,
+      false
     );
 
   record(dispatch, `listening to the booths until ${timeOfDay(endsAt)}`);
@@ -496,9 +511,8 @@ const HOOKS: Record<TimelineAction, Hook> = {
   "shift-start": collect,
   "ftw-deadline": marker,
   "finger-in": marker,
-  /* Nothing attached yet: it names the tap that collects a printed ticket, and
-     the printing is a later phase. On the timeline now so the schedule the
-     application runs matches the one the yard works to. */
+  /* No hook: printing is driven by the tap. Its *time* is what holds a
+     spare's slip until the board exists (`ticket-issue.ts`). */
   "finger-second": marker,
   "bus-depart": marker,
   other: marker,
@@ -563,6 +577,9 @@ export async function tick(now = new Date()): Promise<Dispatch[]> {
     .select()
     .from(schema.timelineStages)
     .where(eq(schema.timelineStages.active, true));
+  /* Stamped once the timeline has been read, not before: a tick that cannot
+     reach the database must not keep the Operations Center saying "Jalan". */
+  void markSchedulerTick(now).catch(() => {});
 
   const fired: Dispatch[] = [];
   for (const stage of stages) {
@@ -581,6 +598,13 @@ export async function tick(now = new Date()): Promise<Dispatch[]> {
         `[scheduler] ${date} hook for "${stage.name}" (${stage.action}) threw`,
         error
       );
+      // The error's name only: its message stays in the log line above.
+      void recordStageRun({
+        date,
+        stage,
+        note: `hook threw ${error instanceof Error ? error.name : "an error"} — see the server log`,
+        ok: false,
+      }).catch(() => {});
     }
   }
   return fired;

@@ -9,14 +9,19 @@
  *
  * The order of business:
  *
- *   1. every unit holding a PLAN slot, minus breakdown and standby — neither
- *      needs an operator, so neither is a vacancy to report (owner)
- *   2. its slot operator rostered to *this* shift; passes → keeps the unit
+ *   1. every unit allocation is about — active, not broken down, in a
+ *      formation or flagged support (`fleet-scope.ts`). Driven by `units`, so
+ *      a unit nobody is planned on is still a vacancy; standby units take
+ *      part (owner, 2026-09-15)
+ *   2. of its standing operators rostered to *this* shift, the one who is
+ *      ready and eligible keeps the unit (ties: a slip already naming the
+ *      unit, then the earlier tap, then NIK)
  *   3. everything else is a vacancy, and a vacancy is the thing the board
  *      exists to make visible
- *   4. spares — fleet-allocation operators rostered to this shift holding no
- *      slot — who pass, first come first served by their tap, fill vacancies
- *      subject to the same SIMPER and department rules PLAN enforces
+ *   4. spares — allocatable operators rostered to this shift with no seat —
+ *      whose tap passed, unattached ones first and then by tap, fill
+ *      vacancies in Prioritas Alokasi order, subject to the same SIMPER and
+ *      department rules PLAN enforces
  *
  * Reads only local tables. The readiness snapshots were pulled hours earlier
  * by the ingest stages; nothing here opens a socket to an external source.

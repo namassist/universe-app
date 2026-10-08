@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
+import { forgetOpsTraffic } from "./ops/metrics";
 import { redis } from "./redis";
 import { localDate, minutesOfDay, stageMinutes, tick } from "./scheduler";
 
@@ -78,6 +79,9 @@ afterAll(async () => {
       .where(inArray(schema.timelineStages.id, suspended));
   if (created.length) {
     await redis.del(...created.map((id) => `stage:${id}:${localDate(now())}`));
+    // `tick` also logs each run for the Operations Center, under the test
+    // namespace; clear it.
+    await forgetOpsTraffic();
     await db
       .delete(schema.timelineStages)
       .where(inArray(schema.timelineStages.id, created));

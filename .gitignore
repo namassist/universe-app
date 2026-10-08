@@ -14,25 +14,18 @@ build/
 # WSL/Windows "mark of the web" artifacts that appear next to downloaded files
 *:Zone.Identifier
 
-# Agent skills are materialized per machine (like node_modules); the shareable
-# artifact is skills-lock.json, which stays tracked. Run `bunx skills add
-# elysiajs/skills` to restore them.
-.claude
+# AI workflow: ECC (https://github.com/affaan-m/ECC). The curated agents,
+# commands, skills and rules under .claude/ are committed so every machine runs
+# the same workflow — see .claude/ECC.md. The elysiajs skill is committed too,
+# under .agents/skills/ (pinned in skills-lock.json). Only personal settings
+# stay out.
+.claude/settings.local.json
+CLAUDE.local.md
 
-# Personal AI-workflow files at the repo root only (leading slash = root). The
-# SDLC framework references the gitignored .claude/ agents, so it stays local,
-# not shared. Per-app apps/*/AGENTS.md are project files and remain tracked.
-#
-# `docs` used to sit here, and being slashless it matched at every depth: it hid
-# the root docs/ *and* apps/*/docs/. Those are the durable requirement record
-# that replaced the frozen OpenSpec archive — the one thing a change is supposed
-# to keep up to date — so they belong in the repository, not on one machine.
-/AGENTS.md
-/CLAUDE.md
-/CONTEXT.md
+# codebase-memory-mcp index, when CBM_CACHE_DIR points into the repo
+# (per-machine, rebuild with index_repository)
+.codebase-memory/
 
 # Uploaded sound files (SOUND_DIR). Runtime data, not source.
 apps/api/storage/
 
-# Codebase-memory MCP index (per-machine, rebuild with index_repository)
-.codebase-memory/

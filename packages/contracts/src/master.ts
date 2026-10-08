@@ -70,19 +70,18 @@ export function isBloodType(value: string): value is BloodType {
  * no-op. The values are the contract — labels below are presentation and may
  * be reworded freely.
  *
- * `shift-start` fires nothing at all. It exists because the yard walls have to
- * know which shift they are showing, and that question was answered by
+ * `shift-start` exists because the yard walls have to know which shift they
+ * are showing (it also arms tap collection until `bus-depart`), and that question was answered by
  * `ftw-ingest` for want of a stage that meant it — which tied the moment the
  * screens turn over to the moment the FTW pull begins, two decisions with no
  * reason to move together. Naming it separately lets a wall change over at
  * 16:00 while the pull stays where the upload deadline needs it.
  *
- * `finger-second` fires nothing either, yet. It is the muster's fourth gate on
- * the site's own flowchart — the tap a spare makes *after* the board exists,
- * to collect the unit it gave them — and it is on the timeline now so that the
- * schedule the application runs is the schedule the yard works to, and so that
- * the ticket printing that will fire from it has a time to fire at. Until then
- * it is a marker, and its being on the wall screen is most of its value.
+ * `finger-second` fires no hook. It is the muster's fourth gate on the site's
+ * own flowchart — the tap a spare makes *after* the board exists, to collect
+ * the unit it gave them. Printing is driven by the tap, not the stage: a
+ * spare's slip is held until this stage's time (`ticket-issue.ts` reads it),
+ * so moving the stage moves when spares are printed for.
  */
 export const TIMELINE_ACTIONS = [
   "shift-start",

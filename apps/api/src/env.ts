@@ -251,6 +251,36 @@ export const env = {
    *  "upload it again", never to a wrong answer, because the commit re-parses
    *  what the client sends rather than trusting anything stored here. */
   IMPORT_DIR: required("IMPORT_DIR", "./storage/imports"),
+
+  /** How long an Operations Center login lasts, in seconds. One shift. */
+  OPS_SESSION_SECONDS: number("OPS_SESSION_SECONDS", String(12 * HOUR)),
 } as const;
+
+/**
+ * The Operations Center's password, as an argon2id hash (`bun run ops:hash`),
+ * or null when the page is switched off.
+ *
+ * Optional, unlike everything above: a deployment that never sets it simply
+ * has no `/v1/ops` — every route there answers 404 — which is the safe
+ * direction for a password-only page to fail in. A hash rather than the
+ * password itself, so the value in a compose file or a shell history is not
+ * the thing that opens the page. Read on every use rather than at boot, so it
+ * stays a plain environment value with no module-load ordering to get wrong.
+ */
+export function opsPasswordHash(): string | null {
+  return process.env.OPS_PASSWORD_HASH?.trim() || null;
+}
+
+/**
+ * Whether `X-Forwarded-For` may be believed for the client's address.
+ *
+ * True only behind the reverse proxy that sets it (Caddy in `deploy/`, which
+ * writes the header itself and ignores a client's own). Exposed directly, a
+ * client could write any address there and walk around the ops login's
+ * per-address lockout, so it is off unless said otherwise.
+ */
+export function trustProxy(): boolean {
+  return process.env.TRUST_PROXY?.trim().toLowerCase() === "true";
+}
 
 export const isProd = env.NODE_ENV === "production";

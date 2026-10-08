@@ -11,7 +11,15 @@
  *   bun --env-file=.env test src/routes/timeline.test.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  setSystemTime,
+  test,
+} from "bun:test";
 import { Elysia } from "elysia";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -442,5 +450,126 @@ describe("a stage cannot be put out of order", () => {
       active: false,
     });
     expect(response.status).toBe(201);
+  });
+});
+
+/* ------------------------------------------------- a gate already passed */
+
+/*
+ * The owner's rule (2026-09-23): a stage may change only before the running
+ * muster reaches it. A delete, or a patch that changes what a stage *is*
+ * (action, shift), is a change too — deleting today's `finger-in` at 05:40, or
+ * turning it into `other`, stops the board and every slip for the shift just
+ * as surely as moving it.
+ *
+ * The clock is pinned to 05:40 local, inside the day muster the seed opens at
+ * 04:00 (`shift-start`), so these depend on the seeded timeline.
+ */
+describe("a gate the running muster has passed", () => {
+  const at = (clock: string) => {
+    const [hours, minutes] = clock.split(":").map(Number);
+    const day = new Date();
+    day.setHours(hours!, minutes!, 0, 0);
+    return day;
+  };
+
+  afterEach(() => setSystemTime());
+
+  const passedDayStage = async () => {
+    setSystemTime(at("05:00"));
+    const created = (await (
+      await create({ at: "05:25", shift: "day" })
+    ).json()) as Stage;
+    setSystemTime(at("05:40"));
+    return created;
+  };
+
+  const stillThere = async (id: string) =>
+    (
+      await db
+        .select({ id: schema.timelineStages.id })
+        .from(schema.timelineStages)
+        .where(eq(schema.timelineStages.id, id))
+    ).length === 1;
+
+  test("cannot be deleted, and is still there afterwards", async () => {
+    const created = await passedDayStage();
+    const response = await send(
+      "DELETE",
+      `/timeline/${created.id}`,
+      admin.cookie
+    );
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { code: string }).code).toBe(
+      "stage_passed"
+    );
+    expect(await stillThere(created.id)).toBe(true);
+  });
+
+  test("cannot change its action or its shift", async () => {
+    const created = await passedDayStage();
+    for (const body of [{ action: "ftw-deadline" }, { shift: "night" }]) {
+      const response = await send(
+        "PATCH",
+        `/timeline/${created.id}`,
+        admin.cookie,
+        body
+      );
+      expect(response.status).toBe(422);
+      expect(((await response.json()) as { code: string }).code).toBe(
+        "stage_passed"
+      );
+    }
+  });
+
+  test("may still be renamed or given a sound", async () => {
+    const created = await passedDayStage();
+    const response = await send(
+      "PATCH",
+      `/timeline/${created.id}`,
+      admin.cookie,
+      { name: `${tag} ganti nama ${uid()}`, soundId }
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("may be renamed from a form that echoes every field back", async () => {
+    // The Timeline menu sends the whole row on save, unchanged fields
+    // included, so only a value that actually differs counts as a change.
+    const created = await passedDayStage();
+    const response = await send(
+      "PATCH",
+      `/timeline/${created.id}`,
+      admin.cookie,
+      {
+        name: `${tag} ganti nama ${uid()}`,
+        at: created.at,
+        action: created.action,
+        shift: created.shift,
+        active: created.active,
+        soundId: created.soundId,
+      }
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("a stage still ahead in the muster can be deleted", async () => {
+    setSystemTime(at("05:40"));
+    const created = (await (
+      await create({ at: "05:50", shift: "day" })
+    ).json()) as Stage;
+    expect(
+      (await send("DELETE", `/timeline/${created.id}`, admin.cookie)).status
+    ).toBe(200);
+  });
+
+  test("another shift's stage, or one governing none, can be deleted", async () => {
+    setSystemTime(at("05:40"));
+    for (const body of [{ at: "17:10", shift: "night" }, { at: "05:10" }]) {
+      const created = (await (await create(body)).json()) as Stage;
+      expect(
+        (await send("DELETE", `/timeline/${created.id}`, admin.cookie)).status
+      ).toBe(200);
+    }
   });
 });
