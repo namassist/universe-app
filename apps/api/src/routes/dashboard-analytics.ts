@@ -23,6 +23,7 @@ import type { ShiftKind } from "@universe/contracts";
 
 import { db, schema } from "../db";
 import { takesPartInAllocation } from "../fleet-scope";
+import { ftwObligedWhere } from "../ftw-obliged";
 import { FTW_PASS_CATEGORY, FTW_PASS_DECISION } from "../readiness";
 import { unitCategory } from "../unit-category";
 
@@ -77,6 +78,13 @@ const shiftOperators = (date: string, shift: ShiftKind) => sql`
     select
       e.nik,
       (ps.employee_id is null) as is_spare,
+      /* Read by the FTW cards' own rule (\`ftw-obliged.ts\`), so the bar and
+         the cards cannot disagree about who owes a filing. Unaliased inside,
+         so the rule's \`employees.*\` columns bind to this row. */
+      exists (
+        select 1 from ${schema.employees}
+        where ${schema.employees.id} = e.id and ${ftwObligedWhere}
+      ) as ftw_obliged,
       coalesce(paired.category, licensed.category, 'TANPA KATEGORI') as category
     from ${schema.employees} e
     join ${schema.rosterDays} rd on rd.employee_id = e.id
@@ -148,6 +156,12 @@ export async function dashboardAnalytics(
    *
    * Lateness is not a bucket (owner, 2026-09-18): a filing sent after the
    * deadline fails the allocation gate, but this chart is about who can work.
+   *
+   * **Someone FTW is not asked of is ready once tapped** — a digger, dozer or
+   * small excavator, whose units ask for none, sends no reading at all. Before
+   * this, no reading made the FTW test `null`, which no bucket counts: 61
+   * operators who had tapped in vanished on 2026-10-09, and whole categories
+   * read empty. Someone who owes a filing and sent none has not passed it.
    */
   const operators = await db.execute<{
     category: string;
@@ -158,10 +172,14 @@ export async function dashboardAnalytics(
     with ${roster}
     select
       o.category,
-      count(*) filter (where fr.${arrival} is not null and ${ftwPassed})::int as ready,
+      count(*) filter (
+        where fr.${arrival} is not null
+          and (not o.ftw_obliged or coalesce(${ftwPassed}, false))
+      )::int as ready,
       count(*) filter (where fr.${arrival} is null)::int as no_finger,
       count(*) filter (
-        where fr.${arrival} is not null and not ${ftwPassed}
+        where fr.${arrival} is not null
+          and o.ftw_obliged and not coalesce(${ftwPassed}, false)
       )::int as no_ftw
     from operators o
     left join ${schema.fingerReadings} fr on fr.nik = o.nik and fr.date = ${date}
@@ -204,8 +222,9 @@ export async function dashboardAnalytics(
    * appears: `takesPartInAllocation` is the same rule the board is built on,
    * so a column here and a line there cannot disagree about what the fleet is.
    *
-   * `ready` is the register's own answer — active, not broken down, not on
-   * standby. `running` is what today's board actually seated somebody on. The
+   * `ready` is the register's own answer — active and not broken down.
+   * Standby counts (owner, 2026-10-09): the engine crews standby units, and a
+   * panel where more machines ran than were ready read as an error. `running` is what today's board actually seated somebody on. The
    * gap between them is the interesting number, and it is the reason both are
    * drawn rather than one.
    */
@@ -214,7 +233,7 @@ export async function dashboardAnalytics(
       unitClass: sql<string>`coalesce(${schema.unitClasses.name}, ${schema.unitTypes.name})`,
       qty: sql<number>`count(*)::int`,
       ready: sql<number>`count(*) filter (
-        where not ${schema.units.breakdown} and not ${schema.units.standby})::int`,
+        where not ${schema.units.breakdown})::int`,
       running: sql<number>`count(*) filter (where exists (
         select 1 from ${schema.fleetActualSlots} s
         join ${schema.fleetActualDocuments} fd on fd.id = s.document_id

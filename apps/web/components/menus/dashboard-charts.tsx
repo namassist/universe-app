@@ -210,13 +210,16 @@ function OperatorRatio({
         noFtw: a.noFtw + b.noFtw,
       }))
         .map((r) => {
-          const total = r.ready + r.noFtw + r.noFinger || 1;
+          /* The guard is for the division only: printing it made an empty
+             category read "1" in the TOTAL column. */
+          const total = r.ready + r.noFtw + r.noFinger;
+          const per = total || 1;
           return {
             ...r,
             total,
-            readyPct: (r.ready / total) * 100,
-            noFtwPct: (r.noFtw / total) * 100,
-            noFingerPct: (r.noFinger / total) * 100,
+            readyPct: (r.ready / per) * 100,
+            noFtwPct: (r.noFtw / per) * 100,
+            noFingerPct: (r.noFinger / per) * 100,
           };
         })
         .sort((a, b) => b.total - a.total),

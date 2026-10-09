@@ -797,6 +797,16 @@ until someone pressed Sync at 07:07 — although they were on time.
   the ratio chart too, not only in their own tile: a ratio that left out 131 of
   330 people would be a ratio of something nobody asked about.
 
+  **Every operator the shift has lands in exactly one ratio bucket**
+  (2026-10-09 trial, when 61 who had tapped in vanished). No tap: _Belum
+  finger_. Tapped and owing no FTW — by the FTW cards' own rule
+  (`ftw-obliged.ts`), so a digger, dozer or small excavator whose units ask for
+  none — or tapped with a passing filing: _Siap kerja_. Tapped, owing a filing,
+  and none passing or none sent: _Tidak lolos FTW_. A standby employee (an
+  induction hold included) is not on the ratio, as the engine gives them no
+  unit. **Laporan Alat counts standby units as ready** (owner, 2026-10-09): the
+  engine crews them, and "Beroperasi" above "Siap" read as an error.
+
   **Names stay the register's own.** The morning report writes OHT, DT and
   DIGGER; the screen writes `REAR DUMP TRUCK`, `DUMP TRUCK` and `BIGDIGGER`,
   because every other menu spells them the way the register does and one screen
