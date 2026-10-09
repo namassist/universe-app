@@ -1610,8 +1610,11 @@ reads "-".
   - **Operator No Equipment**: every rostered operator the board placed
     nowhere, **ready or not** (owner, 2026-09-24): audit decisions `no-seat` and
     `not-ready`. MATRIX SIMPER lists the codes they hold.
-  - **Operator No FTW**: FTW not passed for the unit that applied to them (a
-    unit with `ftw = false` puts nobody here). STATUS SAVERA is savera's category
+  - **Operator No FTW**: rostered, **tapped in — on time or late — and FTW
+    not passed** for the unit that applied to them (owner, 2026-10-09: the
+    report lists who came and could not work; someone with no IN tap is
+    Operator No Finger's). A unit with `ftw = false` puts nobody here; a late
+    upload still counts as not passed. STATUS SAVERA is savera's category
     as savera spelled it; **no reading, or savera's own "Belum mengisi FTW",
     reads _Belum FTW_** (owner, 2026-09-24); a late upload reads _Terlambat FTW
     (HH:MM)_.
