@@ -18,6 +18,9 @@ import {
 } from "drizzle-orm/pg-core";
 import {
   ACCESS_MODES,
+  DEFAULT_SOUND_OFFSET,
+  SOUND_OFFSET_MAX,
+  SOUND_OFFSET_MIN,
   BLOOD_TYPES,
   CARD_LAYOUTS,
   DEVICE_KINDS,
@@ -1445,38 +1448,58 @@ export const sounds = pgTable("sounds", {
  * timestamp: a stage recurs every day, and storing an instant would make
  * "05:20" a fact about one particular morning.
  */
-export const timelineStages = pgTable("timeline_stages", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  at: time("at").notNull(),
-  action: timelineAction("action").notNull(),
-  /**
-   * Played two minutes before this stage, or null for a silent one (owner,
-   * 2026-09-23). `set null` rather than `restrict`: deleting a sound is a
-   * master-data decision, and it should silence the stages that used it
-   * rather than being refused by them.
-   */
-  soundId: uuid("sound_id").references(() => sounds.id, {
-    onDelete: "set null",
-  }),
-  /**
-   * Which half of the day this stage governs.
-   *
-   * The schedule used to be the morning's alone, so the shift was implicit in
-   * the clock. Now that FTW and fingerprint are required on both shifts, two
-   * rows can carry the same action twelve hours apart, and the reader that
-   * asks "when is the finger-in deadline for the night shift" needs an answer
-   * that does not depend on comparing times and guessing.
-   *
-   * Nullable, and null means "neither in particular" — the `other` markers an
-   * operator adds govern no shift and should not have to claim one.
-   */
-  shift: shiftKind("shift"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const timelineStages = pgTable(
+  "timeline_stages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    at: time("at").notNull(),
+    action: timelineAction("action").notNull(),
+    /**
+     * Played around this stage — see `soundOffsetMinutes` — or null for a
+     * silent one (owner, 2026-09-23). `set null` rather than `restrict`: deleting a sound is a
+     * master-data decision, and it should silence the stages that used it
+     * rather than being refused by them.
+     */
+    soundId: uuid("sound_id").references(() => sounds.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * When the sound plays, in minutes from `at` — negative before, positive
+     * after, 0 on the minute — within `SOUND_OFFSET_MIN`..`MAX` (owner,
+     * 2026-10-10). Defaults to the two minutes before that every stage played
+     * at until the offset could be chosen, so existing stages do not move.
+     * Kept when the sound is cleared: it is the stage's setting, not the
+     * sound's.
+     */
+    soundOffsetMinutes: integer("sound_offset_minutes")
+      .notNull()
+      .default(DEFAULT_SOUND_OFFSET),
+    /**
+     * Which half of the day this stage governs.
+     *
+     * The schedule used to be the morning's alone, so the shift was implicit in
+     * the clock. Now that FTW and fingerprint are required on both shifts, two
+     * rows can carry the same action twelve hours apart, and the reader that
+     * asks "when is the finger-in deadline for the night shift" needs an answer
+     * that does not depend on comparing times and guessing.
+     *
+     * Nullable, and null means "neither in particular" — the `other` markers an
+     * operator adds govern no shift and should not have to claim one.
+     */
+    shift: shiftKind("shift"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "timeline_stages_sound_offset_range",
+      sql`${table.soundOffsetMinutes} between ${sql.raw(String(SOUND_OFFSET_MIN))} and ${sql.raw(String(SOUND_OFFSET_MAX))}`
+    ),
+  ]
+);
 
 /* ------------------------------------------------------- actual allocation */
 

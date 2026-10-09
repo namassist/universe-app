@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 
 import {
+  DEFAULT_SOUND_OFFSET,
   MENU_LABELS,
   SHIFT_KIND_LABELS,
   SHIFT_KINDS,
@@ -59,6 +60,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
+
+import { SoundOffsetStepper } from "./timeline-sound-offset-stepper";
 
 /**
  * The morning allocation schedule — not a display announcement.
@@ -174,6 +177,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
   const [fActive, setFActive] = React.useState(true);
   /** "" is the wire's `null`: a stage that announces itself with nothing. */
   const [fSound, setFSound] = React.useState("");
+  const [fOffset, setFOffset] = React.useState(DEFAULT_SOUND_OFFSET);
   const [errName, setErrName] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<TimelineStageRow | null>(
     null
@@ -216,6 +220,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       shift: ShiftKind | null;
       active: boolean;
       soundId: string | null;
+      soundOffsetMinutes: number;
     }) => {
       const body = {
         name: input.name,
@@ -224,6 +229,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
         shift: input.shift,
         active: input.active,
         soundId: input.soundId,
+        soundOffsetMinutes: input.soundOffsetMinutes,
       };
       const result = input.id
         ? await api.v1.timeline({ id: input.id }).patch(body)
@@ -301,6 +307,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     setFShift("");
     setFActive(true);
     setFSound("");
+    setFOffset(DEFAULT_SOUND_OFFSET);
     setErrName(false);
     setDlgOpen(true);
   }
@@ -312,6 +319,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     setFShift(r.shift ?? "");
     setFActive(r.active);
     setFSound(r.soundId ?? "");
+    setFOffset(r.soundOffsetMinutes);
     setErrName(false);
     setDlgOpen(true);
   }
@@ -340,6 +348,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       shift: fShift === "" ? null : fShift,
       active: fActive,
       soundId: fSound === "" ? null : fSound,
+      soundOffsetMinutes: fOffset,
     });
   }
 
@@ -485,6 +494,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       <Dialog
         open={dlgOpen}
         onClose={() => setDlgOpen(false)}
+        className="w-[min(560px,100%)]"
         labelledBy="tl-t"
       >
         <DialogIcon variant="info">
@@ -500,87 +510,117 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
             {notice}
           </p>
         ) : null}
-        <form onSubmit={submit} noValidate>
-          <Field
-            className="mt-4"
-            label="Nama Tahap"
-            htmlFor="tl-name"
-            required
-            error={errName}
-            errorMessage={t.mdErrName}
-          >
-            <Input
-              id="tl-name"
-              value={fName}
-              onChange={(e) => setFName(e.target.value)}
-            />
-          </Field>
-          <Field className="mt-4" label={t.mdJam} htmlFor="tl-at">
-            <Input
-              id="tl-at"
-              type="time"
-              className="font-mono"
-              value={fAt}
-              onChange={(e) => setFAt(e.target.value)}
-            />
-          </Field>
-          <Field className="mt-4" label="Aksi" htmlFor="tl-action">
-            {/* The option's value is the contract value; the label is only what
+        <form
+          onSubmit={submit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {/* The fields scroll; the actions below them do not, so Save stays
+              on screen however short the window (Dialog's own contract). */}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <Field
+              className="mt-4"
+              label="Nama Tahap"
+              htmlFor="tl-name"
+              required
+              error={errName}
+              errorMessage={t.mdErrName}
+            >
+              <Input
+                id="tl-name"
+                value={fName}
+                onChange={(e) => setFName(e.target.value)}
+              />
+            </Field>
+            {/* Two short fields side by side: the form grew a sound row, and
+              stacked it ran past the bottom of a laptop screen. */}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Field label={t.mdJam} htmlFor="tl-at">
+                <Input
+                  id="tl-at"
+                  type="time"
+                  className="font-mono"
+                  value={fAt}
+                  onChange={(e) => setFAt(e.target.value)}
+                />
+              </Field>
+              <Field label={t.tlShift} htmlFor="tl-shift">
+                <Select
+                  id="tl-shift"
+                  value={fShift}
+                  onChange={(e) => setFShift(e.target.value as ShiftKind | "")}
+                >
+                  <option value="">{t.tlShiftNone}</option>
+                  {SHIFT_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {SHIFT_KIND_LABELS[k]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <p className="mt-2 text-xs text-(--text-tertiary)">
+              {t.tlShiftHint}
+            </p>
+            <Field className="mt-4" label="Aksi" htmlFor="tl-action">
+              {/* The option's value is the contract value; the label is only what
                 it reads as. Submitting the label would make dispatch depend on
                 the wording of a translation. */}
-            <Select
-              id="tl-action"
-              value={fAction}
-              onChange={(e) => setFAction(e.target.value as TimelineAction)}
-            >
-              {TIMELINE_ACTIONS.map((a) => (
-                <option key={a} value={a}>
-                  {timelineActionLabel(a)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field className="mt-4" label={t.tlShift} htmlFor="tl-shift">
-            <Select
-              id="tl-shift"
-              value={fShift}
-              onChange={(e) => setFShift(e.target.value as ShiftKind | "")}
-            >
-              <option value="">{t.tlShiftNone}</option>
-              {SHIFT_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {SHIFT_KIND_LABELS[k]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <p className="mt-2 text-xs text-(--text-tertiary)">{t.tlShiftHint}</p>
-          {/* Optional, and most stages leave it empty. The screens play it two
-              minutes early — long enough to walk to the muster, short enough
-              that nobody forgets what it was for. */}
-          <Field className="mt-4" label={t.tlSound} htmlFor="tl-sound">
-            <Select
-              id="tl-sound"
-              value={fSound}
-              onChange={(e) => setFSound(e.target.value)}
-            >
-              <option value="">{t.tlSoundNone}</option>
-              {sounds.map((sound) => (
-                <option key={sound.id} value={sound.id}>
-                  {sound.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <p className="mt-2 text-xs text-(--text-tertiary)">{t.tlSoundHint}</p>
-          <ToggleRow className="mt-4" htmlFor="tl-active">
-            <Checkbox
-              id="tl-active"
-              checked={fActive}
-              onChange={(e) => setFActive(e.target.checked)}
-            />
-            {t.stAktif}
-          </ToggleRow>
+              <Select
+                id="tl-action"
+                value={fAction}
+                onChange={(e) => setFAction(e.target.value as TimelineAction)}
+              >
+                {TIMELINE_ACTIONS.map((a) => (
+                  <option key={a} value={a}>
+                    {timelineActionLabel(a)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {/* Optional, and most stages leave it empty. When it plays is the
+              stage's own choice, five minutes either side (owner,
+              2026-10-10); asked only once there is a sound to play. */}
+            <Field className="mt-4" label={t.tlSound} htmlFor="tl-sound">
+              <Select
+                id="tl-sound"
+                value={fSound}
+                onChange={(e) => setFSound(e.target.value)}
+              >
+                <option value="">{t.tlSoundNone}</option>
+                {sounds.map((sound) => (
+                  <option key={sound.id} value={sound.id}>
+                    {sound.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <p className="mt-2 text-xs text-(--text-tertiary)">
+              {t.tlSoundHint}
+            </p>
+            {fSound !== "" ? (
+              <Field
+                className="mt-4"
+                label={t.tlSoundWhen}
+                htmlFor="tl-sound-offset"
+              >
+                <SoundOffsetStepper
+                  id="tl-sound-offset"
+                  value={fOffset}
+                  at={fAt}
+                  onChange={setFOffset}
+                />
+              </Field>
+            ) : null}
+            <ToggleRow className="mt-4" htmlFor="tl-active">
+              <Checkbox
+                id="tl-active"
+                checked={fActive}
+                onChange={(e) => setFActive(e.target.checked)}
+              />
+              {t.stAktif}
+            </ToggleRow>
+          </div>
           <DialogActions>
             <Button
               type="button"

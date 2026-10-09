@@ -14,6 +14,9 @@
 import { and, asc, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import {
+  DEFAULT_SOUND_OFFSET,
+  SOUND_OFFSET_MAX,
+  SOUND_OFFSET_MIN,
   TIMELINE_ACTION_LABELS,
   type ShiftKind,
   type TimelineAction,
@@ -43,6 +46,7 @@ const toStage = (row: TimelineStageRow) => ({
   shift: row.shift,
   active: row.active,
   soundId: row.soundId,
+  soundOffsetMinutes: row.soundOffsetMinutes,
   createdAt: row.createdAt.toISOString(),
 });
 
@@ -110,6 +114,12 @@ const soundNotFound = {
 };
 
 const AT_PATTERN = "^([01][0-9]|2[0-3]):[0-5][0-9]$";
+
+/** Whole minutes, five before to five after (owner, 2026-10-10). */
+const SoundOffsetSchema = t.Integer({
+  minimum: SOUND_OFFSET_MIN,
+  maximum: SOUND_OFFSET_MAX,
+});
 
 /**
  * The order the muster's gates have to keep, and why each pair matters.
@@ -256,6 +266,7 @@ export const timelineRoutes = new Elysia({
           shift: body.shift ?? null,
           active: body.active ?? true,
           soundId: body.soundId ?? null,
+          soundOffsetMinutes: body.soundOffsetMinutes ?? DEFAULT_SOUND_OFFSET,
         })
         .returning();
       return status(201, toStage(row!));
@@ -278,6 +289,8 @@ export const timelineRoutes = new Elysia({
         active: t.Optional(t.Boolean()),
         /** Optional and nullable: most stages are silent. */
         soundId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
+        /** Minutes from the stage: negative before, positive after. */
+        soundOffsetMinutes: t.Optional(SoundOffsetSchema),
       }),
       response: {
         201: TimelineStageSchema,
@@ -302,7 +315,8 @@ export const timelineRoutes = new Elysia({
       if (!before) return status(404, notFound);
 
       /* Only a change to when it fires or what it governs: renaming a stage
-         the muster has passed, or giving it a sound, is harmless, and
+         the muster has passed, giving it a sound or moving when that sound
+         plays, is harmless — none of it judges anybody — and
          refusing it would be a rule about the wrong thing. Turning a passed
          `finger-in` into `other`, or moving it to the other shift, is as
          final for the muster as deleting it. A real change, not a field
@@ -334,6 +348,9 @@ export const timelineRoutes = new Elysia({
           ...(body.shift !== undefined ? { shift: body.shift } : {}),
           ...(body.active !== undefined ? { active: body.active } : {}),
           ...(body.soundId !== undefined ? { soundId: body.soundId } : {}),
+          ...(body.soundOffsetMinutes !== undefined
+            ? { soundOffsetMinutes: body.soundOffsetMinutes }
+            : {}),
         })
         .where(eq(schema.timelineStages.id, params.id))
         .returning();
@@ -350,6 +367,8 @@ export const timelineRoutes = new Elysia({
         shift: OptionalShiftKindSchema,
         active: t.Optional(t.Boolean()),
         soundId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
+        /** Minutes from the stage: negative before, positive after. */
+        soundOffsetMinutes: t.Optional(SoundOffsetSchema),
       }),
       response: {
         200: TimelineStageSchema,

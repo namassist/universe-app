@@ -16,7 +16,7 @@ import { inArray } from "drizzle-orm";
 import { createSession, DEVICE_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
-import { SOUND_LEAD_SECONDS } from "../sound-cue";
+import { DEFAULT_SOUND_OFFSET } from "@universe/contracts";
 import { displayRoutes } from "./devices";
 import { soundsRoutes } from "./display-content";
 
@@ -60,7 +60,7 @@ async function makeDevice(sound: boolean) {
   return `${DEVICE_COOKIE}=${session.id}`;
 }
 
-async function stage(at: string, withSound: boolean) {
+async function stage(at: string, withSound: boolean, offset?: number) {
   const [row] = await db
     .insert(schema.timelineStages)
     .values({
@@ -68,6 +68,7 @@ async function stage(at: string, withSound: boolean) {
       at: `${at}:00`,
       action: "other",
       soundId: withSound ? soundId : null,
+      ...(offset === undefined ? {} : { soundOffsetMinutes: offset }),
     })
     .returning({ id: schema.timelineStages.id });
   made.stages.push(row!.id);
@@ -124,13 +125,28 @@ describe("the cue a screen is given with its content", () => {
     expect(cue).toMatchObject({ soundId });
     expect(cue!.id).toContain(id);
 
-    // Two minutes before the stage, to the second.
+    // Two minutes before the stage, to the second — the default offset.
     const [hours, minutes] = at.split(":").map(Number);
     const due = new Date();
     due.setHours(hours!, minutes!, 0, 0);
     expect(new Date(cue!.playAt).getTime()).toBe(
-      due.getTime() - SOUND_LEAD_SECONDS * 1000
+      due.getTime() + DEFAULT_SOUND_OFFSET * 60_000
     );
+  });
+
+  test("a stage's own offset reaches the screen — here a minute after", async () => {
+    /* Sooner than any other stage this file makes, so it is the cue the
+       screen is given: the stage is about a minute out, its sound one minute
+       after that. */
+    const at = soonAt(1);
+    const id = await stage(at, true, 1);
+
+    const cue = await cueOf(loud);
+    expect(cue!.id).toContain(id);
+    const [hours, minutes] = at.split(":").map(Number);
+    const due = new Date();
+    due.setHours(hours!, minutes! + 1, 0, 0);
+    expect(new Date(cue!.playAt).getTime()).toBe(due.getTime());
   });
 
   test("a screen with sound switched off is given none", async () => {

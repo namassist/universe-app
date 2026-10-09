@@ -1173,8 +1173,10 @@ export const TimelineStageSchema = t.Object({
   /** Which half of the day the stage governs; null means neither. */
   shift: t.Nullable(ShiftKindSchema),
   active: t.Boolean(),
-  /** Played two minutes before the stage; null for a silent one. */
+  /** Played around the stage; null for a silent one. */
   soundId: t.Nullable(t.String()),
+  /** When it plays, in minutes from `at`: negative before, positive after. */
+  soundOffsetMinutes: t.Integer(),
   createdAt: t.String(),
 });
 

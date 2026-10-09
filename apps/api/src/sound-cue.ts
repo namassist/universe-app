@@ -10,9 +10,6 @@
  * display route passes the day's stages and `new Date()`.
  */
 
-/** How long before a stage its sound plays. Two minutes (owner, 2026-09-23). */
-export const SOUND_LEAD_SECONDS = 120;
-
 /**
  * How far ahead a cue is worth carrying.
  *
@@ -28,8 +25,14 @@ export type CueStage = {
   name: string;
   /** Wall-clock `HH:MM`, as the timeline stores it. */
   at: string;
-  /** The sound to play two minutes before it, or null for silence. */
+  /** The sound to play, or null for silence. */
   soundId: string | null;
+  /**
+   * When it plays, in minutes from `at`: negative before, positive after
+   * (`SOUND_OFFSET_MIN`..`MAX`, owner 2026-10-10). Each stage its own — a
+   * warning wants a few minutes' notice, a bus bell wants the minute itself.
+   */
+  soundOffsetMinutes: number;
   active: boolean;
 };
 
@@ -55,13 +58,15 @@ const localDay = (at: Date) =>
 /**
  * The soonest cue still ahead of `now`, or null.
  *
- * A cue already past is not replayed — announcing a deadline that has arrived
- * is worse than silence — and one beyond the horizon waits.
+ * A cue whose own instant has passed is not replayed, and one beyond the
+ * horizon waits. "Passed" is about the sound, not the stage: a stage may
+ * sound after itself (owner, 2026-10-10), and that sound is still to come
+ * while the stage is already behind.
  *
- * Both today's occurrence and tomorrow's are considered, which is what carries
- * the horizon across midnight: at 23:50 the cue for a 00:05 stage is thirteen
- * minutes away, and computing it from today's date alone put it a day in the
- * past and dropped it. The cue is named for the day it *fires* on, so the poll
+ * Yesterday's, today's and tomorrow's occurrence are all considered, which is
+ * what carries the horizon across midnight both ways: at 23:50 the sound five
+ * minutes before a 00:02 stage is seven minutes away, and at 00:01 the sound
+ * five minutes after a 23:58 stage belongs to yesterday's stage. The cue is named for the day it *fires* on, so the poll
  * before midnight and the poll after it describe the same announcement by the
  * same name — otherwise a screen holding both would sound it twice.
  */
@@ -71,11 +76,10 @@ export function nextSoundCue(stages: CueStage[], now: Date): SoundCue | null {
     if (!stage.active || !stage.soundId) continue;
     const [hours, minutes] = stage.at.split(":").map(Number);
     if (hours === undefined || minutes === undefined) continue;
-    for (const dayOffset of [0, 1]) {
+    for (const dayOffset of [-1, 0, 1]) {
       const playAt = new Date(now);
       playAt.setDate(playAt.getDate() + dayOffset);
-      playAt.setHours(hours, minutes, 0, 0);
-      playAt.setSeconds(playAt.getSeconds() - SOUND_LEAD_SECONDS);
+      playAt.setHours(hours, minutes + stage.soundOffsetMinutes, 0, 0);
       const waitMs = playAt.getTime() - now.getTime();
       if (waitMs < 0 || waitMs > CUE_HORIZON_SECONDS * 1000) continue;
       cues.push({

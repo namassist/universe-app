@@ -7,13 +7,16 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { nextSoundCue, SOUND_LEAD_SECONDS, type CueStage } from "./sound-cue";
+import { DEFAULT_SOUND_OFFSET } from "@universe/contracts";
+
+import { nextSoundCue, type CueStage } from "./sound-cue";
 
 const stage = (extra: Partial<CueStage> = {}): CueStage => ({
   id: "stage-ftw",
   name: "Batas upload FTW",
   at: "05:21",
   soundId: "sound-a",
+  soundOffsetMinutes: DEFAULT_SOUND_OFFSET,
   active: true,
   ...extra,
 });
@@ -29,8 +32,8 @@ describe("the next sound a screen is told to play", () => {
       stageName: "Batas upload FTW",
     });
     expect(cue?.playAt).toEqual(at("05:19"));
-    // The lead is the feature, stated once: 05:21 minus two minutes.
-    expect(SOUND_LEAD_SECONDS).toBe(120);
+    // The default every stage had before the offset could be chosen.
+    expect(DEFAULT_SOUND_OFFSET).toBe(-2);
   });
 
   test("the cue is identified by stage and date, so a screen plays it once", () => {
@@ -100,5 +103,63 @@ describe("the next sound a screen is told to play", () => {
     // The poll is a minute wide, so the moment often lands mid-interval.
     const cue = nextSoundCue([stage()], new Date("2026-09-23T05:18:59"));
     expect(cue?.playAt).toEqual(at("05:19"));
+  });
+});
+
+describe("each stage's own offset (owner, 2026-10-10)", () => {
+  test("five minutes before", () => {
+    const cue = nextSoundCue([stage({ soundOffsetMinutes: -5 })], at("05:10"));
+    expect(cue?.playAt).toEqual(at("05:16"));
+  });
+
+  test("zero is on the stage's minute", () => {
+    const cue = nextSoundCue([stage({ soundOffsetMinutes: 0 })], at("05:10"));
+    expect(cue?.playAt).toEqual(at("05:21"));
+  });
+
+  test("a positive offset plays after the stage — and still plays", () => {
+    // The stage itself has passed at 05:22; its sound at 05:24 has not.
+    const cue = nextSoundCue([stage({ soundOffsetMinutes: 3 })], at("05:22"));
+    expect(cue?.playAt).toEqual(at("05:24"));
+  });
+
+  test("a sound already played is not offered again, whatever the offset", () => {
+    expect(
+      nextSoundCue([stage({ soundOffsetMinutes: 3 })], at("05:25"))
+    ).toBeNull();
+  });
+
+  test("two stages on one minute with different offsets both get their turn", () => {
+    const stages = [
+      stage({
+        id: "ftw",
+        at: "05:21",
+        soundId: "s-ftw",
+        soundOffsetMinutes: -3,
+      }),
+      stage({
+        id: "tap",
+        at: "05:21",
+        soundId: "s-tap",
+        soundOffsetMinutes: 0,
+      }),
+    ];
+    expect(nextSoundCue(stages, at("05:10"))?.soundId).toBe("s-ftw");
+    expect(nextSoundCue(stages, at("05:19"))?.soundId).toBe("s-tap");
+  });
+
+  test("an offset after a late stage crosses midnight into the next day", () => {
+    const late = stage({ id: "late", at: "23:58", soundOffsetMinutes: 5 });
+    // At 00:01 the 00:03 sound belongs to yesterday's 23:58 stage.
+    const cue = nextSoundCue([late], new Date("2026-09-24T00:01:00"));
+    expect(cue?.playAt).toEqual(new Date("2026-09-24T00:03:00"));
+    expect(cue?.id).toBe("late:2026-09-24");
+  });
+
+  test("an offset before an early stage crosses midnight into the day before", () => {
+    const early = stage({ id: "early", at: "00:02", soundOffsetMinutes: -5 });
+    const cue = nextSoundCue([early], new Date("2026-09-23T23:50:00"));
+    expect(cue?.playAt).toEqual(new Date("2026-09-23T23:57:00"));
+    expect(cue?.id).toBe("early:2026-09-23");
   });
 });
