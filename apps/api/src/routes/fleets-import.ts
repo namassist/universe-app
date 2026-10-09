@@ -67,7 +67,13 @@ const HEADER_ALIASES: Record<string, FleetImportColumn | undefined> = {
   bus: "bus",
 };
 
-export type ImportUnit = { id: string; code: string; typeName: string };
+export type ImportUnit = {
+  id: string;
+  code: string;
+  typeName: string;
+  /** Switched off in master: named in the file, it is refused by row. */
+  active: boolean;
+};
 
 export type ExistingFleet = {
   id: string;
@@ -152,6 +158,10 @@ function danger(
     badge: "Error",
   };
 }
+
+/** A vehicle switched off in master gives nobody a ride, spare pool included. */
+const inactiveTransport = (vehicle: ImportUnit) =>
+  `Transport ${vehicle.code} nonaktif`;
 
 /** The template a caller downloads before filling it in. */
 export async function buildTemplate(): Promise<Buffer> {
@@ -320,11 +330,15 @@ export async function validateFleetWorkbook(
       .filter((f) => f.length > 0)
   );
 
-  /** Vehicles by their punctuation-free key, so three spellings find one unit. */
+  /** Vehicles by their punctuation-free key, so three spellings find one unit.
+      Where two master codes share a key, the active one answers: a retired
+      `UDBU09` must not refuse the `UD-BU09` that replaced it. */
   const transportByKey = new Map<string, ImportUnit>();
-  for (const unit of catalogues.unitsByCode.values())
-    if (isFleetTransportType(unit.typeName))
-      transportByKey.set(transportKey(unit.code), unit);
+  for (const unit of catalogues.unitsByCode.values()) {
+    if (!isFleetTransportType(unit.typeName)) continue;
+    const key = transportKey(unit.code);
+    if (!transportByKey.get(key)?.active) transportByKey.set(key, unit);
+  }
 
   /* ---- pass 2b: the spare pool's ride ------------------------------------ */
 
@@ -376,6 +390,12 @@ export async function validateFleetWorkbook(
             ? `Unit ${known.code} bukan ${FLEET_TRANSPORT_TYPES_TEXT}`
             : `Transport "${row.bus}" tidak ada di master`
         )
+      );
+      continue;
+    }
+    if (!vehicle.active) {
+      errors.push(
+        danger(row.n, row.unit, vehicle.code, inactiveTransport(vehicle))
       );
       continue;
     }
@@ -473,10 +493,22 @@ export async function validateFleetWorkbook(
 
     let transportId: string | null = null;
     let transportCode: string | null = null;
-    let bad = false;
+    /* Refused, but kept — like a mistyped vehicle below — so the formation it
+       leads or hauls for is still recognised and does not also report a
+       missing leader row. */
+    let bad = !unitRow.active;
+    if (bad)
+      errors.push(
+        danger(row.n, row.unit, "—", `Unit ${unitRow.code} nonaktif`)
+      );
     if (row.bus) {
       const vehicle = transportByKey.get(transportKey(row.bus));
-      if (!vehicle) {
+      if (vehicle && !vehicle.active) {
+        errors.push(
+          danger(row.n, row.unit, vehicle.code, inactiveTransport(vehicle))
+        );
+        bad = true;
+      } else if (!vehicle) {
         const known = catalogues.unitsByCode.get(row.bus.toLowerCase());
         errors.push(
           danger(

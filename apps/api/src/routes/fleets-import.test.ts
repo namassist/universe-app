@@ -56,6 +56,7 @@ let hauler3 = { id: "", code: "" };
 let hauler4 = { id: "", code: "" };
 let busUnit = { id: "", code: "" };
 let manhaulUnit = { id: "", code: "" };
+let unitRefs = { classId: "", modelId: "", brandId: "" };
 
 /* ------------------------------------------------------------- fixtures */
 
@@ -202,6 +203,7 @@ beforeAll(async () => {
   miningName = `${tag} PIT`;
 
   const refs = { classId: cls!.id, modelId: mdl!.id, brandId: brd!.id };
+  unitRefs = refs;
   digger1 = await makeUnit(`ZZFX1${uid()}`, typ!.id, refs);
   digger2 = await makeUnit(`ZZFX2${uid()}`, typ!.id, refs);
   digger3 = await makeUnit(`ZZFX3${uid()}`, typ!.id, refs);
@@ -585,6 +587,128 @@ describe("the transport cell", () => {
     expect(preview.rows[0]!.transports.sort()).toEqual(
       [busUnit.code, manhaulUnit.code].sort()
     );
+  });
+});
+
+/* ------------------------------------------------------------- inactive */
+
+/**
+ * A unit switched off in master takes no part in the day, so the file may not
+ * seat it, crew it as support or hand it out as a ride (2026-10-09). The PLAN
+ * import is the exception and keeps admitting it — it is not this route.
+ */
+describe("an inactive unit is refused", () => {
+  async function whileInactive(ids: string[], run: () => Promise<void>) {
+    await db
+      .update(schema.units)
+      .set({ active: false })
+      .where(inArray(schema.units.id, ids));
+    try {
+      await run();
+    } finally {
+      await db
+        .update(schema.units)
+        .set({ active: true })
+        .where(inArray(schema.units.id, ids));
+    }
+  }
+
+  test("an inactive leader is named on its own row, and only there", async () => {
+    await whileInactive([digger2.id], async () => {
+      const preview = await validate(fleetRows(digger2.code, [hauler1.code]));
+      /* The row stays recognised, so its formation does not also report a
+         missing leader row or a hauler naming nobody. */
+      expect(preview.errorCount).toBe(1);
+      expect(preview.errors[0]).toMatchObject({
+        nik: digger2.code,
+        issue: `Unit ${digger2.code} nonaktif`,
+      });
+    });
+  });
+
+  test("an inactive member is named on its own row", async () => {
+    await whileInactive([hauler2.id], async () => {
+      const preview = await validate(
+        fleetRows(digger1.code, [hauler1.code, hauler2.code])
+      );
+      expect(preview.errorCount).toBe(1);
+      expect(preview.errors[0]).toMatchObject({
+        nik: hauler2.code,
+        issue: `Unit ${hauler2.code} nonaktif`,
+      });
+    });
+  });
+
+  test("an inactive unit cannot be crewed as support", async () => {
+    await whileInactive([hauler3.id], async () => {
+      const preview = await validate([
+        ...fleetRows(digger1.code, [hauler1.code]),
+        [hauler3.code, `${tag} DISPOSAL`, null, null],
+      ]);
+      expect(preview.errorCount).toBe(1);
+      expect(preview.errors[0]!.issue).toBe(`Unit ${hauler3.code} nonaktif`);
+    });
+  });
+
+  test("an inactive vehicle is refused as a unit's ride", async () => {
+    await whileInactive([busUnit.id], async () => {
+      const preview = await validate([
+        [digger1.code, miningName, null, null],
+        [hauler1.code, miningName, digger1.code, busUnit.code],
+      ]);
+      expect(preview.errorCount).toBe(1);
+      expect(preview.errors[0]).toMatchObject({
+        nik: hauler1.code,
+        emp: busUnit.code,
+        issue: `Transport ${busUnit.code} nonaktif`,
+      });
+    });
+  });
+
+  test("an inactive vehicle is refused as the spare pool's ride", async () => {
+    await whileInactive([busUnit.id], async () => {
+      const preview = await validate([
+        ...fleetRows(digger1.code, [hauler1.code]),
+        ["SPARE", `${tag} PARKIRAN`, "SPARE", busUnit.code],
+      ]);
+      expect(preview.errorCount).toBe(1);
+      expect(preview.errors[0]!.issue).toBe(
+        `Transport ${busUnit.code} nonaktif`
+      );
+    });
+  });
+
+  test("a retired twin spelling does not shadow the active vehicle", async () => {
+    // Same punctuation-free key as busUnit, switched off in master.
+    const twin = await makeUnit(
+      busUnit.code.replace(/^ZZ/, "ZZ-"),
+      busTypeId,
+      unitRefs
+    );
+    await whileInactive([twin.id], async () => {
+      const preview = await validate([
+        [digger1.code, miningName, null, null],
+        [hauler1.code, miningName, digger1.code, busUnit.code],
+      ]);
+      expect(preview.errorCount).toBe(0);
+      expect(preview.rows[0]!.transports).toEqual([busUnit.code]);
+    });
+  });
+
+  test("a file naming an inactive unit commits nothing", async () => {
+    await whileInactive([hauler2.id], async () => {
+      const response = await postForm(
+        "/fleets/import/commit",
+        admin.cookie,
+        form(await file(fleetRows(digger2.code, [hauler2.code])))
+      );
+      expect(response.status).toBe(422);
+      const fleets = await db
+        .select()
+        .from(schema.fleets)
+        .where(eq(schema.fleets.leaderUnitId, digger2.id));
+      expect(fleets).toEqual([]);
+    });
   });
 });
 
