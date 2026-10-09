@@ -22,7 +22,8 @@
     "db:studio": "drizzle-kit studio",
     "stage:rearm": "bun scripts/rearm-stage.ts",
     "photos:upload": "bun scripts/upload-photos.ts",
-    "ops:hash": "bun scripts/ops-hash.ts"
+    "ops:hash": "bun scripts/ops-hash.ts",
+    "openapi:integration": "bun scripts/integration-openapi.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.2",

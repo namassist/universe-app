@@ -1,0 +1,617 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Universe Integration API",
+    "description": "API ini dipakai layanan lain di jaringan site untuk membaca data karyawan\nUniverse: NIK, nama, perusahaan, departemen, posisi, status, tanggal masuk,\nkode SIMPER, dan foto. Semua endpoint hanya untuk membaca.\n\n**Token.** Setiap permintaan wajib membawa header\n`Authorization: Bearer <token>`. Token dibuat oleh admin Universe di menu\nIntegrasi API dan hanya ditampilkan sekali, jadi simpan baik-baik. Token\nberlaku dari tanggal mulai sampai tanggal akhir yang ditentukan admin\n(waktu site, WITA).\n\n**Batas pemakaian.** Satu token boleh mengirim 120 permintaan per menit.\nKalau lebih, server membalas 429. Tunggu sesuai header `Retry-After`,\nlalu coba lagi.\n\n**Error.** Isi balasan error selalu `{ \"code\": \"...\", \"message\": \"...\" }`.\nLihat bagian respons tiap endpoint untuk arti setiap `code`.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://192.168.151.23:8081",
+      "description": "Site"
+    },
+    {
+      "url": "http://localhost:3001",
+      "description": "Local"
+    }
+  ],
+  "tags": [
+    {
+      "name": "integrations",
+      "description": "Data dan foto karyawan"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "integrationToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Token dari menu Integrasi API di Universe"
+      }
+    },
+    "schemas": {}
+  },
+  "paths": {
+    "/v1/integrations/employees": {
+      "get": {
+        "tags": ["integrations"],
+        "summary": "Ambil daftar karyawan",
+        "security": [
+          {
+            "integrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000,
+              "default": 1
+            },
+            "description": "Halaman yang diminta. Halaman pertama adalah 1."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            },
+            "description": "Jumlah karyawan per halaman, paling banyak 500."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["aktif", "standby", "nonaktif"]
+            },
+            "description": "Tampilkan karyawan dengan status ini saja. Kalau tidak diisi, semua status ikut tampil."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            },
+            "description": "Cari dengan sebagian NIK atau nama. Huruf besar dan kecil dianggap sama, dan tanda `%` atau `_` dibaca apa adanya."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar karyawan di halaman yang diminta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "page", "limit", "total"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "nik",
+                          "name",
+                          "company",
+                          "department",
+                          "position",
+                          "status",
+                          "joinDate",
+                          "skills",
+                          "photo"
+                        ],
+                        "properties": {
+                          "nik": {
+                            "description": "Nomor induk karyawan. Tidak ada dua karyawan dengan NIK yang sama.",
+                            "type": "string",
+                            "example": "12345678"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "BUDI SANTOSO"
+                          },
+                          "company": {
+                            "type": "string",
+                            "example": "PT UDU"
+                          },
+                          "department": {
+                            "type": "string",
+                            "example": "MINING OPERATION"
+                          },
+                          "position": {
+                            "type": "string",
+                            "example": "OPERATOR HD"
+                          },
+                          "status": {
+                            "description": "Status karyawan: aktif, standby, atau nonaktif.",
+                            "type": "string",
+                            "example": "aktif"
+                          },
+                          "joinDate": {
+                            "description": "Tanggal mulai bekerja. Berisi null kalau belum tercatat.",
+                            "format": "date",
+                            "type": "string",
+                            "example": "2019-04-01",
+                            "nullable": true
+                          },
+                          "skills": {
+                            "description": "Kode SIMPER yang dimiliki, yaitu jenis unit yang boleh dioperasikan. Diurutkan sesuai abjad.",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": ["EXC 2600", "OHT 777"]
+                          },
+                          "photo": {
+                            "description": "Berisi null kalau karyawan belum punya foto.",
+                            "type": "object",
+                            "required": ["url", "version"],
+                            "properties": {
+                              "url": {
+                                "description": "Alamat foto di server ini. Pakai token yang sama untuk mengambilnya.",
+                                "type": "string",
+                                "example": "/v1/integrations/employees/12345678/photo"
+                              },
+                              "version": {
+                                "description": "Berubah setiap kali foto diganti. Unduh ulang foto hanya kalau nilai ini berbeda dari yang Anda simpan.",
+                                "type": "string",
+                                "example": "3f9a1c0b2d4e5f61"
+                              }
+                            },
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "description": "Nomor halaman ini.",
+                      "type": "number",
+                      "example": 1
+                    },
+                    "limit": {
+                      "description": "Jumlah karyawan per halaman.",
+                      "type": "number",
+                      "example": 100
+                    },
+                    "total": {
+                      "description": "Jumlah seluruh karyawan yang sesuai dengan filter, dari semua halaman.",
+                      "type": "number",
+                      "example": 1342
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token tidak bisa dipakai. `unauthenticated`: token tidak dikirim, salah, atau sudah dicabut. `token_expired`: tanggal akhirnya sudah lewat. `token_not_yet_valid`: tanggal mulainya belum tiba.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token valid tetapi tidak boleh dipakai di sini. `forbidden`: token tidak punya akses ke data ini. `ip_not_allowed`: permintaan datang dari IP yang tidak terdaftar untuk token ini.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Batas 120 permintaan per menit sudah terlewati.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Berapa detik lagi boleh mencoba kembali.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1IntegrationsEmployees",
+        "description": "Data dikirim per halaman dan diurutkan berdasarkan NIK. Untuk mengambil semuanya, lanjutkan ke halaman berikutnya sampai jumlah data yang terkumpul sama dengan `total`."
+      }
+    },
+    "/v1/integrations/employees/{nik}": {
+      "get": {
+        "tags": ["integrations"],
+        "summary": "Ambil data satu karyawan",
+        "security": [
+          {
+            "integrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "nik",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "description": "NIK karyawan yang dicari.",
+            "example": "12345678"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Data karyawan dengan NIK tersebut.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "nik",
+                    "name",
+                    "company",
+                    "department",
+                    "position",
+                    "status",
+                    "joinDate",
+                    "skills",
+                    "photo"
+                  ],
+                  "properties": {
+                    "nik": {
+                      "description": "Nomor induk karyawan. Tidak ada dua karyawan dengan NIK yang sama.",
+                      "type": "string",
+                      "example": "12345678"
+                    },
+                    "name": {
+                      "type": "string",
+                      "example": "BUDI SANTOSO"
+                    },
+                    "company": {
+                      "type": "string",
+                      "example": "PT UDU"
+                    },
+                    "department": {
+                      "type": "string",
+                      "example": "MINING OPERATION"
+                    },
+                    "position": {
+                      "type": "string",
+                      "example": "OPERATOR HD"
+                    },
+                    "status": {
+                      "description": "Status karyawan: aktif, standby, atau nonaktif.",
+                      "type": "string",
+                      "example": "aktif"
+                    },
+                    "joinDate": {
+                      "description": "Tanggal mulai bekerja. Berisi null kalau belum tercatat.",
+                      "format": "date",
+                      "type": "string",
+                      "example": "2019-04-01",
+                      "nullable": true
+                    },
+                    "skills": {
+                      "description": "Kode SIMPER yang dimiliki, yaitu jenis unit yang boleh dioperasikan. Diurutkan sesuai abjad.",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": ["EXC 2600", "OHT 777"]
+                    },
+                    "photo": {
+                      "description": "Berisi null kalau karyawan belum punya foto.",
+                      "type": "object",
+                      "required": ["url", "version"],
+                      "properties": {
+                        "url": {
+                          "description": "Alamat foto di server ini. Pakai token yang sama untuk mengambilnya.",
+                          "type": "string",
+                          "example": "/v1/integrations/employees/12345678/photo"
+                        },
+                        "version": {
+                          "description": "Berubah setiap kali foto diganti. Unduh ulang foto hanya kalau nilai ini berbeda dari yang Anda simpan.",
+                          "type": "string",
+                          "example": "3f9a1c0b2d4e5f61"
+                        }
+                      },
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token tidak bisa dipakai. `unauthenticated`: token tidak dikirim, salah, atau sudah dicabut. `token_expired`: tanggal akhirnya sudah lewat. `token_not_yet_valid`: tanggal mulainya belum tiba.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token valid tetapi tidak boleh dipakai di sini. `forbidden`: token tidak punya akses ke data ini. `ip_not_allowed`: permintaan datang dari IP yang tidak terdaftar untuk token ini.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Batas 120 permintaan per menit sudah terlewati.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Berapa detik lagi boleh mencoba kembali.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1IntegrationsEmployeesByNik"
+      }
+    },
+    "/v1/integrations/employees/{nik}/photo": {
+      "get": {
+        "tags": ["integrations"],
+        "summary": "Ambil foto karyawan",
+        "security": [
+          {
+            "integrationToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "nik",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "description": "NIK karyawan yang dicari.",
+            "example": "12345678"
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "description": "Isi dengan `photo.version` yang Anda simpan, diapit tanda kutip. Kalau fotonya belum berubah, server membalas 304 tanpa mengirim gambar.",
+            "schema": {
+              "type": "string",
+              "example": "\"3f9a1c0b2d4e5f61\""
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File foto karyawan.",
+            "headers": {
+              "ETag": {
+                "description": "Versi foto ini, sama dengan `photo.version` di data karyawan.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Foto belum berubah sejak versi yang Anda kirim."
+          },
+          "401": {
+            "description": "Token tidak bisa dipakai. `unauthenticated`: token tidak dikirim, salah, atau sudah dicabut. `token_expired`: tanggal akhirnya sudah lewat. `token_not_yet_valid`: tanggal mulainya belum tiba.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token valid tetapi tidak boleh dipakai di sini. `forbidden`: token tidak punya akses ke data ini. `ip_not_allowed`: permintaan datang dari IP yang tidak terdaftar untuk token ini.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NIK tidak ditemukan, atau karyawan ini belum punya foto.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Batas 120 permintaan per menit sudah terlewati.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Berapa detik lagi boleh mencoba kembali.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1IntegrationsEmployeesByNikPhoto",
+        "description": "Simpan nilai `photo.version` dari data karyawan. Saat meminta foto lagi, kirim nilai itu di header `If-None-Match`. Kalau fotonya belum diganti, server membalas 304 tanpa mengirim ulang gambarnya."
+      }
+    }
+  }
+}

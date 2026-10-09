@@ -46,6 +46,7 @@ export const MENU_SLUGS = [
   "roles",
   "setting",
   "notifications",
+  "integrations",
 ] as const;
 export type MenuSlug = (typeof MENU_SLUGS)[number];
 
@@ -101,6 +102,9 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   roles: "Role",
   setting: "Setting",
   notifications: "Notifikasi",
+  // Tokens for other services on the site network that read from Universe —
+  // not people, so they hold no role and are managed here instead.
+  integrations: "Integrasi API",
 };
 
 /**

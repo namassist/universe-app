@@ -2239,3 +2239,67 @@ this shift's muster is running, without reading a server log (owner,
   only as good as Caddy's view of that address (see `docs/deploy.md`).
 - **Deferred:** request metrics for longer than a day, push alerts, and
   mobile-upload monitoring (there is no mobile client yet).
+
+## Integration API — shipped
+
+**Goal:** another service on the site network reads the employee register —
+with SIMPER codes and photos — without a person's account and without
+reaching into the database (owner, 2026-10-09). What that service does with it
+is its own business; Universe provides the read.
+
+- **A service is its own kind of caller.** Not a user (no role, no password,
+  no session that expires) and not a display. It is registered under
+  **Integrasi API** (menu `integrations`, Superadmin by default) and given a
+  token `uvk_…` — 32 random bytes — **shown once**; only its sha256 is kept.
+  Lost means revoked and re-issued. Revoking stamps rather than deletes, takes
+  effect on the next request, and frees the name.
+- **A token works between two dates** (owner, 2026-10-09), picked on date
+  pickers: _Berlaku dari_ (today unless changed) and _Berlaku sampai_, or
+  _Tanpa batas_. Both are site calendar dates, inclusive, compared with the
+  site's own date (`localDate`, WITA) — `valid_from` / `valid_until`, null
+  end = never. Before the start: 401 `token_not_yet_valid`; after the end:
+  401 `token_expired` — their own codes, so a service can tell "not yet" or
+  "ask for an extension" from "not our token". An end before the start, or
+  already past, is refused 422. The list shows the range and warns two weeks
+  ahead (_Habis N hari lagi_, _Hari terakhir_), _Mulai N hari lagi_ before
+  the start, _Kedaluwarsa_ after. **Ubah masa berlaku** changes the dates and
+  keeps the token (bringing an expired one back); **Ganti token** issues a
+  new token for the same client with new dates — shown once, `no-store` — and
+  the old one stops on the next request, with name, scopes and addresses
+  kept.
+- **The access column names the endpoints** a scope opens (owner,
+  2026-10-09), not a description of them: `INTEGRATION_SCOPE_ENDPOINTS`.
+- **Scopes over reads, not menus.** A client holds `INTEGRATION_SCOPES`
+  (today only `employees:read`). A second service, or a second kind of read,
+  is a new client or a new scope — the same mechanism (owner: flexible for
+  services that come later).
+- **Same network, optionally the same address.** A client may be limited to
+  a list of IPs (empty = any). The address is read as the ops login reads it,
+  so it relies on `TRUST_PROXY=true` behind the deploy's Caddy.
+- **Bounded.** `INTEGRATION_RATE_PER_MINUTE` requests per client per minute
+  (default 120); past it, 429 with `Retry-After` — so a sync written as a
+  tight loop cannot crowd out the booths during a muster.
+- **What goes out** (`GET /v1/integrations/employees`, `/employees/:nik`): NIK,
+  name, company, department, position, status, join date, SIMPER codes held
+  (`skills`, by name), and the photo as `{ url, version }` or null.
+  **Nothing else** — mess, phone, emergency contact, medical notes, blood
+  type, MCU and the SIMPER card number stay in. Paged by NIK
+  (`page`, `limit` ≤ 500, default 100), filterable by `status` and `q`
+  (NIK or name). Every status is returned unless `status` is given.
+- **Photos** (`/employees/:nik/photo`) need the same token. `version` changes
+  exactly when the photo does; it is also the ETag, so a request with
+  `If-None-Match` — strong, weak, a list, or `*` — answers 304 without
+  reading the file. Served `nosniff`.
+- **Every read and refusal is logged** (security review, 2026-10-09): the
+  client's name, the path and the address, never the token or the query
+  string. Addresses are compared in one spelling (IPv6 canonicalised, mapped
+  IPv4 unmapped), and the allow-list is a second lock behind the token — it
+  is only as good as Caddy being the API's sole way in. The token response is
+  `Cache-Control: no-store`. If Redis is down, integration reads fail closed
+  (500) rather than run without a budget.
+- **Deferred:** `updatedSince`. The register has no `updated_at`, and the
+  employee row is written from several paths (form, import, photo, skills,
+  NIK rename, organisation changes); a timestamp only some of them stamp would
+  silently drop changes from a sync. Until then a service re-reads the pages
+  and re-fetches photos only when `version` moves. Consumer guide:
+  `docs/integration-api.md`.

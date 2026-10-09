@@ -254,6 +254,11 @@ export const env = {
 
   /** How long an Operations Center login lasts, in seconds. One shift. */
   OPS_SESSION_SECONDS: number("OPS_SESSION_SECONDS", String(12 * HOUR)),
+
+  /** Requests one integration token may make per minute before a 429. Two a
+   *  second is far past what a sync needs and well short of what would crowd
+   *  out the booths during a muster. */
+  INTEGRATION_RATE_PER_MINUTE: number("INTEGRATION_RATE_PER_MINUTE", "120"),
 } as const;
 
 /**
