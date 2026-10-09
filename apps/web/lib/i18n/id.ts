@@ -384,8 +384,8 @@ export const id = {
   tlResetNothing: "Tidak ada jendela yang perlu disetel ulang saat ini.",
   tlSound: "Suara",
   tlSoundNone: "Tanpa suara",
-  tlSoundHint:
-    "Opsional. Diputar 2 menit sebelum jam tahap ini, di layar yang suaranya dinyalakan.",
+  tlSoundHint: "Opsional. Diputar di layar yang suaranya dinyalakan.",
+  tlSoundWhen: "Waktu bunyi",
   tlSoundCol: "Suara",
   mfSub: "Daftar mesin fingerprint — sumber data layar monitoring",
   mfDlgB: "Alamat IP dipakai untuk mengecek mesin, jadi satu IP satu mesin.",

@@ -1,0 +1,2 @@
+ALTER TABLE "timeline_stages" ADD COLUMN "sound_offset_minutes" integer DEFAULT -2 NOT NULL;--> statement-breakpoint
+ALTER TABLE "timeline_stages" ADD CONSTRAINT "timeline_stages_sound_offset_range" CHECK ("timeline_stages"."sound_offset_minutes" between -5 and 5);

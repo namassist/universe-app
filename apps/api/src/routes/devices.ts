@@ -764,6 +764,7 @@ async function dueSoundCue() {
       name: schema.timelineStages.name,
       at: schema.timelineStages.at,
       soundId: schema.timelineStages.soundId,
+      soundOffsetMinutes: schema.timelineStages.soundOffsetMinutes,
       active: schema.timelineStages.active,
     })
     .from(schema.timelineStages)

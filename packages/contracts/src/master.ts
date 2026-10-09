@@ -114,6 +114,24 @@ export const TIMELINE_ACTION_LABELS: Record<TimelineAction, string> = {
 export const timelineActionLabel = (value: TimelineAction): string =>
   TIMELINE_ACTION_LABELS[value] ?? value;
 
+/**
+ * When a stage's sound plays, in minutes from the stage's own time (owner,
+ * 2026-10-10): negative is before, positive after, 0 on the minute. Five
+ * either way — a warning further out is not about this stage any more, and
+ * a sound later than that announces something everyone has already done.
+ * The default is the two minutes before that every stage played at before
+ * the offset could be chosen.
+ */
+export const SOUND_OFFSET_MIN = -5;
+export const SOUND_OFFSET_MAX = 5;
+export const DEFAULT_SOUND_OFFSET = -2;
+
+/** "2 menit sebelum", "Tepat di jam stage", "3 menit setelah". */
+export function soundOffsetLabel(minutes: number): string {
+  if (minutes === 0) return "Tepat di jam stage";
+  return minutes < 0 ? `${-minutes} menit sebelum` : `${minutes} menit setelah`;
+}
+
 /** Type guard for an action arriving from the wire. */
 export function isTimelineAction(value: string): value is TimelineAction {
   return (TIMELINE_ACTIONS as readonly string[]).includes(value);

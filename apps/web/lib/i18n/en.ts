@@ -386,8 +386,8 @@ export const en: Dict = {
   tlResetNothing: "Nothing needed re-arming right now.",
   tlSound: "Sound",
   tlSoundNone: "No sound",
-  tlSoundHint:
-    "Optional. Played 2 minutes before this stage's time, on screens with sound switched on.",
+  tlSoundHint: "Optional. Played on screens with sound switched on.",
+  tlSoundWhen: "When it plays",
   tlSoundCol: "Sound",
   mfSub: "Fingerprint machine registry — what the monitoring screen reads",
   mfDlgB:

@@ -21,6 +21,7 @@ import {
   test,
 } from "bun:test";
 import { Elysia } from "elysia";
+import { DEFAULT_SOUND_OFFSET } from "@universe/contracts";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
@@ -52,6 +53,7 @@ type Stage = {
   shift: "day" | "night" | null;
   active: boolean;
   soundId: string | null;
+  soundOffsetMinutes: number;
   createdAt: string;
 };
 
@@ -231,6 +233,48 @@ describe("the sound a stage announces itself with", () => {
   test("a sound that does not exist is refused", async () => {
     const response = await create({ soundId: crypto.randomUUID() });
     expect(response.status).toBe(422);
+  });
+});
+
+describe("when a stage's sound plays (owner, 2026-10-10)", () => {
+  test("is two minutes before unless somebody says otherwise", async () => {
+    const stage = (await (await create({ soundId })).json()) as Stage;
+    expect(stage.soundOffsetMinutes).toBe(DEFAULT_SOUND_OFFSET);
+  });
+
+  test("any whole minute from five before to five after round-trips", async () => {
+    for (const offset of [-5, 0, 5]) {
+      const stage = (await (
+        await create({ soundId, soundOffsetMinutes: offset })
+      ).json()) as Stage;
+      expect(stage.soundOffsetMinutes).toBe(offset);
+    }
+  });
+
+  test("outside five minutes either way, or not a whole minute, is refused", async () => {
+    for (const offset of [-6, 6, 1.5]) {
+      const response = await create({ soundId, soundOffsetMinutes: offset });
+      expect(response.status).toBe(422);
+    }
+  });
+
+  test("an edit that omits it leaves it alone", async () => {
+    const stage = (await (
+      await create({ soundId, soundOffsetMinutes: 4 })
+    ).json()) as Stage;
+    const renamed = await send("PATCH", `/timeline/${stage.id}`, admin.cookie, {
+      name: `${tag} ${uid()}`,
+    });
+    expect(((await renamed.json()) as Stage).soundOffsetMinutes).toBe(4);
+  });
+
+  test("an edit can move it", async () => {
+    const stage = (await (await create({ soundId })).json()) as Stage;
+    const moved = await send("PATCH", `/timeline/${stage.id}`, admin.cookie, {
+      soundOffsetMinutes: -5,
+    });
+    expect(moved.status).toBe(200);
+    expect(((await moved.json()) as Stage).soundOffsetMinutes).toBe(-5);
   });
 });
 
@@ -520,6 +564,17 @@ describe("a gate the running muster has passed", () => {
         "stage_passed"
       );
     }
+  });
+
+  test("may still have its sound moved — it governs nobody", async () => {
+    const created = await passedDayStage();
+    const response = await send(
+      "PATCH",
+      `/timeline/${created.id}`,
+      admin.cookie,
+      { soundId, soundOffsetMinutes: 3 }
+    );
+    expect(response.status).toBe(200);
   });
 
   test("may still be renamed or given a sound", async () => {

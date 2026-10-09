@@ -1296,7 +1296,8 @@ until someone pressed Sync at 07:07 — although they were on time.
   reading "05:00 has gone by today" would refuse them; a night stage keeps its
   muster across midnight for the same reason, in the other direction. The
   boundary is the `shift-start` gate the walls already turn over on. Renaming
-  a passed stage, or giving it a sound, is still allowed. Refused are a change
+  a passed stage, giving it a sound, or moving when that sound plays, is still
+  allowed. Refused are a change
   that moves _when it fires_ or _what it governs_ (time, active, action,
   shift) and **deleting** it (2026-10-02): turning today's passed `finger-in`
   into `other`, or deleting it, stops the board and every slip for the shift
@@ -1328,8 +1329,16 @@ until someone pressed Sync at 07:07 — although they were on time.
   master. Optional, and most stages stay silent. `set null` on delete: removing
   a sound from the master silences the stages that used it rather than being
   refused by them.
-- **It plays two minutes before the stage** (`SOUND_LEAD_SECONDS`, one constant
-  — no stage has yet wanted its own lead). A deadline at 05:21 sounds at 05:19.
+- **Each stage chooses when its sound plays** (owner, 2026-10-10): whole
+  minutes from five before to five after the stage, 0 on the minute
+  (`timeline_stages.sound_offset_minutes`, `SOUND_OFFSET_MIN`..`MAX`, checked
+  by the database too). The default is two minutes before — what every stage
+  played at until it could be chosen, so existing stages did not move. A
+  deadline at 05:21 at −5 sounds at 05:16; a bus bell at 05:30 at 0 sounds at
+  05:30. The Timeline menu sets it with a `[−] n [+] menit` stepper that
+  cannot be typed into, shown once a sound is chosen, with the clock time it
+  lands on beside it. Like the sound itself, it may be changed on a stage the
+  running muster has passed: it judges nobody.
 - **The screens play it; the server decides when.** The API has no speakers, so
   playback is the kiosk's. But a wall must not work the moment out for itself:
   kiosk clocks drift over the weeks they run, and a screen loading at 05:18:59
@@ -1340,10 +1349,12 @@ until someone pressed Sync at 07:07 — although they were on time.
   response has been in hand, so the sound lands on the second at any clock
   offset, and plays a given `id` once for the life of the page. The rule is
   pure and tested without a database (`sound-cue.ts`).
-- **A cue already past is never played** (announcing a deadline that has
-  arrived is worse than silence) and one more than fifteen minutes out is not
-  carried yet — the screen will be told again, several times, before it
-  matters.
+- **A cue whose own instant has passed is never played**, and one more than
+  fifteen minutes out is not carried yet — the screen will be told again,
+  several times, before it matters. "Passed" is about the sound, not the
+  stage: a sound set after its stage still plays once the stage is behind.
+  Yesterday's, today's and tomorrow's occurrence are all considered, so an
+  offset carries across midnight both ways (23:58 +5 sounds at 00:03).
 - **Which screen sounds is a per-device switch** (`devices.sound`, default
   off). Sound belongs to the room rather than the wall: four screens in one
   muster room would play the same warning four times, a beat apart. Every kind
