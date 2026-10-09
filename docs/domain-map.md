@@ -58,6 +58,9 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 - Every stage run is also logged to Redis for the Operations Center
   (`ops/stage-log.ts`), with `ok: false` for a refusal or a throw; the
   scheduler's heartbeat is stamped every tick. Logging never blocks a hook.
+- The scheduler ticks once a minute **on second :01** (`msUntilNextTick`),
+  so a stage fires about a second after its time, not wherever the last
+  restart left the cycle.
 - Hooks: `scheduler.ts` (`HOOKS`). Sound cues: each stage's own
   `sound_offset_minutes`, −5..+5 from its time (default −2): `sound-cue.ts`.
 - PRD: _Readiness on both shifts_, _Re-arming a muster_, _The timeline's sounds_.

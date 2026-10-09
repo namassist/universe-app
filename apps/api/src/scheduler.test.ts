@@ -16,7 +16,13 @@ import { eq, inArray } from "drizzle-orm";
 import { db, schema } from "./db";
 import { forgetOpsTraffic } from "./ops/metrics";
 import { redis } from "./redis";
-import { localDate, minutesOfDay, stageMinutes, tick } from "./scheduler";
+import {
+  localDate,
+  minutesOfDay,
+  msUntilNextTick,
+  stageMinutes,
+  tick,
+} from "./scheduler";
 
 /** Stages this file created, cleaned up whatever the assertions do. */
 const created: string[] = [];
@@ -100,6 +106,24 @@ describe("stage time arithmetic", () => {
     expect(stageMinutes("00:00:00")).toBe(0);
     expect(stageMinutes("05:20:00")).toBe(320);
     expect(stageMinutes("23:59:00")).toBe(1439);
+  });
+});
+
+describe("tick alignment", () => {
+  const at = (time: string) => new Date(`2026-10-09T${time}`);
+
+  test("waits for second :01 of the next minute", () => {
+    expect(msUntilNextTick(at("17:24:31.600"))).toBe(29_400);
+    expect(msUntilNextTick(at("17:23:59.900"))).toBe(1_100);
+  });
+
+  test("lands on :01 of the same minute when it has not passed yet", () => {
+    expect(msUntilNextTick(at("17:24:00.500"))).toBe(500);
+    expect(msUntilNextTick(at("17:24:00.999"))).toBe(1);
+  });
+
+  test("a tick landing exactly on :01 waits a full minute, never zero", () => {
+    expect(msUntilNextTick(at("17:24:01.000"))).toBe(60_000);
   });
 });
 
