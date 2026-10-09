@@ -312,17 +312,19 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
   return (
     <div className="flex flex-col gap-6">
       <PageTitle title={MENU_LABELS["mesin-fingerprint"]} sub={t.mfSub}>
-        <Button variant="secondary" onClick={() => setPingOpen(true)}>
-          <Activity />
-          {t.mfPing}
-          {selectedRows.length ? ` (${selectedRows.length})` : null}
-        </Button>
-        {canW ? (
-          <Button onClick={openAdd}>
-            <Plus />
-            {t.mdAdd}
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setPingOpen(true)}>
+            <Activity />
+            {t.mfPing}
+            {selectedRows.length ? ` (${selectedRows.length})` : null}
           </Button>
-        ) : null}
+          {canW ? (
+            <Button onClick={openAdd}>
+              <Plus />
+              {t.mdAdd}
+            </Button>
+          ) : null}
+        </div>
       </PageTitle>
 
       <Panel>
@@ -330,7 +332,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           <ToolbarTitle>{MENU_LABELS["mesin-fingerprint"]}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
-              className="w-[240px]"
+              className="w-60"
               placeholder={t.mdSearchPh}
               aria-label={t.mdSearchPh}
               value={q}
@@ -490,7 +492,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           </Table>
         ) : (
           <StateBox
-            icon={<Search className="text-(--color-primary-bright)" />}
+            icon={<Search className="text-primary-bright" />}
             title={t.noResTitle}
             body={t.mfEmptyB}
           />
