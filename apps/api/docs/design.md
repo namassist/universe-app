@@ -61,7 +61,9 @@ decisions taken while those screens existed, and nothing writes to them.
 
 The morning timeline is driven by `scheduler.ts` inside the API process, with
 stages as `timeline_stages` rows (editable). No external cron, no worker
-fleet — single-site scale does not need one yet.
+fleet — single-site scale does not need one yet. It ticks once a minute on
+second :01 of the clock, a chain of timeouts re-measured each time, so a stage
+fires a second after its time whatever second the process started on.
 
 A stage's time can mean something to code that never fires it: `ftw-deadline`
 and `finger-in` are markers whose _hours_ are the pass rule, and `shift-start`

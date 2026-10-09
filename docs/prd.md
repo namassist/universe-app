@@ -431,6 +431,12 @@ fill the gap from the spare pool.
     so sharing the minute would let a board be built before the last pull of
     tap data landed — a race that surfaces as a handful of operators
     mysteriously missing from a board they had tapped in for.
+  - **A tick lands on second :01 of every minute.** It used to come every 60
+    seconds from whenever the API last started, so a 17:24 stage fired
+    anywhere up to 17:24:59 and moved with every deploy (the trial's evening
+    boards were built 11–53 s after their stage). Aligned, a stage fires about
+    a second after its time, and the minute between `finger-in` and
+    `spare-validate` is always a full minute plus that second.
   - **Only new installations take the seeded times.** The seed inserts a stage
     it cannot find by name and never rewrites one, so a running site's schedule
     stays the operator's — which is the whole reason it is a table.

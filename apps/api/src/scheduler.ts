@@ -1,10 +1,11 @@
 /**
  * The morning allocation schedule (design D9).
  *
- * A tick each minute reads the active stages and fires those whose time has
- * arrived. The actions themselves are hooks: `shift-start`, `ftw-deadline`,
- * `finger-in`, `bus-depart`, and `other` are markers; `ftw-ingest` and `finger-ingest`
- * open a readiness-ingest window (`ingest.ts`); `roster-ingest` mirrors the
+ * A tick each minute, on second :01, reads the active stages and fires those
+ * whose time has arrived. The actions themselves are hooks: `shift-start`,
+ * `ftw-deadline`, `finger-in`, `bus-depart`, and `other` are markers;
+ * `ftw-ingest` and `finger-ingest` open a readiness-ingest window
+ * (`ingest.ts`); `roster-ingest` mirrors the
  * schedule from unggul_att (`roster-sync.ts`) in a single pass, because a
  * roster is not a late-arriving reading and re-pulling it every minute would
  * ask a whole month of another system for nothing; `spare-validate` names work
@@ -50,6 +51,15 @@ import { markSchedulerTick, recordStageRun } from "./ops/stage-log";
 const TICK_MS = 60_000;
 
 /**
+ * Where in the minute a tick lands. Aligned to the clock rather than to the
+ * second the process happened to start, which used to fire a 05:26 stage
+ * anywhere up to 05:26:59 and moved with every deploy. One second past the
+ * boundary, not on it, so a timer firing a hair early cannot read the
+ * previous minute and leave the stage for a full minute later.
+ */
+const TICK_OFFSET_MS = 1_000;
+
+/**
  * How long a claim survives.
  *
  * Longer than a day so a stage claimed just before midnight cannot have its
@@ -74,6 +84,15 @@ export function localDate(now: Date): string {
 /** Minutes since local midnight, which is what a `time` column compares to. */
 export function minutesOfDay(now: Date): number {
   return now.getHours() * 60 + now.getMinutes();
+}
+
+/**
+ * Milliseconds until the next tick at second :01. Never zero: a tick landing
+ * exactly on :01 schedules the next minute's, not itself again.
+ */
+export function msUntilNextTick(now: Date): number {
+  const intoMinute = now.getTime() % TICK_MS;
+  return (TICK_OFFSET_MS - intoMinute + TICK_MS) % TICK_MS || TICK_MS;
 }
 
 /** "HH:MM:SS" → minutes since midnight. */
@@ -610,7 +629,7 @@ export async function tick(now = new Date()): Promise<Dispatch[]> {
   return fired;
 }
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Pick listening back up after a restart inside a muster.
@@ -641,20 +660,29 @@ export function startScheduler(): void {
   void resumeListening().catch((error) =>
     console.error("[listen] gagal melanjutkan jendela", error)
   );
-  // An immediate tick as well as the interval, so a stage whose time passed
-  // while the process was down fires on startup rather than up to a minute
-  // later.
+  // An immediate tick as well as the aligned ones, so a stage whose time
+  // passed while the process was down fires on startup rather than up to a
+  // minute later.
   void tick().catch((error) => console.error("[scheduler] tick failed", error));
-  timer = setInterval(() => {
+  scheduleNextTick();
+  console.log("[scheduler] started — one tick per minute, on second :01");
+}
+
+/**
+ * A chain of timeouts rather than an interval: each delay is measured from the
+ * clock again, so the tick stays on :01 however late the last one ran.
+ */
+function scheduleNextTick(): void {
+  timer = setTimeout(() => {
     void tick().catch((error) =>
       console.error("[scheduler] tick failed", error)
     );
-  }, TICK_MS);
-  console.log("[scheduler] started — one tick per minute");
+    scheduleNextTick();
+  }, msUntilNextTick(new Date()));
 }
 
 export function stopScheduler(): void {
   if (!timer) return;
-  clearInterval(timer);
+  clearTimeout(timer);
   timer = null;
 }
