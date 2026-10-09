@@ -21,14 +21,11 @@
  */
 
 import { eq, sql } from "drizzle-orm";
-import net from "node:net";
 
 import { db, schema } from "./db";
 import { env } from "./env";
+import { tcpReachable, ZK_PORT } from "./netcheck";
 import { redis } from "./redis";
-
-/** The ZK protocol port. Not configurable: it is fixed in device firmware. */
-const ZK_PORT = 4370;
 
 /** Injectable so tests exercise the folding logic without a network. */
 export type Probe = (ip: string) => Promise<boolean>;
@@ -41,30 +38,9 @@ export type ProbeCycle = {
   flipped: { name: string; online: boolean }[];
 };
 
-/**
- * One TCP connect, resolved as reachable/unreachable and never rejected.
- *
- * Every exit path destroys the socket. A machine that accepts the SYN and then
- * says nothing would otherwise hold a file descriptor open for the OS timeout,
- * and fifty-eight of those a minute is a leak with a clock on it.
- */
+/** One connect-and-close on the ZK port; see `tcpReachable` in `netcheck.ts`. */
 export const tcpProbe: Probe = (ip) =>
-  new Promise((resolve) => {
-    const socket = new net.Socket();
-    let settled = false;
-    const finish = (reachable: boolean) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve(reachable);
-    };
-
-    socket.setTimeout(env.PROBE_TIMEOUT_MS);
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
-    socket.connect(ZK_PORT, ip);
-  });
+  tcpReachable(ip, ZK_PORT, env.PROBE_TIMEOUT_MS);
 
 /** Map over `items` with at most `limit` in flight, preserving order. */
 async function mapPooled<T, R>(

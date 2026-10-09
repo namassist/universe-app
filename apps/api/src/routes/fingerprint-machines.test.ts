@@ -422,3 +422,140 @@ describe("a booth and its printer", () => {
     expect(((await cleared.json()) as Machine).printerId).toBeNull();
   });
 });
+
+/* ------------------------------------------------------------- selection */
+
+describe("bulk actions on a selection", () => {
+  async function three(base: number) {
+    const ids: string[] = [];
+    for (const n of [0, 1, 2]) {
+      const response = await create({
+        name: `${tag} MASSAL ${base + n}`,
+        ip: ipOf(base + n),
+      });
+      ids.push(((await response.json()) as Machine).id);
+    }
+    return ids;
+  }
+
+  const read = (id: string) =>
+    db
+      .select()
+      .from(schema.fingerprintMachines)
+      .where(eq(schema.fingerprintMachines.id, id));
+
+  test("deactivates and reactivates exactly the ticked machines", async () => {
+    const [a, b, c] = await three(140);
+
+    const off = await send(
+      "POST",
+      "/fingerprint-machines/bulk-active",
+      admin.cookie,
+      { ids: [a, b], active: false }
+    );
+    expect(off.status).toBe(200);
+    expect(((await off.json()) as { updated: number }).updated).toBe(2);
+    expect((await read(a!))[0]!.active).toBe(false);
+    expect((await read(b!))[0]!.active).toBe(false);
+    expect((await read(c!))[0]!.active).toBe(true);
+
+    const on = await send(
+      "POST",
+      "/fingerprint-machines/bulk-active",
+      admin.cookie,
+      { ids: [a], active: true }
+    );
+    expect(((await on.json()) as { updated: number }).updated).toBe(1);
+    expect((await read(a!))[0]!.active).toBe(true);
+  });
+
+  test("deletes exactly the ticked machines", async () => {
+    const [a, b, c] = await three(150);
+    const response = await send(
+      "POST",
+      "/fingerprint-machines/bulk-delete",
+      admin.cookie,
+      { ids: [a, b, a] }
+    );
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { deleted: number }).deleted).toBe(2);
+    expect(await read(a!)).toHaveLength(0);
+    expect(await read(b!)).toHaveLength(0);
+    expect(await read(c!)).toHaveLength(1);
+  });
+
+  test("an empty selection is refused", async () => {
+    const response = await send(
+      "POST",
+      "/fingerprint-machines/bulk-delete",
+      admin.cookie,
+      { ids: [] }
+    );
+    expect(response.status).toBe(422);
+  });
+
+  test("a viewer cannot delete or toggle a selection", async () => {
+    const [a] = await three(160);
+    for (const [path, body] of [
+      ["/fingerprint-machines/bulk-delete", { ids: [a] }],
+      ["/fingerprint-machines/bulk-active", { ids: [a], active: false }],
+    ] as const) {
+      const response = await send("POST", path, viewer.cookie, body);
+      expect(response.status).toBe(403);
+    }
+    expect((await read(a!))[0]!.active).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------- netcheck */
+
+describe("network check", () => {
+  /** Loopback, so the check answers at once: no machine on site has it. */
+  const loopback = () => `127.0.0.${2 + Math.floor(Math.random() * 250)}`;
+
+  test("reports every check of a machine and its printer", async () => {
+    const printerId = await makePrinter(170);
+    const created = await send("POST", "/fingerprint-machines", admin.cookie, {
+      name: `${tag} CEK`,
+      ip: loopback(),
+      printerId,
+    });
+    const row = (await created.json()) as Machine;
+    made.machines.push(row.id);
+
+    // A viewer may diagnose: the check changes nothing.
+    const response = await send(
+      "POST",
+      `/fingerprint-machines/${row.id}/netcheck`,
+      viewer.cookie
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      id: string;
+      finger: Record<string, unknown>;
+      printer: Record<string, unknown> | null;
+    };
+    expect(body.id).toBe(row.id);
+    expect(body.finger).toMatchObject({ ip: row.ip, port: 80 });
+    // Nothing listens on these loopback ports.
+    expect(body.finger.zk).toBe("fail");
+    expect(body.printer).toMatchObject({ ip: ipOf(170), port: 9100 });
+  });
+
+  test("an unknown machine is a 404", async () => {
+    const response = await send(
+      "POST",
+      `/fingerprint-machines/${crypto.randomUUID()}/netcheck`,
+      viewer.cookie
+    );
+    expect(response.status).toBe(404);
+  });
+
+  test("anonymous callers are refused", async () => {
+    const response = await send(
+      "POST",
+      `/fingerprint-machines/${crypto.randomUUID()}/netcheck`
+    );
+    expect(response.status).toBe(401);
+  });
+});

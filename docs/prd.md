@@ -1724,6 +1724,32 @@ runs intermittently.
 - The page carries the registry and nothing else. A pairing panel was built
   here and then removed at the owner's request — kiosk access is a person's
   session now, not a second device to administer (see _Kiosk access_ above).
+- The list shows the paired **printer's IP**, not its name: the address is
+  what a technician pings, and what the site's `netcheck.sh` prints beside the
+  machine.
+- Rows can be **ticked** (per row, or every row on the page), as in the unit
+  registry. With `manage`, a selection can be **activated, deactivated or
+  deleted** at once (`POST /v1/fingerprint-machines/bulk-active` and
+  `/bulk-delete`, up to 200 ids). Nothing holds a foreign key to a machine, so
+  a bulk delete never refuses part of a selection.
+
+### Network check (Ping) — shipped
+
+- A **Ping** button opens a dialog that checks the ticked machines, or every
+  active machine when none is ticked. It answers "which booth is the
+  problem?" the way `netcheck.sh` did from a shell on the server.
+- Per machine: ICMP ping (`ping -c 2 -W 1`), TCP to its SOAP port (normally 80) and to 4370. Per paired printer: ICMP ping and TCP to its port (normally
+  9100). **Each check is shown on its own**: a machine that drops ICMP but
+  answers 4370 is healthy, and one verdict would hide that.
+- One request per machine (`POST /v1/fingerprint-machines/:id/netcheck`), six
+  in flight from the dialog, so rows fill in as they answer. Problems sort to
+  the top, with a "mesin bermasalah: x dari y" count and a problems-only
+  filter.
+- Allowed with `view` on `mesin-fingerprint`: the check writes nothing. It does
+  **not** touch the prober's online/offline. The wall keeps its debounced
+  reading, and this is a person asking the hardware right now.
+- Without the `ping` binary on the server, ping reads **n/a**, never a
+  failure. The API image installs `iputils-ping`.
 
 ### Reachability probing — shipped
 

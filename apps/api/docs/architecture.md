@@ -138,6 +138,18 @@ persisted so a restart cannot walk a machine back to online.
 A Redis lease per cycle keeps several API processes from double-probing, the
 same mechanism as the scheduler's claim.
 
+### The on-demand network check
+
+`netcheck.ts` is the prober's opposite. A person clicks Ping in the machine
+registry and `POST /fingerprint-machines/:id/netcheck` asks the hardware right
+then: ICMP ping, TCP to the machine's SOAP port and to 4370, and ping plus the
+raw port of its paired printer. Each result comes back separately (`ok`,
+`fail`, or `unavailable` when `ping` could not run). This is the one request
+path that deliberately waits on hardware, and it writes nothing, so the wall's
+debounced reading stays the prober's. `ping` is spawned with an argument array,
+never a shell, on an address the registry already validated as IPv4. The
+prober's own connect is the same `tcpReachable`.
+
 ## Kiosk devices
 
 TV displays authenticate as devices (`devices` table) with their own cookie,

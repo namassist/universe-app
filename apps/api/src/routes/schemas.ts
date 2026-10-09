@@ -1577,6 +1577,34 @@ export const FingerprintDisplaySchema = t.Object({
   machines: t.Array(FingerprintMachineSchema),
 });
 
+/** One network check result — `unavailable` means "could not ask" (no `ping`). */
+const NetcheckStatusSchema = t.UnionEnum(["ok", "fail", "unavailable"]);
+
+/**
+ * One machine's on-demand network check (`netcheck.ts`): every check reported
+ * on its own, the way the site's `netcheck.sh` prints them, because a machine
+ * that drops ICMP but answers 4370 is healthy and one verdict would hide that.
+ */
+export const FingerprintNetcheckSchema = t.Object({
+  id: t.String(),
+  finger: t.Object({
+    ip: t.String(),
+    port: t.Integer(),
+    ping: NetcheckStatusSchema,
+    web: NetcheckStatusSchema,
+    zk: NetcheckStatusSchema,
+  }),
+  /** Null when the machine has no printer paired. */
+  printer: t.Nullable(
+    t.Object({
+      ip: t.String(),
+      port: t.Integer(),
+      ping: NetcheckStatusSchema,
+      raw: NetcheckStatusSchema,
+    })
+  ),
+});
+
 /* ---------------------------------------------------------------- roster */
 
 /**
