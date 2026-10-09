@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  Activity,
+  Fingerprint,
+  Pencil,
+  Plus,
+  Power,
+  PowerOff,
+  Search,
+  Trash2,
+} from "lucide-react";
 
 import { MENU_LABELS } from "@universe/contracts";
 
@@ -50,6 +59,8 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 
+import { NetcheckDialog } from "./fingerprint-netcheck-dialog";
+
 /**
  * The same IPv4 shape the API enforces, checked here only so a typo is caught
  * before a round trip. The server's answer is still the one that decides — a
@@ -93,6 +104,9 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
   const [errIp, setErrIp] = React.useState(false);
   const [delTarget, setDelTarget] =
     React.useState<FingerprintMachineRow | null>(null);
+  const [sel, setSel] = React.useState<ReadonlySet<string>>(() => new Set());
+  const [bulkDelOpen, setBulkDelOpen] = React.useState(false);
+  const [pingOpen, setPingOpen] = React.useState(false);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: fingerprintMachinesKey });
@@ -154,6 +168,46 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
       pushToast("error", t.mdDelT, errorMessage(error, t.loginErr)),
   });
 
+  /* The whole site is ~60 machines, well under the endpoints' 200, so a
+     selection always goes in one request. */
+  const bulkActive = useMutation({
+    mutationFn: async (input: { ids: string[]; active: boolean }) => {
+      const result =
+        await api.v1["fingerprint-machines"]["bulk-active"].post(input);
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (data, input) => {
+      await invalidate();
+      pushToast(
+        "success",
+        t.mfBulkActiveToastT,
+        `${data.updated} ${t.mfSumB} — ${input.active ? t.stAktif : t.stNonaktif}`
+      );
+      setSel(new Set());
+    },
+    onError: (error) =>
+      pushToast("error", t.mfBulkActiveToastT, errorMessage(error, t.loginErr)),
+  });
+
+  const bulkDel = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const result = await api.v1["fingerprint-machines"]["bulk-delete"].post({
+        ids,
+      });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: async (data) => {
+      await invalidate();
+      pushToast("success", t.mdDelToastT, `${data.deleted} ${t.mfSumB}`);
+      setBulkDelOpen(false);
+      setSel(new Set());
+    },
+    onError: (error) =>
+      pushToast("error", t.mdBulkDel, errorMessage(error, t.loginErr)),
+  });
+
   const rows = entries.filter((r) => {
     if (stF === "1" && !r.active) return false;
     if (stF === "0" && r.active) return false;
@@ -165,6 +219,43 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     );
   });
   const pg = usePagination(rows, "25");
+
+  // Resolved against the filtered list, so a machine ticked before a filter
+  // hid it never reaches a request.
+  const selectedRows = rows.filter((r) => sel.has(r.id));
+
+  // The header box governs the page, not the whole filtered set — as in the
+  // unit registry. Selections still accumulate across pages.
+  const pageIds = pg.rows.map((r) => r.id);
+  const allPageSel = pageIds.length > 0 && pageIds.every((id) => sel.has(id));
+  const somePageSel = pageIds.some((id) => sel.has(id));
+
+  function toggleRow(id: string) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+  function togglePage() {
+    setSel((prev) => {
+      const next = new Set(prev);
+      for (const id of pageIds) {
+        if (allPageSel) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
+  // The ticked machines, or else every active one — an inactive machine is
+  // retired, and checking it is only worth doing when somebody asks for it.
+  const pingTargets = selectedRows.length
+    ? selectedRows
+    : entries.filter((r) => r.active);
+
+  const printerIp = (id: string | null) =>
+    id ? (printersQ.data?.find((x) => x.id === id)?.ip ?? null) : null;
 
   function openAdd() {
     setEditing(null);
@@ -221,6 +312,11 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
   return (
     <div className="flex flex-col gap-6">
       <PageTitle title={MENU_LABELS["mesin-fingerprint"]} sub={t.mfSub}>
+        <Button variant="secondary" onClick={() => setPingOpen(true)}>
+          <Activity />
+          {t.mfPing}
+          {selectedRows.length ? ` (${selectedRows.length})` : null}
+        </Button>
         {canW ? (
           <Button onClick={openAdd}>
             <Plus />
@@ -250,6 +346,45 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
               <option value="1">{t.stAktif}</option>
               <option value="0">{t.stNonaktif}</option>
             </Select>
+            {/* Appended so the controls before them keep their place when a
+                selection appears and disappears. */}
+            {canW && selectedRows.length ? (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={bulkActive.isPending}
+                  onClick={() =>
+                    bulkActive.mutate({
+                      ids: selectedRows.map((r) => r.id),
+                      active: true,
+                    })
+                  }
+                >
+                  <Power />
+                  {t.mfBulkOn}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={bulkActive.isPending}
+                  onClick={() =>
+                    bulkActive.mutate({
+                      ids: selectedRows.map((r) => r.id),
+                      active: false,
+                    })
+                  }
+                >
+                  <PowerOff />
+                  {t.mfBulkOff}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => setBulkDelOpen(true)}
+                >
+                  <Trash2 />
+                  {t.mdBulkDel} ({selectedRows.length})
+                </Button>
+              </>
+            ) : null}
           </ToolbarGroup>
         </Toolbar>
 
@@ -257,9 +392,21 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           <Table>
             <TableHeader>
               <tr>
+                {/* For viewers too: a selection also scopes the Ping check. */}
+                <TableHead style={{ width: 44 }}>
+                  <Checkbox
+                    ref={(el) => {
+                      // Indeterminate is a DOM property, not an attribute.
+                      if (el) el.indeterminate = somePageSel && !allPageSel;
+                    }}
+                    checked={allPageSel}
+                    onChange={togglePage}
+                    aria-label={t.mdSelAll}
+                  />
+                </TableHead>
                 <TableHead>{t.mfName}</TableHead>
                 <TableHead>{t.mfIp}</TableHead>
-                <TableHead>Printer</TableHead>
+                <TableHead>{t.mfPrinterIp}</TableHead>
                 <TableHead>{t.mfReach}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
@@ -267,7 +414,14 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
             </TableHeader>
             <TableBody>
               {pg.rows.map((r) => (
-                <TableRow key={r.id}>
+                <TableRow key={r.id} selected={sel.has(r.id)}>
+                  <TableCell>
+                    <Checkbox
+                      checked={sel.has(r.id)}
+                      onChange={() => toggleRow(r.id)}
+                      aria-label={`${t.mdSelRow} — ${r.name}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <span className="font-semibold">{r.name}</span>
                   </TableCell>
@@ -275,13 +429,11 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
                     {r.ip}
                   </TableCell>
                   <TableCell>
-                    {/* The booth's printer, by name — the pairing is what a
-                        ticket is written to, so it belongs on the list rather
-                        than only inside the dialog. */}
-                    {r.printerId ? (
-                      <span>
-                        {printersQ.data?.find((x) => x.id === r.printerId)
-                          ?.name ?? "—"}
+                    {/* The booth's printer, by address — what a technician
+                        pings and what `netcheck.sh` lists beside the machine. */}
+                    {printerIp(r.printerId) ? (
+                      <span className="font-mono tabular-nums">
+                        {printerIp(r.printerId)}
                       </span>
                     ) : (
                       <span className="text-(--text-tertiary)">—</span>
@@ -533,6 +685,40 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={bulkDelOpen}
+        onClose={() => setBulkDelOpen(false)}
+        labelledBy="mfb-t"
+      >
+        <DialogIcon variant="danger">
+          <Trash2 />
+        </DialogIcon>
+        <DialogTitle id="mfb-t">{t.mfBulkDelT}</DialogTitle>
+        <DialogBody>
+          <b>{selectedRows.length}</b> {t.mfSumB} — {t.mfBulkDelB}
+        </DialogBody>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setBulkDelOpen(false)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={bulkDel.isPending || !selectedRows.length}
+            onClick={() => bulkDel.mutate(selectedRows.map((r) => r.id))}
+          >
+            {t.mdBulkDel}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {pingOpen ? (
+        <NetcheckDialog
+          machines={pingTargets}
+          scopeLabel={selectedRows.length ? t.mfPingScopeSel : t.mfPingScopeAll}
+          onClose={() => setPingOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
