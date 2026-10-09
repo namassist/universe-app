@@ -151,6 +151,48 @@ describe("Operator No FTW", () => {
     expect(rows).toEqual([]);
   });
 
+  test("only people who tapped in — on time or late — are listed", () => {
+    // Owner, 2026-10-09: the report is about who came and could not work,
+    // so someone with no IN tap at all belongs on Operator No Finger instead.
+    const rows = operatorNoFtwRows(
+      [
+        line({
+          nik: "509000001",
+          name: "Absen",
+          ftw: "missing",
+          finger: "missing",
+        }),
+        line({
+          nik: "509000002",
+          name: "Tepat",
+          ftw: "missing",
+          finger: "pass",
+        }),
+        line({ nik: "509000003", name: "Telat", ftw: "fail", finger: "late" }),
+      ],
+      DEPTS,
+      readings
+    );
+    // Sorted by name, as every person report is.
+    expect(rows.map((r) => r.name)).toEqual(["Telat", "Tepat"]);
+  });
+
+  test("a late FTW upload still counts as not passed for someone who tapped", () => {
+    const rows = operatorNoFtwRows(
+      [
+        line({
+          nik: "501000003",
+          ftw: "late",
+          sentAt: "05:41:10",
+          finger: "late",
+        }),
+      ],
+      DEPTS,
+      readings
+    );
+    expect(rows.map((r) => r.saveraStatus)).toEqual(["Terlambat FTW (05:41)"]);
+  });
+
   test("a failed reading reads as savera categorised it", () => {
     const [row] = operatorNoFtwRows(
       [line({ nik: "501000001", name: "Bima", ftw: "fail" })],

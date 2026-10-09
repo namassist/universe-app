@@ -38,7 +38,8 @@ export const REPORT_DESCRIPTIONS: Record<ReportKind, string> = {
   "equipment-no-operator": "Unit di papan yang tidak mendapat operator",
   "operator-no-equipment":
     "Operator yang sudah finger dan FTW-nya oke, tetapi tidak mendapat unit",
-  "operator-no-ftw": "Operator terjadwal yang tidak lolos Fit To Work",
+  "operator-no-ftw":
+    "Operator terjadwal yang sudah finger, tetapi FTW-nya tidak lolos atau belum upload",
   "operator-no-finger": "Operator terjadwal yang tidak tap atau terlambat tap",
   "final-validation": "Hasil akhir alokasi: setiap operator dan unitnya",
 };

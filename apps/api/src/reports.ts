@@ -114,9 +114,13 @@ function saveraStatus(line: AuditLine, reading: FtwText | undefined): string {
 }
 
 /**
- * Everyone whose FTW did not pass for the unit that applied to them. A unit
- * that asks for no FTW (`not-required`) puts nobody here: the engine never
- * held it against them, and the report must not either.
+ * Everyone who tapped in — on time or late — and whose FTW did not pass for
+ * the unit that applied to them (owner, 2026-10-09). The report answers "who
+ * came and could not work for want of an FTW"; someone who never tapped in
+ * did not come, and is Operator No Finger's to list. A unit that asks for no
+ * FTW (`not-required`) puts nobody here: the engine never held it against
+ * them, and the report must not either. A late upload still counts as not
+ * passed.
  *
  * `readings` is keyed by normalized NIK — the only key savera shares with us.
  */
@@ -126,7 +130,12 @@ export function operatorNoFtwRows(
   readings: Map<string, FtwText>
 ): ReportRow[] {
   return lines
-    .filter((l) => l.row.ftw !== "pass" && l.row.ftw !== "not-required")
+    .filter(
+      (l) =>
+        l.row.finger !== "missing" &&
+        l.row.ftw !== "pass" &&
+        l.row.ftw !== "not-required"
+    )
     .sort(byName)
     .map((l) => {
       const { nik, name, position, department } = personCells(l, departments);

@@ -52,6 +52,8 @@ let nikPlaced: string, nikLeftA: string, nikLeftB: string;
 /** Spares the board left seatless whose SIMPERs reach only units that ask no
     FTW, or reach both kinds (owner, 2026-10-06). */
 let nikDozerOnly: string, nikBoth: string;
+/** Tapped in, FTW failed / never uploaded — Operator No FTW's own people. */
+let nikTapFail: string, nikTapNoFtw: string;
 let unitPlaced: string,
   unitEmptyA: string,
   unitEmptyB: string,
@@ -191,6 +193,8 @@ beforeAll(async () => {
   nikLeftB = `9883${digits()}`;
   nikDozerOnly = `9884${digits()}`;
   nikBoth = `9885${digits()}`;
+  nikTapFail = `9886${digits()}`;
+  nikTapNoFtw = `9887${digits()}`;
   const people = await db
     .insert(schema.employees)
     .values([
@@ -229,12 +233,40 @@ beforeAll(async () => {
         departmentId: deptA,
         positionId: posA,
       },
+      {
+        nik: nikTapFail,
+        name: `${tag} Tap Fail`,
+        companyId: co!.id,
+        departmentId: deptA,
+        positionId: posA,
+      },
+      {
+        nik: nikTapNoFtw,
+        name: `${tag} Tap No FTW`,
+        companyId: co!.id,
+        departmentId: deptA,
+        positionId: posA,
+      },
     ])
     .returning({ id: schema.employees.id });
   made.employees.push(...people.map((p) => p.id));
-  const [opPlaced, opLeftA, opLeftB, opDozerOnly, opBoth] = people.map(
-    (p) => p.id
-  ) as [string, string, string, string, string];
+  const [
+    opPlaced,
+    opLeftA,
+    opLeftB,
+    opDozerOnly,
+    opBoth,
+    opTapFail,
+    opTapNoFtw,
+  ] = people.map((p) => p.id) as [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
   await db.insert(schema.employeeSkills).values([
     /* The two left without a seat can reach an FTW seat, so the No FTW
        report holds them to it. */
@@ -243,6 +275,8 @@ beforeAll(async () => {
     { employeeId: opDozerOnly, simperCodeId: codeNoFtw },
     { employeeId: opBoth, simperCodeId: codeFtw },
     { employeeId: opBoth, simperCodeId: codeNoFtw },
+    { employeeId: opTapFail, simperCodeId: codeFtw },
+    { employeeId: opTapNoFtw, simperCodeId: codeFtw },
   ]);
 
   all = await makeUser({ scope: "all" });
@@ -299,16 +333,43 @@ beforeAll(async () => {
         date,
         code: "D" as const,
       },
+      {
+        documentId: docOf(deptA),
+        employeeId: opTapFail,
+        date,
+        code: "D" as const,
+      },
+      {
+        documentId: docOf(deptA),
+        employeeId: opTapNoFtw,
+        date,
+        code: "D" as const,
+      },
     ])
   );
 
-  await db.insert(schema.ftwReadings).values({
-    nik: nikLeftA,
-    date: DATE,
-    name: `${tag} Left A`,
-    ftwDecision: "FTW Perlu Tindak Lanjut",
-    sleepCategory: "Tidak Boleh Bekerja",
-  });
+  /* Operator No FTW lists only people who tapped in (owner, 2026-10-09), so
+     its own fixtures tap; Placed and Left A/B stay untapped for the No
+     Finger and No Equipment tests. */
+  await db.insert(schema.fingerReadings).values(
+    [DATE, NO_BOARD_DATE].flatMap((date) =>
+      [nikTapFail, nikTapNoFtw, nikBoth, nikDozerOnly].map((nik) => ({
+        nik,
+        date,
+        firstInAt: `${date} 05:00:00`,
+      }))
+    )
+  );
+
+  await db.insert(schema.ftwReadings).values(
+    [nikLeftA, nikTapFail].map((nik) => ({
+      nik,
+      date: DATE,
+      name: `${tag} FTW`,
+      ftwDecision: "FTW Perlu Tindak Lanjut",
+      sleepCategory: "Tidak Boleh Bekerja",
+    }))
+  );
 
   const [doc] = await db
     .insert(schema.fleetActualDocuments)
@@ -333,7 +394,24 @@ beforeAll(async () => {
 afterAll(async () => {
   await db
     .delete(schema.ftwReadings)
-    .where(inArray(schema.ftwReadings.nik, [nikPlaced, nikLeftA, nikLeftB]));
+    .where(
+      inArray(schema.ftwReadings.nik, [
+        nikPlaced,
+        nikLeftA,
+        nikLeftB,
+        nikTapFail,
+      ])
+    );
+  await db
+    .delete(schema.fingerReadings)
+    .where(
+      inArray(schema.fingerReadings.nik, [
+        nikTapFail,
+        nikTapNoFtw,
+        nikBoth,
+        nikDozerOnly,
+      ])
+    );
   if (made.docs.length)
     await db
       .delete(schema.fleetActualDocuments)
@@ -518,7 +596,7 @@ describe("the person reports", () => {
     expect(byNik.has(nikLeftB)).toBe(false);
   });
 
-  /* Nobody in these fixtures tapped in: the unplaced are the No Finger
+  /* Placed and Left A/B never tapped in: the unplaced are the No Finger
      report's, not this one's (owner, 2026-10-07). The rule's other halves
      are proven case by case in reports.test.ts. */
   test("Operator No Equipment leaves out whoever never tapped in", async () => {
@@ -538,8 +616,19 @@ describe("the person reports", () => {
     const body = await person("operator-no-ftw");
     if (!body) return;
     const status = new Map(body.rows.map((r) => [r.nik, r.saveraStatus]));
-    expect(status.get(nikLeftA)).toBe("Tidak Boleh Bekerja");
-    expect(status.get(nikLeftB)).toBe("Belum FTW");
+    expect(status.get(nikTapFail)).toBe("Tidak Boleh Bekerja");
+    expect(status.get(nikTapNoFtw)).toBe("Belum FTW");
+  });
+
+  /* Owner, 2026-10-09: the report lists who came and could not work. Left
+     A failed FTW and Left B never uploaded, but neither tapped in — they are
+     Operator No Finger's, not this report's. */
+  test("Operator No FTW leaves out whoever never tapped in", async () => {
+    const body = await person("operator-no-ftw");
+    if (!body) return;
+    const niks = body.rows.map((r) => r.nik);
+    expect(niks).not.toContain(nikLeftA);
+    expect(niks).not.toContain(nikLeftB);
   });
 
   /*
