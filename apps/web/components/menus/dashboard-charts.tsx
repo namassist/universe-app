@@ -6,6 +6,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -192,6 +193,52 @@ function ChartPanel({
  * carries its own count, and the table below is the relief the light-mode
  * contrast warning obliges.
  */
+/*
+ * The ratio axis starts at 50% (owner, 2026-10-09): nearly every category is
+ * mostly ready, so the scale is spent where the differences are. A bar's part
+ * below 50% is cut off, and each segment's share is drawn in the middle of
+ * the part that shows — the ready segment usually runs from 0%, so its own
+ * middle would sit off the chart.
+ */
+const RATIO_FLOOR = 50;
+const RATIO_TICKS = [50, 60, 70, 80, 90, 100];
+const RATIO_MARGIN = { top: 4, right: 8, bottom: 4, left: 8 };
+const RATIO_YAXIS = 112;
+/** Pixel x where the plot starts — the left edge of what a bar can show. */
+const RATIO_PLOT_LEFT = RATIO_MARGIN.left + RATIO_YAXIS;
+
+function SegmentCount(props: {
+  x?: number | string;
+  y?: number | string;
+  width?: number | string;
+  height?: number | string;
+  value?: number | string;
+}) {
+  // A whole percentage (owner, 2026-10-09); a segment that rounds to 0% has
+  // nothing to say.
+  const value = Math.round(Number(props.value ?? 0));
+  if (!value) return null;
+  const x = Number(props.x ?? 0);
+  const width = Number(props.width ?? 0);
+  const left = Math.max(x, RATIO_PLOT_LEFT);
+  const right = x + width;
+  // Too narrow to hold a number legibly: leave it to the tooltip.
+  if (right - left < 14) return null;
+  return (
+    <text
+      x={(left + right) / 2}
+      y={Number(props.y ?? 0) + Number(props.height ?? 0) / 2}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={11}
+      fontWeight={600}
+      fill="var(--text-primary)"
+    >
+      {value}%
+    </text>
+  );
+}
+
 function OperatorRatio({
   rows,
   title,
@@ -256,21 +303,22 @@ function OperatorRatio({
         <BarChart
           layout="vertical"
           data={data}
-          margin={{ top: 4, right: 8, bottom: 4, left: 8 }}
+          margin={RATIO_MARGIN}
           barCategoryGap="22%"
         >
           <CartesianGrid horizontal={false} stroke="var(--chart-grid)" />
           <XAxis
             type="number"
-            domain={[0, 100]}
-            ticks={[0, 25, 50, 75, 100]}
+            domain={[RATIO_FLOOR, 100]}
+            ticks={RATIO_TICKS}
+            allowDataOverflow
             tickFormatter={(v: number) => `${v}%`}
             {...AXIS}
           />
           <YAxis
             type="category"
             dataKey="category"
-            width={112}
+            width={RATIO_YAXIS}
             tickLine={false}
             {...AXIS}
           />
@@ -309,7 +357,9 @@ function OperatorRatio({
               stroke="var(--color-bg)"
               strokeWidth={1}
               radius={i === series.length - 1 ? [0, 4, 4, 0] : undefined}
-            />
+            >
+              <LabelList dataKey={s.key} content={<SegmentCount />} />
+            </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>
@@ -511,7 +561,8 @@ function EquipmentReport({
       <ResponsiveContainer width="100%" height={EQUIPMENT_HEIGHT}>
         <BarChart
           data={data}
-          margin={{ top: 4, right: 8, bottom: 52, left: 0 }}
+          /* Room above the tallest column for its label. */
+          margin={{ top: 16, right: 8, bottom: 52, left: 0 }}
           barGap={2}
         >
           <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
@@ -524,7 +575,13 @@ function EquipmentReport({
             tickLine={false}
             {...AXIS}
           />
-          <YAxis allowDecimals={false} {...AXIS} />
+          {/* Headroom above the tallest column, so its label clears the
+              legend instead of sitting on it. */}
+          <YAxis
+            allowDecimals={false}
+            domain={[0, (max: number) => Math.ceil(max * 1.15) + 1]}
+            {...AXIS}
+          />
           <Tooltip
             content={<ChartTip />}
             cursor={{ fill: "var(--fill-subtle)" }}
@@ -534,7 +591,7 @@ function EquipmentReport({
             align="left"
             iconType="square"
             iconSize={9}
-            wrapperStyle={{ fontSize: 12, paddingBottom: 8 }}
+            wrapperStyle={{ fontSize: 12, paddingBottom: 16 }}
           />
           {series.map((s) => (
             <Bar
@@ -543,7 +600,14 @@ function EquipmentReport({
               name={s.name}
               fill={s.fill}
               radius={[4, 4, 0, 0]}
-            />
+            >
+              <LabelList
+                dataKey={s.key}
+                position="top"
+                fontSize={10}
+                fill="var(--text-secondary)"
+              />
+            </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>
