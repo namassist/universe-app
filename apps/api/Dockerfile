@@ -16,6 +16,13 @@ FROM oven/bun:1.3.14
 WORKDIR /app
 ENV NODE_ENV=production
 
+# `ping`, for the fingerprint menu's network check (`src/netcheck.ts`). The
+# slim base has none; without it that check reports ping as n/a, never as a
+# failure, so an image built before this line still works.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends iputils-ping \
+  && rm -rf /var/lib/apt/lists/*
+
 # Every workspace member's package.json has to be present or bun refuses to
 # install the workspace at all.
 COPY package.json bun.lock ./

@@ -11,10 +11,11 @@
  * out of probing and off the wall.
  */
 
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
+import { checkTarget } from "../netcheck";
 import { machineBoard } from "../prober";
 import {
   db,
@@ -26,6 +27,7 @@ import {
   ErrorSchema,
   FingerprintDisplaySchema,
   FingerprintMachineSchema,
+  FingerprintNetcheckSchema,
 } from "./schemas";
 import { invalidIp, IPV4 } from "./ipv4";
 
@@ -61,6 +63,12 @@ const printerTaken = {
    clash on the printer is not reported as a clash on the address. */
 const IP_UNIQUE = "fingerprint_machines_ip_unique";
 const PRINTER_UNIQUE = "fingerprint_machines_printer_id_unique";
+
+/** A hand-ticked selection; the same ceiling as the unit registry's bulk delete. */
+const SelectionSchema = t.Array(t.String({ format: "uuid" }), {
+  minItems: 1,
+  maxItems: 200,
+});
 
 const duplicateIp = (ip: string) => ({
   code: "ip_taken",
@@ -291,5 +299,112 @@ export const fingerprintMachineRoutes = new Elysia({
         404: ErrorSchema,
       },
       detail: { summary: "Remove a fingerprint machine" },
+    }
+  )
+
+  /**
+   * Delete a hand-ticked selection in one statement.
+   *
+   * Unlike the unit registry's bulk delete this can be a set delete: nothing
+   * holds a foreign key to a machine (taps carry the address, not the row), so
+   * there is no partial refusal to report. `POST …/bulk-delete` rather than
+   * `DELETE /fingerprint-machines` for the same reason as `units.ts`.
+   */
+  .post(
+    "/bulk-delete",
+    async ({ body }) => {
+      const ids = [...new Set(body.ids)];
+      const rows = await db
+        .delete(schema.fingerprintMachines)
+        .where(inArray(schema.fingerprintMachines.id, ids))
+        .returning({ id: schema.fingerprintMachines.id });
+      return { deleted: rows.length };
+    },
+    {
+      auth: { menu: "mesin-fingerprint", mode: "manage" },
+      body: t.Object({ ids: SelectionSchema }),
+      response: {
+        200: t.Object({ deleted: t.Integer() }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Delete several fingerprint machines at once" },
+    }
+  )
+
+  /**
+   * Activate or deactivate a selection — the bulk form of the dialog's "Aktif"
+   * toggle. A deactivated machine drops out of probing and off the wall.
+   */
+  .post(
+    "/bulk-active",
+    async ({ body }) => {
+      const ids = [...new Set(body.ids)];
+      const rows = await db
+        .update(schema.fingerprintMachines)
+        .set({ active: body.active })
+        .where(inArray(schema.fingerprintMachines.id, ids))
+        .returning({ id: schema.fingerprintMachines.id });
+      return { updated: rows.length };
+    },
+    {
+      auth: { menu: "mesin-fingerprint", mode: "manage" },
+      body: t.Object({ ids: SelectionSchema, active: t.Boolean() }),
+      response: {
+        200: t.Object({ updated: t.Integer() }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Activate or deactivate several machines at once" },
+    }
+  )
+
+  /**
+   * Ping and port-check one machine and its printer, now (`netcheck.ts`).
+   *
+   * One machine per request, so the dialog fills row by row and no request
+   * waits on the whole site. This is the one route here that waits on
+   * hardware, on purpose — and it writes nothing, so a viewer may run it.
+   */
+  .post(
+    "/:id/netcheck",
+    async ({ params, status }) => {
+      const [row] = await db
+        .select({
+          ip: schema.fingerprintMachines.ip,
+          port: schema.fingerprintMachines.port,
+          printerIp: schema.printers.ip,
+          printerPort: schema.printers.port,
+        })
+        .from(schema.fingerprintMachines)
+        .leftJoin(
+          schema.printers,
+          eq(schema.printers.id, schema.fingerprintMachines.printerId)
+        )
+        .where(eq(schema.fingerprintMachines.id, params.id));
+      if (!row) return status(404, notFound);
+
+      const result = await checkTarget({
+        ip: row.ip,
+        port: row.port,
+        printer:
+          row.printerIp !== null && row.printerPort !== null
+            ? { ip: row.printerIp, port: row.printerPort }
+            : null,
+      });
+      return { id: params.id, ...result };
+    },
+    {
+      auth: { menu: "mesin-fingerprint", mode: "view" },
+      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      response: {
+        200: FingerprintNetcheckSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+      },
+      detail: { summary: "Ping and port-check one machine and its printer" },
     }
   );
