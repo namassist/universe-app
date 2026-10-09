@@ -390,6 +390,7 @@ async function importCatalogues(): Promise<FleetCatalogues> {
       id: schema.units.id,
       code: schema.units.code,
       typeName: schema.unitTypes.name,
+      active: schema.units.active,
     })
     .from(schema.units)
     .innerJoin(schema.unitTypes, eq(schema.unitTypes.id, schema.units.typeId));

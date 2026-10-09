@@ -110,6 +110,13 @@ fill the gap from the spare pool.
 - Refused by row, with the row named: a unit listed twice, a leader with no row
   of its own, a unit that both leads and hauls, and members of one formation
   that disagree about their area.
+- **An inactive unit is refused, ride included** (owner, 2026-10-09). A unit
+  switched off in master may not lead, haul or support, and an inactive
+  vehicle may not be anyone's ride nor the spare pool's — each refused on its
+  row ("Unit DT4027 nonaktif", "Transport UD-BU09 nonaktif"), so the import
+  cannot be committed until it is fixed. The row still counts toward its
+  formation, so an inactive digger is one error, not three. The PLAN import is
+  the exception and keeps admitting inactive units (2026-09-23).
 - **Released means cleared, not merely unflagged.** A unit the file does not
   name loses its support flag, its work area and its transport together — a
   machine nobody named today is not working anywhere, and a leftover area had
