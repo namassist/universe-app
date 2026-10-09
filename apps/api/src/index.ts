@@ -27,6 +27,8 @@ import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { allocationPriorityRoutes } from "./routes/allocation-priority";
 import { notificationRoutes } from "./routes/notifications";
 import { opsRoutes } from "./routes/ops";
+import { integrationClientRoutes } from "./routes/integration-clients";
+import { integrationRoutes } from "./routes/integrations";
 import { monitoringTapRoutes } from "./routes/monitoring-tap";
 import { ticketRoutes } from "./routes/tickets";
 import { fleetsRoutes } from "./routes/fleets";
@@ -89,7 +91,9 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(fingerprintMachineRoutes)
   .use(printerRoutes)
   .use(reportRoutes)
-  .use(opsRoutes);
+  .use(opsRoutes)
+  .use(integrationClientRoutes)
+  .use(integrationRoutes);
 
 export const app = new Elysia()
   /* First, so its clock starts before CORS, auth and validation run — their
@@ -137,7 +141,21 @@ export const app = new Elysia()
             name: "ops",
             description: "Operations Center (its own password, outside roles)",
           },
+          {
+            name: "integrations",
+            description:
+              "Reads for other services on the site network (per-service token)",
+          },
         ],
+        components: {
+          securitySchemes: {
+            integrationToken: {
+              type: "http",
+              scheme: "bearer",
+              description: "A `uvk_…` token issued under Integrasi API",
+            },
+          },
+        },
       },
     })
   )

@@ -161,7 +161,9 @@ export const NAV: NavEntry[] = [
     key: "um",
     label: "User Management",
     icon: UserPlus,
-    children: [leaf("users"), leaf("roles")],
+    /* Integrasi API sits with the accounts because it is the same question —
+       who may read from Universe — asked of a service rather than a person. */
+    children: [leaf("users"), leaf("roles"), leaf("integrations")],
   },
   item("setting", Settings),
 ];

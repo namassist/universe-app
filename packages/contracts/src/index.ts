@@ -11,6 +11,7 @@ export * from "./access";
 export * from "./account-import";
 export * from "./fleet";
 export * from "./fleet-import";
+export * from "./integration";
 export * from "./master";
 export * from "./master-import";
 export * from "./notifications";

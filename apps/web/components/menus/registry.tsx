@@ -17,6 +17,7 @@ import { FingerprintMachinesMenu } from "./fingerprint-machines";
 import { FitToWorkMenu } from "./fit-to-work";
 import { FleetAllocationMenu } from "./fleet-allocation";
 import { FleetSettingMenu } from "./fleet-setting";
+import { IntegrationsMenu } from "./integrations";
 import { MasterMenu } from "./master";
 import { MonitoringTapMenu } from "./monitoring-tap";
 import { MenuPlaceholder } from "./placeholder";
@@ -54,6 +55,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   "unit-status": UnitStatusMenu,
   "fleet-allocation": FleetAllocationMenu,
   "fleet-setting": FleetSettingMenu,
+  integrations: IntegrationsMenu,
   "allocation-priority": AllocationPriorityMenu,
   report: ReportMenu,
   "monitoring-tap": MonitoringTapMenu,

@@ -15,6 +15,12 @@ the definition — when they disagree, the code wins. Change flow: edit
 - `users` — login accounts. Linked to an employee by **NIK** (string), not by
   FK id — see known-issues: renaming an employee's NIK orphans the account.
 - `devices` — kiosk displays (all four kinds) with their own auth.
+- `integration_clients` — other services that read from Universe: name,
+  sha256 of the token (never the token), its shown prefix, `scopes text[]`,
+  `allowed_ips text[]` (empty = any), creator, last use, `valid_from` /
+  `valid_until` (site dates, inclusive; null end = never), and a revoke stamp instead of deletion. Rotating rewrites the hash
+  and prefix in place. A live name is unique case-insensitively
+  (`integration_clients_live_name_idx`, partial on `revoked_at is null`).
 
 **Master data catalogues** (spreadsheet-importable)
 

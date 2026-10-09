@@ -234,6 +234,67 @@ export const devices = pgTable("devices", {
  * disbanded in Fleet Settings leaves the TVs that showed it rather than
  * blocking its own deletion with an error about a television.
  */
+/**
+ * Another service on the site network that reads from Universe — the third
+ * kind of principal, beside a person and a wall.
+ *
+ * It holds a token rather than a session: a service runs unattended, so a
+ * login that expires or a password somebody rotates would break it silently.
+ * Only the token's sha256 is kept — the token is 32 random bytes, so a fast
+ * hash is enough and lets the lookup be an index probe — and `token_prefix`
+ * is what the screen shows so an admin can tell two tokens apart.
+ *
+ * `scopes` are `INTEGRATION_SCOPES`, plain text for the reason `menu_slug` is.
+ * An empty `allowed_ips` admits any address; otherwise the request must come
+ * from one of them. Revoking stamps `revoked_at` rather than deleting, so the
+ * list keeps who had access and until when. A live name is unique, so two
+ * services are never told apart by their prefix alone.
+ */
+export const integrationClients = pgTable(
+  "integration_clients",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    tokenPrefix: text("token_prefix").notNull(),
+    scopes: text("scopes")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    allowedIps: text("allowed_ips")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    /**
+     * The days the token works, inclusive, as site calendar dates (owner,
+     * 2026-10-09: a start and an end chosen on a date picker). Dates rather
+     * than instants, compared with the site's own date as the muster's
+     * schedule is (`localDate`), so "until 9 Oct" means through that day in
+     * WITA with no hour to get wrong. A null end is a token that never
+     * expires: an unattended sync that expires silently breaks without anyone
+     * watching, so the end is the admin's choice, not a rule.
+     */
+    validFrom: date("valid_from").notNull().defaultNow(),
+    validUntil: date("valid_until"),
+    revokedBy: uuid("revoked_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("integration_clients_live_name_idx")
+      .on(sql`lower(${table.name})`)
+      .where(sql`${table.revokedAt} is null`),
+  ]
+);
+
 export const deviceFleets = pgTable(
   "device_fleets",
   {

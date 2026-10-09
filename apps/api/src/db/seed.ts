@@ -21,6 +21,7 @@ import {
 } from "@universe/contracts";
 
 import { hashPassword } from "../auth/password";
+import { invalidatePermissions } from "../auth/principal";
 import { env } from "../env";
 import { db, schema } from "./index";
 import { ORGANISATION, seedMasterData, workforce } from "./seed-master";
@@ -580,6 +581,14 @@ export async function bootstrap(): Promise<Map<string, string>> {
 
   console.log("[seed] grants for newly added menu slugs");
   await seedNewSlugGrants(roleIds);
+
+  /* The grants were written straight to Postgres, past the API that would
+     have dropped each role's cached permission set — so a release that adds
+     a menu showed it to nobody until the cache ran out (Laporan, 2026-10-06;
+     Integrasi API, 2026-10-09). Dropping them here is what makes the new
+     menu appear on the next request. */
+  console.log("[seed] permission cache");
+  await Promise.all([...roleIds.values()].map(invalidatePermissions));
 
   console.log("[seed] bootstrap account");
   await seedSuperadminAccount(roleIds.get("superadmin")!);
