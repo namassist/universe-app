@@ -16,11 +16,13 @@
  * Ping would be the wrong instrument: at least one machine on this site
  * (MAIN OFFICE) drops ICMP while happily accepting 4370.
  *
- * Each machine's paired printer is probed in the same cycle, the same way: a
- * connect-and-close on its raw port (9100). A machine answering beside a dead
- * printer records the tap and never hands out the slip, and every screen used
- * to call it "online" (2026-10-10). Nothing is written to the printer, and a
- * slip that meets the probe mid-connect is covered by `printWithRetry`.
+ * Each machine's paired printer is checked in the same cycle — by **ICMP ping
+ * only**. A machine answering beside a dead printer records the tap and never
+ * hands out the slip, and every screen used to call it "online" (2026-10-10).
+ * The first version opened and closed the printer's raw port (9100) every
+ * 30 s instead; that night most booth printers accepted their slips without
+ * printing them, having printed fine the day before. A printer serves one
+ * connection at a time, so its port is left to the slips.
  *
  * This runs as an interval rather than a timeline stage (`scheduler.ts`)
  * because monitoring is continuous — there is no deadline it is racing.
@@ -30,7 +32,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import { env } from "./env";
-import { tcpReachable, ZK_PORT } from "./netcheck";
+import { icmpPing, tcpReachable, ZK_PORT, type CheckStatus } from "./netcheck";
 import { redis } from "./redis";
 
 /** Injectable so tests exercise the folding logic without a network. */
@@ -46,6 +48,9 @@ export type ProbeCycle = {
   /** Devices whose `online` value changed this cycle — the loggable news. */
   flipped: { name: string; online: boolean }[];
 };
+
+/** How a printer is asked: ICMP only. "unavailable" means no `ping` to run. */
+export type PingProbe = (ip: string) => Promise<CheckStatus>;
 
 /** One connect-and-close; see `tcpReachable` in `netcheck.ts`. */
 export const tcpProbe: Probe = (ip, port) =>
@@ -125,8 +130,12 @@ async function mapPooled<T, R>(
  *
  * Printers come second, in the same pool: only those paired with an active
  * machine and themselves active, because those are the ones a slip is sent to.
+ * They are pinged, never connected to (see the header).
  */
-export async function probeOnce(probe: Probe = tcpProbe): Promise<ProbeCycle> {
+export async function probeOnce(
+  probe: Probe = tcpProbe,
+  ping: PingProbe = icmpPing
+): Promise<ProbeCycle> {
   const machines = await db
     .select()
     .from(schema.fingerprintMachines)
@@ -137,7 +146,6 @@ export async function probeOnce(probe: Probe = tcpProbe): Promise<ProbeCycle> {
       id: schema.printers.id,
       name: schema.printers.name,
       ip: schema.printers.ip,
-      port: schema.printers.port,
       online: schema.printers.online,
       missCount: schema.printers.missCount,
       statusSince: schema.printers.statusSince,
@@ -165,7 +173,7 @@ export async function probeOnce(probe: Probe = tcpProbe): Promise<ProbeCycle> {
   const printerResults = await mapPooled(
     printers,
     env.PROBE_CONCURRENCY,
-    async (p) => ({ row: p, reachable: await probe(p.ip, p.port) })
+    async (p) => ({ row: p, status: await ping(p.ip) })
   );
 
   const now = new Date();
@@ -183,8 +191,11 @@ export async function probeOnce(probe: Probe = tcpProbe): Promise<ProbeCycle> {
       .where(eq(schema.fingerprintMachines.id, row.id));
   }
 
-  for (const { row, reachable } of printerResults) {
-    const next = fold(row, reachable, now);
+  for (const { row, status } of printerResults) {
+    /* No `ping` on the server says nothing about the printer: leave it as it
+       was rather than walking it toward "dead". */
+    if (status === "unavailable") continue;
+    const next = fold(row, status === "ok", now);
     if (next.flipped)
       flipped.push({ name: `printer ${row.name}`, online: next.set.online });
     if (next.set.online) printersOnline += 1;

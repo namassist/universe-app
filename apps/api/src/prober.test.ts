@@ -19,7 +19,7 @@ import {
 import { eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { probeOnce, type Probe } from "./prober";
+import { probeOnce, type PingProbe, type Probe } from "./prober";
 import { redis } from "./redis";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
@@ -224,21 +224,32 @@ describe("what gets probed", () => {
 
 /*
  * The printer is half of a booth: a machine that answers with a dead printer
- * records the tap and never hands out the slip. Every screen used to call such
- * a machine "online" (2026-10-10), so the printer is probed in the same cycle.
+ * records the tap and never hands out the slip (2026-10-10).
+ *
+ * It is asked by ICMP ping and nothing else. The first version opened and
+ * closed its raw port (9100) every 30 s, and that night most booth printers
+ * took the slips without printing them while "Tercetak" showed on screen —
+ * they had printed the day before. A printer serves one connection at a time,
+ * so the port is left to the slips.
  */
 describe("the booth's printer", () => {
-  test("a paired printer is probed on its own port, and comes online", async () => {
+  /** A ping that answers from a set of reachable addresses. */
+  const pingWith =
+    (reachable: Set<string>): PingProbe =>
+    async (ip) =>
+      reachable.has(ip) ? "ok" : "fail";
+
+  test("a paired printer is pinged, and comes online", async () => {
     const printer = await makePrinter(IP_PRINTER, 9101);
     await makeMachine("PAIRED", IP_UP, true, printer.id);
-    const asked: string[] = [];
+    const pinged: string[] = [];
 
-    const result = await probeOnce(async (ip, port) => {
-      asked.push(`${ip}:${port}`);
-      return true;
+    const result = await probeOnce(probeWith(new Set([IP_UP])), async (ip) => {
+      pinged.push(ip);
+      return "ok";
     });
 
-    expect(asked).toContain(`${IP_PRINTER}:9101`);
+    expect(pinged).toContain(IP_PRINTER);
     const row = await readPrinter(printer.id);
     expect(row.online).toBe(true);
     expect(row.checkedAt).not.toBeNull();
@@ -246,34 +257,64 @@ describe("the booth's printer", () => {
     expect(result.printersProbed).toBeGreaterThanOrEqual(1);
   });
 
+  test("the printer's own port is never opened", async () => {
+    const printer = await makePrinter(IP_PRINTER, 9100);
+    await makeMachine("PAIRED", IP_UP, true, printer.id);
+    const connected: string[] = [];
+
+    await probeOnce(
+      async (ip, port) => {
+        connected.push(`${ip}:${port}`);
+        return true;
+      },
+      async () => "ok"
+    );
+
+    expect(connected.some((c) => c.startsWith(`${IP_PRINTER}:`))).toBe(false);
+    expect(connected.some((c) => c.endsWith(":9100"))).toBe(false);
+  });
+
   test("a printer goes offline after the same two misses as a machine", async () => {
     const printer = await makePrinter(IP_PRINTER);
     await makeMachine("PAIRED", IP_UP, true, printer.id);
-    const machineOnly = probeWith(new Set([IP_UP]));
+    const machineUp = probeWith(new Set([IP_UP]));
 
-    await probeOnce(probeWith(new Set([IP_UP, IP_PRINTER])));
-    await probeOnce(machineOnly);
+    await probeOnce(machineUp, pingWith(new Set([IP_PRINTER])));
+    await probeOnce(machineUp, pingWith(new Set()));
     expect((await readPrinter(printer.id)).online).toBe(true);
 
-    await probeOnce(machineOnly);
+    await probeOnce(machineUp, pingWith(new Set()));
     const row = await readPrinter(printer.id);
     expect(row.online).toBe(false);
     expect(row.missCount).toBe(2);
+  });
+
+  /* No `ping` on the server says nothing about the printer: it stays
+     unchecked rather than being called dead. */
+  test("a ping that cannot run leaves the printer unchecked", async () => {
+    const printer = await makePrinter(IP_PRINTER);
+    await makeMachine("PAIRED", IP_UP, true, printer.id);
+
+    await probeOnce(probeWith(new Set([IP_UP])), async () => "unavailable");
+
+    const row = await readPrinter(printer.id);
+    expect(row.checkedAt).toBeNull();
+    expect(row.missCount).toBe(0);
   });
 
   test("a printer whose machine is inactive, or that no machine uses, is left alone", async () => {
     const retired = await makePrinter(IP_PRINTER);
     await makeMachine("RETIRED", IP_OFF, false, retired.id);
     const loose = await makePrinter(IP_PRINTER_LOOSE);
-    const asked: string[] = [];
+    const pinged: string[] = [];
 
-    await probeOnce(async (ip) => {
-      asked.push(ip);
-      return true;
+    await probeOnce(probeWith(new Set()), async (ip) => {
+      pinged.push(ip);
+      return "ok";
     });
 
-    expect(asked).not.toContain(IP_PRINTER);
-    expect(asked).not.toContain(IP_PRINTER_LOOSE);
+    expect(pinged).not.toContain(IP_PRINTER);
+    expect(pinged).not.toContain(IP_PRINTER_LOOSE);
     expect((await readPrinter(retired.id)).checkedAt).toBeNull();
     expect((await readPrinter(loose.id)).checkedAt).toBeNull();
   });
@@ -281,10 +322,13 @@ describe("the booth's printer", () => {
   test("a machine is probed on the ZK port", async () => {
     await makeMachine("ZK", IP_UP);
     const asked: string[] = [];
-    await probeOnce(async (ip, port) => {
-      asked.push(`${ip}:${port}`);
-      return true;
-    });
+    await probeOnce(
+      async (ip, port) => {
+        asked.push(`${ip}:${port}`);
+        return true;
+      },
+      async () => "ok"
+    );
     expect(asked).toContain(`${IP_UP}:4370`);
   });
 });

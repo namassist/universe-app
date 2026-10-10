@@ -10,15 +10,40 @@
  * failed and waiting for somebody to press reprint.
  */
 
-import net from "node:net";
-
 /** Long enough for a slip, short enough that a dead printer is not a wait. */
 const CONNECT_TIMEOUT_MS = 4000;
+
+/**
+ * How long to wait, after our FIN, for the printer to close its side.
+ *
+ * A printer closes once the job is in. One that holds the connection open is
+ * let go after this with the slip counted as sent: every byte was flushed and
+ * nothing came back as an error.
+ */
+const CLOSE_GRACE_MS = 3000;
 
 export type PrintOutcome =
   { sent: true; ms: number } | { sent: false; reason: string; ms: number };
 
-/** One attempt. Resolves either way — a refused printer is an answer. */
+/**
+ * One attempt. Resolves either way — a refused printer is an answer.
+ *
+ * **Bun's own socket, not `node:net`.** On 2026-10-10 most booth printers
+ * showed "Tercetak" and printed nothing. The send used `node:net` and
+ * `destroy()`ed the socket in the `write` callback — and under Bun that
+ * callback, like `connect`, fires before the bytes have left; a test even saw
+ * a closed port reported as a successful send. Destroying there throws away
+ * whatever is still queued, which on a loopback is nothing and on a site
+ * radio link can be the whole slip. Measured on loopback with a 64 KB slip:
+ * `node:net` `end(bytes)` lost data 25 times in 25 and `Bun.connect` with a
+ * bare `end()` 24 in 25; `Bun.connect` with `flush()` then `shutdown()` (a FIN,
+ * the socket still open to read) and waiting for the printer to close lost
+ * none. That last one is what this does. `Bun.connect` also reports a refused
+ * port as one.
+ *
+ * Sent means every byte was handed over and the connection then closed
+ * without an error — never merely that a write was attempted.
+ */
 export function sendToPrinter(
   ip: string,
   port: number,
@@ -26,34 +51,84 @@ export function sendToPrinter(
 ): Promise<PrintOutcome> {
   const started = Date.now();
   return new Promise((resolve) => {
-    const socket = new net.Socket();
     let settled = false;
+    let flushed = false;
+    let pending = new Uint8Array(bytes);
     const finish = (outcome: PrintOutcome) => {
       if (settled) return;
       settled = true;
-      socket.destroy();
+      clearTimeout(timer);
       resolve(outcome);
     };
+    const failed = (reason: string) =>
+      finish({ sent: false, reason, ms: Date.now() - started });
+    const codeOf = (error: unknown) =>
+      (error as NodeJS.ErrnoException)?.code ??
+      (error as Error)?.message ??
+      "ERROR";
 
-    socket.setTimeout(CONNECT_TIMEOUT_MS);
-    /* Every failure path ends here rather than as an unheard `error` event —
-       the mistake that took the whole API down on 2026-09-12. */
-    socket.on("error", (error: NodeJS.ErrnoException) =>
-      finish({
-        sent: false,
-        reason: error.code ?? error.message,
-        ms: Date.now() - started,
-      })
-    );
-    socket.on("timeout", () =>
-      finish({ sent: false, reason: "TIMEOUT", ms: Date.now() - started })
-    );
+    type Sock = {
+      write(b: Uint8Array): number;
+      flush(): void;
+      shutdown(): void;
+      end(): void;
+      terminate(): void;
+    };
+    let socket: Sock | null = null;
+    /* Until every byte is out this is a failure; afterwards it is only the
+       printer not closing its side, which `CLOSE_GRACE_MS` forgives. */
+    let timer = setTimeout(() => {
+      socket?.terminate();
+      failed("TIMEOUT");
+    }, CONNECT_TIMEOUT_MS);
 
-    socket.connect(port, ip, () => {
-      socket.write(bytes, () =>
-        finish({ sent: true, ms: Date.now() - started })
-      );
-    });
+    /* Writes what the socket will take; a slip larger than one write is
+       finished from `drain`. Once nothing is left: flush, then FIN. */
+    const pump = (s: Sock) => {
+      if (flushed) return;
+      const wrote = s.write(pending);
+      if (wrote < 0) return failed("WRITE");
+      pending = pending.subarray(wrote);
+      if (pending.length) return;
+      flushed = true;
+      s.flush();
+      s.shutdown();
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        socket?.end();
+        finish({ sent: true, ms: Date.now() - started });
+      }, CLOSE_GRACE_MS);
+    };
+
+    Bun.connect({
+      hostname: ip,
+      port,
+      socket: {
+        open(s) {
+          socket = s;
+          pump(s);
+        },
+        drain(s) {
+          pump(s);
+        },
+        /* Read and dropped: a printer may answer with a status byte. */
+        data() {},
+        /* The printer has the job and closed its side; close ours. */
+        end(s) {
+          s.end();
+        },
+        close() {
+          if (flushed) finish({ sent: true, ms: Date.now() - started });
+          else failed("CLOSED");
+        },
+        error(_s, error) {
+          failed(codeOf(error));
+        },
+        connectError(_s, error) {
+          failed(codeOf(error));
+        },
+      },
+    }).catch((error) => failed(codeOf(error)));
   });
 }
 
