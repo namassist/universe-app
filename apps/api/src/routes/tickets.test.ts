@@ -17,6 +17,7 @@ import { eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
+import { env } from "../env";
 import { ticketRoutes } from "./tickets";
 
 const app = new Elysia().use(ticketRoutes);
@@ -33,6 +34,7 @@ const made = {
   employees: [] as string[],
   departments: [] as string[],
   niks: [] as string[],
+  printers: [] as string[],
 };
 
 let admin: { cookie: string };
@@ -167,6 +169,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (made.printers.length)
+    await db
+      .delete(schema.printers)
+      .where(inArray(schema.printers.id, made.printers));
   if (made.niks.length)
     await db
       .delete(schema.tickets)
@@ -306,5 +312,77 @@ describe("a slip issued before the kind was printed on it", () => {
     expect((await list({ role: "standing" })).rows.map((r) => r.nik)).toEqual([
       "ZZ70000003",
     ]);
+  });
+});
+
+/*
+ * A reprint can go to any active printer (owner, 2026-10-10): the night most
+ * booth printers produced no paper, the slip could only go back to the dead
+ * one. Nothing here reaches a printer — the refusals are decided first.
+ */
+describe("choosing the printer for a reprint", () => {
+  const call = (method: string, path: string, body?: unknown) =>
+    app.handle(
+      new Request(`http://localhost${path}`, {
+        method,
+        headers: {
+          cookie: admin.cookie,
+          ...(body ? { "content-type": "application/json" } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+    );
+
+  test("the picker lists active printers, never a switched-off one", async () => {
+    const [on] = await db
+      .insert(schema.printers)
+      .values({ name: `${tag} NYALA`, ip: "203.0.113.178" })
+      .returning({ id: schema.printers.id });
+    const [off] = await db
+      .insert(schema.printers)
+      .values({ name: `${tag} MATI`, ip: "203.0.113.179", active: false })
+      .returning({ id: schema.printers.id });
+    made.printers.push(on!.id, off!.id);
+
+    const response = await call("GET", "/tickets/printers");
+    expect(response.status).toBe(200);
+    const ids = ((await response.json()) as { id: string }[]).map((p) => p.id);
+    expect(ids).toContain(on!.id);
+    expect(ids).not.toContain(off!.id);
+  });
+
+  /* The page deployed before this change posts no body at all; that must
+     still mean "the printer it first went to", not a validation error. These
+     fixtures carry no printer, so the answer is a refusal — never a 400. */
+  test("a reprint with no body is still accepted as a reprint", async () => {
+    const [ticket] = await db
+      .select({ id: schema.tickets.id })
+      .from(schema.tickets)
+      .where(inArray(schema.tickets.nik, made.niks))
+      .limit(1);
+
+    const response = await call("POST", `/tickets/${ticket!.id}/reprint`);
+
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { code: string }).code).toBe(
+      env.TICKET_PRINTING ? "no_printer" : "printing_off"
+    );
+  });
+
+  test("a printer that does not exist is refused by name", async () => {
+    const [ticket] = await db
+      .select({ id: schema.tickets.id })
+      .from(schema.tickets)
+      .where(inArray(schema.tickets.nik, made.niks))
+      .limit(1);
+
+    const response = await call("POST", `/tickets/${ticket!.id}/reprint`, {
+      printerId: crypto.randomUUID(),
+    });
+
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { code: string }).code).toBe(
+      env.TICKET_PRINTING ? "printer_not_found" : "printing_off"
+    );
   });
 });

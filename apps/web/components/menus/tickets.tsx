@@ -7,6 +7,7 @@ import { Printer } from "lucide-react";
 import { MENU_LABELS, type AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
 import {
+  ticketPrintersQueryOptions,
   ticketsKey,
   ticketsQueryOptions,
   type TicketFilters,
@@ -14,6 +15,14 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   FootSum,
@@ -82,13 +91,28 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
   const ticketsQ = useQuery(ticketsQueryOptions(date, filters));
   const tickets = ticketsQ.data;
 
+  /* The ticket a reprint is being asked for, and where it should go. "" is
+     the printer the slip first went to; anything else is a printer chosen
+     because that one is dead (owner, 2026-10-10). */
+  const [reprintFor, setReprintFor] = React.useState<ReprintTarget | null>(
+    null
+  );
+  const [printerChoice, setPrinterChoice] = React.useState("");
+  const printersQ = useQuery({
+    ...ticketPrintersQueryOptions(),
+    enabled: reprintFor !== null,
+  });
+
   const reprint = useMutation({
-    mutationFn: async (id: string) => {
-      const result = await api.v1.tickets({ id }).reprint.post();
+    mutationFn: async (input: { id: string; printerId: string }) => {
+      const result = await api.v1
+        .tickets({ id: input.id })
+        .reprint.post(input.printerId ? { printerId: input.printerId } : {});
       if (result.error) throw result.error;
       return result.data;
     },
     onSuccess: async (r) => {
+      setReprintFor(null);
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       pushToast(
         r.status === "printed" ? "success" : "error",
@@ -178,7 +202,10 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
           data={tickets}
           loading={ticketsQ.isLoading}
           canW={canW}
-          onReprint={(id) => reprint.mutate(id)}
+          onReprint={(row) => {
+            setPrinterChoice("");
+            setReprintFor(row);
+          }}
           busy={reprint.isPending}
         />
 
@@ -190,9 +217,70 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
           </FootSum>
         </PanelFoot>
       </Panel>
+
+      <Dialog
+        open={reprintFor !== null}
+        onClose={() => setReprintFor(null)}
+        labelledBy="tk-reprint-t"
+      >
+        <DialogIcon variant="info">
+          <Printer />
+        </DialogIcon>
+        <DialogTitle id="tk-reprint-t">Cetak ulang tiket</DialogTitle>
+        <DialogBody>
+          {reprintFor?.name ?? reprintFor?.nik} — pilih printer lain kalau
+          printer bilik asalnya tidak mengeluarkan kertas.
+        </DialogBody>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (reprintFor)
+              reprint.mutate({ id: reprintFor.id, printerId: printerChoice });
+          }}
+        >
+          <Field className="mt-4" label="Printer" htmlFor="tk-reprint-printer">
+            <Select
+              id="tk-reprint-printer"
+              value={printerChoice}
+              onChange={(e) => setPrinterChoice(e.target.value)}
+            >
+              <option value="">
+                Printer asal
+                {reprintFor?.printer ? ` (${reprintFor.printer})` : ""}
+              </option>
+              {(printersQ.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.machine ?? p.name} — {p.ip}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <DialogActions>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setReprintFor(null)}
+            >
+              Batal
+            </Button>
+            <Button type="submit" disabled={reprint.isPending}>
+              <Printer />
+              Cetak
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
     </div>
   );
 }
+
+/** What the reprint dialog needs to know about the ticket it was opened for. */
+type ReprintTarget = {
+  id: string;
+  nik: string;
+  name: string | null;
+  printer: string | null;
+};
 
 /**
  * Tickets issued on one date, and the ones still owed.
@@ -230,7 +318,7 @@ function TicketsView({
   };
   loading: boolean;
   canW: boolean;
-  onReprint: (id: string) => void;
+  onReprint: (row: ReprintTarget) => void;
   busy: boolean;
 }) {
   const [open, setOpen] = React.useState<string | null>(null);
@@ -372,7 +460,7 @@ function TicketsView({
                               r.status === "failed" ? "primary" : "ghost"
                             }
                             disabled={busy}
-                            onClick={() => onReprint(r.id)}
+                            onClick={() => onReprint(r)}
                           >
                             {r.status === "dry" ? "Cetak" : "Cetak ulang"}
                           </Button>

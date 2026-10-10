@@ -846,11 +846,20 @@ export async function issueTicket(
  */
 export async function reprintTicket(
   id: string,
-  deps: IssueDeps = {}
+  /**
+   * `printerId` sends the reprint to another printer (owner, 2026-10-10): on
+   * the night most booth printers produced no paper, the slip could only go
+   * back to the dead one. Absent means the printer it first went to.
+   */
+  deps: IssueDeps & { printerId?: string } = {}
 ): Promise<
   | {
       reprinted: false;
-      reason: "ticket_not_found" | "no_printer" | "printing_off";
+      reason:
+        | "ticket_not_found"
+        | "no_printer"
+        | "printer_not_found"
+        | "printing_off";
     }
   | {
       reprinted: true;
@@ -863,6 +872,7 @@ export async function reprintTicket(
     .select({
       id: schema.tickets.id,
       fields: schema.tickets.fields,
+      printerId: schema.printers.id,
       printerIp: schema.printers.ip,
       printerPort: schema.printers.port,
       printerActive: schema.printers.active,
@@ -875,10 +885,38 @@ export async function reprintTicket(
 
   if (!(deps.printingEnabled ?? env.TICKET_PRINTING))
     return { reprinted: false, reason: "printing_off" };
-  if (!ticket.printerIp || !ticket.printerActive)
-    return { reprinted: false, reason: "no_printer" };
 
-  const target = { ip: ticket.printerIp, port: ticket.printerPort ?? 9100 };
+  /* A chosen printer must exist and be switched on — the same rule a first
+     print follows; an inactive printer is never printed to. */
+  let printer: { id: string; ip: string; port: number } | null = null;
+  if (deps.printerId) {
+    const [chosen] = await db
+      .select({
+        id: schema.printers.id,
+        ip: schema.printers.ip,
+        port: schema.printers.port,
+      })
+      .from(schema.printers)
+      .where(
+        and(
+          eq(schema.printers.id, deps.printerId),
+          eq(schema.printers.active, true)
+        )
+      )
+      .limit(1);
+    if (!chosen) return { reprinted: false, reason: "printer_not_found" };
+    printer = chosen;
+  } else {
+    if (!ticket.printerId || !ticket.printerIp || !ticket.printerActive)
+      return { reprinted: false, reason: "no_printer" };
+    printer = {
+      id: ticket.printerId,
+      ip: ticket.printerIp,
+      port: ticket.printerPort ?? 9100,
+    };
+  }
+
+  const target = { ip: printer.ip, port: printer.port };
   const send = deps.print ?? ((t, bytes) => sendToPrinter(t.ip, t.port, bytes));
   const { outcome, attempts } = await printWithRetry(
     (bytes) => send(target, bytes),
@@ -893,6 +931,9 @@ export async function reprintTicket(
       attempts,
       printedAt: outcome.sent ? new Date() : null,
       lastError: outcome.sent ? null : outcome.reason,
+      /* Where the paper was last sent — the screen's "Printer" then names the
+         booth the person should walk to. */
+      printerId: printer.id,
     })
     .where(eq(schema.tickets.id, ticket.id));
 

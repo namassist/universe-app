@@ -187,14 +187,56 @@ export const ticketRoutes = new Elysia({
     }
   )
 
+  /**
+   * The printers a reprint may be sent to: every active one, with the machine
+   * it stands beside. Served here rather than from the printer registry so a
+   * Tiket user needs no grant on that menu to pick one (owner, 2026-10-10).
+   */
+  .get(
+    "/printers",
+    async () =>
+      db
+        .select({
+          id: schema.printers.id,
+          name: schema.printers.name,
+          ip: schema.printers.ip,
+          machine: schema.fingerprintMachines.name,
+        })
+        .from(schema.printers)
+        .leftJoin(
+          schema.fingerprintMachines,
+          eq(schema.fingerprintMachines.printerId, schema.printers.id)
+        )
+        .where(eq(schema.printers.active, true))
+        .orderBy(schema.printers.name),
+    {
+      auth: { menu: "tiket", mode: "view" },
+      response: {
+        200: t.Array(
+          t.Object({
+            id: t.String(),
+            name: t.String(),
+            ip: t.String(),
+            machine: t.Nullable(t.String()),
+          })
+        ),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Active printers a reprint may be sent to" },
+    }
+  )
+
   .post(
     "/:id/reprint",
-    async ({ params, status }) => {
-      const result = await reprintTicket(params.id);
+    async ({ params, body, status }) => {
+      const result = await reprintTicket(params.id, {
+        printerId: body?.printerId,
+      });
       if (result.reprinted) return { status: result.status };
       /* Each refusal names itself: a ticket that is gone, a printer that is
-         not there, and printing switched off are three different answers and
-         three different things to do about them. */
+         not there, and printing switched off are different answers and
+         different things to do about them. */
       return status(result.reason === "ticket_not_found" ? 404 : 422, {
         code: result.reason,
         message:
@@ -202,12 +244,19 @@ export const ticketRoutes = new Elysia({
             ? "Tiket tidak ditemukan"
             : result.reason === "no_printer"
               ? "Mesin ini tidak punya printer aktif"
-              : "Pencetakan sedang dimatikan (TICKET_PRINTING)",
+              : result.reason === "printer_not_found"
+                ? "Printer yang dipilih tidak ada atau nonaktif"
+                : "Pencetakan sedang dimatikan (TICKET_PRINTING)",
       });
     },
     {
       auth: { menu: "tiket", mode: "manage" },
       params: t.Object({ id: t.String({ format: "uuid" }) }),
+      /* Optional, and the body itself may be absent: a reprint with no
+         printer chosen goes back to the one the ticket first went to. */
+      body: t.Optional(
+        t.Object({ printerId: t.Optional(t.String({ format: "uuid" })) })
+      ),
       response: {
         200: t.Object({
           status: t.Union([t.Literal("printed"), t.Literal("failed")]),

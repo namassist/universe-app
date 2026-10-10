@@ -38,3 +38,15 @@ export const ticketsQueryOptions = (
 export type TicketRow = Awaited<
   ReturnType<NonNullable<ReturnType<typeof ticketsQueryOptions>["queryFn"]>>
 >["rows"][number];
+
+/**
+ * Active printers a reprint may be sent to, each with the machine beside it.
+ * Read from the Tiket menu's own endpoint, so no printer-registry grant is
+ * needed to choose one (owner, 2026-10-10).
+ */
+export const ticketPrintersQueryOptions = () =>
+  queryOptions({
+    queryKey: ["tickets", "printers"] as const,
+    queryFn: () => unwrap(api.v1.tickets.printers.get()),
+    staleTime: 60_000,
+  });
