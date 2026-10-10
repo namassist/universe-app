@@ -3,9 +3,17 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, LayoutGrid, Wifi, WifiOff } from "lucide-react";
+import {
+  CheckCircle2,
+  LayoutGrid,
+  Printer,
+  TriangleAlert,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 
 import { isStatus } from "@/lib/api";
+import { boothHealthView, isBoothProblem } from "@/lib/booth-health";
 import {
   fingerprintDisplayQueryOptions,
   type FingerprintDisplayMachine,
@@ -20,6 +28,10 @@ import { DisplayShell } from "../_components/display-shell";
  * The layout is **priority-ordered, not uniform**. Machines that need
  * attention are pinned at the top and never scroll away; the healthy fleet
  * below rotates a page at a time, the way the fleet screen cycles its fleets.
+ *
+ * "Needs attention" means a tap there will not become a slip: the machine is
+ * down, or its printer is — a machine answering beside a dead printer used to
+ * sit among the healthy ones (2026-10-10).
  *
  * That split is what lets the screen survive growth. Showing every machine at
  * once means shrinking every card as the fleet grows, and past ~80 machines
@@ -76,7 +88,7 @@ const OFFLINE_ROW = 150;
 const OFFLINE_DENSE_ROW = 90;
 const ONLINE_ROW = 130;
 
-/** A machine that needs attention. Pinned: it is why the screen exists. */
+/** A booth that needs attention. Pinned: it is why the screen exists. */
 function OfflineCard({
   machine,
   dense,
@@ -84,6 +96,24 @@ function OfflineCard({
   machine: FingerprintDisplayMachine;
   dense: boolean;
 }) {
+  const view = boothHealthView(machine.health);
+  const printerFault =
+    machine.health === "printer_offline" ||
+    machine.health === "printer_inactive";
+  /* How long, where there is an outage to time: the machine's own, or its
+     printer's. A missing printer is a setting, not an event. */
+  const downSince =
+    machine.health === "offline"
+      ? machine.statusSince
+      : machine.health === "printer_offline"
+        ? (machine.printer?.statusSince ?? null)
+        : null;
+  const Icon =
+    machine.health === "offline"
+      ? WifiOff
+      : printerFault
+        ? Printer
+        : TriangleAlert;
   return (
     <div
       className={cn(
@@ -108,7 +138,7 @@ function OfflineCard({
             dense ? "size-8 [&_svg]:size-4.5" : "size-12 [&_svg]:size-6"
           )}
         >
-          <WifiOff className="text-(--color-danger-text)" />
+          <Icon className="text-(--color-danger-text)" />
         </span>
       </div>
       <div
@@ -117,7 +147,11 @@ function OfflineCard({
           dense ? "text-[13px]" : "text-lg"
         )}
       >
-        {machine.ip}
+        {/* The address somebody will walk to: the printer's, when it is the
+            printer that is wrong. */}
+        {printerFault && machine.printer
+          ? `Printer ${machine.printer.ip}`
+          : machine.ip}
       </div>
       <div
         className={cn(
@@ -125,10 +159,15 @@ function OfflineCard({
           dense ? "text-[14px]" : "text-lg"
         )}
       >
-        Offline{" "}
-        <b className="font-mono font-semibold tabular-nums">
-          {since(machine.statusSince)}
-        </b>
+        {view.label}
+        {downSince ? (
+          <>
+            {" "}
+            <b className="font-mono font-semibold tabular-nums">
+              {since(downSince)}
+            </b>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -193,11 +232,11 @@ export default function DisplayFingerprintPage() {
 
   const machines = React.useMemo(() => data?.machines ?? [], [data?.machines]);
   const offline = React.useMemo(
-    () => machines.filter((m) => !m.online),
+    () => machines.filter((m) => isBoothProblem(m.health)),
     [machines]
   );
   const online = React.useMemo(
-    () => machines.filter((m) => m.online),
+    () => machines.filter((m) => !isBoothProblem(m.health)),
     [machines]
   );
 
@@ -289,14 +328,14 @@ export default function DisplayFingerprintPage() {
           icon: <Wifi className="text-(--badge-success-text)" />,
           iconClass:
             "bg-(--badge-success-fill) border-(--badge-success-border)",
-          value: String(data?.online ?? 0),
-          label: "Online",
+          value: String(data?.ready ?? 0),
+          label: "Siap",
         },
         {
           icon: <WifiOff className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
-          value: String(data?.offline ?? 0),
-          label: "Offline",
+          value: String(data?.problems ?? 0),
+          label: "Bermasalah",
         },
       ]}
     >
@@ -330,7 +369,7 @@ export default function DisplayFingerprintPage() {
             <section className="flex flex-none items-center gap-4 rounded-panel border border-(--badge-success-border) bg-(--badge-success-fill) px-6 py-4">
               <CheckCircle2 className="size-8 flex-none text-(--badge-success-text)" />
               <div className="text-[26px] font-bold text-(--badge-success-text)">
-                Semua mesin online
+                Semua mesin siap
               </div>
             </section>
           )}
@@ -343,7 +382,7 @@ export default function DisplayFingerprintPage() {
             >
               <h2 className="flex flex-none items-center gap-3 text-xl font-semibold text-(--text-secondary)">
                 <Wifi className="size-5 text-(--badge-success-text)" />
-                Online
+                Siap
                 <span className="font-mono tabular-nums">{online.length}</span>
                 {pages > 1 ? (
                   <span className="font-mono text-lg text-(--text-tertiary) tabular-nums">

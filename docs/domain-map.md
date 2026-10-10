@@ -165,12 +165,12 @@ with `allowDevice`. The proxy check is UX, not security.
 carries the running text and the **next sound cue**, and the server decides
 when the sound plays.
 
-| Wall                                                   | Web page                  | API                                                                             |
-| ------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------- |
-| Fleet (per formation, plus built-in Support and Spare) | `app/display/fleet`       | `GET /v1/fleet-allocation/actual/display` (`routes/fleet-actual.ts`)            |
-| Fit to work                                            | `app/display/fitwork`     | `GET /v1/fit-to-work/display` (`routes/readiness-display.ts`)                   |
-| Attendance (the latest scan, as a ticket)              | `app/display/attendance`  | `GET /v1/attendance/display/scans` (`routes/attendance-scans.ts`)               |
-| Fingerprint machines                                   | `app/display/fingerprint` | `GET /v1/fingerprint-machines/display`, reading stored probe rows (`prober.ts`) |
+| Wall                                                   | Web page                  | API                                                                                                                                         |
+| ------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fleet (per formation, plus built-in Support and Spare) | `app/display/fleet`       | `GET /v1/fleet-allocation/actual/display` (`routes/fleet-actual.ts`)                                                                        |
+| Fit to work                                            | `app/display/fitwork`     | `GET /v1/fit-to-work/display` (`routes/readiness-display.ts`)                                                                               |
+| Attendance (the latest scan, as a ticket)              | `app/display/attendance`  | `GET /v1/attendance/display/scans` (`routes/attendance-scans.ts`)                                                                           |
+| Fingerprint machines                                   | `app/display/fingerprint` | `GET /v1/fingerprint-machines/display`, reading stored probe rows of machines **and their printers** (`prober.ts`, `fingerprint-health.ts`) |
 
 Fleet wall rules:
 

@@ -129,6 +129,15 @@ fingerprint machine on port 4370 and closes immediately: never a ZK session, so
 it cannot contend with whatever collects taps into Nakula. Ping would be the
 wrong instrument (one machine on site drops ICMP but accepts 4370).
 
+The same cycle then probes each active printer paired with an active machine,
+the same way, on its raw port (9100) — a dead printer means taps that never
+become slips, and the wall used to call such a booth online. The probe is one
+`(ip, port)` function, so tests inject a fake for both. The two pools run one
+after the other so the concurrency bound is never doubled. `fingerprint-health.ts`
+folds a machine and its printer into one verdict (`ready`, `unchecked`, `offline`,
+`printer_offline`, `printer_inactive`, `no_printer`) that the registry list and
+the wall both read.
+
 Two details are load-bearing. Probes run **pooled** (`PROBE_CONCURRENCY`)
 because firing all of them at once was measured to time out the slower machines
 and report them offline while they were reachable. And a machine flips offline

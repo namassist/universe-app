@@ -359,6 +359,16 @@ export const printers = pgTable("printers", {
   ip: text("ip").notNull().unique(),
   port: integer("port").notNull().default(9100),
   active: boolean("active").notNull().default(true),
+  /* ---- written by the prober, read by the walls ----
+     The same five columns, with the same meaning, as on the machines. A
+     machine that answers beside a dead printer records the tap and never
+     hands out the slip, and every screen used to call it "online"
+     (2026-10-10) — so a paired printer is probed in the same cycle. */
+  online: boolean("online").notNull().default(false),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+  statusSince: timestamp("status_since", { withTimezone: true }),
+  missCount: integer("miss_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

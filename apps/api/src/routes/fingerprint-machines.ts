@@ -11,17 +11,18 @@
  * out of probing and off the wall.
  */
 
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, type SQL } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
 import { checkTarget } from "../netcheck";
-import { machineBoard } from "../prober";
+import { boothHealth, BOOTH_HEALTH } from "../fingerprint-health";
 import {
   db,
   isUniqueViolation,
   schema,
   type FingerprintMachineRow,
+  type PrinterRow,
 } from "../db";
 import {
   ErrorSchema,
@@ -31,7 +32,9 @@ import {
 } from "./schemas";
 import { invalidIp, IPV4 } from "./ipv4";
 
-const toMachine = (row: FingerprintMachineRow) => ({
+const iso = (d: Date | null) => d?.toISOString() ?? null;
+
+const toMachine = (row: FingerprintMachineRow, printer: PrinterRow | null) => ({
   id: row.id,
   name: row.name,
   ip: row.ip,
@@ -44,7 +47,46 @@ const toMachine = (row: FingerprintMachineRow) => ({
   checkedAt: row.checkedAt?.toISOString() ?? null,
   statusSince: row.statusSince?.toISOString() ?? null,
   createdAt: row.createdAt.toISOString(),
+  /* The paired printer's own probe reading — half of whether a tap here
+     becomes a slip. */
+  printer: printer
+    ? {
+        id: printer.id,
+        name: printer.name,
+        ip: printer.ip,
+        port: printer.port,
+        active: printer.active,
+        online: printer.online,
+        lastSeenAt: iso(printer.lastSeenAt),
+        checkedAt: iso(printer.checkedAt),
+        statusSince: iso(printer.statusSince),
+      }
+    : null,
+  health: boothHealth(row, printer),
 });
+
+/**
+ * Machines with their paired printer, in one statement. Every screen reads
+ * through here so the registry page and the wall cannot disagree on a booth.
+ */
+async function loadMachines(where?: SQL) {
+  const rows = await db
+    .select({
+      machine: schema.fingerprintMachines,
+      printer: schema.printers,
+    })
+    .from(schema.fingerprintMachines)
+    .leftJoin(
+      schema.printers,
+      eq(schema.printers.id, schema.fingerprintMachines.printerId)
+    )
+    .where(where)
+    .orderBy(asc(schema.fingerprintMachines.name));
+  return rows.map((r) => toMachine(r.machine, r.printer));
+}
+
+const machineById = async (id: string) =>
+  (await loadMachines(eq(schema.fingerprintMachines.id, id)))[0]!;
 
 const notFound = {
   code: "machine_not_found",
@@ -82,11 +124,7 @@ export const fingerprintMachineRoutes = new Elysia({
   .get(
     "/",
     async () => {
-      const rows = await db
-        .select()
-        .from(schema.fingerprintMachines)
-        .orderBy(asc(schema.fingerprintMachines.name));
-      return rows.map(toMachine);
+      return loadMachines();
     },
     {
       auth: { menu: "mesin-fingerprint", mode: "view" },
@@ -118,14 +156,22 @@ export const fingerprintMachineRoutes = new Elysia({
           message: "Perangkat ini bukan untuk layar tersebut",
         });
 
-      const rows = await machineBoard();
-      const online = rows.filter((r) => r.online).length;
+      const rows = await loadMachines(
+        eq(schema.fingerprintMachines.active, true)
+      );
+      /* Worst first — the wall exists to surface what is broken — and by
+         name within, since the sort is stable over a name-ordered list. */
+      const machines = [...rows].sort(
+        (a, b) =>
+          BOOTH_HEALTH.indexOf(a.health) - BOOTH_HEALTH.indexOf(b.health)
+      );
+      const ready = machines.filter((m) => m.health === "ready").length;
       return {
         servedAt: new Date().toISOString(),
-        total: rows.length,
-        online,
-        offline: rows.length - online,
-        machines: rows.map(toMachine),
+        total: machines.length,
+        ready,
+        problems: machines.length - ready,
+        machines,
       };
     },
     {
@@ -167,7 +213,7 @@ export const fingerprintMachineRoutes = new Elysia({
             printerId: body.printerId ?? null,
           })
           .returning();
-        return status(201, toMachine(row!));
+        return status(201, await machineById(row!.id));
       } catch (error) {
         // One address is one machine — see the table's unique constraint.
         if (isUniqueViolation(error, IP_UNIQUE))
@@ -233,7 +279,7 @@ export const fingerprintMachineRoutes = new Elysia({
           .where(eq(schema.fingerprintMachines.id, params.id))
           .returning();
         if (!row) return status(404, notFound);
-        return toMachine(row);
+        return machineById(row.id);
       } catch (error) {
         if (isUniqueViolation(error, IP_UNIQUE))
           return status(409, duplicateIp(ip!));

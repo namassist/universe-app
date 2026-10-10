@@ -17,6 +17,7 @@ import { MENU_LABELS } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
+import { boothHealthView } from "@/lib/booth-health";
 import { useI18n } from "@/lib/i18n";
 import {
   fingerprintMachinesKey,
@@ -248,9 +249,6 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     ? selectedRows
     : entries.filter((r) => r.active);
 
-  const printerIp = (id: string | null) =>
-    id ? (printersQ.data?.find((x) => x.id === id)?.ip ?? null) : null;
-
   function openAdd() {
     setEditing(null);
     setFName("");
@@ -420,26 +418,44 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
                   </TableCell>
                   <TableCell>
                     {/* The booth's printer, by address — what a technician
-                        pings and what `netcheck.sh` lists beside the machine. */}
-                    {printerIp(r.printerId) ? (
-                      <span className="font-mono tabular-nums">
-                        {printerIp(r.printerId)}
+                        pings and what `netcheck.sh` lists beside the machine —
+                        and the prober's reading of it, so a dead printer is
+                        seen here before a slip fails to come out. */}
+                    {r.printer ? (
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono tabular-nums">
+                          {r.printer.ip}
+                        </span>
+                        {!r.printer.active ? (
+                          <Badge variant="warning" dot>
+                            {t.stNonaktif}
+                          </Badge>
+                        ) : r.printer.checkedAt === null ? null : (
+                          <Badge
+                            variant={r.printer.online ? "success" : "danger"}
+                            dot
+                          >
+                            {r.printer.online ? t.mfOnline : t.mfOffline}
+                          </Badge>
+                        )}
                       </span>
                     ) : (
                       <span className="text-(--text-tertiary)">—</span>
                     )}
                   </TableCell>
                   <TableCell>
-                    {/* The prober's reading, not the operator's flag — a
-                        machine can be active and unreachable, which is
-                        precisely the case worth seeing here. */}
-                    {r.checkedAt === null ? (
+                    {/* Whether a tap here becomes a slip — the machine and its
+                        printer together, the same verdict the wall shows. An
+                        inactive machine is not probed, so it has none. */}
+                    {!r.active ? (
+                      <span className="text-(--text-tertiary)">—</span>
+                    ) : r.checkedAt === null ? (
                       <span className="text-(--text-tertiary)">
                         {t.mfNotChecked}
                       </span>
                     ) : (
-                      <Badge variant={r.online ? "success" : "danger"} dot>
-                        {r.online ? t.mfOnline : t.mfOffline}
+                      <Badge variant={boothHealthView(r.health).variant} dot>
+                        {boothHealthView(r.health).label}
                       </Badge>
                     )}
                   </TableCell>

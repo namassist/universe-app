@@ -29,8 +29,11 @@ const tag = `ZZ Prober ${uid()}`;
 const IP_UP = "203.0.113.201";
 const IP_DOWN = "203.0.113.202";
 const IP_OFF = "203.0.113.203";
+const IP_PRINTER = "203.0.113.204";
+const IP_PRINTER_LOOSE = "203.0.113.205";
 
 const made: string[] = [];
+const madePrinters: string[] = [];
 
 /** A probe that answers from a set of reachable addresses. */
 const probeWith =
@@ -38,14 +41,37 @@ const probeWith =
   async (ip) =>
     reachable.has(ip);
 
-async function makeMachine(name: string, ip: string, active = true) {
+async function makeMachine(
+  name: string,
+  ip: string,
+  active = true,
+  printerId: string | null = null
+) {
   const [row] = await db
     .insert(schema.fingerprintMachines)
-    .values({ name: `${tag} ${name}`, ip, active })
+    .values({ name: `${tag} ${name}`, ip, active, printerId })
     .returning();
   made.push(row!.id);
   return row!;
 }
+
+async function makePrinter(ip: string, port = 9100) {
+  const [row] = await db
+    .insert(schema.printers)
+    .values({ name: `${tag} PRINTER ${ip}`, ip, port })
+    .returning();
+  madePrinters.push(row!.id);
+  return row!;
+}
+
+const readPrinter = async (id: string) => {
+  const [row] = await db
+    .select()
+    .from(schema.printers)
+    .where(eq(schema.printers.id, id))
+    .limit(1);
+  return row!;
+};
 
 const read = async (id: string) => {
   const [row] = await db
@@ -61,21 +87,23 @@ beforeAll(async () => {
   if (redis.status === "end") await redis.connect();
 });
 
-beforeEach(async () => {
+async function cleanUp() {
   if (made.length) {
     await db
       .delete(schema.fingerprintMachines)
       .where(inArray(schema.fingerprintMachines.id, made));
     made.length = 0;
   }
-});
-
-afterAll(async () => {
-  if (made.length)
+  if (madePrinters.length) {
     await db
-      .delete(schema.fingerprintMachines)
-      .where(inArray(schema.fingerprintMachines.id, made));
-});
+      .delete(schema.printers)
+      .where(inArray(schema.printers.id, madePrinters));
+    madePrinters.length = 0;
+  }
+}
+
+beforeEach(cleanUp);
+afterAll(cleanUp);
 
 describe("the debounce", () => {
   test("a reachable machine comes online on the first cycle", async () => {
@@ -191,5 +219,72 @@ describe("what gets probed", () => {
     expect(asked).toContain(IP_UP);
     expect(asked).toContain(IP_DOWN);
     expect(result.probed).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/*
+ * The printer is half of a booth: a machine that answers with a dead printer
+ * records the tap and never hands out the slip. Every screen used to call such
+ * a machine "online" (2026-10-10), so the printer is probed in the same cycle.
+ */
+describe("the booth's printer", () => {
+  test("a paired printer is probed on its own port, and comes online", async () => {
+    const printer = await makePrinter(IP_PRINTER, 9101);
+    await makeMachine("PAIRED", IP_UP, true, printer.id);
+    const asked: string[] = [];
+
+    const result = await probeOnce(async (ip, port) => {
+      asked.push(`${ip}:${port}`);
+      return true;
+    });
+
+    expect(asked).toContain(`${IP_PRINTER}:9101`);
+    const row = await readPrinter(printer.id);
+    expect(row.online).toBe(true);
+    expect(row.checkedAt).not.toBeNull();
+    expect(row.lastSeenAt).not.toBeNull();
+    expect(result.printersProbed).toBeGreaterThanOrEqual(1);
+  });
+
+  test("a printer goes offline after the same two misses as a machine", async () => {
+    const printer = await makePrinter(IP_PRINTER);
+    await makeMachine("PAIRED", IP_UP, true, printer.id);
+    const machineOnly = probeWith(new Set([IP_UP]));
+
+    await probeOnce(probeWith(new Set([IP_UP, IP_PRINTER])));
+    await probeOnce(machineOnly);
+    expect((await readPrinter(printer.id)).online).toBe(true);
+
+    await probeOnce(machineOnly);
+    const row = await readPrinter(printer.id);
+    expect(row.online).toBe(false);
+    expect(row.missCount).toBe(2);
+  });
+
+  test("a printer whose machine is inactive, or that no machine uses, is left alone", async () => {
+    const retired = await makePrinter(IP_PRINTER);
+    await makeMachine("RETIRED", IP_OFF, false, retired.id);
+    const loose = await makePrinter(IP_PRINTER_LOOSE);
+    const asked: string[] = [];
+
+    await probeOnce(async (ip) => {
+      asked.push(ip);
+      return true;
+    });
+
+    expect(asked).not.toContain(IP_PRINTER);
+    expect(asked).not.toContain(IP_PRINTER_LOOSE);
+    expect((await readPrinter(retired.id)).checkedAt).toBeNull();
+    expect((await readPrinter(loose.id)).checkedAt).toBeNull();
+  });
+
+  test("a machine is probed on the ZK port", async () => {
+    await makeMachine("ZK", IP_UP);
+    const asked: string[] = [];
+    await probeOnce(async (ip, port) => {
+      asked.push(`${ip}:${port}`);
+      return true;
+    });
+    expect(asked).toContain(`${IP_UP}:4370`);
   });
 });

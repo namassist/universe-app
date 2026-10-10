@@ -52,6 +52,8 @@ type Machine = {
   ip: string;
   active: boolean;
   printerId: string | null;
+  printer: { id: string; ip: string; online: boolean } | null;
+  health: string;
   createdAt: string;
 };
 
@@ -270,12 +272,12 @@ describe("the kiosk endpoint", () => {
 
     const body = (await response.json()) as {
       total: number;
-      online: number;
-      offline: number;
+      ready: number;
+      problems: number;
       machines: Machine[];
       servedAt: string;
     };
-    expect(body.total).toBe(body.online + body.offline);
+    expect(body.total).toBe(body.ready + body.problems);
     expect(body.machines.length).toBe(body.total);
     expect(body.servedAt).toBeTruthy();
   });
@@ -311,6 +313,76 @@ describe("the kiosk endpoint", () => {
     expect((await send("GET", "/fingerprint-machines/display")).status).toBe(
       401
     );
+  });
+
+  /* The printer is half of the booth: a machine answering beside a dead
+     printer records the tap and never prints the slip. */
+  test("a machine whose printer is down is a problem, and sorts first", async () => {
+    const printerId = await makePrinter(84);
+    const created = await send("POST", "/fingerprint-machines", admin.cookie, {
+      name: `${tag} PRINTER MATI`,
+      ip: ipOf(44),
+      printerId,
+    });
+    const row = (await created.json()) as Machine;
+    made.machines.push(row.id);
+    const healthy = (await (
+      await create({ name: `${tag} SEHAT`, ip: ipOf(45) })
+    ).json()) as Machine;
+    const healthyPrinter = await makePrinter(85);
+
+    await db
+      .update(schema.fingerprintMachines)
+      .set({ online: true, checkedAt: new Date() })
+      .where(inArray(schema.fingerprintMachines.id, [row.id, healthy.id]));
+    await db
+      .update(schema.fingerprintMachines)
+      .set({ printerId: healthyPrinter })
+      .where(eq(schema.fingerprintMachines.id, healthy.id));
+    await db
+      .update(schema.printers)
+      .set({ online: true, checkedAt: new Date() })
+      .where(eq(schema.printers.id, healthyPrinter));
+    await db
+      .update(schema.printers)
+      .set({ online: false, checkedAt: new Date() })
+      .where(eq(schema.printers.id, printerId));
+
+    const response = await send(
+      "GET",
+      "/fingerprint-machines/display",
+      tvViewer.cookie
+    );
+    const body = (await response.json()) as { machines: Machine[] };
+    const sick = body.machines.find((m) => m.id === row.id)!;
+    const well = body.machines.find((m) => m.id === healthy.id)!;
+
+    expect(sick.health).toBe("printer_offline");
+    expect(sick.printer?.online).toBe(false);
+    expect(well.health).toBe("ready");
+    expect(body.machines.indexOf(sick)).toBeLessThan(
+      body.machines.indexOf(well)
+    );
+  });
+
+  test("the registry list carries the printer's state too", async () => {
+    const printerId = await makePrinter(86);
+    const created = await send("POST", "/fingerprint-machines", admin.cookie, {
+      name: `${tag} DAFTAR`,
+      ip: ipOf(46),
+      printerId,
+    });
+    const row = (await created.json()) as Machine;
+    made.machines.push(row.id);
+    expect(row.printer?.id).toBe(printerId);
+
+    const list = (await (
+      await send("GET", "/fingerprint-machines", admin.cookie)
+    ).json()) as Machine[];
+    const listed = list.find((m) => m.id === row.id)!;
+    expect(listed.printer?.ip).toBe(ipOf(86));
+    /* Never probed yet — said so, rather than called offline. */
+    expect(listed.health).toBe("unchecked");
   });
 
   test("refuses a caller holding only the registry grant", async () => {

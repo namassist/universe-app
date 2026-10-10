@@ -144,8 +144,13 @@ export function NetcheckDialog({
           {t.mfPingOf} {sum.total}
         </span>
         {/* Always mounted: a live region inserted together with its text is
-            often not announced, and this one must also say when it is done. */}
-        <span className="text-(--text-tertiary)" role="status">
+            often not announced, and this one must also say when it is done.
+            Visible only while checking — once done, the count beside it
+            already says the same thing, and showing both printed it twice. */}
+        <span
+          className={running ? "text-(--text-tertiary)" : "sr-only"}
+          role="status"
+        >
           {running
             ? `${t.mfPingChecking} ${sum.finished}/${sum.total}`
             : sum.total

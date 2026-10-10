@@ -392,7 +392,7 @@ export const en: Dict = {
   mfSub: "Fingerprint machine registry — what the monitoring screen reads",
   mfDlgB:
     "The IP address is how a machine is checked, so one IP is one machine.",
-  mfReach: "Reachability",
+  mfReach: "Readiness",
   mfOnline: "Online",
   mfOffline: "Offline",
   mfNotChecked: "Not checked yet",

@@ -1770,6 +1770,24 @@ runs intermittently.
   offline only after two consecutive misses, so one dropped packet does not
   flash red on a wall-mounted TV. The kiosk polls on the same 30 s cadence, so
   an outage reaches the wall in about a minute and a half at worst.
+- **The printer is half of the booth** (owner, 2026-10-10). A machine answering
+  beside a dead printer records the tap and never prints the slip, yet the
+  registry page and the wall both called it "online" — only the Ping dialog
+  could tell. So the same cycle also probes each **active printer paired with
+  an active machine**: a connect-and-close on its raw port (9100), nothing
+  written, with the same columns and the same two-miss debounce. Machines and
+  printers are probed one pool after the other, never side by side, so the
+  concurrency bound holds.
+- **A booth's health** is one verdict, computed in the API
+  (`fingerprint-health.ts`) and shown the same on the registry page and the
+  wall: **Siap** (machine and printer both answer), **Offline** (machine
+  down), **Printer mati** (printer down), **Printer nonaktif** (printer
+  switched off in the registry — tickets are never sent to it) and **Tanpa
+  printer** (none paired), plus **Belum dicek** for a machine or printer not
+  yet probed — a device's reading starts as "not answering", so before its
+  first probe it was called dead (2026-10-10). Anything but Siap is pinned under "Perlu
+  Perhatian", with the printer's address on the card when it is the printer
+  that is wrong, and counted as **Bermasalah** in the header.
 - The kiosk reads those stored rows; the request path opens no sockets, the
   same principle as never querying an external source from a request path.
 - **Probes are pooled, not fired all at once.** Measured on site: the slower

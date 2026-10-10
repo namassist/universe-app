@@ -389,7 +389,7 @@ export const id = {
   tlSoundCol: "Suara",
   mfSub: "Daftar mesin fingerprint — sumber data layar monitoring",
   mfDlgB: "Alamat IP dipakai untuk mengecek mesin, jadi satu IP satu mesin.",
-  mfReach: "Jangkauan",
+  mfReach: "Kesiapan",
   mfOnline: "Online",
   mfOffline: "Offline",
   mfNotChecked: "Belum dicek",

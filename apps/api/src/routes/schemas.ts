@@ -11,6 +11,7 @@
  * never used for anything a caller could use to pick its own privileges.
  */
 
+import { BOOTH_HEALTH } from "../fingerprint-health";
 import { t } from "elysia";
 import {
   ACCESS_MODES,
@@ -1556,14 +1557,35 @@ export const FingerprintMachineSchema = t.Object({
   /** When the current status began, so a screen can say how long. */
   statusSince: t.Nullable(t.String()),
   createdAt: t.String(),
+  /** The paired printer and the prober's last reading of it; null if none. */
+  printer: t.Nullable(
+    t.Object({
+      id: t.String(),
+      name: t.String(),
+      ip: t.String(),
+      port: t.Integer(),
+      active: t.Boolean(),
+      online: t.Boolean(),
+      lastSeenAt: t.Nullable(t.String()),
+      checkedAt: t.Nullable(t.String()),
+      statusSince: t.Nullable(t.String()),
+    })
+  ),
+  /**
+   * Whether a tap here becomes a slip (`fingerprint-health.ts`): the machine
+   * answering is not enough when its printer does not.
+   */
+  health: t.UnionEnum(BOOTH_HEALTH),
 });
 
 /** What the monitoring TV renders: the machines, plus its headline counts. */
 export const FingerprintDisplaySchema = t.Object({
   servedAt: t.String(),
   total: t.Integer(),
-  online: t.Integer(),
-  offline: t.Integer(),
+  /** Machine and printer both answering — a tap here prints a slip. */
+  ready: t.Integer(),
+  /** Everything else: offline, printer down or off, or no printer at all. */
+  problems: t.Integer(),
   machines: t.Array(FingerprintMachineSchema),
 });
 

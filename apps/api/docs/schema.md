@@ -125,7 +125,9 @@ the definition — when they disagree, the code wins. Change flow: edit
   survives a re-seed. Carries the prober's reading too — `online`,
   `last_seen_at` (last contact), `checked_at` (last attempt), `status_since`
   (when the current status began, so a screen can say how long) and
-  `miss_count`, the persisted debounce counter.
+  `miss_count`, the persisted debounce counter. `printers` carries the same
+  five columns: a printer paired with an active machine is probed in the same
+  cycle, since a dead printer means taps that never become slips.
 
 **Readiness snapshots** (external sources, ingested)
 
