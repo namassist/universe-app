@@ -52,6 +52,7 @@ import {
   deptAbbrev,
   FLEET_OPTIONS,
   ftwBadge,
+  shiftClash,
   shiftNow,
   SPARE_INIT,
   stBadge,
@@ -136,7 +137,7 @@ const inSelectedFleet = (
  */
 const SPARE_SKILL_BADGES = 6;
 
-type Filter = "all" | "unalloc" | "alloc" | "vacant" | "issue";
+type Filter = "all" | "unalloc" | "alloc" | "vacant" | "clash" | "issue";
 type Kind = "bd" | "none" | "warn" | "dt" | "ok";
 
 /** A dialog row — the static candidate shape plus the pair-shift flag the
@@ -550,6 +551,7 @@ export function AllocBoard({
     if (filter === "unalloc" && u.slots.length) return false;
     if (filter === "alloc" && !u.slots.length) return false;
     if (filter === "vacant" && !isVacant(u)) return false;
+    if (filter === "clash" && !shiftClash(u.slots, shiftF)) return false;
     if (filter === "issue" && kind !== "bd" && kind !== "dt" && kind !== "warn")
       return false;
     if (!needle) return true;
@@ -759,7 +761,12 @@ export function AllocBoard({
                 ["unalloc", t.faFUnalloc],
                 ["alloc", t.faFAlloc],
                 ...(mode === "plan"
-                  ? ([["vacant", t.faCrewVacant]] as [Filter, string][])
+                  ? ([
+                      ["vacant", t.faCrewVacant],
+                      /* Two holders on one shift today: the second to tap
+                         becomes a spare (owner, 2026-10-11). */
+                      ["clash", "Bentrok shift"],
+                    ] as [Filter, string][])
                   : []),
                 ["issue", t.faFIssue],
               ] as [Filter, string][]
@@ -956,6 +963,22 @@ export function AllocBoard({
                   {!u.slots.length ? (
                     <div className="flex min-h-[62px] items-center justify-center rounded-icon border border-dashed border-(--divider) bg-(--fill-subtle) p-3 text-[13px] text-(--text-tertiary)">
                       {t.faNoOp}
+                    </div>
+                  ) : null}
+                  {/* Both holders on the shift being looked at: the board
+                      gives the unit to one, the other becomes a spare and
+                      gets his slip only at the second finger. */}
+                  {mode === "plan" && shiftClash(u.slots, shiftF) ? (
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      <Badge
+                        variant="warning"
+                        dot
+                        title="Roster hari ini menaruh kedua pegangan unit ini di shift yang sama. Board memberi unit ke satu orang; yang lain menjadi spare dan tiketnya baru keluar di finger kedua."
+                      >
+                        2 pegangan shift{" "}
+                        {SHIFT_KIND_LABELS[shiftClash(u.slots, shiftF)!]} — yang
+                        tap belakangan jadi spare
+                      </Badge>
                     </div>
                   ) : null}
                 </div>

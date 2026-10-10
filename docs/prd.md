@@ -304,6 +304,16 @@ fill the gap from the spare pool.
   the other. The board's status filter gains **Kosong** (PLAN only).
   Before this, somebody changing a standing operator read vacancy off the
   table, then hunted the unit on the board — the complaint that started it.
+- **Both holders on one shift is flagged on the board** (owner, 2026-10-11).
+  A pair is checked against the roster only when it is made (one Day, one
+  Night); a roster that changes later can put both on the same shift, and
+  then whoever taps second becomes a spare. On 2026-10-11 day that operator
+  was handed SPARE and left before the board found him another unit. A PLAN
+  card whose two non-standby holders both work the chosen shift today carries
+  a warning badge ("2 pegangan shift … — yang tap belakangan jadi spare"), and
+  the status filter gains **Bentrok shift** (PLAN only; with "all" shifts,
+  either shift counts). Read from today's roster on the board's payload
+  (`shiftClash` in `fleet-allocation/data.ts`); no other date is checked.
 - **A search on the board spans every fleet** (owner, 2026-09-22). With text
   in the search box the formation filter is set aside: "DT4014" is a question
   about one machine, and answering "nowhere" because it sits in a formation

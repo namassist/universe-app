@@ -405,3 +405,23 @@ export function vacantOn(
     !unit.crew.some((c) => !c.standby && worksShift(c.rosterCode, shift))
   );
 }
+
+/**
+ * The shift two holders of one unit both work today, or null (owner,
+ * 2026-10-11).
+ *
+ * A pair is checked against the roster only on the day it is made (one Day,
+ * one Night); a roster that changes later can put both on one shift, and then
+ * whoever taps second becomes a spare. On 2026-10-11 that operator was handed
+ * SPARE and left before the board found him another unit. Standby holders are
+ * not counted — the engine never seats them. With "all", either shift counts.
+ */
+export function shiftClash(
+  crew: { rosterCode?: RosterCode | null; standby?: boolean }[],
+  shift: ShiftChoice
+): "day" | "night" | null {
+  const both = (on: "day" | "night") =>
+    crew.filter((c) => !c.standby && worksShift(c.rosterCode, on)).length >= 2;
+  if (shift !== "all") return both(shift) ? shift : null;
+  return both("day") ? "day" : both("night") ? "night" : null;
+}
