@@ -1773,11 +1773,13 @@ runs intermittently.
 - **The printer is half of the booth** (owner, 2026-10-10). A machine answering
   beside a dead printer records the tap and never prints the slip, yet the
   registry page and the wall both called it "online" — only the Ping dialog
-  could tell. So the same cycle also probes each **active printer paired with
-  an active machine**: a connect-and-close on its raw port (9100), nothing
-  written, with the same columns and the same two-miss debounce. Machines and
-  printers are probed one pool after the other, never side by side, so the
-  concurrency bound holds.
+  could tell. So the same cycle also checks each **active printer paired with
+  an active machine**, with the same columns and the same two-miss debounce —
+  by **ICMP ping only**. The first version opened and closed the printer's raw
+  port (9100) every 30 s; that night most booth printers took their slips
+  without printing them, having printed the day before, so the port is left
+  to the slips. No `ping` on the server leaves a printer unchecked rather than
+  calling it dead.
 - **A booth's health** is one verdict, computed in the API
   (`fingerprint-health.ts`) and shown the same on the registry page and the
   wall: **Siap** (machine and printer both answer), **Offline** (machine
@@ -1898,12 +1900,12 @@ person holding a wall clock against a screen.
 
 ### When it listens and when it prints (day shift; night is +12 h)
 
-| Stage            | Time  | Behaviour                                          |
-| ---------------- | ----- | -------------------------------------------------- |
-| `finger-ingest`  | 04:30 | Listening opens on every active machine            |
-| `finger-in`      | 05:25 | First finger closes; a later first tap is **late** |
-| `spare-validate` | 05:26 | Allocation runs and is **final**                   |
-| `finger-second`  | 05:28 | Spare tickets start printing                       |
+| Stage            | Time  | Behaviour                                                                 |
+| ---------------- | ----- | ------------------------------------------------------------------------- |
+| `finger-ingest`  | 04:30 | Listening opens on every active machine; test slip to every booth printer |
+| `finger-in`      | 05:25 | First finger closes; a later first tap is **late**                        |
+| `spare-validate` | 05:26 | Allocation runs and is **final**                                          |
+| `finger-second`  | 05:28 | Spare tickets start printing                                              |
 
 A spare's repeat tap before 05:28 is recorded and prints nothing, even if the
 allocation has already finished (owner, 2026-09-13).
@@ -2229,6 +2231,29 @@ and bus on the right.
 - The ticket is retried for about 60 s, then marked for a manual reprint on the
   monitoring screen. Nothing prints unattended after the person has left
   (owner, 2026-09-13).
+- **A reprint picks its printer** (owner, 2026-10-10). Cetak ulang opens a
+  dialog defaulting to the printer the slip first went to; any active printer
+  can be chosen instead (`GET /v1/tickets/printers`, readable with the Tiket
+  grant), and the ticket then records the printer its paper last went to. A
+  chosen printer that is missing or switched off is refused
+  (`printer_not_found`). Raised during the 2026-10-10 night muster, when only
+  Mesin 20's printer produced paper.
+- **"Tercetak" means the connection closed cleanly** (2026-10-10). The send
+  used `node:net` and `destroy()`ed the socket in the write callback; under
+  Bun that callback fires before the bytes have left, and destroying there
+  drops whatever is queued — on a site radio link, possibly the whole slip.
+  It now uses `Bun.connect`: every byte written, `flush()`, a FIN, and waiting
+  for the printer to close (3 s grace). Measured on loopback with 64 KB:
+  `node:net` lost data 25/25, this none.
+- **A test slip at every booth when the first finger opens** (owner,
+  2026-10-10). At `finger-ingest`, beside opening the listen, every active
+  printer paired with an active machine is sent a short slip — "TES PRINTER —
+  BUKAN TIKET", the machine, the printer's address, the shift and time — once,
+  with no minute of retries, so the crew sees paper before the queue does. The
+  result is a `printer-test` notification: green with the count, or red naming
+  the booths whose slip could not be sent. Skipped while `TICKET_PRINTING` is
+  off. It knows the same as a ticket does — that the bytes were handed over —
+  so paper coming out is still the crew's to see.
 
 ### Open questions
 
