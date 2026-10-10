@@ -283,14 +283,25 @@ export function renderTicket(fields: TicketFields): Buffer {
  *
  * Short, to spare the roll at two musters a day, and loud about not being a
  * ticket: nobody should walk to a unit holding it.
+ *
+ * Also sent by hand from the printer registry ("manual"), where a printer may
+ * not be paired to any machine yet — so the machine may be absent and the
+ * printer is then named itself.
  */
 export function renderTestSlip(fields: {
-  machine: string;
+  machine: string | null;
+  printerName?: string;
   printerIp: string;
   /** Local `HH:MM`. */
   at: string;
-  shift: "day" | "night";
+  shift: "day" | "night" | "manual";
 }): Buffer {
+  const when =
+    fields.shift === "manual"
+      ? "Manual"
+      : fields.shift === "night"
+        ? "Malam"
+        : "Siang";
   return Buffer.concat([
     INIT,
     CODEPAGE,
@@ -303,14 +314,12 @@ export function renderTestSlip(fields: {
     BOLD_OFF,
     text(RULE),
     ALIGN_LEFT,
-    text(field("Mesin", fields.machine)),
+    text(field("Mesin", orDash(fields.machine))),
+    ...(fields.printerName
+      ? wrapField("Nama", fields.printerName).map(text)
+      : []),
     text(field("Printer", fields.printerIp)),
-    text(
-      field(
-        "Shift",
-        `${fields.shift === "night" ? "Malam" : "Siang"} ${fields.at}`
-      )
-    ),
+    text(field("Shift", `${when} ${fields.at}`)),
     text(RULE),
     ALIGN_CENTRE,
     text("Slip ini keluar = printer siap."),

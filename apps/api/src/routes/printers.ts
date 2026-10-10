@@ -17,6 +17,7 @@ import { requireAuth } from "../auth/macro";
 import { db, isUniqueViolation, schema, type PrinterRow } from "../db";
 import { ErrorSchema, PrinterSchema } from "./schemas";
 import { invalidIp, IPV4 } from "./ipv4";
+import { testPrinters } from "../printer-check";
 
 const toPrinter = (row: PrinterRow) => ({
   id: row.id,
@@ -192,5 +193,61 @@ export const printerRoutes = new Elysia({
         404: ErrorSchema,
       },
       detail: { summary: "Remove a printer" },
+    }
+  )
+
+  /**
+   * A test slip sent by hand (owner, 2026-10-10): to the printers asked for,
+   * or every active one when none are — to check them before the timeline
+   * opens, or a new printer before it is paired. Inactive printers are never
+   * sent to. Each failure comes back with its reason.
+   */
+  .post(
+    "/test",
+    async ({ body, status }) => {
+      const result = await testPrinters(body?.ids);
+      if (result.skipped)
+        return status(422, {
+          code: "printing_off",
+          message: "Pencetakan sedang dimatikan (TICKET_PRINTING)",
+        });
+      return {
+        total: result.total,
+        sent: result.sent,
+        failed: result.failed,
+      };
+    },
+    {
+      auth: { menu: "mesin-printer", mode: "manage" },
+      /* An empty list is refused rather than read as "everything": a slip at
+         every booth is what an absent list means, and only that. */
+      body: t.Optional(
+        t.Object({
+          ids: t.Optional(
+            t.Array(t.String({ format: "uuid" }), {
+              minItems: 1,
+              maxItems: 200,
+            })
+          ),
+        })
+      ),
+      response: {
+        200: t.Object({
+          total: t.Integer(),
+          sent: t.Integer(),
+          failed: t.Array(
+            t.Object({
+              id: t.String(),
+              name: t.String(),
+              ip: t.String(),
+              reason: t.String(),
+            })
+          ),
+        }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "Send a test slip to printers by hand" },
     }
   );

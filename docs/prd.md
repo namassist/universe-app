@@ -2254,6 +2254,14 @@ and bus on the right.
   the booths whose slip could not be sent. Skipped while `TICKET_PRINTING` is
   off. It knows the same as a ticket does — that the bytes were handed over —
   so paper coming out is still the crew's to see.
+- **The same test by hand, from Mesin Printer** (owner, 2026-10-10), to check
+  printers before the timeline opens or a new printer before it is paired.
+  "Tes cetak" on a row sends one printer a slip; "Tes cetak semua" sends every
+  active printer one after a confirmation. The slip reads "Manual" and names
+  the printer (and its machine, or "-"). Inactive printers are never sent to.
+  The answer comes back on screen — a toast when all went out, otherwise the
+  printers that failed with their reason — and no notification is written
+  (`POST /v1/printers/test`, `manage` on Mesin Printer).
 
 ### Open questions
 

@@ -15,6 +15,7 @@ import { inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
+import { env } from "../env";
 import { redis } from "../redis";
 import { printerRoutes } from "./printers";
 
@@ -195,5 +196,44 @@ describe("permissions", () => {
 
   test("no session cannot list", async () => {
     expect((await send("GET", "/printers")).status).toBe(401);
+  });
+});
+
+/*
+ * A test slip sent by hand, to check a printer before the timeline opens
+ * (owner, 2026-10-10). These only ask for printers that do not exist, so no
+ * slip ever leaves the host.
+ */
+describe("a test slip by hand", () => {
+  test("view access cannot send one", async () => {
+    const denied = await send("POST", "/printers/test", viewer.cookie, {
+      ids: [crypto.randomUUID()],
+    });
+    expect(denied.status).toBe(403);
+  });
+
+  test("a printer that does not exist is simply not sent to", async () => {
+    const response = await send("POST", "/printers/test", admin.cookie, {
+      ids: [crypto.randomUUID()],
+    });
+
+    if (env.TICKET_PRINTING) {
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { total: number; sent: number };
+      expect(body.total).toBe(0);
+      expect(body.sent).toBe(0);
+    } else {
+      expect(response.status).toBe(422);
+      expect(((await response.json()) as { code: string }).code).toBe(
+        "printing_off"
+      );
+    }
+  });
+
+  test("an empty selection is refused, never read as everything", async () => {
+    const response = await send("POST", "/printers/test", admin.cookie, {
+      ids: [],
+    });
+    expect(response.status).toBe(422);
   });
 });

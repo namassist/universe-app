@@ -80,6 +80,33 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
   const [errName, setErrName] = React.useState(false);
   const [errIp, setErrIp] = React.useState(false);
   const [delTarget, setDelTarget] = React.useState<PrinterRow | null>(null);
+  /* A test slip by hand (owner, 2026-10-10): to one printer from its row, or
+     to every active printer after a confirmation — paper is not free. */
+  const [testAllAsk, setTestAllAsk] = React.useState(false);
+  const [testResult, setTestResult] = React.useState<TestResult | null>(null);
+
+  const testPrint = useMutation({
+    mutationFn: async (ids: string[] | null) => {
+      const result = await api.v1.printers.test.post(ids ? { ids } : {});
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSuccess: (r) => {
+      setTestAllAsk(false);
+      /* All sent is a toast; any failure stays on screen with its reason,
+         because that is the list somebody walks the booths with. */
+      if (r.failed.length) setTestResult(r);
+      else
+        pushToast(
+          "success",
+          "Tes cetak",
+          `${r.sent}/${r.total} slip tes terkirim — cek kertas keluar di printernya`
+        );
+    },
+    onError: (error) =>
+      pushToast("error", "Tes cetak", errorMessage(error, t.loginErr)),
+  });
+  const activeCount = entries.filter((e) => e.active).length;
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: printersKey });
@@ -189,10 +216,20 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
         sub="Daftar printer tiket — dipasangkan ke mesin fingerprint di menu Mesin Fingerprint"
       >
         {canW ? (
-          <Button onClick={openAdd}>
-            <Plus />
-            {t.mdAdd}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              disabled={testPrint.isPending || activeCount === 0}
+              onClick={() => setTestAllAsk(true)}
+            >
+              <Printer />
+              Tes cetak semua
+            </Button>
+            <Button onClick={openAdd}>
+              <Plus />
+              {t.mdAdd}
+            </Button>
+          </div>
         ) : null}
       </PageTitle>
 
@@ -252,6 +289,16 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
                     <div className="flex gap-2">
                       {canW ? (
                         <>
+                          {/* An inactive printer is never sent to, so it is
+                              never offered a test either. */}
+                          <IconButton
+                            aria-label="Tes cetak"
+                            title="Tes cetak"
+                            disabled={!r.active || testPrint.isPending}
+                            onClick={() => testPrint.mutate([r.id])}
+                          >
+                            <Printer />
+                          </IconButton>
                           <IconButton
                             aria-label={t.mdEditT}
                             onClick={() => openEdit(r)}
@@ -404,6 +451,72 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={testAllAsk}
+        onClose={() => setTestAllAsk(false)}
+        labelledBy="prt-t"
+      >
+        <DialogIcon variant="info">
+          <Printer />
+        </DialogIcon>
+        <DialogTitle id="prt-t">
+          Kirim slip tes ke {activeCount} printer aktif?
+        </DialogTitle>
+        <DialogBody>
+          Tiap printer mencetak satu slip &ldquo;TES PRINTER — BUKAN
+          TIKET&rdquo;. Slip yang keluar berarti printer siap; yang gagal
+          terkirim ditampilkan beserta alasannya.
+        </DialogBody>
+        <DialogActions>
+          <Button variant="ghost" onClick={() => setTestAllAsk(false)}>
+            {t.btnCancel}
+          </Button>
+          <Button
+            disabled={testPrint.isPending}
+            onClick={() => testPrint.mutate(null)}
+          >
+            <Printer />
+            {testPrint.isPending ? "Mengirim…" : "Kirim slip tes"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={!!testResult}
+        onClose={() => setTestResult(null)}
+        labelledBy="prr-t"
+      >
+        <DialogIcon variant="danger">
+          <Printer />
+        </DialogIcon>
+        <DialogTitle id="prr-t">
+          {testResult
+            ? `${testResult.sent}/${testResult.total} slip tes terkirim`
+            : ""}
+        </DialogTitle>
+        <DialogBody>Printer berikut tidak bisa dikirimi slip:</DialogBody>
+        <ul className="mt-3 flex flex-col gap-1.5 text-sm">
+          {testResult?.failed.map((f) => (
+            <li key={f.id} className="flex justify-between gap-3">
+              <span className="font-semibold">{f.name}</span>
+              <span className="font-mono text-(--text-secondary) tabular-nums">
+                {f.ip} · {f.reason}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <DialogActions>
+          <Button onClick={() => setTestResult(null)}>Tutup</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }
+
+/** What a test by hand answers: how many went out, and each that did not. */
+type TestResult = {
+  total: number;
+  sent: number;
+  failed: { id: string; name: string; ip: string; reason: string }[];
+};

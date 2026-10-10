@@ -325,6 +325,21 @@ describe("the booth test slip", () => {
     expect(slip).toContain("Malam");
   });
 
+  /* Sent by hand from the printer registry (owner, 2026-10-10): no shift to
+     name, and a printer that may not be paired to any machine yet. */
+  test("a manual test says so, and names the printer itself", () => {
+    const manual = renderTestSlip({
+      machine: null,
+      printerName: "Printer B18",
+      printerIp: "192.168.179.100",
+      at: "14:05",
+      shift: "manual",
+    }).toString("latin1");
+    expect(manual).toContain("Manual 14:05");
+    expect(manual).toContain("Nama           : Printer B18");
+    expect(manual).toMatch(/Mesin\s+: -/);
+  });
+
   test("is cut like a ticket, so the roll is left ready", () => {
     expect(slip.endsWith("\x1dVB\x00")).toBe(true);
   });

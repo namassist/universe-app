@@ -14,7 +14,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { runPrinterCheck } from "./printer-check";
+import { runPrinterCheck, testPrinters } from "./printer-check";
 import type { PrintOutcome } from "./ticket-printer";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
@@ -48,7 +48,11 @@ async function booth(
     })
     .returning({ id: schema.fingerprintMachines.id });
   made.machines.push(machine!.id);
-  return { printerIp: ip(100 + last), name: `${tag} M${last}` };
+  return {
+    printerId: printer!.id,
+    printerIp: ip(100 + last),
+    name: `${tag} M${last}`,
+  };
 }
 
 /** A send that records where it went and fails for the addresses given. */
@@ -176,5 +180,98 @@ describe("what it reports", () => {
     const params = notice?.params as { total: number; sent: number };
     expect(params.sent).toBe(params.total);
     expect(params.total).toBeGreaterThanOrEqual(1);
+  });
+});
+
+/*
+ * The same slip, sent by hand from the printer registry before the timeline
+ * opens (owner, 2026-10-10). It answers the person who pressed the button —
+ * with the reason for each failure — and leaves the notifications page to the
+ * scheduled test.
+ */
+describe("a test sent by hand", () => {
+  async function loosePrinter(last: number, active = true) {
+    const [row] = await db
+      .insert(schema.printers)
+      .values({ name: `${tag} LEPAS ${last}`, ip: ip(100 + last), active })
+      .returning({ id: schema.printers.id });
+    made.printers.push(row!.id);
+    return { printerId: row!.id, printerIp: ip(100 + last) };
+  }
+
+  test("goes to the printers asked for, paired or not, and only those", async () => {
+    const paired = await booth(9);
+    const loose = await loosePrinter(10);
+    const other = await booth(11);
+    const { send, sent } = fakeSend();
+
+    const result = await testPrinters([paired.printerId, loose.printerId], {
+      send,
+      printing: true,
+    });
+
+    expect(result.skipped).toBe(false);
+    const ips = sent.map((s) => s.ip);
+    expect(ips.sort()).toEqual([paired.printerIp, loose.printerIp].sort());
+    expect(ips).not.toContain(other.printerIp);
+    const slip = sent.find((s) => s.ip === loose.printerIp)!.text;
+    expect(slip).toContain("Manual");
+    /* The registry name, wrapped on a 58 mm roll — its last words suffice. */
+    expect(slip).toContain("LEPAS");
+  });
+
+  test("never to a printer switched off, even when asked by name", async () => {
+    const off = await loosePrinter(12, false);
+    const { send, sent } = fakeSend();
+
+    const result = await testPrinters([off.printerId], {
+      send,
+      printing: true,
+    });
+
+    expect(sent).toHaveLength(0);
+    expect(result.total).toBe(0);
+  });
+
+  test("with nothing asked for, every active printer", async () => {
+    const a = await booth(13);
+    const b = await loosePrinter(14);
+    const { send, sent } = fakeSend();
+
+    await testPrinters(undefined, { send, printing: true });
+
+    const ips = sent.map((s) => s.ip);
+    expect(ips).toContain(a.printerIp);
+    expect(ips).toContain(b.printerIp);
+  });
+
+  test("a failure comes back with its reason, and no notice is written", async () => {
+    const bad = await loosePrinter(15);
+    const { send } = fakeSend([bad.printerIp]);
+
+    const result = await testPrinters([bad.printerId], {
+      send,
+      printing: true,
+    });
+
+    expect(result.failed).toEqual([
+      {
+        id: bad.printerId,
+        name: `${tag} LEPAS 15`,
+        ip: bad.printerIp,
+        reason: "ECONNREFUSED",
+      },
+    ]);
+    expect(await lastNotice()).toBeUndefined();
+  });
+
+  test("nothing is sent while ticket printing is switched off", async () => {
+    const p = await loosePrinter(16);
+    const { send, sent } = fakeSend();
+
+    const result = await testPrinters([p.printerId], { send, printing: false });
+
+    expect(result.skipped).toBe(true);
+    expect(sent).toHaveLength(0);
   });
 });
