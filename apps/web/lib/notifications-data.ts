@@ -83,6 +83,20 @@ export function notifText(
       : `${shift} board for ${date} failed to generate — ${why}`;
   }
 
+  /* The test slip at every booth printer when the first finger opens: the
+     booths that failed are named, because that is where to walk. */
+  if (n.kind === "printer-test") {
+    const count = `${num(p.sent)}/${num(p.total)}`;
+    const failed = Array.isArray(p.failed) ? p.failed.map(str).join(", ") : "";
+    if (lang === "id")
+      return failed
+        ? `Tes printer shift ${shift}: ${count} terkirim — gagal: ${failed}`
+        : `Tes printer shift ${shift}: ${count} terkirim — cek slip keluar di tiap bilik`;
+    return failed
+      ? `${shift} printer test: ${count} sent — failed: ${failed}`
+      : `${shift} printer test: ${count} sent — check each booth printed its slip`;
+  }
+
   return n.kind;
 }
 

@@ -13,6 +13,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  renderTestSlip,
   renderTicket,
   ticketPreview,
   type TicketFields,
@@ -296,5 +297,35 @@ describe("the spare bus on a SPARE slip", () => {
     expect(lines).toContain("UNIT           : -");
     expect(lines).toContain("NO BUS         : -");
     expect(lines).toContain("AREA           : -");
+  });
+});
+
+/*
+ * The test slip printed at every booth when the first finger opens, so the
+ * crew sees paper come out before the queue does (owner, 2026-10-10). It must
+ * never pass for a ticket, and must say which booth and printer it came from.
+ */
+describe("the booth test slip", () => {
+  const slip = renderTestSlip({
+    machine: "Mesin 18 KM 31",
+    printerIp: "192.168.179.100",
+    at: "16:30",
+    shift: "night",
+  }).toString("latin1");
+
+  test("says plainly that it is not a ticket", () => {
+    expect(slip).toContain("TES PRINTER");
+    expect(slip).toContain("BUKAN TIKET");
+  });
+
+  test("names the booth, the printer and the moment", () => {
+    expect(slip).toContain("Mesin 18 KM 31");
+    expect(slip).toContain("192.168.179.100");
+    expect(slip).toContain("16:30");
+    expect(slip).toContain("Malam");
+  });
+
+  test("is cut like a ticket, so the roll is left ready", () => {
+    expect(slip.endsWith("\x1dVB\x00")).toBe(true);
   });
 });

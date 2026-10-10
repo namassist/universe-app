@@ -33,16 +33,16 @@ Stages are **data** (`timeline_stages`, edited on the Timeline menu), one row
 per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 `readiness.ts`). Seeded schedule (`db/seed-master.ts`), night = +12 h:
 
-| Time  | Action           | What happens                                                        |
-| ----- | ---------------- | ------------------------------------------------------------------- |
-| 04:00 | `shift-start`    | Walls turn over to this shift; tap collection arms                  |
-| 04:00 | `ftw-ingest`     | FTW pull begins, re-pulls every minute until `ftw-deadline`         |
-| 04:30 | `finger-ingest`  | Live listening opens on every active machine                        |
-| 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                   |
-| 05:25 | `finger-in`      | A first IN tap at/after this is `late`                              |
-| 05:26 | `spare-validate` | **The board is built** (one minute after `finger-in`, never on it)  |
-| 05:28 | `finger-second`  | No hook. A spare's slip is held until this time (`ticket-issue.ts`) |
-| 05:30 | `bus-depart`     | Listening/collection windows end (plus grace)                       |
+| Time  | Action           | What happens                                                                                               |
+| ----- | ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| 04:00 | `shift-start`    | Walls turn over to this shift; tap collection arms                                                         |
+| 04:00 | `ftw-ingest`     | FTW pull begins, re-pulls every minute until `ftw-deadline`                                                |
+| 04:30 | `finger-ingest`  | Live listening opens on every active machine; a test slip goes to every booth printer (`printer-check.ts`) |
+| 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                                                          |
+| 05:25 | `finger-in`      | A first IN tap at/after this is `late`                                                                     |
+| 05:26 | `spare-validate` | **The board is built** (one minute after `finger-in`, never on it)                                         |
+| 05:28 | `finger-second`  | No hook. A spare's slip is held until this time (`ticket-issue.ts`)                                        |
+| 05:30 | `bus-depart`     | Listening/collection windows end (plus grace)                                                              |
 
 - **Missing gate = refuse, never default.** No `finger-in` or `ftw-deadline`
   stage means `spare-validate` builds no board and notifies

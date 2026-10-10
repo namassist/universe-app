@@ -407,6 +407,13 @@
       "when": 1791594080708,
       "tag": "0057_closed_lucky_pierre",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791626239105,
+      "tag": "0058_talented_pet_avengers",
+      "breakpoints": true
     }
   ]
 }

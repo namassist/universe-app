@@ -276,3 +276,46 @@ export function renderTicket(fields: TicketFields): Buffer {
     CUT,
   ]);
 }
+
+/**
+ * The test slip sent to every booth printer when the first finger opens
+ * (owner, 2026-10-10), so the crew sees paper come out before the queue does.
+ *
+ * Short, to spare the roll at two musters a day, and loud about not being a
+ * ticket: nobody should walk to a unit holding it.
+ */
+export function renderTestSlip(fields: {
+  machine: string;
+  printerIp: string;
+  /** Local `HH:MM`. */
+  at: string;
+  shift: "day" | "night";
+}): Buffer {
+  return Buffer.concat([
+    INIT,
+    CODEPAGE,
+    ALIGN_CENTRE,
+    BOLD_ON,
+    SIZE_DOUBLE,
+    text("TES PRINTER"),
+    SIZE_NORMAL,
+    text("BUKAN TIKET"),
+    BOLD_OFF,
+    text(RULE),
+    ALIGN_LEFT,
+    text(field("Mesin", fields.machine)),
+    text(field("Printer", fields.printerIp)),
+    text(
+      field(
+        "Shift",
+        `${fields.shift === "night" ? "Malam" : "Siang"} ${fields.at}`
+      )
+    ),
+    text(RULE),
+    ALIGN_CENTRE,
+    text("Slip ini keluar = printer siap."),
+    Buffer.from("\r\n", "latin1"),
+    FEED,
+    CUT,
+  ]);
+}

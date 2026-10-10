@@ -42,6 +42,7 @@ import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { pullClosesAt, stageTimeOf } from "./stage-time";
 import { retimeListenWindow, runListenWindow } from "./live-listener";
+import { runPrinterCheck } from "./printer-check";
 import { collectOnce, reportLogSizes } from "./device-taps";
 import { deriveDate } from "./derive";
 import { redis } from "./redis";
@@ -511,6 +512,13 @@ const listen: Hook = async (dispatch) => {
       "stage carries no shift — cannot tell which muster to listen for",
       false
     );
+
+  /* A test slip at every booth printer as the first finger opens, so the crew
+     sees paper before the queue does (owner, 2026-10-10). Detached: a dead
+     printer must not hold the tick, and it never stops the listening below. */
+  void runPrinterCheck(shift).catch((error) =>
+    console.error("[tes-printer] gagal dijalankan", error)
+  );
 
   const endsAt = await listenClosesAt(shift);
   if (!endsAt)

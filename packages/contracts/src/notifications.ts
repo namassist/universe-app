@@ -19,6 +19,9 @@ export const NOTIFICATION_KINDS = [
   "allocation-generated",
   "allocation-failed",
   "device-log-sizes",
+  /* The test slip sent to every booth printer when the first finger opens:
+     `{ shift, total, sent, failed: machineName[] }`. */
+  "printer-test",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

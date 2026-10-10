@@ -140,6 +140,7 @@ const NotificationKindUnion = t.Union([
   t.Literal("allocation-generated"),
   t.Literal("allocation-failed"),
   t.Literal("device-log-sizes"),
+  t.Literal("printer-test"),
 ]);
 
 const NotificationToneUnion = t.Union([
