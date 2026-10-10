@@ -1859,17 +1859,25 @@ person holding a wall clock against a screen.
   most one machine.** ShiftCorner's pairing table has 33 pairs and 33 distinct
   printers — none shared — so one-to-one is the shape the site already runs.
   The printer name is printed on the ticket. ESC/POS over TCP port 9100.
-- **Machines carry a "Universe only" flag.** Universe cannot see which machines
-  ShiftCorner listens to — that lives in ShiftCorner's own database — so the
-  flag is how a machine is declared safe for live listening. The development
-  machine and the sixteen new booths carry it; every production machine
-  registered today does not.
+- **"Active" is a machine's only switch** (owner, 2026-10-10). An active
+  machine gets everything: probed and shown on the walls, its log pulled, and
+  listened to live during the muster window (which sends `enableDevice` and
+  prints tickets) or by hand. An inactive machine is ignored entirely — not
+  probed, not pulled, not listened to, not listed on the tap monitor.
+  Universe cannot see which machines ShiftCorner listens to, so a machine
+  ShiftCorner still drives must stay inactive here.
+  - This replaced two narrower flags, "operator booth" (which machines are
+    pulled) and "Universe only" (which may be listened to). Three switches let
+    a machine be monitored but not collected, or collected but not heard, and
+    every muster needed them toggled in step by hand. The migration kept a
+    machine active only if it was all three; every other one starts
+    inactive.
 
 ### When it listens and when it prints (day shift; night is +12 h)
 
 | Stage            | Time  | Behaviour                                          |
 | ---------------- | ----- | -------------------------------------------------- |
-| `finger-ingest`  | 04:30 | Listening opens on every booth                     |
+| `finger-ingest`  | 04:30 | Listening opens on every active machine            |
 | `finger-in`      | 05:25 | First finger closes; a later first tap is **late** |
 | `spare-validate` | 05:26 | Allocation runs and is **final**                   |
 | `finger-second`  | 05:28 | Spare tickets start printing                       |
@@ -1881,17 +1889,16 @@ allocation has already finished (owner, 2026-09-13).
 
 - **Live listening never touches a production machine** (owner, 2026-09-13).
   Listening sends `enableDevice`, which changes device state, and production
-  machines are ShiftCorner's. Scheduled and manual listening both run only on
-  machines flagged "Universe only" — the development machine and the sixteen
-  new booths. Production machines keep the periodic pull they have today:
-  read-only, no live session.
+  machines are ShiftCorner's. Scheduled and manual listening both run on every
+  **active** machine and nothing else (owner, 2026-10-10), so a machine
+  ShiftCorner still drives stays inactive in Universe.
 - **Listening follows the timeline by default** (owner, 2026-09-13): it opens at
   `finger-ingest` and stays open through the gap between the two fingers until
   `bus-depart` plus the collection grace. It does not disconnect for the three
   minutes between 05:25 and 05:28 — those taps are still recorded.
 - **A manual listen exists for testing** (owner, 2026-09-13). An admin picks
-  machines one at a time and starts listening. Only "Universe only" machines
-  can be chosen; a production machine is not offered.
+  machines one at a time and starts listening. Only active machines can be
+  chosen; an inactive one is not offered, and the server refuses it.
 - **A manual listen runs until someone presses stop** (owner, 2026-09-13). To
   keep a forgotten session visible, the screen shows every active listen with
   who started it and since when, and a server restart ends every manual

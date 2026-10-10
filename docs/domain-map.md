@@ -37,7 +37,7 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 | ----- | ---------------- | ------------------------------------------------------------------- |
 | 04:00 | `shift-start`    | Walls turn over to this shift; tap collection arms                  |
 | 04:00 | `ftw-ingest`     | FTW pull begins, re-pulls every minute until `ftw-deadline`         |
-| 04:30 | `finger-ingest`  | Live listening opens on "Universe only" booths                      |
+| 04:30 | `finger-ingest`  | Live listening opens on every active machine                        |
 | 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                   |
 | 05:25 | `finger-in`      | A first IN tap at/after this is `late`                              |
 | 05:26 | `spare-validate` | **The board is built** (one minute after `finger-in`, never on it)  |
@@ -205,9 +205,10 @@ _Kiosk access_, _The attendance wall shows the scan as a ticket_.
 
 ## Tickets (muster slips)
 
-A tap at a **"Universe only"** booth (live listen, `live-listener.ts`) prints a
-slip on the booth's one paired printer (ESC/POS, port 9100). Production
-machines are never listened to, because listening sends `enableDevice`.
+A tap at an **active** booth (live listen, `live-listener.ts`) prints a slip on
+the booth's one paired printer (ESC/POS, port 9100). "Active" is a machine's
+only switch: an inactive machine — any one ShiftCorner still drives — is never
+listened to, because listening sends `enableDevice`.
 
 - **Everyone who taps gets a slip** as proof of attendance. The one exception:
   a **spare at the first finger** is recorded and printed at `finger-second`.

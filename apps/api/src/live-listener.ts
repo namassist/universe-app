@@ -7,14 +7,16 @@
  * answer to "what happens on restart" — every manual listen ends, deliberately
  * (owner, 2026-09-13), rather than coming back without anybody asking.
  *
- * **Only machines flagged `universeOnly` may be listened to.** Listening sends
- * `CMD_ENABLE_DEVICE`, which changes the machine's state, and the production
- * machines belong to ShiftCorner. The rule is enforced here rather than in the
- * screen, because a screen that hides a button is a suggestion and this is a
- * promise (owner, 2026-09-13).
+ * **Only active machines may be listened to.** Listening sends
+ * `CMD_ENABLE_DEVICE`, which changes the machine's state, so a machine
+ * somebody switched off — one ShiftCorner still drives, say — must stay
+ * untouched. "Active" is the only switch a machine has (owner, 2026-10-10);
+ * it replaced the "Universe only" and "operator booth" flags. The rule is
+ * enforced here rather than in the screen, because a screen that hides a
+ * button is a suggestion and this is a promise (owner, 2026-09-13).
  */
 
-import { and, eq, lt, sql } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import { env } from "./env";
@@ -51,10 +53,7 @@ const held = new Map<string, Held>();
 export class ListenRefused extends Error {
   constructor(
     readonly code:
-      | "machine_not_found"
-      | "machine_inactive"
-      | "machine_not_universe"
-      | "already_listening",
+      "machine_not_found" | "machine_inactive" | "already_listening",
     message: string
   ) {
     super(message);
@@ -129,11 +128,6 @@ export async function startListening(input: {
     throw new ListenRefused("machine_not_found", "Mesin tidak ditemukan");
   if (!machine.active)
     throw new ListenRefused("machine_inactive", "Mesin sedang nonaktif");
-  if (!machine.universeOnly)
-    throw new ListenRefused(
-      "machine_not_universe",
-      "Mesin ini bukan mesin khusus Universe — mendengarkan langsung akan menyentuh mesin produksi"
-    );
   if (held.has(machine.ip))
     throw new ListenRefused("already_listening", "Mesin ini sudah didengarkan");
 
@@ -218,17 +212,12 @@ export async function listenableMachines() {
       ip: schema.fingerprintMachines.ip,
     })
     .from(schema.fingerprintMachines)
-    .where(
-      and(
-        eq(schema.fingerprintMachines.active, true),
-        eq(schema.fingerprintMachines.universeOnly, true)
-      )
-    )
+    .where(eq(schema.fingerprintMachines.active, true))
     .orderBy(schema.fingerprintMachines.name);
   return rows.map((r) => ({ ...r, listening: held.has(r.ip) }));
 }
 
-/** The booths a scheduled window is responsible for. */
+/** The booths a scheduled window is responsible for — every active machine. */
 async function boothsToHear() {
   return db
     .select({
@@ -237,13 +226,7 @@ async function boothsToHear() {
       name: schema.fingerprintMachines.name,
     })
     .from(schema.fingerprintMachines)
-    .where(
-      and(
-        eq(schema.fingerprintMachines.active, true),
-        eq(schema.fingerprintMachines.universeOnly, true),
-        eq(schema.fingerprintMachines.operatorBooth, true)
-      )
-    );
+    .where(eq(schema.fingerprintMachines.active, true));
 }
 
 /** Close every session the schedule opened, leaving manual ones alone. */

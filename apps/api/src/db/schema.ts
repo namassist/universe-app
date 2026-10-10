@@ -368,26 +368,21 @@ export const fingerprintMachines = pgTable("fingerprint_machines", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   ip: text("ip").notNull().unique(),
-  active: boolean("active").notNull().default(true),
   /**
-   * Whether this machine stands in the operator booth.
+   * Whether Universe uses this machine at all — the only switch it has.
    *
-   * Named after the physical fact rather than its effect — it decides which
-   * machines we pull taps from, but calling it "sync this one" would invite
-   * somebody to untick it to save something, and nothing on the screen would
-   * look wrong afterwards. A machine standing in the booth and not ticked is
-   * visibly wrong to anyone reading the list.
+   * Active means everything: probed and shown on the walls, its log pulled,
+   * and listened to live during a muster (which sends `enableDevice` and
+   * prints tickets). Inactive means nothing: not probed, not pulled, not
+   * listened to, not listed on the tap monitor. A machine another system
+   * still drives — ShiftCorner — must therefore stay inactive here.
    *
-   * The cost of getting it wrong is measured: operators used 33 machines in a
-   * month, and pulling only the busiest 16 would have missed 425 taps — about
-   * fourteen people a day marked absent while standing at a sensor. So the
-   * column was seeded from what operators actually did, not from a list
-   * somebody typed.
-   *
-   * Every machine stays registered whatever this says: monitoring still covers
-   * the whole site, and only collection is narrowed.
+   * This replaced two narrower flags, "operator booth" and "Universe only"
+   * (owner, 2026-10-10): with three switches a machine could be monitored but
+   * not collected, or collected but not heard, and every muster needed them
+   * toggled in step by hand.
    */
-  operatorBooth: boolean("operator_booth").notNull().default(false),
+  active: boolean("active").notNull().default(true),
   /**
    * The machine's communication key, and the port its SOAP endpoint answers on.
    *
@@ -411,16 +406,6 @@ export const fingerprintMachines = pgTable("fingerprint_machines", {
   printerId: uuid("printer_id")
     .references(() => printers.id, { onDelete: "set null" })
     .unique(),
-  /**
-   * Whether this machine belongs to Universe alone.
-   *
-   * Live listening sends `enableDevice`, which changes the machine's state, so
-   * it must never reach a machine ShiftCorner is listening to. We cannot see
-   * ShiftCorner's machine list — it lives in its database — so this flag is how
-   * a machine is declared ours. Default false: a machine is production until
-   * somebody says otherwise, which is the safe direction to be wrong in.
-   */
-  universeOnly: boolean("universe_only").notNull().default(false),
   /* ---- written by the prober, read by the wall ---- */
   /** Last probe verdict, after the miss-count debounce. */
   online: boolean("online").notNull().default(false),

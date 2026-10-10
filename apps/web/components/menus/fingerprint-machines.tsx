@@ -95,11 +95,9 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
   const [fName, setFName] = React.useState("");
   const [fIp, setFIp] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
-  const [fBooth, setFBooth] = React.useState(false);
   const [fComKey, setFComKey] = React.useState("0");
   const [fPort, setFPort] = React.useState("80");
   const [fPrinterId, setFPrinterId] = React.useState("");
-  const [fUniverse, setFUniverse] = React.useState(false);
   const [errName, setErrName] = React.useState(false);
   const [errIp, setErrIp] = React.useState(false);
   const [delTarget, setDelTarget] =
@@ -117,21 +115,17 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
       name: string;
       ip: string;
       active: boolean;
-      operatorBooth: boolean;
       comKey: number;
       port: number;
       printerId: string | null;
-      universeOnly: boolean;
     }) => {
       const body = {
         name: input.name,
         ip: input.ip,
         active: input.active,
-        operatorBooth: input.operatorBooth,
         comKey: input.comKey,
         port: input.port,
         printerId: input.printerId,
-        universeOnly: input.universeOnly,
       };
       const result = input.id
         ? await api.v1["fingerprint-machines"]({ id: input.id }).patch(body)
@@ -262,11 +256,9 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     setFName("");
     setFIp("");
     setFActive(true);
-    setFBooth(false);
     setFComKey("0");
     setFPort("80");
     setFPrinterId("");
-    setFUniverse(false);
     setErrName(false);
     setErrIp(false);
     setDlgOpen(true);
@@ -276,11 +268,9 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
     setFName(r.name);
     setFIp(r.ip);
     setFActive(r.active);
-    setFBooth(r.operatorBooth);
     setFComKey(String(r.comKey));
     setFPort(String(r.port));
     setFPrinterId(r.printerId ?? "");
-    setFUniverse(r.universeOnly);
     setErrName(false);
     setErrIp(false);
     setDlgOpen(true);
@@ -299,13 +289,11 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
       name,
       ip,
       active: fActive,
-      operatorBooth: fBooth,
       /* Blank reads as the factory value rather than as an error: somebody
          clearing the box means "the usual one", not "no key at all". */
       comKey: Number(fComKey) || 0,
       port: Number(fPort) || 80,
       printerId: fPrinterId || null,
-      universeOnly: fUniverse,
     });
   }
 
@@ -440,11 +428,6 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
                     ) : (
                       <span className="text-(--text-tertiary)">—</span>
                     )}
-                    {r.universeOnly ? (
-                      <Badge className="ml-2" variant="info">
-                        Universe
-                      </Badge>
-                    ) : null}
                   </TableCell>
                   <TableCell>
                     {/* The prober's reading, not the operator's flag — a
@@ -568,24 +551,6 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
             {t.mfNonaktifNote}
           </p>
 
-          {/* Asked as a fact about where the machine stands, not as a setting
-              about what the software does with it. Somebody who knows the yard
-              can answer it; nobody has to know that it decides which machines
-              taps are collected from. */}
-          <ToggleRow className="mt-4" htmlFor="mf-booth">
-            <Checkbox
-              id="mf-booth"
-              checked={fBooth}
-              onChange={(e) => setFBooth(e.target.checked)}
-            />
-            Mesin bilik operator
-          </ToggleRow>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            Absensi operator ditarik dari mesin yang ditandai ini. Mesin di luar
-            bilik operator tetap dipantau hidup/matinya, tapi tidak ditarik
-            datanya.
-          </p>
-
           <div className="mt-4 grid grid-cols-2 gap-3">
             <Field label="Com Key" htmlFor="mf-comkey">
               <Input
@@ -633,20 +598,6 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
                 ))}
             </Select>
           </Field>
-
-          <ToggleRow className="mt-4" htmlFor="mf-universe">
-            <Checkbox
-              id="mf-universe"
-              checked={fUniverse}
-              onChange={(e) => setFUniverse(e.target.checked)}
-            />
-            Mesin khusus Universe
-          </ToggleRow>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            Hanya mesin bertanda ini yang boleh didengarkan langsung (live).
-            Mesin produksi yang dipakai ShiftCorner jangan ditandai — cukup
-            ditarik berkala seperti sekarang.
-          </p>
           <DialogActions>
             <Button
               type="button"

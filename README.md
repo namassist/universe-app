@@ -61,15 +61,16 @@ on the Timeline menu), never hard-coded. Seeded for a new installation, day
 shift (night is the same twelve hours later):
 
 - **04:00** — shift start; walls turn over, FTW pulling begins
-- **04:30** — live listening opens on the Universe booths
+- **04:30** — live listening opens on every active machine
 - **05:22** — Fit To Work upload deadline
 - **05:25** — first fingerprint deadline
 - **05:26** — the board is built (`spare-validate`)
 - **05:28** — second fingerprint: spares collect their slip
 - **05:30** — buses depart
 
-Taps are read from the fingerprint machines directly — live on Universe-only
-booths, pulled from the rest — not from Nakula. FTW is pulled from savera.
+Taps are read from the fingerprint machines directly — every active machine is
+both listened to live and pulled; inactive ones are ignored — not from Nakula.
+FTW is pulled from savera.
 
 ### Units & competencies
 

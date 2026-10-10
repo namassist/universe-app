@@ -39,10 +39,10 @@ const made = {
 let known = "";
 const unknown = "999999999";
 
-async function addMachine(ip: string, booth = true, active = true) {
+async function addMachine(ip: string, active = true) {
   const [row] = await db
     .insert(schema.fingerprintMachines)
-    .values({ name: `${tag} ${ip}`, ip, operatorBooth: booth, active })
+    .values({ name: `${tag} ${ip}`, ip, active })
     .returning({ id: schema.fingerprintMachines.id });
   made.machines.push(row!.id);
   made.ips.push(ip);
@@ -218,18 +218,17 @@ describe("which taps are kept", () => {
     expect(await storedFor(ip)).toHaveLength(1);
   });
 
-  test("a machine outside the operator booth is never asked", async () => {
-    const ip = await addMachine(`10.96.${uid().slice(0, 2)}.1`, false);
+  test("every active machine is asked — there is no second flag to tick", async () => {
+    const ip = await addMachine(`10.96.${uid().slice(0, 2)}.1`);
     const { client, pulled } = fake({ [ip]: { count: 5, taps: [] } });
 
     await collectOnce(client);
 
-    expect(pulled).not.toContain(ip);
-    expect(await storedFor(ip)).toHaveLength(0);
+    expect(pulled).toContain(ip);
   });
 
   test("an inactive machine is never asked", async () => {
-    const ip = await addMachine(`10.97.${uid().slice(0, 2)}.1`, true, false);
+    const ip = await addMachine(`10.97.${uid().slice(0, 2)}.1`, false);
     const { client, pulled } = fake({ [ip]: { count: 5, taps: [] } });
 
     await collectOnce(client);

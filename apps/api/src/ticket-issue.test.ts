@@ -46,7 +46,7 @@ beforeAll(async () => {
 
   const [machine] = await db
     .insert(schema.fingerprintMachines)
-    .values({ name: tag, ip, printerId: printer!.id, universeOnly: true })
+    .values({ name: tag, ip, printerId: printer!.id })
     .returning({ id: schema.fingerprintMachines.id });
   made.machines.push(machine!.id);
 
@@ -62,7 +62,6 @@ beforeAll(async () => {
       name: `${tag} LAIN`,
       ip: otherIp,
       printerId: otherPrinter!.id,
-      universeOnly: true,
     })
     .returning({ id: schema.fingerprintMachines.id });
   made.machines.push(otherMachine!.id);

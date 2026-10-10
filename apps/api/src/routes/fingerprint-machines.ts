@@ -36,11 +36,9 @@ const toMachine = (row: FingerprintMachineRow) => ({
   name: row.name,
   ip: row.ip,
   active: row.active,
-  operatorBooth: row.operatorBooth,
   comKey: row.comKey,
   port: row.port,
   printerId: row.printerId,
-  universeOnly: row.universeOnly,
   online: row.online,
   lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
   checkedAt: row.checkedAt?.toISOString() ?? null,
@@ -164,11 +162,9 @@ export const fingerprintMachineRoutes = new Elysia({
             name,
             ip,
             active: body.active ?? true,
-            operatorBooth: body.operatorBooth ?? false,
             comKey: body.comKey ?? 0,
             port: body.port ?? 80,
             printerId: body.printerId ?? null,
-            universeOnly: body.universeOnly ?? false,
           })
           .returning();
         return status(201, toMachine(row!));
@@ -187,11 +183,9 @@ export const fingerprintMachineRoutes = new Elysia({
         name: t.String({ minLength: 1 }),
         ip: t.String({ minLength: 1 }),
         active: t.Optional(t.Boolean()),
-        operatorBooth: t.Optional(t.Boolean()),
         comKey: t.Optional(t.Integer({ minimum: 0 })),
         port: t.Optional(t.Integer({ minimum: 1, maximum: 65535 })),
         printerId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
-        universeOnly: t.Optional(t.Boolean()),
       }),
       response: {
         201: FingerprintMachineSchema,
@@ -230,16 +224,10 @@ export const fingerprintMachineRoutes = new Elysia({
             ...(name !== undefined ? { name } : {}),
             ...(ip !== undefined ? { ip } : {}),
             ...(body.active !== undefined ? { active: body.active } : {}),
-            ...(body.operatorBooth !== undefined
-              ? { operatorBooth: body.operatorBooth }
-              : {}),
             ...(body.comKey !== undefined ? { comKey: body.comKey } : {}),
             ...(body.port !== undefined ? { port: body.port } : {}),
             ...(body.printerId !== undefined
               ? { printerId: body.printerId }
-              : {}),
-            ...(body.universeOnly !== undefined
-              ? { universeOnly: body.universeOnly }
               : {}),
           })
           .where(eq(schema.fingerprintMachines.id, params.id))
@@ -261,11 +249,9 @@ export const fingerprintMachineRoutes = new Elysia({
         name: t.Optional(t.String({ minLength: 1 })),
         ip: t.Optional(t.String({ minLength: 1 })),
         active: t.Optional(t.Boolean()),
-        operatorBooth: t.Optional(t.Boolean()),
         comKey: t.Optional(t.Integer({ minimum: 0 })),
         port: t.Optional(t.Integer({ minimum: 1, maximum: 65535 })),
         printerId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
-        universeOnly: t.Optional(t.Boolean()),
       }),
       response: {
         200: FingerprintMachineSchema,

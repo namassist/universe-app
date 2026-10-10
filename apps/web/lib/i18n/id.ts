@@ -397,7 +397,8 @@ export const id = {
   mfIp: "Alamat IP",
   mfErrIp: "Alamat IPv4 tidak sah (contoh: 192.168.179.229)",
   mfEmptyB: "Belum ada mesin fingerprint terdaftar.",
-  mfNonaktifNote: "Mesin nonaktif tidak dicek dan tidak tampil di layar TV.",
+  mfNonaktifNote:
+    "Mesin aktif dicek, ditarik datanya, dan didengarkan langsung saat jadwal muster. Mesin nonaktif diabaikan sama sekali — mesin yang masih dipakai ShiftCorner harus nonaktif.",
   mfPrinterIp: "IP Printer",
   mfSumB: "mesin",
   mfBulkOn: "Aktifkan",

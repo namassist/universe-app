@@ -401,7 +401,7 @@ export const en: Dict = {
   mfErrIp: "Not a valid IPv4 address (e.g. 192.168.179.229)",
   mfEmptyB: "No fingerprint machines registered yet.",
   mfNonaktifNote:
-    "An inactive machine is not checked and does not appear on the TV.",
+    "An active machine is checked, its log pulled, and listened to live during the muster window. An inactive one is ignored entirely — a machine ShiftCorner still uses must stay inactive.",
   mfPrinterIp: "Printer IP",
   mfSumB: "machines",
   mfBulkOn: "Activate",

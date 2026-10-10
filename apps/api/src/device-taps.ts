@@ -21,7 +21,7 @@
  * until they have been compared.
  */
 
-import { and, eq, lt, sql } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 import type { DeviceReportMoment } from "@universe/contracts";
 
 import { db, schema } from "./db";
@@ -47,7 +47,7 @@ const liveClient: DeviceClient = {
 };
 
 export type CollectResult = {
-  /** Machines considered — active, and standing in the operator booth. */
+  /** Machines considered — every active one. */
   asked: number;
   /** Machines whose log had grown and were therefore read. */
   pulled: number;
@@ -157,12 +157,7 @@ export async function collectOnce(
   const machines = await db
     .select()
     .from(schema.fingerprintMachines)
-    .where(
-      and(
-        eq(schema.fingerprintMachines.active, true),
-        eq(schema.fingerprintMachines.operatorBooth, true)
-      )
-    );
+    .where(eq(schema.fingerprintMachines.active, true));
 
   const result: CollectResult = {
     asked: machines.length,
@@ -288,12 +283,7 @@ export async function reportLogSizes(
       ip: schema.fingerprintMachines.ip,
     })
     .from(schema.fingerprintMachines)
-    .where(
-      and(
-        eq(schema.fingerprintMachines.active, true),
-        eq(schema.fingerprintMachines.operatorBooth, true)
-      )
-    );
+    .where(eq(schema.fingerprintMachines.active, true));
   if (!machines.length) return;
 
   const sizes: { name: string; count: number | null }[] = [];

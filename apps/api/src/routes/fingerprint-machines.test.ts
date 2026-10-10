@@ -52,7 +52,6 @@ type Machine = {
   ip: string;
   active: boolean;
   printerId: string | null;
-  universeOnly: boolean;
   createdAt: string;
 };
 
@@ -352,18 +351,26 @@ describe("a booth and its printer", () => {
     const created = await create({ name: `${tag} PASANG`, ip: ipOf(31) });
     const row = (await created.json()) as Machine;
     expect(row.printerId).toBeNull();
-    expect(row.universeOnly).toBe(false);
 
     const patched = await send(
       "PATCH",
       `/fingerprint-machines/${row.id}`,
       admin.cookie,
-      { printerId, universeOnly: true }
+      { printerId }
     );
     expect(patched.status).toBe(200);
     const paired = (await patched.json()) as Machine;
     expect(paired.printerId).toBe(printerId);
-    expect(paired.universeOnly).toBe(true);
+  });
+
+  /* "Active" is the only switch now: the booth and Universe-only flags are
+     gone from the row, so nothing can read them back and act on them. */
+  test("a machine carries no flag besides active", async () => {
+    const created = await create({ name: `${tag} SATU`, ip: ipOf(35) });
+    const row = (await created.json()) as Record<string, unknown>;
+    expect(row.active).toBe(true);
+    expect(row).not.toHaveProperty("operatorBooth");
+    expect(row).not.toHaveProperty("universeOnly");
   });
 
   /*
@@ -406,7 +413,6 @@ describe("a booth and its printer", () => {
       name: `${tag} LANGSUNG`,
       ip: ipOf(34),
       printerId,
-      universeOnly: true,
     });
     expect(created.status).toBe(201);
     const row = (await created.json()) as Machine;

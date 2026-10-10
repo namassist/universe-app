@@ -538,8 +538,6 @@ export const TapMonitorSchema = t.Object({
 const DeviceStatusSchema = t.Object({
   ip: t.String(),
   name: t.String(),
-  /** Only the operator booths are collected from; the rest are monitored. */
-  operatorBooth: t.Boolean(),
   active: t.Boolean(),
   /** What the machine last said it holds. Null when it has never answered. */
   records: t.Nullable(t.Integer()),
@@ -557,7 +555,7 @@ export const DeviceStatusListSchema = t.Object({
   date: t.String(),
   /** Machines that answered at least once today. */
   answering: t.Integer(),
-  /** Active operator booths that did not answer at all. */
+  /** Active machines that did not answer at all. */
   silent: t.Integer(),
   /** When the collector last spoke to anything, `HH:MM:SS`. */
   lastContact: t.Nullable(t.String()),
@@ -1536,13 +1534,11 @@ export const FingerprintMachineSchema = t.Object({
   name: t.String(),
   /** IPv4 host address — the prober's target, and the machine's identity. */
   ip: t.String(),
-  active: t.Boolean(),
   /**
-   * Whether this machine stands in the operator booth — which is what decides
-   * whether taps are collected from it. Named after the physical fact, so a
-   * machine in the booth and not ticked reads as wrong on the screen.
+   * The only switch: active is probed, pulled and listened to during a
+   * muster; inactive is ignored entirely.
    */
-  operatorBooth: t.Boolean(),
+  active: t.Boolean(),
   /** The communication key and SOAP port, per machine rather than assumed. */
   comKey: t.Integer(),
   port: t.Integer(),
@@ -1551,12 +1547,6 @@ export const FingerprintMachineSchema = t.Object({
    * printer belongs to one machine, so pairing a claimed printer is a 409.
    */
   printerId: t.Nullable(t.String()),
-  /**
-   * Whether the machine is Universe's alone. Live listening enables the device,
-   * so it runs only on machines carrying this; production machines keep the
-   * read-only pull they already have.
-   */
-  universeOnly: t.Boolean(),
   /** Last probe verdict, after the miss-count debounce. */
   online: t.Boolean(),
   /** Last probe that reached the machine; null until one ever has. */

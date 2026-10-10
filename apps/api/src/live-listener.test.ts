@@ -2,9 +2,9 @@
  * The registry of live sessions: who may be listened to, and what a tap does.
  *
  * The session itself is opened through an injected function, so none of this
- * touches a machine. What is under test is the promise that matters — a
- * production machine is refused here, in the server, not merely hidden on a
- * screen.
+ * touches a machine. What is under test is the promise that matters — an
+ * inactive machine is refused here, in the server, not merely hidden on a
+ * screen. "Active" is the only switch: an active machine is Universe's.
  *
  * Needs the dev Postgres:
  *   bun --env-file=.env test src/live-listener.test.ts
@@ -33,21 +33,14 @@ const made = { machines: [] as string[], ips: [] as string[] };
 /** Documentation range — never a real machine on site. */
 const ipOf = (last: number) => `203.0.113.${last}`;
 
-async function addMachine(options: {
-  last: number;
-  universeOnly?: boolean;
-  active?: boolean;
-  booth?: boolean;
-}) {
+async function addMachine(options: { last: number; active?: boolean }) {
   const ip = ipOf(options.last);
   const [row] = await db
     .insert(schema.fingerprintMachines)
     .values({
       name: `${tag} ${options.last}`,
       ip,
-      universeOnly: options.universeOnly ?? true,
       active: options.active ?? true,
-      operatorBooth: options.booth ?? false,
     })
     .returning({ id: schema.fingerprintMachines.id });
   made.machines.push(row!.id);
@@ -58,17 +51,18 @@ async function addMachine(options: {
 /** A session that never opens a socket; the test drives the taps by hand. */
 function fakeOpener() {
   let emit: ((tap: LiveTap) => void) | null = null;
-  let stopped = 0;
-  const open: OpenLive = async ({ onTap }) => {
+  const opened: string[] = [];
+  const stopped: string[] = [];
+  const open: OpenLive = async ({ ip, onTap }) => {
     emit = onTap;
-    return { ip: "fake", stop: async () => void (stopped += 1) };
+    opened.push(ip);
+    return { ip, stop: async () => void stopped.push(ip) };
   };
   return {
     open,
     tap: (tap: LiveTap) => emit?.(tap),
-    get stopped() {
-      return stopped;
-    },
+    opened,
+    stopped,
   };
 }
 
@@ -94,24 +88,11 @@ afterAll(async () => {
 
 describe("who may be listened to", () => {
   /*
-   * The whole reason the flag exists. Listening enables the device, and the
-   * production machines are ShiftCorner's — a screen that hides the button is
-   * a suggestion, this is the promise.
+   * Listening enables the device, so a machine somebody switched off must stay
+   * untouched — a screen that hides the button is a suggestion, this is the
+   * promise.
    */
-  test("a production machine is refused by the server", async () => {
-    const machine = await addMachine({ last: 61, universeOnly: false });
-    const fake = fakeOpener();
-    expect(
-      startListening({
-        machineId: machine.id,
-        source: "manual",
-        startedBy: "uji",
-        open: fake.open,
-      })
-    ).rejects.toThrow(ListenRefused);
-  });
-
-  test("an inactive machine is refused", async () => {
+  test("an inactive machine is refused by the server", async () => {
     const machine = await addMachine({ last: 62, active: false });
     const fake = fakeOpener();
     expect(
@@ -124,9 +105,9 @@ describe("who may be listened to", () => {
     ).rejects.toThrow(ListenRefused);
   });
 
-  test("only Universe-only machines are offered", async () => {
+  test("every active machine is offered, and no inactive one", async () => {
     const mine = await addMachine({ last: 63 });
-    await addMachine({ last: 64, universeOnly: false });
+    await addMachine({ last: 64, active: false });
     const offered = await listenableMachines();
     const ips = offered.map((m) => m.ip);
     expect(ips).toContain(mine.ip);
@@ -190,7 +171,7 @@ describe("a session while it runs", () => {
     });
 
     expect(await stopListening(machine.ip)).toBe(true);
-    expect(fake.stopped).toBe(1);
+    expect(fake.stopped).toEqual([machine.ip]);
     expect(activeListens().map((s) => s.ip)).not.toContain(machine.ip);
     // Stopping twice is not an error — the caller wanted it stopped.
     expect(await stopListening(machine.ip)).toBe(false);
@@ -198,8 +179,8 @@ describe("a session while it runs", () => {
 });
 
 describe("a scheduled window", () => {
-  /* The window hears every booth there is, which is right in production and
-     means these tests must each be the only booths in the table. */
+  /* The window hears every active machine there is, the dev table's own
+     included, so these tests judge only the machines they made. */
   beforeEach(async () => {
     if (made.machines.length)
       await db
@@ -208,10 +189,10 @@ describe("a scheduled window", () => {
     made.machines = [];
   });
 
-  test("opens the booths, and closes them when the window ends", async () => {
-    const booth = await addMachine({ last: 71, booth: true });
-    /* Universe-only but not a booth: monitored, not listened to. */
-    await addMachine({ last: 72, booth: false });
+  test("opens every active machine, and closes them when the window ends", async () => {
+    const booth = await addMachine({ last: 71 });
+    /* Switched off: ignored entirely, never listened to. */
+    const off = await addMachine({ last: 72, active: false });
     const fake = fakeOpener();
 
     const result = await runListenWindow(new Date(Date.now() + 40), {
@@ -219,9 +200,10 @@ describe("a scheduled window", () => {
       everyMs: 20,
     });
 
-    expect(result.opened).toBe(1);
+    expect(fake.opened).toContain(booth.ip);
+    expect(fake.opened).not.toContain(off.ip);
     expect(result.failed).toBe(0);
-    expect(fake.stopped).toBe(1);
+    expect(fake.stopped).toContain(booth.ip);
     expect(activeListens().map((s) => s.ip)).not.toContain(booth.ip);
   });
 
@@ -229,7 +211,7 @@ describe("a scheduled window", () => {
     /* The bus time is read once, when the window is armed. An admin moving it
        mid-muster used to leave the booths closing at the old hour, with taps
        silently going unheard — see the timeline reset. */
-    const booth = await addMachine({ last: 77, booth: true });
+    const booth = await addMachine({ last: 77 });
     const fake = fakeOpener();
 
     const window = runListenWindow(new Date(Date.now() + 40), {
@@ -256,12 +238,12 @@ describe("a scheduled window", () => {
    * has made that mistake once already, in the collection pass.
    */
   test("a machine that refuses is counted, and the rest are still heard", async () => {
-    const bad = await addMachine({ last: 73, booth: true });
-    await addMachine({ last: 74, booth: true });
-    let calls = 0;
+    const bad = await addMachine({ last: 73 });
+    const good = await addMachine({ last: 74 });
+    const opened: string[] = [];
     const opener: OpenLive = async ({ ip }) => {
-      calls += 1;
       if (ip === bad.ip) throw new Error("mesin ini menolak");
+      opened.push(ip);
       return { ip, stop: async () => {} };
     };
 
@@ -270,8 +252,7 @@ describe("a scheduled window", () => {
       everyMs: 20,
     });
 
-    expect(calls).toBeGreaterThanOrEqual(2);
-    expect(result.opened).toBe(1);
+    expect(opened).toContain(good.ip);
     /* Counted per attempt, not per machine: a booth that refuses twice refused
        twice, and a window that hid the second one would read as healthier than
        it was. */
@@ -281,26 +262,30 @@ describe("a scheduled window", () => {
   /* The window reconciles rather than reacts, which is what makes a reconnect
      free: a booth that dropped is simply missing at the next check. */
   test("a booth that dropped is opened again on the next check", async () => {
-    await addMachine({ last: 75, booth: true });
+    const booth = await addMachine({ last: 75 });
     let attempts = 0;
+    const opened: string[] = [];
     const opener: OpenLive = async ({ ip }) => {
-      attempts += 1;
-      if (attempts === 1) throw new Error("jaringan sedang putus");
+      if (ip === booth.ip && ++attempts === 1)
+        throw new Error("jaringan sedang putus");
+      opened.push(ip);
       return { ip, stop: async () => {} };
     };
 
-    const result = await runListenWindow(new Date(Date.now() + 120), {
+    /* Wide enough for a second pass even when the dev table's own active
+       machines are opened alongside — each open sweeps old live events. */
+    await runListenWindow(new Date(Date.now() + 400), {
       open: opener,
       everyMs: 30,
     });
 
     expect(attempts).toBeGreaterThan(1);
-    expect(result.opened).toBe(1);
+    expect(opened.filter((ip) => ip === booth.ip)).toHaveLength(1);
   });
 
   /* Somebody asked for it by hand; the schedule does not get to close it. */
   test("a manual session survives the window closing", async () => {
-    const booth = await addMachine({ last: 76, booth: true });
+    const booth = await addMachine({ last: 76 });
     const fake = fakeOpener();
     await startListening({
       machineId: booth.id,
@@ -315,6 +300,6 @@ describe("a scheduled window", () => {
     });
 
     expect(activeListens().map((s) => s.ip)).toContain(booth.ip);
-    expect(fake.stopped).toBe(0);
+    expect(fake.stopped).not.toContain(booth.ip);
   });
 });

@@ -303,15 +303,15 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
 }
 
 /**
- * Every machine and how the collector last found it.
+ * Every active machine and how the collector last found it.
  *
  * Until this existed the answer lived in `device_requests`, a table written on
  * every call and read by nobody without a psql prompt. That is the wrong shape
  * for the question: when a machine goes quiet during a muster the person who
  * needs to know is standing in the yard.
  *
- * Ordered booths first, and within them the ones in trouble first, because a
- * screen read under time pressure should not need sorting.
+ * Ordered with the ones in trouble first, because a screen read under time
+ * pressure should not need sorting.
  */
 function DevicesView({
   data,
@@ -321,7 +321,6 @@ function DevicesView({
     rows: Array<{
       ip: string;
       name: string;
-      operatorBooth: boolean;
       active: boolean;
       records: number | null;
       lastSeen: string | null;
@@ -339,33 +338,18 @@ function DevicesView({
       <StateBox
         icon={<Fingerprint className="text-(--text-tertiary)" />}
         title="Belum ada mesin"
-        body={loading ? "Memuat…" : "Belum ada mesin fingerprint terdaftar."}
+        body={loading ? "Memuat…" : "Belum ada mesin fingerprint aktif."}
       />
     );
 
-  /* A booth that never answered outranks one that answered and then failed:
-     the first means nobody's taps are being read at all. */
+  /* Only active machines are listed, and each is collected from. One that
+     never answered outranks one that answered and then failed: the first
+     means nobody's taps are being read at all. */
   const rank = (r: (typeof rows)[number]) =>
-    !r.active || !r.operatorBooth
-      ? 3
-      : r.lastSeen === null
-        ? 0
-        : r.lastError
-          ? 1
-          : 2;
+    r.lastSeen === null ? 0 : r.lastError ? 1 : 2;
   const sorted = [...rows].sort((a, b) => rank(a) - rank(b));
 
   const chip = (r: (typeof rows)[number]) => {
-    if (!r.active)
-      return {
-        label: "Nonaktif",
-        tone: "bg-(--fill-subtle) text-(--text-secondary)",
-      };
-    if (!r.operatorBooth)
-      return {
-        label: "Dipantau",
-        tone: "bg-(--fill-subtle) text-(--text-secondary)",
-      };
     if (r.lastSeen === null)
       return {
         label: "Diam",
@@ -527,7 +511,7 @@ function LiveView({
             value={picked}
             onChange={(e) => setPicked(e.target.value)}
           >
-            <option value="">Pilih mesin khusus Universe…</option>
+            <option value="">Pilih mesin aktif…</option>
             {free.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name} — {m.ip}
@@ -578,7 +562,7 @@ function LiveView({
           body={
             loading
               ? "Memuat…"
-              : "Pilih mesin khusus Universe lalu mulai mendengarkan. Mesin produksi tidak ditawarkan."
+              : "Pilih mesin aktif lalu mulai mendengarkan. Mesin nonaktif tidak ditawarkan."
           }
         />
       )}

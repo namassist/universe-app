@@ -58,7 +58,7 @@ shortens listening that day.
 The same mechanism has a machine-side twin. The listen loop re-reads the
 machine list every `DEVICE_LISTEN_RETRY_SECONDS` but only ever _adds_ a
 session (`runListenWindow`): a booth added at 16:35 is heard within fifteen
-seconds, but one deactivated or unticked at 16:50 keeps listening — and
+seconds, but one deactivated at 16:50 keeps listening — and
 printing — until the window closes. Today the only way to stop it at once is
 the stop button on Monitoring Tap.
 

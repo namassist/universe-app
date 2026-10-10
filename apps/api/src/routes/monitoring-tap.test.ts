@@ -34,7 +34,11 @@ const tag = `ZZ TapMon ${uid()}`;
 const IP = "10.77.77.7";
 const DATE = "1999-04-04";
 
-const made = { users: [] as string[], roles: [] as string[] };
+const made = {
+  users: [] as string[],
+  roles: [] as string[],
+  machines: [] as string[],
+};
 let watcher = "";
 let outsider = "";
 
@@ -90,6 +94,10 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await db.delete(schema.deviceTaps).where(eq(schema.deviceTaps.ip, IP));
+  if (made.machines.length)
+    await db
+      .delete(schema.fingerprintMachines)
+      .where(inArray(schema.fingerprintMachines.id, made.machines));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
@@ -142,6 +150,40 @@ describe("what the headline counts", () => {
     expect(b.taps).toBe(2);
     expect(b.people).toBe(1);
     expect(b.machines).toBe(1);
+  });
+});
+
+describe("which machines the device view lists", () => {
+  const addMachine = async (ip: string, active: boolean) => {
+    const [row] = await db
+      .insert(schema.fingerprintMachines)
+      .values({ name: `${tag} ${ip}`, ip, active })
+      .returning({ id: schema.fingerprintMachines.id });
+    made.machines.push(row!.id);
+  };
+
+  /* A machine switched off is ignored entirely — not probed, not pulled, not
+     listened to — so listing it here would only show a machine nobody reads. */
+  test("an inactive machine is left out, and an active one is in", async () => {
+    await addMachine("10.77.77.8", true);
+    await addMachine("10.77.77.9", false);
+
+    const response = await app.handle(
+      new Request(`http://localhost/monitoring-tap/devices?date=${DATE}`, {
+        headers: { cookie: watcher },
+      })
+    );
+    const body = (await response.json()) as {
+      rows: { ip: string }[];
+      silent: number;
+    };
+    const ips = body.rows.map((r) => r.ip);
+
+    expect(response.status).toBe(200);
+    expect(ips).toContain("10.77.77.8");
+    expect(ips).not.toContain("10.77.77.9");
+    /* Every active machine counts toward answering/silent now. */
+    expect(body.silent).toBeGreaterThanOrEqual(1);
   });
 });
 

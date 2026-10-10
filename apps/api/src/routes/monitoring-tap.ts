@@ -180,7 +180,7 @@ async function deviceStatusOn(date: string) {
       where at >= ${`${date} 00:00:00`} and at <= ${`${date} 23:59:59`}
       group by ip
     )
-    select m.ip, m.name, m.operator_booth as "operatorBooth", m.active,
+    select m.ip, m.name, m.active,
            c.records,
            to_char(t.last_ok at time zone 'Asia/Makassar', 'HH24:MI:SS') as "lastSeen",
            case when t.last_fail is not null
@@ -194,12 +194,12 @@ async function deviceStatusOn(date: string) {
     left join counted c on c.ip = m.ip
     left join failed f on f.ip = m.ip
     left join taps p on p.ip = m.ip
-    order by m.operator_booth desc, m.active desc, m.name
+    where m.active
+    order by m.name
   `);
   return ((rows as unknown as { rows?: unknown[] }).rows ?? rows) as Array<{
     ip: string;
     name: string;
-    operatorBooth: boolean;
     active: boolean;
     records: number | null;
     lastSeen: string | null;
@@ -375,10 +375,9 @@ export const monitoringTapRoutes = new Elysia({
       const date = query.date ?? new Date().toISOString().slice(0, 10);
       const rows = await deviceStatusOn(date);
 
-      /* Counted over the booths we actually collect from. A monitored machine
-         that is off is a fact; an operator booth that is off is a queue of
-         people whose taps are not being read. */
-      const booths = rows.filter((r) => r.active && r.operatorBooth);
+      /* Only active machines are listed, and every one of them is collected
+         from — so a silent row is a queue of people whose taps are not being
+         read. */
       const seen = rows
         .map((r) => r.lastSeen)
         .filter((t): t is string => t !== null)
@@ -386,8 +385,8 @@ export const monitoringTapRoutes = new Elysia({
 
       return {
         date,
-        answering: booths.filter((r) => r.lastSeen !== null).length,
-        silent: booths.filter((r) => r.lastSeen === null).length,
+        answering: rows.filter((r) => r.lastSeen !== null).length,
+        silent: rows.filter((r) => r.lastSeen === null).length,
         lastContact: seen.at(-1) ?? null,
         rows,
       };
@@ -400,7 +399,9 @@ export const monitoringTapRoutes = new Elysia({
         401: ErrorSchema,
         403: ErrorSchema,
       },
-      detail: { summary: "Every machine and how the collector last found it" },
+      detail: {
+        summary: "Every active machine and how the collector last found it",
+      },
     }
   )
 
