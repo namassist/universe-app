@@ -1788,6 +1788,11 @@ runs intermittently.
   first probe it was called dead (2026-10-10). Anything but Siap is pinned under "Perlu
   Perhatian", with the printer's address on the card when it is the printer
   that is wrong, and counted as **Bermasalah** in the header.
+- The registry page filters by the same verdict (**Kesiapan**): Siap,
+  Bermasalah (semua), or one problem — Mesin offline, Printer mati, Tanpa /
+  nonaktif printer, Belum dicek. A dead machine and a dead printer stay
+  separate choices because they send a technician to different devices; any
+  readiness choice leaves inactive machines out, since they are not probed.
 - The kiosk reads those stored rows; the request path opens no sockets, the
   same principle as never querying an external source from a request path.
 - **Probes are pooled, not fired all at once.** Measured on site: the slower

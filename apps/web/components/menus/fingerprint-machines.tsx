@@ -17,7 +17,12 @@ import { MENU_LABELS } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { boothHealthView } from "@/lib/booth-health";
+import {
+  boothHealthView,
+  matchesReadiness,
+  READINESS_FILTERS,
+  type ReadinessFilter,
+} from "@/lib/booth-health";
 import { useI18n } from "@/lib/i18n";
 import {
   fingerprintMachinesKey,
@@ -89,6 +94,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
 
   const [q, setQ] = React.useState("");
   const [stF, setStF] = React.useState("");
+  const [rdF, setRdF] = React.useState<ReadinessFilter>("");
   const [dlgOpen, setDlgOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<FingerprintMachineRow | null>(
     null
@@ -206,6 +212,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
   const rows = entries.filter((r) => {
     if (stF === "1" && !r.active) return false;
     if (stF === "0" && r.active) return false;
+    if (!matchesReadiness(r, rdF)) return false;
     const needle = q.trim().toLowerCase();
     if (!needle) return true;
     return (
@@ -333,6 +340,28 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
               <option value="">{t.allStatus}</option>
               <option value="1">{t.stAktif}</option>
               <option value="0">{t.stNonaktif}</option>
+            </Select>
+            {/* The same verdict as the Kesiapan column and the wall, so a
+                filtered list never disagrees with either. */}
+            <Select
+              wrapperClassName="w-[200px]"
+              value={rdF}
+              onChange={(e) => setRdF(e.target.value as ReadinessFilter)}
+              aria-label="Kesiapan"
+            >
+              <option value="">Semua kesiapan</option>
+              {READINESS_FILTERS.slice(0, 2).map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+              <optgroup label="Rincian masalah">
+                {READINESS_FILTERS.slice(2).map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </optgroup>
             </Select>
             {/* Appended so the controls before them keep their place when a
                 selection appears and disappears. */}
