@@ -965,22 +965,6 @@ export function AllocBoard({
                       {t.faNoOp}
                     </div>
                   ) : null}
-                  {/* Both holders on the shift being looked at: the board
-                      gives the unit to one, the other becomes a spare and
-                      gets his slip only at the second finger. */}
-                  {mode === "plan" && shiftClash(u.slots, shiftF) ? (
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      <Badge
-                        variant="warning"
-                        dot
-                        title="Roster hari ini menaruh kedua pegangan unit ini di shift yang sama. Board memberi unit ke satu orang; yang lain menjadi spare dan tiketnya baru keluar di finger kedua."
-                      >
-                        2 pegangan shift{" "}
-                        {SHIFT_KIND_LABELS[shiftClash(u.slots, shiftF)!]} — yang
-                        tap belakangan jadi spare
-                      </Badge>
-                    </div>
-                  ) : null}
                 </div>
               ) : kind === "bd" ? (
                 <div>
