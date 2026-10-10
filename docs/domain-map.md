@@ -212,6 +212,9 @@ listened to, because listening sends `enableDevice`.
 
 - **Everyone who taps gets a slip** as proof of attendance. The one exception:
   a **spare at the first finger** is recorded and printed at `finger-second`.
+  A plan holder whose unit goes to his shift partner counts as that spare
+  (2026-10-11, `planSeatVerdict` → `"partner"`); failing the unit's own
+  eligibility still prints SPARE at once.
 - Unit, bus, fleet and area are printed **together or not at all**. A person
   with no seat reads `UNIT: SPARE` (an `aktif` allocatable operator) or `-`
   (everyone else).

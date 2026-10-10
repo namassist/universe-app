@@ -2111,10 +2111,19 @@ KASTURI | SPARE | RBU26`: unit and fleet cells read SPARE, the area is
   matching (`pairingRefusal`), and — when a partner on the same unit is
   rostered to the same shift — the board's own order: ready and eligible
   first, then **whoever already holds a slip naming the unit**, then the
-  earlier tap, then NIK. A refusal prints SPARE. The slip rule is the owner's
-  (2026-09-15): a partner who tapped first but was ready only later (his FTW
-  arrived after) does not take a unit already handed to the other on paper,
-  on the slip or on the board. A failed print counts as handed.
+  earlier tap, then NIK. An eligibility refusal prints SPARE. The slip rule is
+  the owner's (2026-09-15): a partner who tapped first but was ready only later
+  (his FTW arrived after) does not take a unit already handed to the other on
+  paper, on the slip or on the board. A failed print counts as handed.
+- **The partner who loses the unit is a spare, and his slip waits for the
+  second finger** (owner, 2026-10-11). He used to be handed SPARE at the first
+  finger: on 2026-10-11 day, operator A tapped after his partner B, was handed
+  SPARE, took it as final and left — while the board then put him on another
+  unit he never came back to collect. Now, like every spare, his first tap is
+  recorded and nothing prints; he taps again after `finger-second` and gets
+  whatever the board found him. Only losing to a partner does this — failing
+  the unit's own eligibility (SIMPER, department) or an FTW not yet in still
+  prints SPARE at once, as before. The ticket's kind stays TETAP.
 - **FTW reads `-` for somebody who owes no filing** and has none: the
   fit-to-work wall's own test (aktif, allocated position, a SIMPER on a unit
   that asks for FTW). An upload is printed whoever made it. An upload that

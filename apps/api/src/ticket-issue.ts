@@ -316,9 +316,13 @@ export async function seatOf(
  *   ready and eligible first, then whoever already holds a slip for it, then
  *   the earlier tap, then NIK — and this is that same order.
  *
- * Called only when he has passed for the unit; a refusal prints SPARE.
+ * Called only when he has passed for the unit. The answer says *why* a seat
+ * does not hold, because the two reasons are treated differently: losing the
+ * unit to a partner makes him a spare whose slip waits for the second finger
+ * (owner, 2026-10-11); failing the unit's own eligibility prints SPARE at
+ * once, as it always has.
  */
-export async function planSeatHolds(input: {
+export async function planSeatVerdict(input: {
   nik: string;
   unitCode: string;
   requiresFtw: boolean;
@@ -327,12 +331,12 @@ export async function planSeatHolds(input: {
   shift: ShiftKind;
   deadline: string;
   ftwDeadline: string;
-}): Promise<boolean> {
+}): Promise<PlanSeatVerdict> {
   const [unit, me] = await Promise.all([
     unitByCode(input.unitCode),
     personByNik(input.nik),
   ]);
-  if (!unit || !me) return false;
+  if (!unit || !me) return "ineligible";
 
   const today = localDate(new Date());
   const eligible = async (person: AllocPerson) => {
@@ -352,7 +356,7 @@ export async function planSeatHolds(input: {
       : false;
     return pairingRefusal(unit, person, { holdsCode, today }) === null;
   };
-  if (!(await eligible(me))) return false;
+  if (!(await eligible(me))) return "ineligible";
 
   const partners = await db
     .select({ nik: schema.employees.nik })
@@ -377,7 +381,7 @@ export async function planSeatHolds(input: {
         eq(schema.employees.status, "aktif")
       )
     );
-  if (!partners.length) return true;
+  if (!partners.length) return "holds";
 
   /*
    * The slip already in somebody's hand decides first (owner, 2026-09-15).
@@ -399,8 +403,8 @@ export async function planSeatHolds(input: {
         sql`${schema.tickets.fields}->'seat'->>'unit' = ${unit.code}`
       )
     );
-  if (slips.some((s) => s.nik === input.nik)) return true;
-  if (slips.length) return false;
+  if (slips.some((s) => s.nik === input.nik)) return "holds";
+  if (slips.length) return "partner";
 
   /* Each partner judged the way this tap judged him: his own first tap, his
      own FTW, against this unit. */
@@ -446,8 +450,11 @@ export async function planSeatHolds(input: {
       (a.tappedAt ?? "￿").localeCompare(b.tappedAt ?? "￿") ||
       a.nik.localeCompare(b.nik)
   );
-  return winner!.nik === input.nik;
+  return winner!.nik === input.nik ? "holds" : "partner";
 }
+
+/** Whether his plan seat is his today, and if not, why not. */
+export type PlanSeatVerdict = "holds" | "ineligible" | "partner";
 
 /**
  * The units a plan seat may still name on paper: the ones the board is about.
@@ -659,9 +666,36 @@ export async function issueTicket(
 
   const tapClock = tap.at.slice(11, 19);
   const waits = await awaitsAllocation(tap.nik, tap.date, tap.shift);
+
+  /* A plan seat is checked against what the board will ask; a board seat is
+     already the board's answer. Only worth asking when he passed —
+     otherwise `ticketFor` drops the seat anyway. */
+  const verdict: PlanSeatVerdict =
+    held?.source === "plan" && readiness.passed
+      ? await planSeatVerdict({
+          nik: tap.nik,
+          unitCode: held.seat.unit,
+          requiresFtw: held.requiresFtw,
+          readiness,
+          date: tap.date,
+          shift: tap.shift,
+          deadline,
+          ftwDeadline: uploadClose,
+        })
+      : "holds";
+  /*
+   * A holder whose unit goes to his partner has no seat today — the
+   * glossary's spare (owner, 2026-10-11). He used to keep "standing" here and
+   * was handed SPARE at the first finger; he took it as final and left, while
+   * the board then put him on another unit he never came back to collect.
+   * As a spare, his slip waits for the second finger like every other.
+   */
+  const ticketRole: TicketRole =
+    role === "standing" && verdict === "partner" ? "spare" : role;
+
   /* Asked only of a spare the rule is about to hold: the query is for him. */
   const certainlyUnseated =
-    role === "spare" &&
+    ticketRole === "spare" &&
     waits &&
     readiness.finger !== "late" &&
     tapClock < secondFingerAt &&
@@ -673,26 +707,9 @@ export async function issueTicket(
     }));
 
   const decision = ticketFor({
-    role,
+    role: ticketRole,
     readiness,
-    /* A plan seat is checked against what the board will ask; a board seat
-       is already the board's answer. Only worth asking when he passed —
-       otherwise `ticketFor` drops the seat anyway. */
-    seat:
-      held?.source === "plan" &&
-      readiness.passed &&
-      !(await planSeatHolds({
-        nik: tap.nik,
-        unitCode: held.seat.unit,
-        requiresFtw: held.requiresFtw,
-        readiness,
-        date: tap.date,
-        shift: tap.shift,
-        deadline,
-        ftwDeadline: uploadClose,
-      }))
-        ? null
-        : (held?.seat ?? null),
+    seat: verdict === "holds" ? (held?.seat ?? null) : null,
     tappedAt: tap.at.slice(11, 19),
     firstTapAt: firstAt.slice(11, 19),
     secondFingerAt,

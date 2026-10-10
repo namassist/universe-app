@@ -826,9 +826,32 @@ describe("a plan seat on the first-finger slip", () => {
     const early = await operator(u.id);
     const late = await operator(u.id);
     const earlyTap = await tapAt(early, "04:50:00");
-    const lateTap = await tapAt(late, "05:05:00");
-    expect(await unitLine(lateTap)).toBe("UNIT           : SPARE");
+    await tapAt(late, "05:05:00");
     expect(await unitLine(earlyTap)).toBe(`UNIT           : ${u.code}`);
+  });
+
+  /*
+   * The partner who loses his unit is a spare (owner, 2026-10-11). He used to
+   * be handed SPARE at the first finger, took it as final and left — while
+   * the board then gave him another unit he never came back to collect. Like
+   * every spare, his slip now waits for the second finger.
+   */
+  test("the partner who lost his unit gets no slip until the second finger", async () => {
+    const u = await unit();
+    const first = await operator(u.id);
+    const second = await operator(u.id);
+    await unitLine(await tapAt(first, "04:50:00"));
+
+    const held = await issueTicket(await tapAt(second, "05:05:00"), {
+      printingEnabled: false,
+    });
+    expect(held).toEqual({ issued: false, reason: "held-back" });
+
+    /* At the second finger his slip prints — with no board in this fixture,
+       SPARE; on site, whatever the board found him. */
+    expect(await unitLine(await tapAt(second, "05:30:00"))).toBe(
+      "UNIT           : SPARE"
+    );
   });
 
   /* A partner who has not tapped cannot win on the clock. */
@@ -869,10 +892,12 @@ describe("a plan seat on the first-finger slip", () => {
       `UNIT           : ${u.code}`
     );
 
+    /* Ready now, but the unit is in A's hand: B has lost it to a partner,
+       so — like any spare — he waits for the second finger (2026-10-11). */
     await fit(b);
-    expect(await unitLine(await tapAt(b, "05:10:00"))).toBe(
-      "UNIT           : SPARE"
-    );
+    expect(
+      await issueTicket(await tapAt(b, "05:10:00"), { printingEnabled: false })
+    ).toEqual({ issued: false, reason: "held-back" });
   });
 });
 
