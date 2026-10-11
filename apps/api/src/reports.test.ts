@@ -11,6 +11,7 @@ import type { AuditLine, AuditRow } from "./board-audit";
 import {
   equipmentNoOperatorRows,
   finalValidationRows,
+  narrowToPosition,
   operatorNoEquipmentRows,
   operatorNoFingerRows,
   operatorNoFtwRows,
@@ -320,7 +321,21 @@ describe("Final Validation", () => {
     ]);
   });
 
-  test("the first tap reads as its time, and no tap as No Finger", () => {
+  test("the first tap reads as its time, late or not", () => {
+    const rows = finalValidationRows(
+      [line({ name: "A late one", finger: "late", tappedAt: "05:40:12" })],
+      DEPTS
+    );
+    expect(rows.map((r) => r.jamIn)).toEqual(["05:40"]);
+  });
+
+  /*
+   * Somebody who never tapped and holds no seat did not take part in the
+   * muster, so the final result leaves them out (owner, 2026-10-11) — the
+   * Operator No Finger report is where they are listed. A late tap is still
+   * an arrival and stays.
+   */
+  test("leaves out whoever never tapped and holds no seat", () => {
     const rows = finalValidationRows(
       [
         line({ name: "A late one", finger: "late", tappedAt: "05:40:12" }),
@@ -328,7 +343,27 @@ describe("Final Validation", () => {
       ],
       DEPTS
     );
-    expect(rows.map((r) => r.jamIn)).toEqual(["05:40", "No Finger"]);
+    expect(rows.map((r) => r.name)).toEqual(["A late one"]);
+  });
+
+  /* Placed by hand without a tap: he holds a unit on the board, so the
+     report must agree with the board. */
+  test("keeps somebody placed on a unit even with no tap", () => {
+    const rows = finalValidationRows(
+      [
+        line({
+          name: "C placed by hand",
+          finger: "missing",
+          tappedAt: null,
+          decision: "kept",
+          actualUnitCode: "DT4026",
+        }),
+      ],
+      DEPTS
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.jamIn).toBe("No Finger");
+    expect(rows[0]!.unit).toBe("DT4026");
   });
 
   test("a support seat names the support group as its fleet", () => {
@@ -337,6 +372,37 @@ describe("Final Validation", () => {
       DEPTS
     );
     expect(row!.fleet).toBe("Fleet support");
+  });
+});
+
+describe("narrowing a report to one position", () => {
+  const rows = [
+    { name: "A", position: "HD 90-100T Operator" },
+    { name: "B", position: "Dozer Operator" },
+    { name: "C", position: "HD 90-100T Operator" },
+    { name: "D", position: "" },
+  ];
+
+  test("offers every position the rows hold, once each, in order", () => {
+    expect(narrowToPosition(rows, null).positions).toEqual([
+      "Dozer Operator",
+      "HD 90-100T Operator",
+    ]);
+  });
+
+  test("keeps only the rows in the position chosen", () => {
+    const { rows: kept } = narrowToPosition(rows, "HD 90-100T Operator");
+    expect(kept.map((r) => r.name)).toEqual(["A", "C"]);
+  });
+
+  /* The choices are read before the narrowing: picking one must not make
+     the others vanish from the list. */
+  test("still offers every position once one is chosen", () => {
+    expect(narrowToPosition(rows, "Dozer Operator").positions).toHaveLength(2);
+  });
+
+  test("no position chosen keeps every row", () => {
+    expect(narrowToPosition(rows, null).rows).toHaveLength(4);
   });
 });
 

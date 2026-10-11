@@ -178,29 +178,62 @@ export function operatorNoFingerRows(
 }
 
 /**
- * Every rostered operator and the seat they ended on. Someone placed nowhere
- * reads SPARE, the word their slip carries, and nothing else: their standing
- * formation is not where they worked, and printing it beside SPARE would say
- * they did.
+ * Every rostered operator who took part and the seat they ended on. Someone
+ * placed nowhere reads SPARE, the word their slip carries, and nothing else:
+ * their standing formation is not where they worked, and printing it beside
+ * SPARE would say they did.
+ *
+ * Whoever never tapped and holds no seat is left out (owner, 2026-10-11): they
+ * did not take part in the muster, and Operator No Finger is where they are
+ * listed. A late tap is still an arrival and stays; so does somebody placed
+ * on a unit by hand without a tap, or the report would disagree with the
+ * board.
  */
 export function finalValidationRows(
   lines: AuditLine[],
   departments: Map<string, string>
 ): ReportRow[] {
-  return [...lines].sort(byName).map((l) => {
-    const placed = l.row.actualUnitCode !== null;
-    return {
-      ...personCells(l, departments),
-      /* The first tap, late or not — the arrival the slip states. */
-      jamIn: l.row.tappedAt ? hhmm(l.row.tappedAt) : NO_FINGER_LABEL,
-      unit: l.row.actualUnitCode ?? SPARE_UNIT_LABEL,
-      fleet: placed
-        ? fleetLabel(l.row.fleetLeaderCode, l.row.fleetSupport)
-        : "",
-      bus: placed ? (l.busCode ?? "") : "",
-      location: placed ? (l.area ?? "") : "",
-    };
-  });
+  const tookPart = (l: AuditLine) =>
+    l.row.tappedAt !== null || l.row.actualUnitCode !== null;
+  return lines
+    .filter(tookPart)
+    .sort(byName)
+    .map((l) => {
+      const placed = l.row.actualUnitCode !== null;
+      return {
+        ...personCells(l, departments),
+        /* The first tap, late or not — the arrival the slip states. */
+        jamIn: l.row.tappedAt ? hhmm(l.row.tappedAt) : NO_FINGER_LABEL,
+        unit: l.row.actualUnitCode ?? SPARE_UNIT_LABEL,
+        fleet: placed
+          ? fleetLabel(l.row.fleetLeaderCode, l.row.fleetSupport)
+          : "",
+        bus: placed ? (l.busCode ?? "") : "",
+        location: placed ? (l.area ?? "") : "",
+      };
+    });
+}
+
+/**
+ * A report narrowed to one position, and the positions it can be narrowed to
+ * (owner, 2026-10-11).
+ *
+ * The choices are read before the narrowing, so picking one never makes the
+ * others vanish from the list; and only positions the rows actually hold are
+ * offered, so every choice yields rows. A row with no position is never a
+ * choice.
+ */
+export function narrowToPosition<R extends { position?: string }>(
+  rows: R[],
+  position: string | null
+): { rows: R[]; positions: string[] } {
+  const positions = [
+    ...new Set(rows.map((r) => r.position ?? "").filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b));
+  return {
+    rows: position ? rows.filter((r) => r.position === position) : rows,
+    positions,
+  };
 }
 
 /** Formations by leader code, then support, then no fleet. */

@@ -85,6 +85,8 @@ const ReportQuery = t.Object({
   date: t.String({ pattern: DATE_PATTERN }),
   shift: ShiftKindSchema,
   department: t.Optional(t.String({ format: "uuid" })),
+  /** One position, as the report spells it (owner, 2026-10-11). */
+  position: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
 });
 
 const ReportParams = t.Object({ kind: t.UnionEnum(REPORT_KINDS) });
@@ -117,6 +119,8 @@ const ReportSchema = t.Object({
   /** Whether the board for this date and shift has been built yet. */
   boardGenerated: t.Boolean(),
   rows: t.Array(ReportRowSchema),
+  /** The positions the report can be narrowed to, whatever is chosen now. */
+  positions: t.Array(t.String()),
 });
 
 export const reportRoutes = new Elysia({ prefix: "/reports", tags: ["report"] })
@@ -177,7 +181,8 @@ export const reportRoutes = new Elysia({ prefix: "/reports", tags: ["report"] })
         params.kind,
         query.date,
         query.shift,
-        scope.department?.id ?? null
+        scope.department?.id ?? null,
+        query.position ?? null
       );
       if (data.kind === "no-deadline")
         return status(422, noDeadline(query.shift));
@@ -189,6 +194,7 @@ export const reportRoutes = new Elysia({ prefix: "/reports", tags: ["report"] })
         department: scope.department,
         boardGenerated: data.boardGenerated,
         rows: data.rows,
+        positions: data.positions,
       };
     },
     {
@@ -217,7 +223,8 @@ export const reportRoutes = new Elysia({ prefix: "/reports", tags: ["report"] })
         params.kind,
         query.date,
         query.shift,
-        scope.department?.id ?? null
+        scope.department?.id ?? null,
+        query.position ?? null
       );
       if (data.kind === "no-deadline")
         return status(422, noDeadline(query.shift));

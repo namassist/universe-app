@@ -15,6 +15,7 @@ import { db, schema } from "./db";
 import {
   equipmentNoOperatorRows,
   finalValidationRows,
+  narrowToPosition,
   operatorNoEquipmentRows,
   operatorNoFingerRows,
   operatorNoFtwRows,
@@ -26,7 +27,13 @@ import { normalizeNik } from "./sources/nik";
 export type ReportData =
   /** The timeline names no deadline for this shift, so nobody can be judged. */
   | { kind: "no-deadline" }
-  | { kind: "ok"; boardGenerated: boolean; rows: ReportRow[] };
+  | {
+      kind: "ok";
+      boardGenerated: boolean;
+      rows: ReportRow[];
+      /** The positions the rows hold, read before any narrowing to one. */
+      positions: string[];
+    };
 
 async function departmentNames(): Promise<Map<string, string>> {
   const rows = await db
@@ -152,13 +159,15 @@ async function personRows(
 
 /**
  * One report's rows for a date and shift, narrowed to a department when one is
- * given.
+ * given, and to a position when one is (owner, 2026-10-11 — the people
+ * reports only; a unit has no position).
  */
 export async function loadReport(
   kind: ReportKind,
   date: string,
   shift: ShiftKind,
-  departmentId: string | null
+  departmentId: string | null,
+  position: string | null = null
 ): Promise<ReportData> {
   if (kind === "equipment-no-operator") {
     const seats = await vacantSeats(date, shift, departmentId);
@@ -166,15 +175,21 @@ export async function loadReport(
       kind: "ok",
       boardGenerated: seats !== null,
       rows: equipmentNoOperatorRows(seats ?? []),
+      positions: [],
     };
   }
 
   const audit = await boardAudit(date, shift, departmentId);
   if (audit.kind === "no-deadline") return audit;
 
+  const narrowed = narrowToPosition(
+    await personRows(kind, date, audit.boardGenerated, audit.lines),
+    position
+  );
   return {
     kind: "ok",
     boardGenerated: audit.boardGenerated,
-    rows: await personRows(kind, date, audit.boardGenerated, audit.lines),
+    rows: narrowed.rows,
+    positions: narrowed.positions,
   };
 }

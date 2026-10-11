@@ -1667,6 +1667,14 @@ reads "-".
   - **Final Validation**: every rostered operator and the seat they ended on.
     Someone placed nowhere reads **SPARE** and nothing else: printing their
     standing formation beside it would say they worked there.
+    **Whoever never tapped and holds no seat is left out** (owner,
+    2026-10-11): they did not take part, and Operator No Finger lists them.
+    A late tap stays, and so does somebody placed on a unit by hand without
+    a tap, so the sheet agrees with the board. It can be **narrowed to one
+    position** with a searchable filter (`?position=`, applied to the
+    workbook too); the choices are the positions the sheet holds, read
+    before narrowing, and the choice resets when date, shift or department
+    changes.
 - **Built on the board's audit lines** (`board-audit.ts`), the same lines the
   Actual tab's audit table shows, extracted from that route so a sheet and the
   screen cannot name a different outcome for one operator. The readiness

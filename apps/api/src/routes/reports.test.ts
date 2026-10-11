@@ -458,6 +458,7 @@ type Report = {
   department: { id: string; name: string } | null;
   boardGenerated: boolean;
   rows: Record<string, string>[];
+  positions: string[];
 };
 
 const read = async (res: Response) => (await res.json()) as Report;
@@ -591,9 +592,34 @@ describe("the person reports", () => {
       location: "KASTURI - KOLAM",
       department: `${tag} Dept A`,
     });
-    expect(byNik.get(nikLeftA)).toMatchObject({ unit: "SPARE", bus: "" });
+    /* Left A never tapped and holds no seat: not in the final result
+       (owner, 2026-10-11). Placed never tapped either, but holds a unit. */
+    expect(byNik.has(nikLeftA)).toBe(false);
     /* Department B's operator is not on department A's sheet. */
     expect(byNik.has(nikLeftB)).toBe(false);
+  });
+
+  /* Narrowed to one position, on screen and in the workbook alike (owner,
+     2026-10-11). The choices stay whole whatever is chosen. */
+  test("Final Validation narrows to one position, and offers them all", async () => {
+    const whole = await person("final-validation");
+    if (!whole) return;
+    expect(whole.positions.length).toBeGreaterThan(0);
+    const chosen = whole.positions[0]!;
+
+    const narrowed = await person(
+      "final-validation",
+      `&position=${encodeURIComponent(chosen)}`
+    );
+    expect(narrowed!.rows.length).toBeGreaterThan(0);
+    expect(narrowed!.rows.every((r) => r.position === chosen)).toBe(true);
+    expect(narrowed!.positions).toEqual(whole.positions);
+
+    const sheet = await get(
+      `/reports/final-validation/export?date=${DATE}&shift=day&position=${encodeURIComponent(chosen)}`,
+      all
+    );
+    expect(sheet.status).toBe(200);
   });
 
   /* Placed and Left A/B never tapped in: the unplaced are the No Finger

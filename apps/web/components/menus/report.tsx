@@ -35,6 +35,7 @@ import {
 } from "@/lib/queries/reports";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
+import { AsyncSelect } from "@/components/ui/async-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pagination, usePagination } from "@/components/ui/pagination";
@@ -247,7 +248,8 @@ function ReportView({
             className="w-40 font-mono"
             value={filter.date}
             onChange={(e) =>
-              e.target.value && setFilter({ ...filter, date: e.target.value })
+              e.target.value &&
+              setFilter({ ...filter, date: e.target.value, position: "" })
             }
             aria-label={t.lblDate}
           />
@@ -255,7 +257,7 @@ function ReportView({
             wrapperClassName="w-[220px]"
             value={filter.department}
             onChange={(e) =>
-              setFilter({ ...filter, department: e.target.value })
+              setFilter({ ...filter, department: e.target.value, position: "" })
             }
             disabled={!siteWide}
             aria-label={t.allDepts}
@@ -267,6 +269,28 @@ function ReportView({
               </option>
             ))}
           </Select>
+          {/* Searchable: a site has dozens of positions (owner, 2026-10-11).
+              Offered only the positions this sheet holds, so every choice
+              yields rows; the list stays whole once one is chosen. */}
+          {filter.kind === "final-validation" ? (
+            <AsyncSelect
+              ariaLabel="Filter posisi"
+              wrapperClassName="w-[260px] max-w-full"
+              value={filter.position}
+              onChange={(option) =>
+                option && setFilter({ ...filter, position: option.value })
+              }
+              searchPlaceholder="Cari posisi…"
+              emptyText="Posisi tidak ditemukan"
+              options={[
+                { value: "", label: "Semua posisi" },
+                ...(reportQ.data?.positions ?? []).map((p) => ({
+                  value: p,
+                  label: p,
+                })),
+              ]}
+            />
+          ) : null}
           <Segmented role="group" aria-label={t.rptShift}>
             {(["day", "night"] as const).map((shift) => (
               <SegmentedButton
@@ -274,7 +298,7 @@ function ReportView({
                 type="button"
                 active={filter.shift === shift}
                 aria-pressed={filter.shift === shift}
-                onClick={() => setFilter({ ...filter, shift })}
+                onClick={() => setFilter({ ...filter, shift, position: "" })}
               >
                 {shift === "day" ? t.shiftDay : t.shiftNight}
               </SegmentedButton>
@@ -325,7 +349,12 @@ export function ReportMenu() {
   const { t } = useI18n();
   const [kind, setKind] = React.useState<ReportKind | null>(null);
   const [filter, setFilter] = React.useState<Omit<ReportFilter, "kind">>(
-    () => ({ date: isoDate(new Date()), shift: shiftNow(), department: "" })
+    () => ({
+      date: isoDate(new Date()),
+      shift: shiftNow(),
+      department: "",
+      position: "",
+    })
   );
 
   return (
