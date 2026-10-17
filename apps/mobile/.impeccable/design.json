@@ -1,0 +1,845 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T15:47:35+00:00",
+  "title": "Design System: Universe Mobile",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#F2F4F7",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#242527",
+          "#404244",
+          "#606164",
+          "#818285",
+          "#A3A5A8",
+          "#C7C9CC",
+          "#EDEFF2"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "White Surface",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "surface-sunken": {
+        "role": "neutral",
+        "displayName": "Sunken Grey",
+        "canonical": "#EDF0F4",
+        "tonalRamp": [
+          "#090B0E",
+          "#232528",
+          "#404245",
+          "#5F6165",
+          "#808286",
+          "#A2A5A9",
+          "#C6C9CD",
+          "#ECEFF3"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#DCE2EA",
+        "tonalRamp": [
+          "#080B10",
+          "#21252B",
+          "#3E4249",
+          "#5D6269",
+          "#7D838A",
+          "#A0A6AD",
+          "#C4CAD1",
+          "#E9EFF7"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "#0B1220",
+        "tonalRamp": [
+          "#050B18",
+          "#1D2534",
+          "#394253",
+          "#586173",
+          "#798395",
+          "#9BA5B9",
+          "#BFCADE",
+          "#E4EFFF"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Slate Ink",
+        "canonical": "#46536A",
+        "tonalRamp": [
+          "#030A1C",
+          "#1A2539",
+          "#364258",
+          "#546279",
+          "#75839C",
+          "#97A6C0",
+          "#BACAE5",
+          "#DFEFFF"
+        ]
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Faint Slate",
+        "canonical": "#5F6B80",
+        "tonalRamp": [
+          "#040B1A",
+          "#1B2537",
+          "#374256",
+          "#566276",
+          "#768399",
+          "#99A6BC",
+          "#BCCAE1",
+          "#E1EFFF"
+        ]
+      },
+      "action-blue": {
+        "role": "primary",
+        "displayName": "Action Blue",
+        "canonical": "#0057D9",
+        "tonalRamp": [
+          "#00003C",
+          "#001E5E",
+          "#183E80",
+          "#375FA5",
+          "#5782CA",
+          "#79A5F0",
+          "#9CCAFF",
+          "#C0F0FF"
+        ]
+      },
+      "action-ink": {
+        "role": "primary",
+        "displayName": "Action Ink",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "action-soft": {
+        "role": "primary",
+        "displayName": "Action Mist",
+        "canonical": "#E3EDFF",
+        "tonalRamp": [
+          "#060B16",
+          "#1E2532",
+          "#3A4250",
+          "#596271",
+          "#7A8393",
+          "#9CA5B6",
+          "#C0CADB",
+          "#E5EFFF"
+        ]
+      },
+      "hero-navy": {
+        "role": "secondary",
+        "displayName": "Universe Navy",
+        "canonical": "#0A2A63",
+        "tonalRamp": [
+          "#000037",
+          "#022058",
+          "#1E3F7A",
+          "#3D609E",
+          "#5D82C3",
+          "#7EA5E9",
+          "#A1CAFF",
+          "#C6F0FF"
+        ]
+      },
+      "hero-navy-low": {
+        "role": "secondary",
+        "displayName": "Navy Low",
+        "canonical": "#0F3A86",
+        "tonalRamp": [
+          "#00003C",
+          "#001E5E",
+          "#193E81",
+          "#385FA5",
+          "#5881CA",
+          "#7AA5F0",
+          "#9DCAFF",
+          "#C1F0FF"
+        ]
+      },
+      "hero-text": {
+        "role": "secondary",
+        "displayName": "Hero White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "hero-text-muted": {
+        "role": "secondary",
+        "displayName": "Hero Lavender",
+        "canonical": "#C9D6F0",
+        "tonalRamp": [
+          "#040A1B",
+          "#1C2538",
+          "#384257",
+          "#566178",
+          "#77839A",
+          "#99A5BE",
+          "#BDC9E3",
+          "#E2EFFF"
+        ]
+      },
+      "brand-cyan": {
+        "role": "tertiary",
+        "displayName": "Brand Cyan",
+        "canonical": "#00C0FF",
+        "tonalRamp": [
+          "#000A33",
+          "#002A53",
+          "#004A75",
+          "#006B98",
+          "#0D8EBD",
+          "#45B2E2",
+          "#6ED7FF",
+          "#94FDFF"
+        ]
+      },
+      "ok": {
+        "role": "status",
+        "displayName": "Pass Green",
+        "canonical": "#157A3E",
+        "tonalRamp": [
+          "#001500",
+          "#003300",
+          "#00531D",
+          "#19743C",
+          "#43965C",
+          "#67BA7E",
+          "#8CE0A1",
+          "#B1FFC6"
+        ]
+      },
+      "ok-soft": {
+        "role": "status",
+        "displayName": "Pass Mist",
+        "canonical": "#E1F4E8",
+        "tonalRamp": [
+          "#030E07",
+          "#1A2920",
+          "#37463D",
+          "#55665C",
+          "#76877D",
+          "#98AA9F",
+          "#BCCFC3",
+          "#E1F4E8"
+        ]
+      },
+      "warn": {
+        "role": "status",
+        "displayName": "Caution Amber",
+        "canonical": "#9A5B00",
+        "tonalRamp": [
+          "#270000",
+          "#490E00",
+          "#6B2F00",
+          "#8E5000",
+          "#B27227",
+          "#D8954E",
+          "#FFB972",
+          "#FFDE97"
+        ]
+      },
+      "warn-soft": {
+        "role": "status",
+        "displayName": "Caution Cream",
+        "canonical": "#FDF0D9",
+        "tonalRamp": [
+          "#120900",
+          "#2D2311",
+          "#4B402E",
+          "#6B604C",
+          "#8C816C",
+          "#B0A38E",
+          "#D4C8B1",
+          "#FAEDD6"
+        ]
+      },
+      "bad": {
+        "role": "status",
+        "displayName": "Gap Red",
+        "canonical": "#B42323",
+        "tonalRamp": [
+          "#2D0000",
+          "#510000",
+          "#751F1C",
+          "#9A413B",
+          "#C0635B",
+          "#E7867C",
+          "#FFAA9F",
+          "#FFCFC3"
+        ]
+      },
+      "bad-soft": {
+        "role": "status",
+        "displayName": "Gap Blush",
+        "canonical": "#FBE4E4",
+        "tonalRamp": [
+          "#140707",
+          "#302020",
+          "#4F3D3D",
+          "#6F5C5C",
+          "#917D7D",
+          "#B49F9F",
+          "#D9C3C3",
+          "#FFE8E8"
+        ]
+      },
+      "dark-ground": {
+        "role": "neutral",
+        "displayName": "Cool Paper (dark)",
+        "canonical": "#111214",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#242527",
+          "#414244",
+          "#606164",
+          "#818285",
+          "#A4A5A8",
+          "#C8C9CC",
+          "#EDEEF1"
+        ]
+      },
+      "dark-surface": {
+        "role": "neutral",
+        "displayName": "White Surface (dark)",
+        "canonical": "#1B1C1F",
+        "tonalRamp": [
+          "#0A0B0E",
+          "#242528",
+          "#414245",
+          "#606165",
+          "#818286",
+          "#A3A5A9",
+          "#C7C9CD",
+          "#EDEEF3"
+        ]
+      },
+      "dark-surface-sunken": {
+        "role": "neutral",
+        "displayName": "Sunken Grey (dark)",
+        "canonical": "#26282C",
+        "tonalRamp": [
+          "#090B0F",
+          "#232529",
+          "#404246",
+          "#5F6166",
+          "#808287",
+          "#A2A5AA",
+          "#C6C9CE",
+          "#ECEEF4"
+        ]
+      },
+      "dark-line": {
+        "role": "neutral",
+        "displayName": "Hairline (dark)",
+        "canonical": "#34373C",
+        "tonalRamp": [
+          "#090B0F",
+          "#22252A",
+          "#3F4247",
+          "#5E6167",
+          "#7F8288",
+          "#A2A5AB",
+          "#C6C9D0",
+          "#EBEFF5"
+        ]
+      },
+      "dark-ink": {
+        "role": "neutral",
+        "displayName": "Night Ink (dark)",
+        "canonical": "#EEF2F8",
+        "tonalRamp": [
+          "#090B0F",
+          "#22252A",
+          "#3F4247",
+          "#5E6166",
+          "#7F8388",
+          "#A2A5AB",
+          "#C5C9CF",
+          "#EBEFF5"
+        ]
+      },
+      "dark-ink-muted": {
+        "role": "neutral",
+        "displayName": "Slate Ink (dark)",
+        "canonical": "#A9B4C8",
+        "tonalRamp": [
+          "#050B18",
+          "#1D2534",
+          "#394253",
+          "#586273",
+          "#788396",
+          "#9BA6B9",
+          "#BECADE",
+          "#E3EFFF"
+        ]
+      },
+      "dark-ink-faint": {
+        "role": "neutral",
+        "displayName": "Faint Slate (dark)",
+        "canonical": "#8E9AB0",
+        "tonalRamp": [
+          "#040B1A",
+          "#1C2536",
+          "#384255",
+          "#576276",
+          "#778398",
+          "#99A6BC",
+          "#BDCAE1",
+          "#E2EFFF"
+        ]
+      },
+      "dark-action-cyan": {
+        "role": "primary",
+        "displayName": "Action Cyan (dark)",
+        "canonical": "#00C8FF",
+        "tonalRamp": [
+          "#000C31",
+          "#002C51",
+          "#004C72",
+          "#006D95",
+          "#0090B9",
+          "#3DB4DF",
+          "#67D9FF",
+          "#8FFFFF"
+        ]
+      },
+      "dark-action-ink": {
+        "role": "primary",
+        "displayName": "Action Ink (dark)",
+        "canonical": "#031020",
+        "tonalRamp": [
+          "#010B1B",
+          "#162638",
+          "#334457",
+          "#516377",
+          "#72849A",
+          "#94A7BE",
+          "#B7CBE3",
+          "#DCF1FF"
+        ]
+      },
+      "dark-action-soft": {
+        "role": "primary",
+        "displayName": "Action Mist (dark)",
+        "canonical": "#0D2A45",
+        "tonalRamp": [
+          "#000B23",
+          "#092641",
+          "#274461",
+          "#466483",
+          "#6686A6",
+          "#88A9CA",
+          "#ACCDF0",
+          "#D0F3FF"
+        ]
+      },
+      "dark-hero-navy": {
+        "role": "secondary",
+        "displayName": "Universe Navy (dark)",
+        "canonical": "#0A2257",
+        "tonalRamp": [
+          "#000134",
+          "#082055",
+          "#243F77",
+          "#42609A",
+          "#6281BF",
+          "#84A5E5",
+          "#A7C9FF",
+          "#CBEFFF"
+        ]
+      },
+      "dark-hero-navy-low": {
+        "role": "secondary",
+        "displayName": "Navy Low (dark)",
+        "canonical": "#0E2F72",
+        "tonalRamp": [
+          "#00003C",
+          "#011D5E",
+          "#1C3E81",
+          "#3A5FA5",
+          "#5A81CA",
+          "#7CA4F0",
+          "#9FC9FF",
+          "#C3EFFF"
+        ]
+      },
+      "dark-hero-text-muted": {
+        "role": "secondary",
+        "displayName": "Hero Lavender (dark)",
+        "canonical": "#B7C6E6",
+        "tonalRamp": [
+          "#03091F",
+          "#1A243C",
+          "#36425C",
+          "#54617D",
+          "#7582A0",
+          "#97A5C4",
+          "#BAC9E9",
+          "#DFEFFF"
+        ]
+      },
+      "dark-ok": {
+        "role": "status",
+        "displayName": "Pass Green (dark)",
+        "canonical": "#4ADE80",
+        "tonalRamp": [
+          "#001600",
+          "#003300",
+          "#00531D",
+          "#18743D",
+          "#42965D",
+          "#67BA7F",
+          "#8BE0A2",
+          "#B0FFC6"
+        ]
+      },
+      "dark-ok-soft": {
+        "role": "status",
+        "displayName": "Pass Mist (dark)",
+        "canonical": "#0E2A1B",
+        "tonalRamp": [
+          "#001004",
+          "#102C1C",
+          "#2D4939",
+          "#4C6957",
+          "#6C8B78",
+          "#8FAE9A",
+          "#B2D2BE",
+          "#D7F8E3"
+        ]
+      },
+      "dark-warn": {
+        "role": "status",
+        "displayName": "Caution Amber (dark)",
+        "canonical": "#FBBF24",
+        "tonalRamp": [
+          "#200000",
+          "#3F1A00",
+          "#5F3900",
+          "#815900",
+          "#A47B11",
+          "#C89E41",
+          "#EEC368",
+          "#FFE88D"
+        ]
+      },
+      "dark-warn-soft": {
+        "role": "status",
+        "displayName": "Caution Cream (dark)",
+        "canonical": "#2E2208",
+        "tonalRamp": [
+          "#140900",
+          "#2F2309",
+          "#4D4026",
+          "#6D5F45",
+          "#8F8165",
+          "#B2A386",
+          "#D7C7AA",
+          "#FDEDCE"
+        ]
+      },
+      "dark-bad": {
+        "role": "status",
+        "displayName": "Gap Red (dark)",
+        "canonical": "#F87171",
+        "tonalRamp": [
+          "#2D0000",
+          "#510006",
+          "#751E23",
+          "#9A4141",
+          "#C06261",
+          "#E78582",
+          "#FFA9A5",
+          "#FFCECA"
+        ]
+      },
+      "dark-bad-soft": {
+        "role": "status",
+        "displayName": "Gap Blush (dark)",
+        "canonical": "#321212",
+        "tonalRamp": [
+          "#1C0203",
+          "#3B1A19",
+          "#5B3735",
+          "#7C5654",
+          "#A07674",
+          "#C49996",
+          "#EABCBA",
+          "#FFE2DF"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The hero fact: unit code, SPARE, count or time. 40px for SPARE; 52px on the Unit saya card."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Inner-screen top bar title; bottom-sheet titles at 20px."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings on the sheet; formation headings at 16px."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Unit codes in rows; button labels."
+      },
+      "body-strong": {
+        "displayName": "Body strong",
+        "purpose": "Row primary line, timeline step name."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Second lines, notes, callouts (13-14px)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Menu, nav and badge labels."
+      }
+    },
+    "shadows": [
+      {
+        "name": "ambient-lift",
+        "value": "0 6px 18px rgba(11,18,32,0.08), 0 1px 3px rgba(11,18,32,0.06)",
+        "purpose": "Cards, groups, menu, candidates, selected tab, ID card (light)."
+      },
+      {
+        "name": "ambient-lift-dark",
+        "value": "0 8px 22px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.4)",
+        "purpose": "Same role in dark theme."
+      },
+      {
+        "name": "raised-disc",
+        "value": "0 6px 14px rgba(3,6,14,0.28)",
+        "purpose": "Centre nav button only."
+      },
+      {
+        "name": "now-halo",
+        "value": "0 0 0 5px var(--action-soft)",
+        "purpose": "Current timeline step knot."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Hero reveal, bottom sheet and toast rise."
+      },
+      {
+        "name": "hero-reveal",
+        "value": "520ms",
+        "purpose": "Hero fact rises 10px and clears a 4px blur, once per render."
+      },
+      {
+        "name": "sheet-rise",
+        "value": "360ms",
+        "purpose": "Bottom sheet rises 24px."
+      },
+      {
+        "name": "toast-rise",
+        "value": "300ms",
+        "purpose": "Toast rises above the nav bar."
+      },
+      {
+        "name": "scrim-fade",
+        "value": "220ms ease-out",
+        "purpose": "Scrim fades in."
+      },
+      {
+        "name": "scan-sweep",
+        "value": "2.2s ease-in-out infinite alternate",
+        "purpose": "Viewfinder scan line."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "All animation and transition removed."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone-frame",
+        "value": "390px x 844px"
+      },
+      {
+        "name": "prototype-band",
+        "value": "max-width: 760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one filled action per screen: Masuk, Tempatkan, Simulasikan hasil scan.",
+      "html": "<button class=\"ds-btn ds-btn-primary\" type=\"button\">Masuk</button>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-btn{min-height:52px;border-radius:14px;border:0;font:800 16px Figtree,system-ui,sans-serif;padding:0 18px;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:filter .15s}.ds-btn:focus-visible{outline:3px solid var(--action);outline-offset:2px}.ds-btn-primary{background:var(--action);color:var(--action-ink)}.ds-btn-primary:hover{filter:brightness(1.08)}.ds-btn-primary:active{filter:brightness(0.94)}.ds-btn-primary:disabled{background:var(--surface-2);color:var(--text-3);cursor:not-allowed}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary action on a surface: Tandai semua dibaca, Scan lagi, Reset password.",
+      "html": "<button class=\"ds-btn ds-btn-ghost\" type=\"button\">Scan lagi</button>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-btn{min-height:52px;border-radius:14px;border:0;font:800 16px Figtree,system-ui,sans-serif;padding:0 18px;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:filter .15s}.ds-btn:focus-visible{outline:3px solid var(--action);outline-offset:2px}.ds-btn-ghost{background:var(--surface);color:var(--text);border:1px solid var(--line)}.ds-btn-ghost:hover{background:var(--surface-2)}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Outlined red, only for Keluar and Nonaktifkan akun.",
+      "html": "<button class=\"ds-btn ds-btn-danger\" type=\"button\">Keluar</button>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-btn{min-height:52px;border-radius:14px;border:0;font:800 16px Figtree,system-ui,sans-serif;padding:0 18px;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:filter .15s}.ds-btn:focus-visible{outline:3px solid var(--action);outline-offset:2px}.ds-btn-danger{background:none;color:var(--bad);border:1px solid var(--bad)}.ds-btn-danger:hover{background:var(--bad-soft)}"
+    },
+    {
+      "name": "Status Badges",
+      "kind": "chip",
+      "refersTo": "badge-ok",
+      "description": "Soft status fill plus a word; never colour alone.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-badge ds-ok\">Lolos</span><span class=\"ds-badge ds-warn\">Terlambat</span><span class=\"ds-badge ds-bad\">Kosong</span><span class=\"ds-badge ds-info\">Plan</span><span class=\"ds-badge\">Belum tap</span></div>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-row{display:flex;gap:6px;flex-wrap:wrap}.ds-badge{display:inline-flex;align-items:center;font:700 12px Figtree,system-ui,sans-serif;padding:4px 9px;border-radius:999px;background:var(--surface-2);color:var(--text-2)}.ds-ok{background:var(--ok-soft);color:var(--ok)}.ds-warn{background:var(--warn-soft);color:var(--warn)}.ds-bad{background:var(--bad-soft);color:var(--bad)}.ds-info{background:var(--action-soft);color:var(--action)}"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Search with an inset icon; focus takes the 3px action outline.",
+      "html": "<label class=\"ds-search\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m20 20-3.5-3.5\"/></svg><input placeholder=\"Cari kode unit, mis. DT4084\" aria-label=\"Cari unit\"></label>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-search{position:relative;display:block;width:320px}.ds-search svg{position:absolute;left:14px;top:16px;color:var(--text-3)}.ds-search input{width:100%;height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);padding:0 16px 0 44px;font:15px Figtree,system-ui,sans-serif;box-sizing:border-box}.ds-search input:focus-visible{outline:3px solid var(--action);outline-offset:2px}"
+    },
+    {
+      "name": "Hero Band",
+      "kind": "custom",
+      "refersTo": "hero-pill",
+      "description": "Navy band: brand, shift chip, the day's fact at display size, status line, and status pills with words.",
+      "html": "<section class=\"ds-hero\"><div class=\"ds-top\"><b class=\"ds-brand\">UNIVERSE</b><span class=\"ds-chip\">Shift Siang · Roster D</span></div><span class=\"ds-code\">DT4084</span><span class=\"ds-line\">Pegangan · rencana s.d. 05:26</span><div class=\"ds-pills\"><button class=\"ds-pill\" type=\"button\"><i class=\"ds-dot ds-dok\"></i>FTW lolos · 04:18</button><button class=\"ds-pill\" type=\"button\"><i class=\"ds-dot\"></i>BUS 07</button></div></section>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-hero{background:linear-gradient(180deg,var(--hero),var(--hero-2));color:var(--hero-text);padding:20px 18px 24px;display:flex;flex-direction:column;gap:8px;width:354px;border-radius:22px}.ds-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.ds-brand{font-weight:800;font-size:17px;letter-spacing:.08em}.ds-chip{font:600 13px Figtree,sans-serif;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18)}.ds-code{font-size:48px;font-weight:800;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.ds-line{font-size:15px;font-weight:600;color:#FFD38A}.ds-pills{display:flex;gap:8px;margin-top:10px}.ds-pill{min-height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 14px;border-radius:999px;background:rgba(3,10,30,.32);border:1px solid rgba(255,255,255,.22);color:var(--hero-text);font:600 14px Figtree,sans-serif;cursor:pointer}.ds-pill:hover{background:rgba(3,10,30,.45)}.ds-pill:focus-visible{outline:3px solid var(--brand);outline-offset:2px}.ds-dot{width:9px;height:9px;border-radius:5px;background:#9FB0CC}.ds-dok{background:#34D17A}"
+    },
+    {
+      "name": "Menu Grid",
+      "kind": "card",
+      "refersTo": "menu-tile",
+      "description": "Four-column menu on a white panel; 54px action-soft tiles over 12px labels.",
+      "html": "<div class=\"ds-menu\"><button type=\"button\"><span class=\"ds-tile\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 16V8h10v8M13 11h4l3 3v2h-7\"/><circle cx=\"7\" cy=\"17\" r=\"2\"/><circle cx=\"17\" cy=\"17\" r=\"2\"/></svg></span>Unit saya</button><button type=\"button\"><span class=\"ds-tile\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M8 3v4M16 3v4\"/></svg></span>Jadwal</button><button type=\"button\"><span class=\"ds-tile\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3\"/><rect x=\"8\" y=\"8\" width=\"8\" height=\"8\" rx=\"1\"/></svg></span>SIMPER</button><button type=\"button\"><span class=\"ds-tile\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg></span>Riwayat</button></div>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-menu{width:358px;background:var(--surface);border-radius:22px;padding:16px 6px 12px;display:grid;grid-template-columns:repeat(4,1fr);box-shadow:var(--shadow)}.ds-menu button{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:8px;font:600 12px Figtree,sans-serif;color:var(--text);cursor:pointer;border-radius:8px}.ds-menu button:focus-visible{outline:3px solid var(--action);outline-offset:2px}.ds-tile{width:54px;height:54px;border-radius:14px;background:var(--action-soft);color:var(--action);display:flex;align-items:center;justify-content:center;transition:transform .15s}.ds-menu button:hover .ds-tile{transform:translateY(-2px)}"
+    },
+    {
+      "name": "List Group",
+      "kind": "card",
+      "refersTo": "list-group",
+      "description": "Grouped rows on a 22px surface: unit code, muted second line, trailing status badge.",
+      "html": "<div class=\"ds-group\"><div class=\"ds-lrow\"><span class=\"ds-txt\"><b>DT4102</b><span>EX1203 · PIT 3 SELATAN</span></span><span class=\"ds-b\">Kosong</span></div><div class=\"ds-lrow\"><span class=\"ds-txt\"><b>DT5131</b><span>EX1207 · PIT 1 UTARA</span></span><span class=\"ds-b\">Kosong</span></div></div>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-group{width:358px;background:var(--surface);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}.ds-lrow{display:flex;align-items:center;gap:14px;padding:14px 16px;min-height:64px;border-bottom:1px solid var(--line);box-sizing:border-box}.ds-lrow:last-child{border-bottom:0}.ds-lrow:hover{background:var(--surface-2)}.ds-txt{flex:1;display:flex;flex-direction:column;gap:3px}.ds-txt b{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text)}.ds-txt span{font-size:13px;color:var(--text-2)}.ds-b{font:700 12px Figtree,sans-serif;padding:4px 9px;border-radius:999px;background:var(--bad-soft);color:var(--bad)}"
+    },
+    {
+      "name": "Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "nav-bar",
+      "description": "Five columns; active item on an action-soft halo; centre action disc raised over the bar.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Navigasi utama\"><button type=\"button\" aria-current=\"page\"><span class=\"ds-halo\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z\"/></svg></span>Beranda</button><button type=\"button\"><span class=\"ds-halo\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M8 3v4M16 3v4\"/></svg></span>Jadwal</button><button type=\"button\" class=\"ds-center\"><span class=\"ds-disc\"><svg width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3\"/><rect x=\"8\" y=\"8\" width=\"8\" height=\"8\" rx=\"1\"/></svg></span>Kartu</button><button type=\"button\"><span class=\"ds-halo\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg></span>Riwayat</button><button type=\"button\"><span class=\"ds-halo\"><svg width=\"21\" height=\"21\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 16V8h10v8M13 11h4l3 3v2h-7\"/><circle cx=\"7\" cy=\"17\" r=\"2\"/><circle cx=\"17\" cy=\"17\" r=\"2\"/></svg></span>Unit</button></nav>",
+      "css": ":host{--bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#EDF0F4;--line:#DCE2EA;--text:#0B1220;--text-2:#46536A;--text-3:#5F6B80;--action:#0057D9;--action-ink:#FFFFFF;--action-soft:#E3EDFF;--hero:#0A2A63;--hero-2:#0F3A86;--hero-text:#FFFFFF;--hero-text-2:#C9D6F0;--brand:#00C0FF;--ok:#157A3E;--ok-soft:#E1F4E8;--warn:#9A5B00;--warn-soft:#FDF0D9;--bad:#B42323;--bad-soft:#FBE4E4;--shadow:0 6px 18px rgba(11,18,32,0.08),0 1px 3px rgba(11,18,32,0.06);font-family:Figtree,system-ui,sans-serif}.ds-nav{width:390px;height:88px;margin-top:34px;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);align-items:start;padding:8px 4px 0;box-sizing:border-box}.ds-nav button{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:4px;font:600 12px Figtree,sans-serif;color:var(--text-3);min-height:56px;cursor:pointer}.ds-nav button:hover{color:var(--text)}.ds-nav button:focus-visible{outline:3px solid var(--action);outline-offset:2px;border-radius:8px}.ds-halo{width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center}.ds-nav button[aria-current=page]{color:var(--text);font-weight:800}.ds-nav button[aria-current=page] .ds-halo{background:var(--action-soft);color:var(--action)}.ds-disc{width:62px;height:62px;margin-top:-34px;border-radius:31px;background:var(--action);color:var(--action-ink);border:5px solid var(--surface);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(3,6,14,.28);box-sizing:border-box}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Everyday App, Played Straight",
+    "overview": "Universe Mobile is the category standard of a modern consumer app (wallet or banking class) carried at full craft and with no costume. There is no pit, no slip and no signage metaphor. The unit code and its status carry every home screen: a navy hero band at the top holds the one fact that matters today, and a rounded neutral sheet slides up over it with a four-column menu grid, grouped lists and the bottom bar of five with a raised centre button. Density is that of a phone app you already know: 16px page gutters, 64px list rows, 44px minimum touch targets.\n\nThe app follows the phone's theme. Light is a cool grey ground with white surfaces and a blue action; dark is a neutral charcoal ground with a cyan action. Navy belongs to the hero band (and the surfaces that quote it), never to the dark ground. Status reads in green, amber and red, and it always carries a word. All copy is Bahasa Indonesia; domain terms (Kosong, SIMPER, FTW, Pegangan, Spare) stay as the site uses them.\n\nThis prototype (`apps/mobile/prototype/index.html`) is the visual reference for stage 3: Compose Multiplatform translates it screen for screen. **Reference status.** The finish review ran three rounds; round 3 resolved every scored item except R1 (the \"4 unit kosong\" pill opened a Kosong board with two rows). After round 3 a third formation (EX1211 · PIT 2 TIMUR, DT4130 and DT4133 empty) was added to the sample board and the home \"Unit kosong\" list is now derived from the board, so pill, list and filtered board all show four; that fix was verified by the parent from a capture (`.impeccable/review/phone-pengawas-kosong.png`), not by the reviewer. **Unresolved:** the Laporan and Dashboard screens, iOS specifics, and the real QR (it will encode the NIK; the prototype shows a dashed placeholder).",
+    "keyCharacteristics": [
+      "Navy hero band with the cyan brand mark, then a rounded sheet on a neutral ground.",
+      "One action colour per theme: blue `#0057D9` in light, cyan `#00C8FF` in dark.",
+      "Status is colour plus a word, every time.",
+      "Figtree throughout; tabular numerals for unit codes, NIKs and times.",
+      "One corner family: 22px sheets and groups, 14px tiles and controls, full pills.",
+      "Sample data is labelled as sample; screens not yet designed say so."
+    ],
+    "rules": [
+      {
+        "name": "The Word Beside the Colour Rule",
+        "body": "Status is never colour alone. Every dot sits in a pill with words (\"FTW lolos · 04:18\"), every badge says Lolos, Kosong, Terlambat or Breakdown, and an empty seat reads \"Belum ada operator\" in red text, not just a red mark.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Action Rule",
+        "body": "Each theme has exactly one action colour: blue in light, cyan in dark. Status hues never style a button except the outlined red Keluar / Nonaktifkan danger button.",
+        "section": "colors"
+      },
+      {
+        "name": "The Navy Stays Up Top Rule",
+        "body": "Navy is the hero band and the surfaces that quote it (ID card header, night-shift cells). The dark theme ground is neutral charcoal (`#111214`), never navy.",
+        "section": "colors"
+      },
+      {
+        "name": "The Code Carries the Screen Rule",
+        "body": "The largest type on any home screen is a code or a count, set at 800 in tabular numerals. Nothing decorative competes with it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Clock Rule",
+        "body": "Every unit code, NIK, time and count is set with tabular numerals.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Lift Rule",
+        "body": "Content surfaces share one ambient shadow; only the raised centre button gets more.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do follow the phone's light or dark theme, with blue action `#0057D9` in light and cyan `#00C8FF` in dark.",
+      "Do put the day's single fact (unit code, count or time) at display size in the navy hero, with its status line directly under it.",
+      "Do pair every status colour with a word: a pill, a badge or text.",
+      "Do set unit codes, NIKs, times and counts in Figtree with tabular numerals.",
+      "Do keep the corner family: 22px sheets and groups, 14px tiles and controls, full pills.",
+      "Do label sample data as sample (\"Semua data di sini adalah contoh\"), on the amber sample band.",
+      "Do show a spare as SPARE, with the reason and the 05:28 time, until finger-second; the seat appears only after it.",
+      "Do route any screen not yet designed to the marked \"Belum dirancang\" placeholder with a way back to Beranda.",
+      "Do write all copy in Bahasa Indonesia and keep site terms (Kosong, SIMPER, FTW, Pegangan, Spare) as they are."
+    ],
+    "donts": [
+      "Don't use pit, slip or signage metaphors; the owner chose the familiar everyday app.",
+      "Don't use colour alone to carry a status.",
+      "Don't reveal a spare's seat before finger-second (05:28).",
+      "Don't use navy as the dark-theme ground; it belongs to the hero band.",
+      "Don't add a second action colour or style buttons with status hues (red outline danger excepted).",
+      "Don't leave a dead tap: every menu item, pill and nav button goes somewhere, even if it is \"Belum dirancang\"."
+    ]
+  }
+}
