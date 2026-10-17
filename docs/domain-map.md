@@ -43,7 +43,7 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 | 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                                                          |
 | 05:25 | `finger-in`      | A first IN tap at/after this is `late`                                                                     |
 | 05:26 | `spare-validate` | **The board is built** (one minute after `finger-in`, never on it)                                         |
-| 05:28 | `finger-second`  | No hook. A spare's slip is held until this time (`ticket-issue.ts`)                                        |
+| 05:28 | `finger-second`  | A spare's slip is held until this time (`ticket-issue.ts`); the hook pushes the app notices held for it    |
 | 05:30 | `bus-depart`     | Listening/collection windows end (plus grace)                                                              |
 
 - **Missing gate = refuse, never default.** No `finger-in` or `ftw-deadline`
@@ -268,6 +268,12 @@ listened to, because listening sends `enableDevice`.
 - Spares print at once when they can never be seated (late first tap, or an
   FTW that is a final no on every unit they could take).
 - The printed time is always the **first tap of the shift**.
+- **The phone never runs ahead of the slip.** `/v1/me/shift` and the
+  personal notifications (`person-notify.ts`) show a holder's board seat at
+  once and everybody else's, hand placements included, only from
+  `finger-second`. No `finger-second` stage means no spare is announced, as
+  no spare slip prints. Before the board, `/v1/me/shift` reads the plan with
+  the same rules the booth judges it by (`my-shift.ts`).
 - A repeat tap reprints **only if the slip's content changed**. Arrival time
   and booth don't count, because machine clocks disagree.
 - A printer failure is retried ~60 s, then queued for manual reprint. Nothing
@@ -281,10 +287,12 @@ listened to, because listening sends `enableDevice`.
 Code: `ticket-rules.ts` (`ticketFor`, pure; one test per row of the PRD table),
 `ticket-issue.ts` (`issueTicket`, `seatOf`, `planSeatHolds`, `cannotBeSeated`,
 `reprintTicket`), `ticket-escpos.ts`, `ticket-printer.ts`, `spare-ride.ts`,
-`live-listener.ts`, `derive.ts`, `routes/tickets.ts`, `routes/printers.ts`.
+`live-listener.ts`, `derive.ts`, `routes/tickets.ts`, `routes/printers.ts`;
+for the phone, `my-shift.ts`, `person-notify.ts`, `routes/me.ts`.
 Web: `components/menus/tickets.tsx`, `printers.tsx`, `monitoring-tap.tsx`.
 Tests: `ticket-rules.test.ts`, `ticket-issue.test.ts`, `ticket-escpos.test.ts`,
-`live-listener.test.ts`, `routes/tickets.test.ts`.
+`live-listener.test.ts`, `routes/tickets.test.ts`, `my-shift.test.ts`,
+`my-shift-facts.test.ts`, `person-notify.test.ts`, `routes/me.test.ts`.
 PRD: _Live capture and muster tickets_ (all subsections).
 
 ## Keeping this file true

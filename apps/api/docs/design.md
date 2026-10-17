@@ -205,6 +205,59 @@ writes, and is mounted beside the PLAN routes under `/fleet-allocation`.
   the unit, and taking the slot first could deadlock with a commit holding
   every unit.
 
+## D13 — `/v1/me` answers only about the caller, so it needs no menu
+
+The mobile app's operator screens (owner, 2026-10-17) are about one person:
+their coming shift (`/me/shift`), past seats (`/me/seats`) and notifications.
+The NIK is the account's, never the request's, so no grant could widen what
+they return, and an operator whose role was trimmed still sees their own
+seat. The `self` macro (`requireSelf`) keeps the rest of the gate: a person
+and not a screen, and not before the issued password is changed.
+
+FTW and attendance history are the existing lists, which now answer a
+`self` caller with their own rows: they ignored scope entirely until
+2026-10-17 (`nikInScope`), and a second route for the same rows would be a
+second place to get scope wrong.
+
+`/me/shift` is about the shift that matters to the person, not the running
+one: opened at 21:00 the evening before a day shift, the running shift is
+tonight's. Before the board it is the plan, with the reason a holder would
+not keep the unit (breakdown, out of the fleet, the board's own
+`pairingRefusal`, a partner rostered alongside). After it, the board's seat,
+held back as the slip is.
+
+## D14 — A person's seat is pushed no earlier than the slip prints
+
+`person_notifications` rows are written at the event and wait for
+`available_at`: a holder's at once, a spare's and any hand placement's at
+`finger-second`. `deliverDue` pushes what has come due, after a board is
+stored, after a placement, and at the `finger-second` stage. Delivery never
+fails the work that caused it, and with no `FCM_SERVICE_ACCOUNT_FILE` it
+sends and marks nothing: the in-app list is the record, the push a nudge.
+
+FCM is spoken directly (HTTP v1, a WebCrypto-signed JWT), not through an SDK:
+two requests do not justify a dependency. Only `UNREGISTERED` drops a token.
+
+Hardened after review (2026-10-17):
+
+- **Claimed, then sent.** `deliverDue` claims rows with `UPDATE … WHERE
+pushed_at IS NULL RETURNING` before sending, so the `finger-second` stage
+  and a placement delivering at once send each row once. A row none of whose
+  phones took it is released again and retried inside the 12-hour window.
+- **Only an account that may still be told**: active, past its password
+  change, and only Android tokens until APNs exists. A deactivated or reset
+  account's phone may be in somebody else's hand.
+- **A regenerated board reconciles.** What each person was last told about
+  each unit is compared with the new board: a seat still waiting for the
+  second finger is taken back, one already shown is retracted with
+  `seat-removed`, one already known is not announced twice. A board for a
+  muster already over announces nothing.
+- **At most five phones per account**, the oldest dropped.
+- **`/me/seats` returns only shifts strictly before the running one**, or
+  before today when the timeline cannot say which is running: a board built
+  early for a coming shift would otherwise name a spare's unit before the
+  slip.
+
 ## Known debt
 
 - `users` links to employees by NIK string; renaming a NIK orphans the

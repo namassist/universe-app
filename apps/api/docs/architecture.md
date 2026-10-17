@@ -22,13 +22,19 @@ src/
   leaderboard.ts  # month range + ranking for the leaderboard (pure)
   leaderboard-breakdown.ts # one operator's lines + the board's sums (pure)
   auth/
-    macro.ts      # the auth macro — THE security boundary for every route
+    macro.ts      # the auth macro — THE security boundary for every route;
+                  # `self` (requireSelf) for /v1/me: a person, no menu (D13)
     session.ts    # Redis-backed sessions, httpOnly cookie
     principal.ts  # who is calling (user or kiosk device)
     scope.ts      # all / dept / self scope resolution
     password.ts   # hashing; verification bounded to four at once
     login-throttle.ts # per-address and per-account login budgets (D11)
     site-network.ts   # SITE_NETWORKS: whether an address is the site (D11)
+  my-shift.ts     # "Unit saya": holder or spare and why, from plan or board (D13)
+  person-notify.ts # a person's seat notices, held until the slip would print (D14)
+  push/
+    fcm.ts        # FCM HTTP v1 sender, WebCrypto-signed JWT, off when unconfigured
+    devices.ts    # phones registered for pushes, dropped at logout
   ops/
     session.ts    # Operations Center password sessions + login lockout
     metrics.ts    # per-request counters, slow/error lists, user activity (Redis)

@@ -2917,6 +2917,44 @@ sees every formation (owner, 2026-10-17) and changes nothing.
   in-app list is the same rows, so a push that never arrives is still read
   the next time the app opens.
 
+### What the API serves — built (stage 2, 2026-10-17)
+
+The app's server side, before the app itself (`apps/api/docs/design.md` D13,
+D14):
+
+- **`GET /v1/me/shift`**: the coming shift for the caller's own NIK. That is
+  the running shift if they are rostered to it, else the next one, so the
+  evening before a day shift it is tomorrow's. It returns the phase (`plan`
+  or `board`), the status (`holder`, `spare`, `off`, `not-allocated`), the
+  reason (`breakdown`, `not-in-fleet`, `ineligible` with the board's own
+  sentence, `partner-rostered`, `no-plan-seat`, `awaiting-second-finger`,
+  `not-seated`), the standing unit, the seat, today's FTW verdict and the
+  first tap. Null when the timeline cannot say which shift is running.
+- **`GET /v1/me/seats?from&to`**: past board seats, two months at most,
+  only for shifts before the running one. The running shift and anything
+  after it are `/me/shift`'s, held as the slip is.
+- **FTW and attendance history** are `GET /v1/fit-to-work` and
+  `/v1/attendance`. **Found while building this:** both answered every
+  caller for everyone, whatever their scope. The `user` role could read the
+  whole site's sleep and taps, and the `dept` roles every department's. Both
+  are now scoped, with their exports. Admin and Manajer see their own
+  department there, as they already did everywhere else.
+- **Profile** is `GET /v1/employees/:nik`, already self-scoped.
+- **`GET /v1/me/notifications`**, `POST …/:id/read`, `POST …/read-all`:
+  the person's own notices that have come due.
+- **`POST` / `DELETE /v1/me/push-devices`**: a phone's FCM token, five per
+  account at most. Logout removes the phone it registered. A deactivated
+  account, or one reset to the issued password, is not pushed to.
+- **A regenerated board takes back what it no longer says**: a seat still
+  waiting for the second finger is withdrawn unseen, and one already shown
+  gets a `seat-removed` notice.
+- **`GET /v1/mobile/version?platform=android`**, no session: minimum build,
+  latest build, download link, from configuration.
+- **Pengawas Lapangan** is seeded with its six view grants. `db:bootstrap`
+  adds it to an installation without touching the roles there.
+- **Push** goes out through FCM once `FCM_SERVICE_ACCOUNT_FILE` names the
+  Firebase service account key. Until then the notices are only in the app.
+
 ### Client stack and distribution
 
 - **Kotlin Multiplatform with Compose Multiplatform**, one codebase for

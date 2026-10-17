@@ -85,7 +85,7 @@ FTW is pulled from savera.
 
 ### Roles
 
-Access is server-enforced. Roles are database rows, seeded with the six below
+Access is server-enforced. Roles are database rows, seeded with the seven below
 and editable at runtime through the Roles screen; permissions are rows of
 (role, menu slug, mode) where mode is `view` or `manage`, and the absence of a
 row means no access. `MENU_SLUGS` stays static in `@universe/contracts` — a
@@ -136,7 +136,7 @@ route re-checks session, permission, and scope independently. Accounts are
 provisioned in bulk by uploading a spreadsheet; initial and reset passwords
 come from configuration and cannot survive first login.
 
-The six seeded roles, each scoped to how much of the workforce it can see:
+The seven seeded roles, each scoped to how much of the workforce it can see:
 
 - **Superadmin** — workforce across every division; read/write on all menus.
 - **Admin** — own division only. Writes Employees, Roster Data, Roster Revision,
@@ -151,7 +151,11 @@ The six seeded roles, each scoped to how much of the workforce it can see:
 - **Medic** — workforce across every division. Writes Fit To Work; reads the
   dashboards, Fit To Work Display, and Employees.
 - **User** — themselves only. Writes their own Fit To Work; reads Dashboard,
-  Employees, Roster Data, Roster Revision, Attendance.
+  Employees, Roster Data, Roster Revision, Attendance. On the mobile app, also
+  their own coming shift, past seats and notifications (`/v1/me`, no menu).
+- **Pengawas Lapangan** — every formation, read only, on the mobile app: Fleet
+  Allocation, Unit Status, the dashboards, Reports, Scan ID Card and
+  Notifications.
 
 ### Scalable, secure, fast — non-negotiables
 
