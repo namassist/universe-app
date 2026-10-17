@@ -43,6 +43,7 @@ import { shiftGates } from "../stage-time";
 import { photoMimeType, photoPath } from "../storage";
 import { pairingRefusal } from "./fleet-allocation";
 import { localDate } from "../scheduler";
+import { announceBoardNow, announcePlacementNow } from "../person-notify";
 import { normalizeNik } from "../sources/nik";
 import {
   ActualAuditSchema,
@@ -1427,6 +1428,9 @@ export const fleetActualRoutes = new Elysia({
         uploadClose
       );
       await storeBoard(board);
+      /* As the scheduled stage does. A board for a muster already over
+         announces nothing (`announceBoard`). */
+      await announceBoardNow(params.date, params.shift);
       return { ok: true, units: board.slots.length };
     },
     {
@@ -1641,6 +1645,19 @@ export const fleetActualRoutes = new Elysia({
           });
       }
 
+      /* Who sat here before, read before the change: if it is somebody
+         else, they are told the seat no longer holds. */
+      const [before] = await db
+        .select({ employeeId: schema.fleetActualSlots.employeeId })
+        .from(schema.fleetActualSlots)
+        .where(
+          and(
+            eq(schema.fleetActualSlots.documentId, doc.id),
+            eq(schema.fleetActualSlots.unitId, params.unitId)
+          )
+        )
+        .limit(1);
+
       const [row] = await db
         .update(schema.fleetActualSlots)
         .set({
@@ -1676,6 +1693,16 @@ export const fleetActualRoutes = new Elysia({
         fingerVerdict: reading?.readiness.finger ?? null,
         overrode: unfit,
       });
+
+      const previous = before?.employeeId ?? null;
+      if (previous !== (body.employeeId ?? null))
+        await announcePlacementNow({
+          date: params.date,
+          shift: params.shift,
+          unitId: params.unitId,
+          placed: body.employeeId ?? null,
+          displaced: previous,
+        });
 
       return { ok: true };
     },

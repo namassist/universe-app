@@ -25,6 +25,7 @@ import {
   SESSION_COOKIE,
 } from "../auth/session";
 import { onSiteNetwork } from "../auth/site-network";
+import { forgetSessionDevices } from "../push/devices";
 import { db, schema } from "../db";
 import { clientIp } from "../ops/client-ip";
 import {
@@ -179,6 +180,10 @@ export const authRoutes = new Elysia({ prefix: "/auth", tags: ["auth"] })
   .post(
     "/logout",
     async ({ sessionId, cookie }) => {
+      /* The phone this session registered stops receiving pushes: a device
+         handed to the next shift's operator must not keep buzzing with the
+         last one's seat. */
+      await forgetSessionDevices(sessionId);
       await deleteSession(sessionId);
       cookie[SESSION_COOKIE]!.remove();
       return { ok: true };
