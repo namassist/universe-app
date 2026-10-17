@@ -49,9 +49,17 @@ describe("behind a trusted proxy (TRUST_PROXY=true)", () => {
       expect(clientIp(request(forwarded), server)).toBeNull();
   });
 
-  test("with no header the socket address is the answer", () => {
+  test("with no header there is no address, not the socket's", () => {
+    // Behind the proxy, a request without the header did not come through it:
+    // the socket is then some other container on the compose network, whose
+    // private address would read as the site.
     process.env.TRUST_PROXY = "true";
-    expect(clientIp(request(), server)).toBe(SOCKET);
+    expect(clientIp(request(), server)).toBeNull();
+  });
+
+  test("an empty header is no address either", () => {
+    process.env.TRUST_PROXY = "true";
+    expect(clientIp(request(" "), server)).toBeNull();
   });
 });
 

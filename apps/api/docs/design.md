@@ -96,6 +96,45 @@ Consequences, all deliberate:
   until someone decides otherwise.
 - Administrators are still made by hand. Raising a role is the only account
   work left in the Users screen.
+- **From outside the site, D10 does not apply** (D11): login provisions
+  nothing there, and an account still on the issued password is refused.
+
+## D11 — The login is reachable from the internet, so its budget is spent first
+
+Owner, 2026-10-17: the installation is opened through a Cloudflare Tunnel
+(`docs/deploy.md`, _Opening the installation to the internet_). Until then the
+person login had no throttle and D10's issued password was only as exposed as
+the LAN. Three rules now hold:
+
+- **Two guess budgets** (`auth/login-throttle.ts`): 10 failures per address,
+  everywhere, and 10 per account from outside the site, each per 15 minutes.
+  An attempt is reserved in Redis **before** the account is read or the
+  password verified, as the Operations Center's is. Success clears the
+  account budget and refunds its own attempt to the address, so a carrier's
+  CGNAT or an office never runs out on correct logins. It does not clear the
+  address's earlier failures, or a guesser holding one real account would
+  reset his own every ninth try. The account budget is not spent or checked
+  on site, so an outsider can exhaust it but cannot lock its owner out at the
+  muster. The price, accepted: whoever knows a NIK can keep that person's
+  off-site login refused.
+- **A first login happens on site** (`auth/site-network.ts`): provisioning, or
+  an account with `mustChangePassword`, from an address outside
+  `SITE_NETWORKS` (default: private ranges and loopback) is a 403
+  `first_login_on_site`. It is only said after the right password, so a wrong
+  one still reads as `invalid_credentials`. A missing or unreadable address
+  is outside.
+- **At most four argon2 verifications at once** (`auth/password.ts`), shared by
+  the person and Operations Center logins. A finishing call hands its slot to
+  the next waiter directly, so a newcomer cannot slip in between.
+
+The address is `clientIp`'s. Behind the proxy, a request with no
+`X-Forwarded-For` has none, rather than its socket's, which would be another
+container's private address and read as the site. The address is only the
+client's own because Caddy writes
+`X-Forwarded-For` itself on both listeners: the peer on the LAN one, Cloudflare's
+`CF-Connecting-IP` on the tunnel one (`deploy/Caddyfile`). Behind cloudflared
+without that, every request would carry cloudflared's address, and one
+person's typos would lock out everyone at once.
 
 ## D11 — The PLAN import saves a default; Reset applies it
 

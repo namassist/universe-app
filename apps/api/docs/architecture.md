@@ -26,7 +26,9 @@ src/
     session.ts    # Redis-backed sessions, httpOnly cookie
     principal.ts  # who is calling (user or kiosk device)
     scope.ts      # all / dept / self scope resolution
-    password.ts   # hashing
+    password.ts   # hashing; verification bounded to four at once
+    login-throttle.ts # per-address and per-account login budgets (D11)
+    site-network.ts   # SITE_NETWORKS: whether an address is the site (D11)
   ops/
     session.ts    # Operations Center password sessions + login lockout
     metrics.ts    # per-request counters, slow/error lists, user activity (Redis)

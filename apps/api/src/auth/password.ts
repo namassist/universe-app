@@ -9,8 +9,33 @@ export function hashPassword(plain: string): Promise<string> {
   return Bun.password.hash(plain);
 }
 
-export function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  return Bun.password.verify(plain, hash);
+/**
+ * At most this many argon2 verifications at once, across every login. Each
+ * takes ~64 MB and tens of milliseconds by design; a burst against a login
+ * the internet can reach must queue rather than take the API's memory with
+ * it (security review, 2026-10-02, first for the Operations Center).
+ */
+const MAX_CONCURRENT_VERIFIES = 4;
+let verifying = 0;
+const waiting: (() => void)[] = [];
+
+export async function verifyPassword(
+  plain: string,
+  hash: string
+): Promise<boolean> {
+  // A finishing call hands its slot straight to the next waiter rather than
+  // freeing it: freed, a newcomer could take it in the microtask before the
+  // waiter resumed, and five would run (code review, 2026-10-17).
+  if (verifying >= MAX_CONCURRENT_VERIFIES)
+    await new Promise<void>((resolve) => waiting.push(resolve));
+  else verifying++;
+  try {
+    return await Bun.password.verify(plain, hash);
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else verifying--;
+  }
 }
 
 /**
