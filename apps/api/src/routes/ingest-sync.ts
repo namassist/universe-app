@@ -24,16 +24,19 @@ import {
   lte,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import type {
   EmployeeStatus,
   RosterCode,
+  SessionPrincipal,
   ShiftKind,
 } from "@universe/contracts";
 import ExcelJS from "exceljs";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
+import { nikInScope } from "../auth/scope";
 import { db, schema } from "../db";
 import { rosterDayInForce } from "../roster-in-force";
 import { ingestDates, syncFtwReadings } from "../ingest";
@@ -241,7 +244,11 @@ async function rosterCodesIn(
   return byPersonDay;
 }
 
-async function unfiledRows(from: string, to: string): Promise<FtwListRow[]> {
+async function unfiledRows(
+  from: string,
+  to: string,
+  scope: SQL
+): Promise<FtwListRow[]> {
   const rostered = await db
     .select({
       nik: schema.employees.nik,
@@ -274,7 +281,8 @@ async function unfiledRows(from: string, to: string): Promise<FtwListRow[]> {
         gte(schema.rosterDays.date, from),
         lte(schema.rosterDays.date, to),
         inArray(schema.rosterDays.code, ["D", "N"]),
-        rosterDayInForce
+        rosterDayInForce,
+        scope
       )
     );
   if (!rostered.length) return [];
@@ -364,7 +372,16 @@ async function employeeStatusOf(
  * The list both the screen and its export read: the range's uploads, each
  * flagged late or not, followed by the unfiled — newest day first, then name.
  */
-async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
+/**
+ * `scope` is the caller's, as `nikInScope` builds it against the readings'
+ * NIK: every query below names only the people the caller may see, so the
+ * list and its export cannot answer for anyone else.
+ */
+async function ftwListRows(
+  from: string,
+  to: string,
+  scope: { readings: SQL; register: SQL }
+): Promise<FtwListRow[]> {
   /*
    * Which gate a reading is judged against.
    *
@@ -394,7 +411,8 @@ async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
       .where(
         and(
           gte(schema.ftwReadings.date, from),
-          lte(schema.ftwReadings.date, to)
+          lte(schema.ftwReadings.date, to),
+          scope.readings
         )
       ),
     rosterCodesIn(from, to),
@@ -421,7 +439,7 @@ async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
       employeeStatus: null,
       inductionHold: false,
     })),
-    ...(await unfiledRows(from, to)),
+    ...(await unfiledRows(from, to, scope.register)),
   ];
 
   const status = await employeeStatusOf([...new Set(rows.map((r) => r.nik))]);
@@ -435,6 +453,22 @@ async function ftwListRows(from: string, to: string): Promise<FtwListRow[]> {
     (a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name)
   );
 }
+
+/** The caller's scope over a reading's NIK and over the register's. */
+async function readingScope(
+  principal: SessionPrincipal,
+  readingNik: typeof schema.ftwReadings.nik | typeof schema.fingerReadings.nik
+): Promise<{ readings: SQL; register: SQL }> {
+  const [readings, register] = await Promise.all([
+    nikInScope(principal, readingNik),
+    nikInScope(principal, schema.employees.nik),
+  ]);
+  return { readings, register };
+}
+const ftwScope = (principal: SessionPrincipal) =>
+  readingScope(principal, schema.ftwReadings.nik);
+const attendanceScope = (principal: SessionPrincipal) =>
+  readingScope(principal, schema.fingerReadings.nik);
 
 const MAX_RANGE_DAYS = 62;
 
@@ -470,13 +504,13 @@ export const fitToWorkSyncRoutes = new Elysia({
 
   .get(
     "/",
-    async ({ query, status }) => {
+    async ({ query, principal, status }) => {
       const { from, to } = query;
       const span = rangeDays(from, to);
       if (span < 1 || span > MAX_RANGE_DAYS) return status(422, invalidRange);
 
       return {
-        rows: await ftwListRows(from, to),
+        rows: await ftwListRows(from, to, await ftwScope(principal)),
         lastSyncedAt: await lastSyncedAt(schema.ftwReadings),
       };
     },
@@ -505,12 +539,14 @@ export const fitToWorkSyncRoutes = new Elysia({
    */
   .get(
     "/export",
-    async ({ query, status }) => {
+    async ({ query, principal, status }) => {
       const { from, to } = query;
       const span = rangeDays(from, to);
       if (span < 1 || span > MAX_RANGE_DAYS) return status(422, invalidRange);
 
-      const rows = (await ftwListRows(from, to)).filter((r) => {
+      const rows = (
+        await ftwListRows(from, to, await ftwScope(principal))
+      ).filter((r) => {
         if (query.company && r.company !== query.company) return false;
         if (query.department && r.department !== query.department) return false;
         if (query.shift && halfOf(r) !== query.shift) return false;
@@ -634,7 +670,11 @@ export const fitToWorkSyncRoutes = new Elysia({
  * still a fact about the morning. Those rows carry a null `rosterCode`, which
  * is *not* the same claim as a roster that disagrees — see `AttendanceReading`.
  */
-async function attendanceRows(from: string, to: string) {
+async function attendanceRows(
+  from: string,
+  to: string,
+  scope: { readings: SQL; register: SQL }
+) {
   /*
    * Only the active document. The previous reading joined `roster_days`
    * without it, so a month that had been re-uploaded held two rows per
@@ -672,7 +712,8 @@ async function attendanceRows(from: string, to: string) {
       and(
         gte(schema.rosterDays.date, from),
         lte(schema.rosterDays.date, to),
-        rosterDayInForce
+        rosterDayInForce,
+        scope.register
       )
     );
 
@@ -712,6 +753,7 @@ async function attendanceRows(from: string, to: string) {
       and(
         gte(schema.fingerReadings.date, from),
         lte(schema.fingerReadings.date, to),
+        scope.readings,
         /* An OUT with no IN of either half is no longer a row of its own: it
            is the tail of a shift whose own row lives on the previous date. */
         or(
@@ -927,13 +969,13 @@ export const attendanceSyncRoutes = new Elysia({
 
   .get(
     "/",
-    async ({ query, status }) => {
+    async ({ query, principal, status }) => {
       const { from, to } = query;
       const span = rangeDays(from, to);
       if (span < 1 || span > MAX_RANGE_DAYS) return status(422, invalidRange);
 
       return {
-        rows: await attendanceRows(from, to),
+        rows: await attendanceRows(from, to, await attendanceScope(principal)),
         lastSyncedAt: await lastSyncedAt(schema.fingerReadings),
       };
     },
@@ -953,12 +995,14 @@ export const attendanceSyncRoutes = new Elysia({
   /** The taps as a spreadsheet — the screen's filters travel with it. */
   .get(
     "/export",
-    async ({ query, status }) => {
+    async ({ query, principal, status }) => {
       const { from, to } = query;
       const span = rangeDays(from, to);
       if (span < 1 || span > MAX_RANGE_DAYS) return status(422, invalidRange);
 
-      const rows = (await attendanceRows(from, to)).filter((r) => {
+      const rows = (
+        await attendanceRows(from, to, await attendanceScope(principal))
+      ).filter((r) => {
         if (query.company && r.company !== query.company) return false;
         if (query.department && r.department !== query.department) return false;
         if (query.roster && r.rosterCode !== query.roster) return false;
