@@ -1,8 +1,8 @@
 /**
- * Seeds the six established roles, their permission rows, a bootstrap
+ * Seeds the seven established roles, their permission rows, a bootstrap
  * superadmin, and the two kiosks that have no admin UI.
  *
- * Idempotent, and deliberately conservative about re-runs: the five editable
+ * Idempotent, and deliberately conservative about re-runs: the six editable
  * roles are seeded only when absent, so re-running never clobbers a permission
  * an administrator changed through the Roles screen. `superadmin` is the
  * exception — it is `locked`, its grant on every menu is an invariant rather
@@ -36,7 +36,7 @@ type RoleSeed = {
   manage: MenuSlug[];
 };
 
-const ROLE_SEEDS: RoleSeed[] = [
+export const ROLE_SEEDS: RoleSeed[] = [
   {
     slug: "superadmin",
     name: "Superadmin",
@@ -151,6 +151,28 @@ const ROLE_SEEDS: RoleSeed[] = [
     locked: false,
     view: ["dashboard", "employees", "roster-data", "attendance"],
     manage: ["fit-to-work"],
+  },
+  {
+    /* The field supervisor, on the mobile app (owner, 2026-10-17): who holds
+       which unit, how the units stand, how the muster went. Every formation,
+       so scope `all`; and nothing to change, because placing somebody by hand
+       is Superadmin's. Seeded like the others: created where absent, left
+       alone where an administrator has since edited it. */
+    slug: "pengawas-lapangan",
+    name: "Pengawas Lapangan",
+    description:
+      "Pengawas lapangan — lihat papan alokasi, status unit, laporan",
+    scope: "all",
+    locked: false,
+    view: [
+      "fleet-allocation",
+      "unit-status",
+      "dashboard",
+      "report",
+      "scan-id",
+      "notifications",
+    ],
+    manage: [],
   },
 ];
 
@@ -559,7 +581,7 @@ async function wipeWorkforce(): Promise<void> {
 }
 
 /**
- * Everything a *real* installation needs and nothing it does not: the six
+ * Everything a *real* installation needs and nothing it does not: the seven
  * roles, their grants, the superadmin who can log in and create everyone else,
  * and the two kiosks that have no admin UI.
  *
