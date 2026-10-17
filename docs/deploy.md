@@ -20,8 +20,8 @@ should be able to state out loud: at login, the password crosses the network in
 clear text, and a session cookie can be copied off the wire and replayed by
 anyone on the same network. That is survivable on a closed LAN with a handful
 of known accounts. It is not survivable once real payroll-adjacent accounts
-exist. See "Adding TLS later" at the end — the change is small, and everything
-here was built so it stays small.
+exist. See "Opening the installation to the internet" near the end. It adds
+HTTPS on the LAN and the way in from outside together.
 
 ## Before you start
 
@@ -176,6 +176,14 @@ docker compose build
 docker compose up -d
 ```
 
+The proxy is a built image too (`deploy/caddy/`, Caddy plus its Cloudflare DNS
+module), and its build fetches Go modules. On a network where that hangs, the
+same remedy as for `bun install` below applies:
+`docker build --network=host -t universe-proxy:latest deploy/caddy`. Built
+once, it only needs rebuilding when `deploy/caddy/Dockerfile` changes. Until
+the switch to HTTPS below, the proxy's 443 is bound to loopback only
+(`127.0.0.1:8443`), so a host where something else owns 443 is unaffected.
+
 `migrate` runs again automatically and applies anything new. If the release
 changed `PUBLIC_ORIGIN`, the web image must be rebuilt — see the next section.
 
@@ -290,26 +298,143 @@ cannot be told at all. The screen detects this and says so, and its manual NIK
 field works regardless — a QR reader typing the number into it is a complete
 workaround at a desk.
 
-Terminating TLS in front of the app — the tunnel, or the section below — is
-what makes the camera work. Nothing in the application changes.
+Serving the domain over HTTPS (_Opening the installation to the internet_,
+below) is what makes the camera work. Nothing in the application changes.
 
-## Adding TLS later
+## Opening the installation to the internet
 
-Everything here was arranged so this stays a small change:
+Owner's decision (2026-10-17, `docs/prd.md` → _Network: reaching the API from
+a phone_): everything is reachable from outside the site, so the mobile app
+works off site and the installation can be watched from home. The way in is a
+**Cloudflare Tunnel** to a domain: the server opens an outbound connection,
+the site opens no port and publishes no address. On site, **split DNS** keeps
+the same domain on the LAN, so walls and booths never depend on the site's
+internet uplink.
 
-1. Give the server a hostname and a certificate — an internal CA is enough on a
-   closed network, and Caddy will do Let's Encrypt on its own if the host is
-   publicly resolvable.
-2. In `deploy/Caddyfile`, replace `:80` with that hostname; Caddy handles the
-   redirect and, for a public name, the certificate.
-3. Set `COOKIE_SECURE=true` on the `api` service, and publish 443 as well as 80.
-4. Update `PUBLIC_ORIGIN` to `https://…` and **rebuild the web image**.
+```
+off site:  phone ── https ── Cloudflare ── tunnel ── cloudflared ── proxy:8080 ─┐
+on site:   PC/TV ── https (split DNS → server's LAN IP) ──────────── proxy:443 ─┴─ api / web
+```
 
-Step 3 matters and is easy to get backwards: a browser silently discards a
-`Secure` cookie sent over plain HTTP. Turning that flag on before TLS actually
-terminates in front of the API breaks login with no error message anywhere —
-which is why the flag is explicit configuration instead of something derived
-from `NODE_ENV`.
+Both arrive at Caddy (`deploy/Caddyfile`), and each listener writes the
+client's real address into `X-Forwarded-For`: the LAN listener the peer, the
+tunnel listener Cloudflare's `CF-Connecting-IP`. The API keys three things on
+that address: the login lockouts, the first-login rule (below), and the
+integration allow-list. A request reaching `:8080` without `CF-Connecting-IP`
+is refused, and `:8080` is never published on the host.
+
+**What the application enforces once outsiders can reach it:**
+
+- **Login is throttled.** 10 failed attempts per address per 15 minutes,
+  everywhere, and 10 per account per 15 minutes from outside the site. A
+  successful login costs nothing, so many people behind one public address
+  can all log in. An account worn out from outside still logs in on site.
+  The price, accepted: whoever knows a NIK can keep that person's off-site
+  login refused, 15 minutes at a time. NIKs are printed on ID cards.
+- **A first login happens on site.** An account still on the issued password,
+  after provisioning or after an administrator's reset, is refused from
+  outside with "Login pertama harus dari jaringan site", and login creates no
+  account from outside. "The site" is `SITE_NETWORKS`, by default the private
+  ranges and loopback.
+
+### Before the switch
+
+Pick an hour outside both musters: every TV is re-paired at the new address.
+
+1. **The domain is on Cloudflare** (its nameservers point there).
+2. **Port 443 on the server is free for Caddy:** `ss -ltn '( sport = :443 )'`.
+   It must be the real 443, not another port. The LAN and the tunnel have to
+   be one origin, and Cloudflare serves the domain on 443.
+3. **Caddy sees each LAN client's own address.** From two PCs on site, open
+   the app, then compare `docker compose logs proxy`: each request shows its
+   PC's address. If both show one `172.x` address, Docker is masking sources
+   (userland proxy, rootless Docker), every PC on site shares one login
+   budget, and nothing on site reads as the site. Fix Docker first.
+4. **Strong passwords.** Change the superadmin's password (`/change-password`), and set a
+   new `OPS_PASSWORD_HASH` (`bun run ops:hash`) if the Operations Center is
+   on. Both were chosen for a closed LAN. The integration tokens are random
+   and need nothing.
+5. **Tell people.** Accounts that have never logged in, and accounts reset
+   by an administrator, can only make their first login on site.
+
+### In the Cloudflare dashboard
+
+1. **API token** (My Profile → API Tokens): template _Edit zone DNS_,
+   restricted to this one zone. It goes in `CLOUDFLARE_API_TOKEN`; Caddy uses
+   it only to prove it owns the domain for the certificate.
+2. **Tunnel** (Zero Trust → Networks → Tunnels → Create, type _Cloudflared_).
+   Copy its token into `TUNNEL_TOKEN`. Add a **public hostname**: the domain,
+   service `HTTP`, URL `proxy:8080`.
+3. **SSL/TLS → Edge Certificates:** _Always Use HTTPS_ on. The tunnel listener
+   tells the app the browser used HTTPS, which is only true with this on.
+4. **Security → WAF → Rate limiting rules:** one rule for
+   `URI Path equals /v1/auth/login` (and `/v1/ops/session`, the Operations Center's), 20 requests per
+   minute per IP, action _Block_ for 10 minutes. It drops a flood at the edge
+   before it costs the server an argon2 verify per request.
+
+### On the site network
+
+**Split DNS:** in the DNS server the site's machines use (the router, or the
+office domain controller), add an A record for the domain pointing at the
+server's LAN address. Check from a PC on site: `nslookup <domain>` answers the
+LAN address. Off site, it answers Cloudflare. Without this, every screen on
+site goes out to the internet and back, and the walls go dark when the
+uplink does.
+
+### On the server
+
+In `deploy/.env`:
+
+```sh
+PUBLIC_ORIGIN=https://universe.example.co.id
+SITE_ADDRESS=universe.example.co.id
+SITE_TLS=cloudflare
+COOKIE_SECURE=true
+HTTPS_PORT=443
+CLOUDFLARE_API_TOKEN=...
+TUNNEL_TOKEN=...
+# SITE_NETWORKS=192.168.0.0/16   # only if the default private ranges are wrong
+```
+
+Then rebuild the web bundle (it carries `PUBLIC_ORIGIN`) and the proxy, and
+start with the tunnel:
+
+```sh
+docker build --network=host -t universe-proxy:latest deploy/caddy
+docker build --network=host -f apps/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_API_URL=https://universe.example.co.id \
+  -t universe-web:latest .
+cd deploy && docker compose --profile tunnel up -d
+```
+
+`COOKIE_SECURE=true` goes with `SITE_TLS=cloudflare` and never before it: a
+browser silently discards a `Secure` cookie sent over plain HTTP, and login
+then fails with no error message anywhere. That is why the flag is explicit
+configuration instead of something derived from `NODE_ENV`.
+
+### Check it
+
+- `docker compose logs proxy | grep -i certificate` shows the certificate
+  obtained. The first one can take a minute.
+- On site, `https://<domain>` opens with a valid padlock, and login works.
+- Off site, on mobile data, the same. Then log into the Operations Center
+  from each: the API log's `[ops] session opened from …` line shows the LAN
+  address on site and your public address off site. If it shows one fixed
+  `172.x` address for both, the forwarded address is not getting through,
+  and the lockouts would lock everybody out at once. Stop and fix that first.
+- An account still on the issued password is refused off site and accepted
+  on site.
+- **Re-pair every TV** at `https://<domain>`. The old `http://<IP>` address no
+  longer answers, and a TV's pairing belonged to that origin. An old TV
+  browser that does not trust Let's Encrypt's root shows a certificate
+  error; that box needs a newer browser.
+
+### Going back
+
+Set `SITE_ADDRESS`, `SITE_TLS` and `COOKIE_SECURE` back (or delete them),
+`PUBLIC_ORIGIN` back to the `http://` address, rebuild the web image, and
+`docker compose up -d` without the profile. Then
+`docker compose stop tunnel`, or delete the tunnel in the dashboard.
 
 ## If `bun install` hangs during the build
 

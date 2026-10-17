@@ -1,0 +1,11 @@
+# SITE_TLS=cloudflare: SITE_ADDRESS is the public domain, served HTTPS on the
+# LAN with a Let's Encrypt certificate proven through a Cloudflare DNS record,
+# so no inbound port is opened for it. The token needs Zone:DNS:Edit on that
+# zone and nothing more.
+#
+# Public resolvers for the challenge check: on a split-DNS site the local
+# resolver answers the domain itself and would never show the TXT record.
+tls {
+	dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	resolvers 1.1.1.1 1.0.0.1
+}

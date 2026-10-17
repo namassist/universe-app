@@ -419,15 +419,16 @@ types from Eden and OpenAPI instead.
 
 ## Not done yet
 
-- **TLS, and the deployment target it depends on.** On-site LAN or cloud is
-  still open, and TLS with it. This is what `COOKIE_SECURE` is waiting on: the
-  flag is explicit configuration rather than a derivation of `NODE_ENV`,
-  because a browser silently discards a `Secure` cookie over plain HTTP, so
-  tying it to the environment would break login in exactly the setup that
-  needs it most. Until TLS terminates in front of the API, passwords cross the
-  network in the clear at login and a session cookie can be copied and
-  replayed by anyone on the same network. An internal CA is sufficient on a
-  closed network; this should land before real accounts exist.
+- **TLS is built but not yet switched on.** The target is decided: on site,
+  opened to the internet through a Cloudflare Tunnel, with the same domain
+  served HTTPS on the LAN through split DNS (`docs/deploy.md`, _Opening the
+  installation to the internet_). Until an installation makes that switch,
+  passwords cross the network in the clear at login, and a session cookie can
+  be copied and replayed by anyone on the same network. `COOKIE_SECURE` is
+  turned on with the switch and not before: it is explicit configuration
+  rather than a derivation of `NODE_ENV`, because a browser silently discards
+  a `Secure` cookie over plain HTTP, so tying it to the environment would
+  break login in exactly the setup that needs it most.
 - **Uploads need directories that survive a redeploy.** `SOUND_DIR` and
   `PHOTO_DIR` are explicit configuration for the same reason `COOKIE_SECURE`
   is: the right path depends on how the API is deployed, not on which
