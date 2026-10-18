@@ -60,6 +60,8 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 - Every stage run is also logged to Redis for the Operations Center
   (`ops/stage-log.ts`), with `ok: false` for a refusal or a throw; the
   scheduler's heartbeat is stamped every tick. Logging never blocks a hook.
+  The Operations Center and `GET /v1/timeline/runs` (menu `timeline`, the
+  phone's monitor) read it through the one reader, `ops/muster-stages.ts`.
 - The scheduler ticks once a minute **on second :01** (`msUntilNextTick`),
   so a stage fires about a second after its time, not wherever the last
   restart left the cycle.

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window behind the first frame is the app's ground (DESIGN.md → Neutral). -->
+    <style name="Theme.Universe" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ground</item>
+    </style>
+
+    <color name="ground">#F2F4F7</color>
+    <color name="launcher_navy">#0A2A63</color>
+</resources>

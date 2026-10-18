@@ -1,0 +1,13 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+# Release signing stays out of the repo, and must never be lost: an APK signed
+# with another key cannot update the installed one (docs/prd.md, Mobile app).
+*.jks
+*.keystore
+keystore.properties
+# Firebase client config, per installation.
+google-services.json

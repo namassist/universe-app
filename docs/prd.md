@@ -2805,7 +2805,7 @@ is its own business; Universe provides the read.
   and re-fetches photos only when `version` moves. Consumer guide:
   `docs/integration-api.md`.
 
-## Mobile app — planned
+## Mobile app — operator screens built, staff screens planned
 
 **Goal:** the people a muster is about can see where they stand without
 walking to a wall, and the people who run it can watch it from the pit
@@ -2954,6 +2954,53 @@ D14):
   adds it to an installation without touching the roles there.
 - **Push** goes out through FCM once `FCM_SERVICE_ACCOUNT_FILE` names the
   Firebase service account key. Until then the notices are only in the app.
+
+### The app — operator screens built (stage 3, 2026-10-18)
+
+`apps/mobile`, translated screen for screen from the approved prototype and
+`apps/mobile/DESIGN.md` (`apps/mobile/README.md`). This round was the API
+additions, the foundation and the operator; the rest follows.
+
+- **Built:**
+  - **Sign-in**: NIK and password, `transport: "bearer"`. The session id is
+    kept in the app's private storage, out of backups and device transfer.
+    The API's own sentence is shown for a refusal (wrong password,
+    `first_login_on_site`, `too_many_attempts`). An account still on the
+    issued password can go nowhere but the password change, or log out.
+    A saved session the API no longer knows asks for login again; one that
+    could not be checked offers a retry, not a login.
+  - **Version gate** on every launch, before any session is read; a check
+    that gets no answer blocks nobody.
+  - **Screens from grants**: the bottom bar and the home are chosen from
+    the menus the session holds (`domain/Access.kt`).
+  - **Operator**: Beranda (the unit, SPARE or the roster code at display
+    size, with its status line), Unit saya (badge, reason, the two
+    requirements, the timeline's gates as a rail), Jadwal (the month from
+    the active roster documents), Kartu (the QR holds the NIK, the screen
+    goes to full brightness), Riwayat (unit, FTW and taps over 30 days),
+    Notifikasi (read one, read all), Profil (today's readiness, password,
+    version, Keluar). Every time named on screen is the timeline's, sent by
+    `/v1/me/shift` as `gates`.
+- **API additions for it** (`apps/api/docs/design.md` D14):
+  `GET /v1/timeline/runs` for the Superadmin's monitor; the fleet wall's
+  `GET /v1/fleet-allocation/actual/display` now also opens to the
+  `fleet-allocation` menu, so Papan ACTUAL on the phone is the wall itself.
+  That payload is the whole running shift with names and readiness, not
+  scoped to a department, as the allocation screens are not: allocation is
+  scoped to formations, and a person viewing a wall never is.
+- **Next:** the Pengawas Lapangan screens (Papan, Cari, Status unit, Scan ID),
+  the Superadmin's (Isi, Akun, Monitor timeline), push once the Firebase
+  project exists, and iOS. Until then a Pengawas or Superadmin signs in to a
+  placeholder home that says so, and every bar item not built opens a page
+  that says "belum ada di versi aplikasi ini".
+- **Decided while building:**
+  - The NIK field takes digits only, as the prototype has it. An account
+    that signs in with an email cannot use the app until the staff screens
+    revisit it.
+  - "Notifikasi HP" in Profil says push is not active yet rather than
+    offering a switch that does nothing.
+  - Android builds against SDK 37 (what Compose Multiplatform 1.12 needs) and
+    targets 36.
 
 ### Client stack and distribution
 
