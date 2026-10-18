@@ -53,6 +53,7 @@ const made = {
 let admin: { cookie: string };
 let viewer: { cookie: string };
 let wall: { cookie: string };
+let outsider: { cookie: string };
 let unitA: string, unitB: string;
 let opOne: string, opTwo: string;
 let nikOne: string, nikTwo: string;
@@ -71,7 +72,8 @@ const send = (method: string, path: string, cookie?: string, body?: unknown) =>
 
 async function makeUser(
   mode: "view" | "manage",
-  menuSlug: "fleet-allocation" | "display-fleet" = "fleet-allocation"
+  menuSlug:
+    "fleet-allocation" | "display-fleet" | "unit-status" = "fleet-allocation"
 ) {
   const [role] = await db
     .insert(schema.roles)
@@ -101,6 +103,7 @@ beforeAll(async () => {
   admin = await makeUser("manage");
   viewer = await makeUser("view");
   wall = await makeUser("view", "display-fleet");
+  outsider = await makeUser("view", "unit-status");
 
   const [co] = await db
     .insert(schema.companies)
@@ -1529,10 +1532,31 @@ describe("previewing one screen from a browser", () => {
 });
 
 describe("the fleet wall endpoint", () => {
-  test("refuses a caller who holds only the allocation menu", async () => {
+  test("answers a holder of the allocation menu too, as the phone reads it", async () => {
+    /* The mobile app's Papan ACTUAL is this wall, read by a Pengawas Lapangan
+       or a Superadmin (docs/prd.md, Mobile app): the phone and the TV must
+       never disagree about the board. */
     const res = await send(
       "GET",
       "/fleet-allocation/actual/display",
+      viewer.cookie
+    );
+    expect(res.status).toBe(200);
+  });
+
+  test("refuses a caller who holds neither menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      outsider.cookie
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("keeps the operator's photo to the wall's own menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display/photo/99120000",
       viewer.cookie
     );
     expect(res.status).toBe(403);

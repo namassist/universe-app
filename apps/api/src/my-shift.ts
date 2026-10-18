@@ -16,7 +16,7 @@
  */
 
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
-import type { ShiftKind } from "@universe/contracts";
+import type { ShiftKind, TimelineAction } from "@universe/contracts";
 
 import { currentShift, type ShiftNow } from "./current-shift";
 import { db, schema } from "./db";
@@ -183,7 +183,35 @@ export type MyShift = Standing & {
   } | null;
   /** "HH:MM:SS" of the first IN tap of the shift, or null. */
   checkInAt: string | null;
+  /**
+   * The shift's gates as "HH:MM", or null where the timeline has none: what
+   * the phone says "before 05:25" or "at 05:28" with, read from the same
+   * stages the scheduler runs rather than guessed.
+   */
+  gates: ShiftGateTimes;
 };
+
+export type ShiftGateTimes = {
+  ftwDeadline: string | null;
+  fingerIn: string | null;
+  board: string | null;
+  secondFinger: string | null;
+  busDepart: string | null;
+};
+
+async function gateTimes(shift: ShiftKind): Promise<ShiftGateTimes> {
+  const at = async (action: TimelineAction) =>
+    (await stageTimeOf(action, shift))?.slice(0, 5) ?? null;
+  const [ftwDeadline, fingerIn, board, secondFinger, busDepart] =
+    await Promise.all([
+      at("ftw-deadline"),
+      at("finger-in"),
+      at("spare-validate"),
+      at("finger-second"),
+      at("bus-depart"),
+    ]);
+  return { ftwDeadline, fingerIn, board, secondFinger, busDepart };
+}
 
 /**
  * The answer for one NIK, now. Null when the timeline cannot say which shift
@@ -206,8 +234,8 @@ export async function myShift(nik: string, now: Date): Promise<MyShift | null> {
     person.statusValue === "aktif" &&
     person.fleetAllocation === true;
 
-  const [plan, board, secondFingerAt, ftwGate, ftwRow, tap] = await Promise.all(
-    [
+  const [plan, board, secondFingerAt, ftwGate, ftwRow, tap, gates] =
+    await Promise.all([
       person ? planFacts(person, target, localDate(now)) : null,
       boardFacts(nik, target),
       stageTimeOf("finger-second", target.shift),
@@ -224,8 +252,8 @@ export async function myShift(nik: string, now: Date): Promise<MyShift | null> {
         .limit(1)
         .then((rows) => rows[0] ?? null),
       firstTapOf(nik, target.date, target.shift),
-    ]
-  );
+      gateTimes(target.shift),
+    ]);
 
   // No `finger-second` stage means no slip is printed (`issueTicket`
   // refuses), so a spare's seat stays unsaid here too.
@@ -256,6 +284,7 @@ export async function myShift(nik: string, now: Date): Promise<MyShift | null> {
         }
       : null,
     checkInAt: tap ? tap.slice(11, 19) : null,
+    gates,
   };
 }
 

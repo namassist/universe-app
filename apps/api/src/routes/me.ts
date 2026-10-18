@@ -85,11 +85,19 @@ const MyShiftSchema = t.Object({
         ])
       ),
       sentAt: t.Nullable(t.String()),
-      sleepMinutes: t.Nullable(t.Number()),
+      sleepMinutes: t.Nullable(t.Integer()),
       category: t.Nullable(t.String()),
     })
   ),
   checkInAt: t.Nullable(t.String()),
+  /** "HH:MM" per gate of that shift, null where the timeline has none. */
+  gates: t.Object({
+    ftwDeadline: t.Nullable(t.String()),
+    fingerIn: t.Nullable(t.String()),
+    board: t.Nullable(t.String()),
+    secondFinger: t.Nullable(t.String()),
+    busDepart: t.Nullable(t.String()),
+  }),
 });
 
 const PersonNotificationSchema = t.Object({
@@ -278,7 +286,7 @@ export const meRoutes = new Elysia({ prefix: "/me", tags: ["me"] })
       response: {
         200: t.Object({
           items: t.Array(PersonNotificationSchema),
-          unread: t.Number(),
+          unread: t.Integer(),
         }),
         401: ErrorSchema,
         403: ErrorSchema,

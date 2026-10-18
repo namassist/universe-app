@@ -1,0 +1,2693 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Universe Mobile API",
+    "description": "Development documentation",
+    "version": "1.0.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "session": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The `sessionId` a login with `transport: bearer` returns"
+      }
+    },
+    "schemas": {}
+  },
+  "paths": {
+    "/v1/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Log in with an email or a NIK",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["identifier", "password"],
+                "properties": {
+                  "identifier": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "enum": ["cookie", "bearer"]
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["identifier", "password"],
+                "properties": {
+                  "identifier": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "enum": ["cookie", "bearer"]
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["identifier", "password"],
+                "properties": {
+                  "identifier": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "enum": ["cookie", "bearer"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["principal", "permissions"],
+                  "properties": {
+                    "principal": {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "name",
+                        "email",
+                        "nik",
+                        "roleId",
+                        "roleName",
+                        "scope",
+                        "mustChangePassword"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "nik": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "roleId": {
+                          "type": "string"
+                        },
+                        "roleName": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string"
+                        },
+                        "mustChangePassword": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "permissions": {
+                      "type": "object",
+                      "properties": {
+                        "dashboard": {
+                          "type": "string"
+                        },
+                        "display-attendance": {
+                          "type": "string"
+                        },
+                        "display-fleet": {
+                          "type": "string"
+                        },
+                        "display-fitwork": {
+                          "type": "string"
+                        },
+                        "monitoring-fingerprint": {
+                          "type": "string"
+                        },
+                        "monitoring-tap": {
+                          "type": "string"
+                        },
+                        "scan-id": {
+                          "type": "string"
+                        },
+                        "employees": {
+                          "type": "string"
+                        },
+                        "roster-data": {
+                          "type": "string"
+                        },
+                        "roster-correction": {
+                          "type": "string"
+                        },
+                        "attendance": {
+                          "type": "string"
+                        },
+                        "tiket": {
+                          "type": "string"
+                        },
+                        "fit-to-work": {
+                          "type": "string"
+                        },
+                        "unit-status": {
+                          "type": "string"
+                        },
+                        "fleet-allocation": {
+                          "type": "string"
+                        },
+                        "fleet-setting": {
+                          "type": "string"
+                        },
+                        "allocation-priority": {
+                          "type": "string"
+                        },
+                        "report": {
+                          "type": "string"
+                        },
+                        "database-unit": {
+                          "type": "string"
+                        },
+                        "jenis-unit": {
+                          "type": "string"
+                        },
+                        "model-unit": {
+                          "type": "string"
+                        },
+                        "merk-unit": {
+                          "type": "string"
+                        },
+                        "kelas-unit": {
+                          "type": "string"
+                        },
+                        "simper": {
+                          "type": "string"
+                        },
+                        "kode-simper": {
+                          "type": "string"
+                        },
+                        "departemen": {
+                          "type": "string"
+                        },
+                        "bus": {
+                          "type": "string"
+                        },
+                        "mess": {
+                          "type": "string"
+                        },
+                        "perusahaan": {
+                          "type": "string"
+                        },
+                        "jabatan": {
+                          "type": "string"
+                        },
+                        "running-text": {
+                          "type": "string"
+                        },
+                        "sound": {
+                          "type": "string"
+                        },
+                        "timeline": {
+                          "type": "string"
+                        },
+                        "mesin-fingerprint": {
+                          "type": "string"
+                        },
+                        "mesin-printer": {
+                          "type": "string"
+                        },
+                        "users": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "type": "string"
+                        },
+                        "setting": {
+                          "type": "string"
+                        },
+                        "notifications": {
+                          "type": "string"
+                        },
+                        "integrations": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response for status 429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1AuthLogin"
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "End the current session",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok"],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1AuthLogout"
+      }
+    },
+    "/v1/auth/session": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "The caller's principal and effective permissions",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["principal", "permissions"],
+                  "properties": {
+                    "principal": {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "name",
+                        "email",
+                        "nik",
+                        "roleId",
+                        "roleName",
+                        "scope",
+                        "mustChangePassword"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "nik": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "roleId": {
+                          "type": "string"
+                        },
+                        "roleName": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string"
+                        },
+                        "mustChangePassword": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "permissions": {
+                      "type": "object",
+                      "properties": {
+                        "dashboard": {
+                          "type": "string"
+                        },
+                        "display-attendance": {
+                          "type": "string"
+                        },
+                        "display-fleet": {
+                          "type": "string"
+                        },
+                        "display-fitwork": {
+                          "type": "string"
+                        },
+                        "monitoring-fingerprint": {
+                          "type": "string"
+                        },
+                        "monitoring-tap": {
+                          "type": "string"
+                        },
+                        "scan-id": {
+                          "type": "string"
+                        },
+                        "employees": {
+                          "type": "string"
+                        },
+                        "roster-data": {
+                          "type": "string"
+                        },
+                        "roster-correction": {
+                          "type": "string"
+                        },
+                        "attendance": {
+                          "type": "string"
+                        },
+                        "tiket": {
+                          "type": "string"
+                        },
+                        "fit-to-work": {
+                          "type": "string"
+                        },
+                        "unit-status": {
+                          "type": "string"
+                        },
+                        "fleet-allocation": {
+                          "type": "string"
+                        },
+                        "fleet-setting": {
+                          "type": "string"
+                        },
+                        "allocation-priority": {
+                          "type": "string"
+                        },
+                        "report": {
+                          "type": "string"
+                        },
+                        "database-unit": {
+                          "type": "string"
+                        },
+                        "jenis-unit": {
+                          "type": "string"
+                        },
+                        "model-unit": {
+                          "type": "string"
+                        },
+                        "merk-unit": {
+                          "type": "string"
+                        },
+                        "kelas-unit": {
+                          "type": "string"
+                        },
+                        "simper": {
+                          "type": "string"
+                        },
+                        "kode-simper": {
+                          "type": "string"
+                        },
+                        "departemen": {
+                          "type": "string"
+                        },
+                        "bus": {
+                          "type": "string"
+                        },
+                        "mess": {
+                          "type": "string"
+                        },
+                        "perusahaan": {
+                          "type": "string"
+                        },
+                        "jabatan": {
+                          "type": "string"
+                        },
+                        "running-text": {
+                          "type": "string"
+                        },
+                        "sound": {
+                          "type": "string"
+                        },
+                        "timeline": {
+                          "type": "string"
+                        },
+                        "mesin-fingerprint": {
+                          "type": "string"
+                        },
+                        "mesin-printer": {
+                          "type": "string"
+                        },
+                        "users": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "type": "string"
+                        },
+                        "setting": {
+                          "type": "string"
+                        },
+                        "notifications": {
+                          "type": "string"
+                        },
+                        "integrations": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1AuthSession"
+      }
+    },
+    "/v1/auth/change-password": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Set a new password for the current account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPassword", "newPassword"],
+                "properties": {
+                  "currentPassword": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPassword", "newPassword"],
+                "properties": {
+                  "currentPassword": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPassword", "newPassword"],
+                "properties": {
+                  "currentPassword": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok"],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1AuthChange-password"
+      }
+    },
+    "/v1/mobile/version": {
+      "get": {
+        "tags": ["mobile"],
+        "summary": "Whether this app build is still supported",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "default": "android",
+              "type": "string",
+              "enum": ["android", "ios"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "platform",
+                    "minimumBuild",
+                    "latestBuild",
+                    "downloadUrl"
+                  ],
+                  "properties": {
+                    "platform": {
+                      "type": "string"
+                    },
+                    "minimumBuild": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "latestBuild": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "downloadUrl": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1MobileVersion"
+      }
+    },
+    "/v1/me/shift": {
+      "get": {
+        "tags": ["me"],
+        "summary": "My coming shift: holder or spare, why, and my FTW and tap",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["shift"],
+                  "properties": {
+                    "shift": {
+                      "type": "object",
+                      "required": [
+                        "date",
+                        "shift",
+                        "roster",
+                        "phase",
+                        "status",
+                        "reason",
+                        "refusal",
+                        "planUnit",
+                        "seat",
+                        "ftw",
+                        "checkInAt",
+                        "gates"
+                      ],
+                      "properties": {
+                        "date": {
+                          "type": "string"
+                        },
+                        "shift": {
+                          "type": "string"
+                        },
+                        "roster": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "phase": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "refusal": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "planUnit": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "seat": {
+                          "type": "object",
+                          "required": ["unit", "area", "bus", "fleet"],
+                          "properties": {
+                            "unit": {
+                              "type": "string"
+                            },
+                            "area": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "bus": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "fleet": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "nullable": true
+                        },
+                        "ftw": {
+                          "type": "object",
+                          "required": [
+                            "verdict",
+                            "sentAt",
+                            "sleepMinutes",
+                            "category"
+                          ],
+                          "properties": {
+                            "verdict": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "sentAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "sleepMinutes": {
+                              "type": "integer",
+                              "nullable": true
+                            },
+                            "category": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "nullable": true
+                        },
+                        "checkInAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "gates": {
+                          "type": "object",
+                          "required": [
+                            "ftwDeadline",
+                            "fingerIn",
+                            "board",
+                            "secondFinger",
+                            "busDepart"
+                          ],
+                          "properties": {
+                            "ftwDeadline": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "fingerIn": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "board": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "secondFinger": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "busDepart": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          }
+                        }
+                      },
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1MeShift"
+      }
+    },
+    "/v1/me/seats": {
+      "get": {
+        "tags": ["me"],
+        "summary": "The units I held on past boards",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["seats"],
+                  "properties": {
+                    "seats": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "date",
+                          "shift",
+                          "unit",
+                          "area",
+                          "bus",
+                          "fleet",
+                          "source"
+                        ],
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "shift": {
+                            "type": "string"
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "area": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "bus": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "fleet": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1MeSeats"
+      }
+    },
+    "/v1/me/notifications": {
+      "get": {
+        "tags": ["me"],
+        "summary": "My own notifications that have come due",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "unread"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "kind",
+                          "date",
+                          "shift",
+                          "params",
+                          "availableAt",
+                          "readAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "date": {
+                            "type": "string"
+                          },
+                          "shift": {
+                            "type": "string"
+                          },
+                          "params": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "availableAt": {
+                            "type": "string"
+                          },
+                          "readAt": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "unread": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1MeNotifications"
+      }
+    },
+    "/v1/me/notifications/{id}/read": {
+      "post": {
+        "tags": ["me"],
+        "summary": "Mark one of my notifications read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok"],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1MeNotificationsByIdRead"
+      }
+    },
+    "/v1/me/notifications/read-all": {
+      "post": {
+        "tags": ["me"],
+        "summary": "Mark all my due notifications read",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok"],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1MeNotificationsRead-all"
+      }
+    },
+    "/v1/me/push-devices": {
+      "post": {
+        "tags": ["me"],
+        "summary": "Receive pushes on this phone",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "platform"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "type": "string"
+                  },
+                  "platform": {
+                    "default": "android",
+                    "type": "string",
+                    "enum": ["android", "ios"]
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "platform"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "type": "string"
+                  },
+                  "platform": {
+                    "default": "android",
+                    "type": "string",
+                    "enum": ["android", "ios"]
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "platform"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "type": "string"
+                  },
+                  "platform": {
+                    "default": "android",
+                    "type": "string",
+                    "enum": ["android", "ios"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok"],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postV1MePush-devices"
+      },
+      "delete": {
+        "tags": ["me"],
+        "summary": "Stop pushes to this phone",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok"],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "deleteV1MePush-devices"
+      }
+    },
+    "/v1/roster/": {
+      "get": {
+        "tags": ["roster"],
+        "summary": "List roster documents, newest month first",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "departmentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["aktif", "arsip"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "departmentId",
+                      "departmentName",
+                      "month",
+                      "fileName",
+                      "uploadedById",
+                      "uploadedByName",
+                      "status",
+                      "source",
+                      "employeeCount",
+                      "dayCount",
+                      "createdAt"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "departmentId": {
+                        "type": "string"
+                      },
+                      "departmentName": {
+                        "type": "string"
+                      },
+                      "month": {
+                        "type": "string"
+                      },
+                      "fileName": {
+                        "type": "string"
+                      },
+                      "uploadedById": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "uploadedByName": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "employeeCount": {
+                        "type": "integer"
+                      },
+                      "dayCount": {
+                        "type": "integer"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Roster"
+      }
+    },
+    "/v1/roster/{id}/days": {
+      "get": {
+        "tags": ["roster"],
+        "summary": "A page of a roster document's grid",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "days",
+                    "rows",
+                    "total",
+                    "page",
+                    "pageSize",
+                    "summary"
+                  ],
+                  "properties": {
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "employeeId",
+                          "nik",
+                          "name",
+                          "codes",
+                          "corrections"
+                        ],
+                        "properties": {
+                          "employeeId": {
+                            "type": "string"
+                          },
+                          "nik": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "codes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "corrections": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "date",
+                                "fromCode",
+                                "toCode",
+                                "reason",
+                                "createdByName",
+                                "createdAt"
+                              ],
+                              "properties": {
+                                "date": {
+                                  "type": "string"
+                                },
+                                "fromCode": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "toCode": {
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "createdByName": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    },
+                    "summary": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["code", "count"],
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1RosterByIdDays"
+      }
+    },
+    "/v1/employees/{nik}": {
+      "get": {
+        "tags": ["employees"],
+        "summary": "One employee by NIK",
+        "parameters": [
+          {
+            "name": "nik",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "nik",
+                    "name",
+                    "companyId",
+                    "companyName",
+                    "positionId",
+                    "positionName",
+                    "departmentId",
+                    "departmentName",
+                    "messId",
+                    "messName",
+                    "simperTypeId",
+                    "simperTypeName",
+                    "joinDate",
+                    "license",
+                    "simperNo",
+                    "simperExp",
+                    "mcu",
+                    "mcuExp",
+                    "blood",
+                    "medical",
+                    "block",
+                    "room",
+                    "phone",
+                    "emergency",
+                    "photoFileName",
+                    "status",
+                    "inductionHold",
+                    "skills",
+                    "createdAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "nik": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "companyId": {
+                      "type": "string"
+                    },
+                    "companyName": {
+                      "type": "string"
+                    },
+                    "positionId": {
+                      "type": "string"
+                    },
+                    "positionName": {
+                      "type": "string"
+                    },
+                    "departmentId": {
+                      "type": "string"
+                    },
+                    "departmentName": {
+                      "type": "string"
+                    },
+                    "messId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "messName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "simperTypeId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "simperTypeName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "joinDate": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "license": {
+                      "type": "string"
+                    },
+                    "simperNo": {
+                      "type": "string"
+                    },
+                    "simperExp": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "mcu": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "mcuExp": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blood": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "medical": {
+                      "type": "string"
+                    },
+                    "block": {
+                      "type": "string"
+                    },
+                    "room": {
+                      "type": "string"
+                    },
+                    "phone": {
+                      "type": "string"
+                    },
+                    "emergency": {
+                      "type": "string"
+                    },
+                    "photoFileName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "inductionHold": {
+                      "type": "boolean"
+                    },
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["id", "name"],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1EmployeesByNik"
+      }
+    },
+    "/v1/fit-to-work/": {
+      "get": {
+        "tags": ["fit-to-work"],
+        "summary": "FTW verdict snapshots for a date range",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["rows", "lastSyncedAt"],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "nik",
+                          "date",
+                          "name",
+                          "company",
+                          "department",
+                          "position",
+                          "mess",
+                          "shift",
+                          "sleepMinutes",
+                          "sleepCategory",
+                          "ftwDecision",
+                          "sentAt",
+                          "late",
+                          "rosterShift",
+                          "rosterCode",
+                          "employeeStatus",
+                          "inductionHold"
+                        ],
+                        "properties": {
+                          "nik": {
+                            "type": "string"
+                          },
+                          "date": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "company": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "department": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "position": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "mess": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "shift": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "sleepMinutes": {
+                            "type": "integer"
+                          },
+                          "sleepCategory": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "ftwDecision": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "sentAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "late": {
+                            "type": "boolean"
+                          },
+                          "rosterShift": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "rosterCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "employeeStatus": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "inductionHold": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Fit-to-work"
+      }
+    },
+    "/v1/attendance/": {
+      "get": {
+        "tags": ["attendance"],
+        "summary": "Fingerprint tap snapshots for a date range",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["rows", "lastSyncedAt"],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "nik",
+                          "date",
+                          "name",
+                          "department",
+                          "position",
+                          "company",
+                          "rosterCode",
+                          "firstInAt",
+                          "firstInIp",
+                          "firstInMachine",
+                          "late"
+                        ],
+                        "properties": {
+                          "nik": {
+                            "type": "string"
+                          },
+                          "date": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "department": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "position": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "company": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "rosterCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "firstInAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "firstInIp": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "firstInMachine": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "late": {
+                            "type": "boolean",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Attendance"
+      }
+    }
+  }
+}

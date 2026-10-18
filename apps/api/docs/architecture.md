@@ -39,6 +39,7 @@ src/
     session.ts    # Operations Center password sessions + login lockout
     metrics.ts    # per-request counters, slow/error lists, user activity (Redis)
     stage-log.ts  # scheduler runs + heartbeat, for the Operations Center
+    muster-stages.ts # the running muster's stages, for ops and /timeline/runs (D14)
     overview.ts   # composes GET /v1/ops/overview (read-only)
   integrations/
     tokens.ts     # mint / hash / read `uvk_` tokens, IP allow-list check

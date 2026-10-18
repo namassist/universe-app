@@ -8,10 +8,12 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
+import type { TimelineAction } from "@universe/contracts";
 import { eq, inArray } from "drizzle-orm";
 
 import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
+import { stageTimeOf } from "../stage-time";
 import { authRoutes } from "./auth";
 import { meRoutes } from "./me";
 
@@ -271,6 +273,27 @@ describe("the coming shift", () => {
     // The timeline in this database decides which shift; either way the
     // answer is about this person, who is rostered to nothing here.
     if (body.shift) expect(body.shift.status).toBe("off");
+  });
+
+  test("carries that shift's gate times, so the phone never guesses them", async () => {
+    const res = await get("/me/shift", { cookie: mine });
+    const body = (await res.json()) as {
+      shift: {
+        shift: "day" | "night";
+        gates: Record<string, string | null>;
+      } | null;
+    };
+    expect(body.shift).not.toBeNull();
+    const shift = body.shift!.shift;
+    const at = async (action: TimelineAction) =>
+      (await stageTimeOf(action, shift))?.slice(0, 5) ?? null;
+    expect(body.shift!.gates).toEqual({
+      ftwDeadline: await at("ftw-deadline"),
+      fingerIn: await at("finger-in"),
+      board: await at("spare-validate"),
+      secondFinger: await at("finger-second"),
+      busDepart: await at("bus-depart"),
+    });
   });
 });
 

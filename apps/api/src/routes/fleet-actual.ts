@@ -1211,7 +1211,14 @@ export const fleetActualRoutes = new Elysia({
       };
     },
     {
-      auth: { menu: "display-fleet", mode: "view", allowDevice: true },
+      /* The allocation menu reads it too: the mobile app's Papan ACTUAL is
+         this wall, so the phone and the TV cannot disagree (docs/prd.md,
+         Mobile app). The photo route below stays the wall's own. */
+      auth: {
+        menu: ["display-fleet", "fleet-allocation"],
+        mode: "view",
+        allowDevice: true,
+      },
       /** Which screen to answer as — browsers previewing a TV, nobody else. */
       query: t.Object({ device: t.Optional(t.String({ minLength: 1 })) }),
       response: {

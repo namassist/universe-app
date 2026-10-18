@@ -1227,6 +1227,24 @@ export const TimelineStageSchema = t.Object({
   createdAt: t.String(),
 });
 
+/** A stage as the running muster saw it: the Operations Center and the phone's monitor. */
+export const MusterStageSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  action: TimelineActionSchema,
+  shift: t.Nullable(ShiftKindSchema),
+  at: t.String(),
+  /** The muster this stage belongs to — yesterday's for a night under way. */
+  date: t.String(),
+  /** Its time on that date has arrived. */
+  due: t.Boolean(),
+  active: t.Boolean(),
+  fired: t.Boolean(),
+  lastRun: t.Nullable(
+    t.Object({ at: t.String(), ok: t.Boolean(), note: t.String() })
+  ),
+});
+
 /* ------------------------------------------------------ actual allocation */
 
 export const ActualDocumentSchema = t.Object({

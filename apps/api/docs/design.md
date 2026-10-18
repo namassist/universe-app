@@ -258,6 +258,33 @@ pushed_at IS NULL RETURNING` before sending, so the `finger-second` stage
   early for a coming shift would otherwise name a spare's unit before the
   slip.
 
+## D14 — The phone reads what the walls and the Operations Center read
+
+The mobile app (stage 3, 2026-10-18) gets no screen-shaped routes of its
+own where one already answers the question, so the phone cannot disagree
+with the TV or the ops console:
+
+- **Papan ACTUAL is the fleet wall.** `GET /v1/fleet-allocation/actual/display`
+  accepts the `fleet-allocation` menu as well as `display-fleet`. Its photo
+  route stays the wall's own.
+- **The timeline monitor is the Operations Center's reading.**
+  `GET /v1/timeline/runs` (menu `timeline`, view) returns the running shift,
+  each stage with its claim and last logged run, and the heartbeat, from
+  `ops/muster-stages.ts`, which `/v1/ops/overview` now uses too. Nothing else
+  of the Operations Center leaves through it.
+- **`/me/shift` carries its gates** (`ftwDeadline`, `fingerIn`, `board`,
+  `secondFinger`, `busDepart`, "HH:MM" or null), so the app words "Batas
+  05:25" from the timeline and never from a constant.
+
+The client is generated from `apps/mobile/openapi.json`, written by
+`bun run openapi:mobile` (`mobile-openapi.ts`) from only the routes the app
+calls, converted to OpenAPI 3.0 (`openapi-30.ts`, shared with the integration
+document) because the Kotlin generator does not read 3.1. Response schemas are
+published **without `enum` and `default`**: a build stays installed for weeks,
+and a generated enum would fail to read a whole answer the day the API adds a
+value. A test fails when the committed copy drifts. Counts and minutes are
+`t.Integer`, so they arrive as `Int` rather than `Double`.
+
 ## Known debt
 
 - `users` links to employees by NIK string; renaming a NIK orphans the
