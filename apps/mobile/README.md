@@ -44,6 +44,19 @@ export JAVA_HOME=$(ls -d ~/.local/jdk/jdk-17*) ANDROID_HOME=~/Android/Sdk
 ./gradlew :androidApp:lintDebug
 ```
 
+**Trying it from WSL.** Android Studio on Windows cannot build a project
+that lives in WSL ("restricted write permissions"). Start an emulator from
+its Device Manager, then from WSL:
+
+```bash
+apps/mobile/scripts/android.sh             # build, install on the emulator, open
+apps/mobile/scripts/android.sh --no-build  # reinstall the last build
+```
+
+It drives Windows' own `adb.exe` through WSL interop. A copy built by
+Android Studio on Windows is signed with another debug key: uninstall it once
+(`adb.exe uninstall id.universe.mobile`) before the first install from WSL.
+
 A debug build talks to `http://10.0.2.2:3001` (the developer's machine, as an
 emulator sees it). A release is built for one installation's origin, over
 HTTPS only:

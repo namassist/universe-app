@@ -2,7 +2,10 @@ package id.universe.mobile.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,16 +20,20 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
@@ -92,16 +99,39 @@ data class NavEntry(
 fun NavBar(entries: List<NavEntry>, modifier: Modifier = Modifier) {
     val palette = Theme.palette
     val type = Theme.type
-    Column(modifier.fillMaxWidth().background(palette.surface).windowInsetsPadding(WindowInsets.navigationBars)) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.line))
-        Row(Modifier.fillMaxWidth().height(87.dp).padding(start = 4.dp, end = 4.dp, top = 8.dp)) {
+    /*
+     * The disc is raised 34px over the bar. A touch only lands inside a node's
+     * bounds, so the bar's layout starts 34px higher, transparent there: the
+     * disc sits inside it and can be tapped, and nothing else claims the strip.
+     */
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(DISC_LIFT + 88.dp)
+                .drawBehind {
+                    val top = DISC_LIFT.toPx()
+                    drawRect(palette.surface, topLeft = Offset(0f, top))
+                    drawRect(palette.line, topLeft = Offset(0f, top), size = Size(size.width, 1.dp.toPx()))
+                }
+                .padding(horizontal = 4.dp),
+        ) {
             entries.forEach { entry ->
+                val press = remember { MutableInteractionSource() }
                 Column(
                     Modifier
                         .weight(1f)
+                        /* Padding before the click: the strip above a plain item stays untouchable. */
+                        .padding(top = if (entry.center) 8.dp else DISC_LIFT + 9.dp)
                         .heightIn(min = 56.dp)
-                        .clip(Corners.tile)
-                        .clickable(role = Role.Tab, onClick = entry.onClick)
+                        /* No clip on the centre item: its press shows on the disc instead. */
+                        .then(if (entry.center) Modifier else Modifier.clip(Corners.tile))
+                        .clickable(
+                            interactionSource = press,
+                            indication = if (entry.center) null else LocalIndication.current,
+                            role = Role.Tab,
+                            onClick = entry.onClick,
+                        )
                         .semantics { selected = entry.active },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -109,17 +139,13 @@ fun NavBar(entries: List<NavEntry>, modifier: Modifier = Modifier) {
                     if (entry.center) {
                         Box(
                             Modifier
-                                .layout { measurable, constraints ->
-                                    /* Raised 34px over the bar, taking no room for it. */
-                                    val lift = 34.dp.roundToPx()
-                                    val placeable = measurable.measure(constraints)
-                                    layout(placeable.width, placeable.height - lift) { placeable.place(0, -lift) }
-                                }
                                 .size(62.dp)
                                 .dropShadow(Corners.pill, RaisedDisc)
                                 .background(palette.surface, Corners.pill)
                                 .padding(5.dp)
-                                .background(palette.action, Corners.pill),
+                                .clip(Corners.pill)
+                                .background(palette.action)
+                                .indication(press, LocalIndication.current),
                             contentAlignment = Alignment.Center,
                         ) { GlyphIcon(entry.glyph, palette.actionInk, size = 26.dp, stroke = 2.2f) }
                     } else {
@@ -139,8 +165,12 @@ fun NavBar(entries: List<NavEntry>, modifier: Modifier = Modifier) {
                 }
             }
         }
+        Box(Modifier.fillMaxWidth().background(palette.surface).windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
+
+/** How far the centre disc rises over the bar. */
+private val DISC_LIFT = 34.dp
 
 /** Inverted, above the bar (DESIGN.md → Bottom sheet and toast). */
 @Composable

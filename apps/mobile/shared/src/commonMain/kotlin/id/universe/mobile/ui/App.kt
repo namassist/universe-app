@@ -192,10 +192,25 @@ private fun activeItem(entry: NavBackStackEntry?): NavItem? {
     }
 }
 
-private fun NavHostController.switchTo(item: NavItem) = navigate(routeOf(item)) {
-    popUpTo<HomeRoute> { saveState = true }
-    launchSingleTop = true
-    restoreState = true
+private fun NavHostController.switchTo(item: NavItem) {
+    val route = routeOf(item)
+    if (route is HomeRoute) {
+        /* Home is the root: go back to it. Saving and restoring here would bring
+           back the very page being left. */
+        if (!popBackStack<HomeRoute>(inclusive = false)) navigate(HomeRoute)
+        return
+    }
+    if (route is SoonRoute) {
+        /* Every unbuilt item is this one destination with another title: reusing or
+           restoring it would keep showing the page already open (Papan, then Timeline). */
+        navigate(route) { popUpTo<HomeRoute>() }
+        return
+    }
+    navigate(route) {
+        popUpTo<HomeRoute> { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
 }
 
 @Composable
