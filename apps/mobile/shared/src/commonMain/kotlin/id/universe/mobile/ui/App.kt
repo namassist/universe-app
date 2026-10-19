@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,7 +63,12 @@ import id.universe.mobile.ui.screens.SoonScreen
 import id.universe.mobile.ui.screens.Splash
 import id.universe.mobile.ui.screens.StaffHome
 import id.universe.mobile.ui.screens.UnreachableScreen
+import id.universe.mobile.ui.components.Load
+import id.universe.mobile.ui.staff.AdminHome
+import id.universe.mobile.ui.staff.AkunScreen
 import id.universe.mobile.ui.staff.CariScreen
+import id.universe.mobile.ui.staff.PlaceSheet
+import id.universe.mobile.ui.staff.TimelineScreen
 import id.universe.mobile.ui.staff.PapanScreen
 import id.universe.mobile.ui.staff.ScanScreen
 import id.universe.mobile.ui.staff.SupervisorHome
@@ -103,6 +109,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class UnitHistoryRoute(val code: String)
 
 @Serializable data object ScanRoute
+
+@Serializable data object TimelineRoute
+
+@Serializable data object AkunRoute
 
 /** What the Android (later iOS) shell builds once per process and hands in. */
 class AppGraph(val api: UniverseApi, val model: AppModel, val info: AppInfo)
@@ -195,7 +205,8 @@ private fun routeOf(item: NavItem): Any = when (item) {
     NavItem.PAPAN -> PapanRoute()
     NavItem.SCAN -> ScanRoute
     NavItem.UNIT -> UnitStatusRoute
-    else -> SoonRoute(item.label, item.name)
+    NavItem.TIMELINE -> TimelineRoute
+    NavItem.AKUN -> AkunRoute
 }
 
 /** The bar item a screen belongs to: "Unit saya" and Notifikasi sit under Beranda. */
@@ -212,6 +223,8 @@ private fun activeItem(entry: NavBackStackEntry?): NavItem? {
         destination.hasRoute<CariRoute>() -> NavItem.HOME
         destination.hasRoute<ScanRoute>() -> NavItem.SCAN
         destination.hasRoute<UnitStatusRoute>() || destination.hasRoute<UnitHistoryRoute>() -> NavItem.UNIT
+        destination.hasRoute<TimelineRoute>() -> NavItem.TIMELINE
+        destination.hasRoute<AkunRoute>() -> NavItem.AKUN
         destination.hasRoute<SoonRoute>() ->
             entry.toRoute<SoonRoute>().nav?.let { name -> NavItem.entries.firstOrNull { it.name == name } }
         else -> null
@@ -274,6 +287,15 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
             api.call { unitStatus.getV1UnitStatus() }
         }
     }
+    /* The running muster, for the Superadmin's home and monitor. */
+    val runs = rememberLoad(signedIn.principal.id, "runs") {
+        if (permissions.timeline == null) {
+            Outcome.Refused(403, "forbidden", "Akun ini tidak memegang menu timeline.")
+        } else {
+            api.call { timeline.getV1TimelineRuns() }
+        }
+    }
+    var placing by remember { mutableStateOf<Pair<String, String>?>(null) }
     var resumed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(operator) {
         if (resumed) {
@@ -282,6 +304,7 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
             } else {
                 board.reload()
                 units.reload()
+                runs.reload()
             }
         }
         resumed = true
@@ -294,6 +317,7 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
                     delay(BOARD_REFRESH_MS)
                     board.refresh()
                     units.refresh()
+                    runs.refresh()
                 }
             }
         }
@@ -324,10 +348,37 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
                             go,
                         )
                         HomeKind.SUPERVISOR -> SupervisorHome(board, units, go)
-                        HomeKind.ADMIN -> StaffHome(signedIn) { go(ProfilRoute) }
+                        HomeKind.ADMIN -> AdminHome(board, runs, go)
                     }
                 }
-                composable<PapanRoute> { PapanScreen(board, it.toRoute<PapanRoute>().filter, back) }
+                composable<PapanRoute> {
+                    /* An Isi sheet belongs to this visit of Papan: leaving closes it. */
+                    DisposableEffect(Unit) { onDispose { placing = null } }
+                    PapanScreen(
+                        board,
+                        it.toRoute<PapanRoute>().filter,
+                        back,
+                        onPlace = { id: String, code: String -> placing = id to code }.takeIf { signedIn.access.canPlace },
+                    )
+                    val shown = (board.value as? Load.Ready)?.value
+                    placing?.let { (unitId, unitCode) ->
+                        if (shown != null) {
+                            PlaceSheet(
+                                api,
+                                shown,
+                                unitId,
+                                unitCode,
+                                onPlaced = {
+                                    placing = null
+                                    board.refresh()
+                                },
+                                onDismiss = { placing = null },
+                            )
+                        }
+                    }
+                }
+                composable<TimelineRoute> { TimelineScreen(runs, back) }
+                composable<AkunRoute> { AkunScreen(api, signedIn.principal.id, back) }
                 composable<CariRoute> { CariScreen(board, back) }
                 composable<UnitStatusRoute> { UnitStatusScreen(units, back, go) }
                 composable<UnitHistoryRoute> { UnitHistoryScreen(api, it.toRoute<UnitHistoryRoute>().code, back) }

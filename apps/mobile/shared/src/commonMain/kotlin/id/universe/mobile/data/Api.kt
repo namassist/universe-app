@@ -5,7 +5,9 @@ import id.universe.mobile.api.apis.AuthApi
 import id.universe.mobile.api.apis.EmployeesApi
 import id.universe.mobile.api.apis.FitToWorkApi
 import id.universe.mobile.api.apis.FleetAllocationApi
+import id.universe.mobile.api.apis.TimelineApi
 import id.universe.mobile.api.apis.UnitStatusApi
+import id.universe.mobile.api.apis.UsersApi
 import id.universe.mobile.api.apis.MeApi
 import id.universe.mobile.api.apis.MobileApi
 import id.universe.mobile.api.apis.RosterApi
@@ -96,6 +98,8 @@ class UniverseApi(origin: String, engine: HttpClientEngine, private val session:
     val attendance = AttendanceApi(origin, http)
     val fleetAllocation = FleetAllocationApi(origin, http)
     val unitStatus = UnitStatusApi(origin, http)
+    val users = UsersApi(origin, http)
+    val timeline = TimelineApi(origin, http)
 
     /**
      * One request, as an [Outcome]. [sessionBound] is false for the calls a

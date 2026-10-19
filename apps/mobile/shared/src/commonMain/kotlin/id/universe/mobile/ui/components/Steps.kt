@@ -39,6 +39,7 @@ fun Steps(steps: List<StepRow>, modifier: Modifier = Modifier) {
                     val knot = Modifier.padding(top = 3.dp).size(14.dp)
                     when (step.state) {
                         StepState.DONE -> Box(knot.background(palette.ok, Corners.pill))
+                        StepState.FAILED -> Box(knot.background(palette.bad, Corners.pill))
                         StepState.NOW -> Box(
                             knot
                                 .drawBehind {

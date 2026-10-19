@@ -3,6 +3,12 @@ package id.universe.mobile.data
 import id.universe.mobile.api.models.GetV1Attendance200ResponseRowsInner
 import id.universe.mobile.api.models.GetV1EmployeesByNik200Response
 import id.universe.mobile.api.models.GetV1FitToWork200ResponseRowsInner
+import id.universe.mobile.api.models.GetV1FleetAllocationActualByDateByShiftCandidatesByUnitId200ResponseInner
+import id.universe.mobile.api.models.GetV1TimelineRuns200Response
+import id.universe.mobile.api.models.GetV1TimelineRuns200ResponseRunningShift
+import id.universe.mobile.api.models.GetV1TimelineRuns200ResponseStagesInner
+import id.universe.mobile.api.models.GetV1TimelineRuns200ResponseStagesInnerLastRun
+import id.universe.mobile.api.models.GetV1Users200ResponseInner
 import id.universe.mobile.api.models.GetV1FleetAllocationActualDisplay200Response
 import id.universe.mobile.api.models.GetV1FleetAllocationActualDisplay200ResponseFleetsInner
 import id.universe.mobile.api.models.GetV1FleetAllocationActualDisplay200ResponseFleetsInnerUnitsInner
@@ -49,3 +55,11 @@ typealias BoardUnit = GetV1FleetAllocationActualDisplay200ResponseFleetsInnerUni
 typealias UnitStatusRow = GetV1UnitStatus200ResponseInner
 typealias UnitStatusChange = GetV1UnitStatusByCodeHistory200ResponseInner
 typealias IdCard = GetV1IdCardByNik200Response
+
+/* The Superadmin's (stage 3, S6). */
+typealias Candidate = GetV1FleetAllocationActualByDateByShiftCandidatesByUnitId200ResponseInner
+typealias Account = GetV1Users200ResponseInner
+typealias MusterRuns = GetV1TimelineRuns200Response
+typealias MusterShift = GetV1TimelineRuns200ResponseRunningShift
+typealias MusterStage = GetV1TimelineRuns200ResponseStagesInner
+typealias MusterLastRun = GetV1TimelineRuns200ResponseStagesInnerLastRun

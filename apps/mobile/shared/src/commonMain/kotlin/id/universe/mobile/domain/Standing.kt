@@ -27,7 +27,8 @@ data class Requirement(val title: String, val note: String, val badge: Pill)
 
 data class Fact(val time: String, val title: String, val note: String)
 
-enum class StepState { DONE, NOW, WAIT }
+/** FAILED: a stage the scheduler refused or never ran (the Superadmin's monitor). */
+enum class StepState { DONE, NOW, WAIT, FAILED }
 
 data class Step(val time: String, val name: String, val state: StepState)
 

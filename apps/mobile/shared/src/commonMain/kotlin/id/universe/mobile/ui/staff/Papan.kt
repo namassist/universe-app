@@ -36,6 +36,7 @@ import id.universe.mobile.domain.boardSummary
 import id.universe.mobile.domain.dayLabel
 import id.universe.mobile.domain.searchBoard
 import id.universe.mobile.domain.shiftWord
+import id.universe.mobile.ui.components.ActionButton
 import id.universe.mobile.ui.components.Badge
 import id.universe.mobile.ui.components.Callout
 import id.universe.mobile.ui.components.Hairline
@@ -64,7 +65,13 @@ import id.universe.mobile.ui.theme.Theme
  * Superadmin's (S6).
  */
 @Composable
-fun PapanScreen(board: LoadHandle<Board>, initialFilter: String, onBack: () -> Unit) {
+fun PapanScreen(
+    board: LoadHandle<Board>,
+    initialFilter: String,
+    onBack: () -> Unit,
+    /** Set for a session that manages the allocation: an empty unit offers "Isi". */
+    onPlace: ((unitId: String, unitCode: String) -> Unit)? = null,
+) {
     var filter by rememberSaveable {
         mutableStateOf(BoardFilter.entries.firstOrNull { it.name == initialFilter } ?: BoardFilter.ALL)
     }
@@ -96,14 +103,27 @@ fun PapanScreen(board: LoadHandle<Board>, initialFilter: String, onBack: () -> U
                     },
                 )
             }
-            groups.forEach { BoardSection(it) }
-            Note("Hanya lihat. Penempatan manual dilakukan Superadmin.")
+            val emptyUnits = shown.fleets.flatMap { it.units }.filter { it.employeeName == null }
+            val place = onPlace?.takeIf { summary.badge != null && shown.generatedAt != null }
+            groups.forEach { group ->
+                BoardSection(group) { code ->
+                    val unit = emptyUnits.firstOrNull { it.unitCode == code } ?: return@BoardSection
+                    place?.invoke(unit.unitId, unit.unitCode)
+                }
+            }
+            Note(
+                if (place != null) {
+                    "Isi menempatkan operator di unit kosong. Papan tidak dibuat ulang dari sini: penempatan manual akan hilang."
+                } else {
+                    "Hanya lihat. Penempatan manual dilakukan Superadmin."
+                },
+            )
         }
     }
 }
 
 @Composable
-private fun BoardSection(group: BoardGroup) {
+private fun BoardSection(group: BoardGroup, onFill: (String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row {
             Txt(group.title, Theme.type.code)
@@ -114,7 +134,7 @@ private fun BoardSection(group: BoardGroup) {
         ListGroup {
             group.rows.forEachIndexed { index, row ->
                 if (index > 0) Hairline()
-                BoardLine(row.unit, row.name, row.badge)
+                BoardLine(row.unit, row.name, row.badge, onFill = { onFill(row.unit) }.takeIf { row.name == null })
             }
         }
     }
@@ -122,14 +142,26 @@ private fun BoardSection(group: BoardGroup) {
 
 /** A unit code, who holds it or that nobody does, and how it was filled. */
 @Composable
-internal fun BoardLine(unit: String, name: String?, badge: Pill, notes: List<String> = emptyList()) {
+internal fun BoardLine(
+    unit: String,
+    name: String?,
+    badge: Pill,
+    notes: List<String> = emptyList(),
+    onFill: (() -> Unit)? = null,
+) {
     ListRow(
         name ?: "Belum ada operator",
         titleColor = if (name == null) Theme.palette.bad else Theme.palette.ink,
         notes = notes,
         leading = { Txt(unit, Theme.type.code, Modifier.width(76.dp), maxLines = 1) },
         chevron = false,
-    ) { Badge(badge) }
+    ) {
+        if (onFill != null) {
+            ActionButton("Isi", onFill, Modifier.width(64.dp), height = 40.dp)
+        } else {
+            Badge(badge)
+        }
+    }
 }
 
 /** "Cari": a unit or a person on the running shift's board. */

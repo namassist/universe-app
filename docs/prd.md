@@ -2998,9 +2998,17 @@ additions, the foundation and the operator; the rest follows.
   web scanner's own rules and looks, records nothing. The Superadmin gets
   Papan (read only) and Scan ID with it. The board and the units are re-read
   when the app comes back and every minute while it is in front.
-- **Next:** the Superadmin's (Isi, Akun, Monitor timeline, their home), push
-  once the Firebase project exists, and iOS. Every bar item not built opens a
-  page that says "belum ada di versi aplikasi ini".
+- **Superadmin, built (S6, 2026-10-19):** Beranda (the next stage's time at
+  display size, the heartbeat, "Perlu tindakan" for empty units; its top
+  button is the profile, since the Superadmin's bar has none), **Isi** on an
+  empty unit of Papan ACTUAL (the Actual tab's candidates and endpoint; an
+  FTW that did not pass must be ticked as confirmed before the button opens,
+  and the API records it by name; no regenerate button), **Akun** (search,
+  reset password, deactivate) and the **timeline monitor** (each stage ran,
+  was refused or is next; "scheduler mungkin berhenti" past two minutes
+  without a heartbeat). The stages' notes are the scheduler's own sentences.
+- **Next:** a design round for Dashboard and Laporan (still "belum
+  dirancang"), push once the Firebase project exists, and iOS.
 - **Decided while building:**
   - The NIK field takes digits only, as the prototype has it. An account
     that signs in with an email cannot use the app until the staff screens

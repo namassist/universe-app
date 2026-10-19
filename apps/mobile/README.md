@@ -10,9 +10,13 @@ gate, the forced password change, navigation from the session's menu grants,
 and the operator's screens: Beranda, Unit saya, Jadwal, Kartu, Riwayat,
 Notifikasi, Profil. **S5 (2026-10-19):** the Pengawas Lapangan's Beranda,
 Papan ACTUAL, Cari, Status unit and Scan ID (CameraX + ML Kit, in
-`shared/src/androidMain`; the NIK can always be typed). **Not yet:** the
-Superadmin's own screens (a placeholder home says so), FCM push (the in-app
-list carries the same notices), iOS (the camera there is a stub).
+`shared/src/androidMain`; the NIK can always be typed). **S6:** the
+Superadmin's Beranda, Isi on Papan, Akun and the timeline monitor. **Not
+yet:** Dashboard and Laporan (not designed), FCM push (the in-app list
+carries the same notices), iOS (the camera there is a stub).
+
+Long lists (Status unit, Cari, Akun, the Isi candidates) are lazy and carry
+no group shadow: a shadow the height of hundreds of rows froze the app.
 
 ## Layout
 
