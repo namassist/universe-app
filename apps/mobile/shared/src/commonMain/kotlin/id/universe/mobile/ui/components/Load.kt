@@ -21,6 +21,7 @@ import id.universe.mobile.data.Outcome
 import id.universe.mobile.data.failureWords
 import id.universe.mobile.domain.Callout
 import id.universe.mobile.domain.Tone
+import id.universe.mobile.domain.siteNow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -32,36 +33,62 @@ sealed interface Load<out T> {
     data class Failed(val words: String) : Load<Nothing>
 }
 
-class LoadHandle<T>(private val state: MutableState<Load<T>>, val reload: () -> Unit) {
+class LoadHandle<T>(
+    private val state: MutableState<Load<T>>,
+    private val stale: MutableState<String?>,
+    /** Asked for by a person: a failure on screen turns back into "Memuat…". */
+    val reload: () -> Unit,
+    /** Asked for by a timer: whatever is on screen stays there until the answer. */
+    val refresh: () -> Unit,
+) {
     val value: Load<T> get() = state.value
+
+    /** "HH:MM" of the data on screen when refreshing it last failed; null while it is current. */
+    val staleSince: String? get() = stale.value
 }
 
 /**
- * A call made when the screen opens, and again on [LoadHandle.reload]. A
- * refresh that fails keeps what was already shown rather than blanking it.
+ * A call made when the screen opens, and again on [LoadHandle.reload] or
+ * [LoadHandle.refresh]. A refresh that fails keeps what was already shown
+ * rather than blanking it, and says since when it has been showing.
  */
 @Composable
 fun <T : Any> rememberLoad(vararg keys: Any?, fetch: suspend () -> Outcome<T>): LoadHandle<T> {
     val scope = rememberCoroutineScope()
     val latest by rememberUpdatedState(fetch)
     val state = remember(*keys) { mutableStateOf<Load<T>>(Load.Loading) }
+    val stale = remember(*keys) { mutableStateOf<String?>(null) }
+    val current = remember(*keys) { arrayOfNulls<String>(1) }
     val run: suspend () -> Unit = {
         val outcome = latest()
-        state.value = when {
-            outcome is Outcome.Ok -> Load.Ready(outcome.value)
-            state.value is Load.Ready -> state.value
-            else -> Load.Failed(outcome.failureWords().orEmpty())
+        when {
+            outcome is Outcome.Ok -> {
+                state.value = Load.Ready(outcome.value)
+                current[0] = siteNow().time.toString().take(5)
+                stale.value = null
+            }
+            state.value is Load.Ready -> stale.value = current[0]
+            else -> state.value = Load.Failed(outcome.failureWords().orEmpty())
         }
     }
     LaunchedEffect(*keys) { run() }
     /* One reload at a time: a slow older answer must not overwrite a newer one. */
     val running = remember(*keys) { arrayOfNulls<Job>(1) }
     return remember(state) {
-        LoadHandle(state) {
+        val again: (Boolean) -> Unit = { asked ->
             running[0]?.cancel()
-            if (state.value is Load.Failed) state.value = Load.Loading
+            if (asked && state.value is Load.Failed) state.value = Load.Loading
             running[0] = scope.launch { run() }
         }
+        LoadHandle(state, stale, reload = { again(true) }, refresh = { again(false) })
+    }
+}
+
+/** Said above data that could not be refreshed: the supervisor is not reading a live board. */
+@Composable
+fun StaleNote(handle: LoadHandle<*>) {
+    handle.staleSince?.let {
+        Callout(Callout("Belum bisa memperbarui. Data terakhir pukul **$it**.", Tone.WARN))
     }
 }
 

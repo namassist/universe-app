@@ -22,6 +22,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -83,6 +88,56 @@ fun InnerScreen(title: String, onBack: (() -> Unit)?, content: @Composable Colum
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content,
         )
+    }
+}
+
+/**
+ * An inner screen whose body is a lazy list, for lists that run to hundreds of
+ * rows (Status unit → Aktif): only the rows on screen are composed.
+ */
+@Composable
+fun InnerList(title: String, onBack: (() -> Unit)?, content: LazyListScope.() -> Unit) {
+    val palette = Theme.palette
+    val platform = LocalPlatform.current
+    DisposableEffect(palette.dark) {
+        platform.statusBarOnDark(palette.dark)
+        onDispose { }
+    }
+    Column(Modifier.fillMaxSize().background(palette.ground)) {
+        TopBar(title, onBack)
+        LazyColumn(
+            Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp + LocalNavReserve.current),
+            content = content,
+        )
+    }
+}
+
+/** A block of an [InnerList] with the 16px gap an inner screen keeps between blocks. */
+fun LazyListScope.block(key: Any? = null, content: @Composable () -> Unit) {
+    item(key) { Box(Modifier.fillMaxWidth().padding(bottom = 16.dp)) { content() } }
+}
+
+/**
+ * Rows drawn as one list group, lazily: rounded ends, hairlines between. No
+ * ambient lift here — a shadow the height of the whole list is a blur over
+ * every row at once, which is what froze the screen.
+ */
+fun <T> LazyListScope.groupRows(rows: List<T>, key: (T) -> Any, row: @Composable (T) -> Unit) {
+    itemsIndexed(rows, key = { _, it -> key(it) }) { index, item ->
+        val top = if (index == 0) 22.dp else 0.dp
+        val bottom = if (index == rows.lastIndex) 22.dp else 0.dp
+        val shape = RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = if (index == rows.lastIndex) 16.dp else 0.dp)
+                .clip(shape)
+                .background(Theme.palette.surface),
+        ) {
+            if (index > 0) Hairline()
+            row(item)
+        }
     }
 }
 

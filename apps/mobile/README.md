@@ -8,9 +8,11 @@ verified on its own.
 **Built (stage 3, 2026-10-18):** login with a bearer session, the version
 gate, the forced password change, navigation from the session's menu grants,
 and the operator's screens: Beranda, Unit saya, Jadwal, Kartu, Riwayat,
-Notifikasi, Profil. **Not yet:** the Pengawas Lapangan and Superadmin screens
-(a placeholder home says so), FCM push (the in-app list carries the same
-notices), iOS.
+Notifikasi, Profil. **S5 (2026-10-19):** the Pengawas Lapangan's Beranda,
+Papan ACTUAL, Cari, Status unit and Scan ID (CameraX + ML Kit, in
+`shared/src/androidMain`; the NIK can always be typed). **Not yet:** the
+Superadmin's own screens (a placeholder home says so), FCM push (the in-app
+list carries the same notices), iOS (the camera there is a stub).
 
 ## Layout
 

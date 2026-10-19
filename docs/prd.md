@@ -2988,11 +2988,19 @@ additions, the foundation and the operator; the rest follows.
   That payload is the whole running shift with names and readiness, not
   scoped to a department, as the allocation screens are not: allocation is
   scoped to formations, and a person viewing a wall never is.
-- **Next:** the Pengawas Lapangan screens (Papan, Cari, Status unit, Scan ID),
-  the Superadmin's (Isi, Akun, Monitor timeline), push once the Firebase
-  project exists, and iOS. Until then a Pengawas or Superadmin signs in to a
-  placeholder home that says so, and every bar item not built opens a page
-  that says "belum ada di versi aplikasi ini".
+- **Pengawas Lapangan, built (S5, 2026-10-19):** Beranda (crewed of total
+  units, the empty ones, how many came from the spare pool, breakdowns from
+  unit status), Papan ACTUAL with Semua / Kosong / Spare / Manual (the pool
+  of spares as its own group, never counted as seats), Cari, Status unit with
+  each unit's trail, and Scan ID: the camera reads the QR on the phone itself
+  (ML Kit's bundled model, so a gate with no signal still reads a card), with
+  the NIK typed by hand as the way that always works. A scan is read with the
+  web scanner's own rules and looks, records nothing. The Superadmin gets
+  Papan (read only) and Scan ID with it. The board and the units are re-read
+  when the app comes back and every minute while it is in front.
+- **Next:** the Superadmin's (Isi, Akun, Monitor timeline, their home), push
+  once the Firebase project exists, and iOS. Every bar item not built opens a
+  page that says "belum ada di versi aplikasi ini".
 - **Decided while building:**
   - The NIK field takes digits only, as the prototype has it. An account
     that signs in with an email cannot use the app until the staff screens

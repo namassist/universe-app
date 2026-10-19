@@ -62,6 +62,12 @@ import id.universe.mobile.ui.screens.SoonScreen
 import id.universe.mobile.ui.screens.Splash
 import id.universe.mobile.ui.screens.StaffHome
 import id.universe.mobile.ui.screens.UnreachableScreen
+import id.universe.mobile.ui.staff.CariScreen
+import id.universe.mobile.ui.staff.PapanScreen
+import id.universe.mobile.ui.staff.ScanScreen
+import id.universe.mobile.ui.staff.SupervisorHome
+import id.universe.mobile.ui.staff.UnitHistoryScreen
+import id.universe.mobile.ui.staff.UnitStatusScreen
 import id.universe.mobile.ui.theme.Theme
 import id.universe.mobile.ui.theme.UniverseTheme
 import kotlinx.coroutines.delay
@@ -87,6 +93,17 @@ import kotlinx.serialization.Serializable
 /** A screen not in this build: [nav] names the bottom-bar item it stands for, if any. */
 @Serializable data class SoonRoute(val title: String, val nav: String? = null)
 
+/** Papan ACTUAL, opened on one of the `BoardFilter` names. */
+@Serializable data class PapanRoute(val filter: String = "ALL")
+
+@Serializable data object CariRoute
+
+@Serializable data object UnitStatusRoute
+
+@Serializable data class UnitHistoryRoute(val code: String)
+
+@Serializable data object ScanRoute
+
 /** What the Android (later iOS) shell builds once per process and hands in. */
 class AppGraph(val api: UniverseApi, val model: AppModel, val info: AppInfo)
 
@@ -94,6 +111,8 @@ private const val TOAST_MILLIS = 2_600L
 
 /** Not a data class: two toasts with the same words are two toasts. */
 private class ToastMessage(val text: String)
+
+private const val BOARD_REFRESH_MS = 60_000L
 
 /** The bar's 88px plus the 16px a screen keeps clear above it. */
 private val NAV_RESERVE = 104.dp
@@ -173,6 +192,9 @@ private fun routeOf(item: NavItem): Any = when (item) {
     NavItem.KARTU -> KartuRoute
     NavItem.RIWAYAT -> RiwayatRoute()
     NavItem.PROFIL -> ProfilRoute
+    NavItem.PAPAN -> PapanRoute()
+    NavItem.SCAN -> ScanRoute
+    NavItem.UNIT -> UnitStatusRoute
     else -> SoonRoute(item.label, item.name)
 }
 
@@ -186,6 +208,10 @@ private fun activeItem(entry: NavBackStackEntry?): NavItem? {
         destination.hasRoute<KartuRoute>() -> NavItem.KARTU
         destination.hasRoute<RiwayatRoute>() -> NavItem.RIWAYAT
         destination.hasRoute<ProfilRoute>() || destination.hasRoute<PasswordRoute>() -> NavItem.PROFIL
+        destination.hasRoute<PapanRoute>() -> NavItem.PAPAN
+        destination.hasRoute<CariRoute>() -> NavItem.HOME
+        destination.hasRoute<ScanRoute>() -> NavItem.SCAN
+        destination.hasRoute<UnitStatusRoute>() || destination.hasRoute<UnitHistoryRoute>() -> NavItem.UNIT
         destination.hasRoute<SoonRoute>() ->
             entry.toRoute<SoonRoute>().nav?.let { name -> NavItem.entries.firstOrNull { it.name == name } }
         else -> null
@@ -232,11 +258,46 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
             api.call { employees.getV1EmployeesByNik(nik) }
         }
     }
+    /* The fleet wall's board and the unit list, for the Pengawas Lapangan and Superadmin. */
+    val permissions = signedIn.permissions
+    val board = rememberLoad(signedIn.principal.id, "board") {
+        if (permissions.fleetAllocation == null) {
+            Outcome.Refused(403, "forbidden", "Akun ini tidak memegang menu papan alokasi.")
+        } else {
+            api.call { fleetAllocation.getV1FleetAllocationActualDisplay() }
+        }
+    }
+    val units = rememberLoad(signedIn.principal.id, "units") {
+        if (permissions.unitStatus == null) {
+            Outcome.Refused(403, "forbidden", "Akun ini tidak memegang menu status unit.")
+        } else {
+            api.call { unitStatus.getV1UnitStatus() }
+        }
+    }
     var resumed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(operator) {
-        if (resumed && operator) shift.reload()
+        if (resumed) {
+            if (operator) {
+                shift.reload()
+            } else {
+                board.reload()
+                units.reload()
+            }
+        }
         resumed = true
-        onPauseOrDispose { }
+        /* The board moves fast between 05:26 and 05:30; while the app is in front it is re-read. */
+        val ticker = if (operator) {
+            null
+        } else {
+            scope.launch {
+                while (true) {
+                    delay(BOARD_REFRESH_MS)
+                    board.refresh()
+                    units.refresh()
+                }
+            }
+        }
+        onPauseOrDispose { ticker?.cancel() }
     }
 
     val go: (Any) -> Unit = { nav.navigate(it) { launchSingleTop = true } }
@@ -255,17 +316,22 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
                 exitTransition = { fadeOut(tween(220)) },
             ) {
                 composable<HomeRoute> {
-                    if (operator) {
-                        OperatorHome(
+                    when (signedIn.access.home) {
+                        HomeKind.OPERATOR -> OperatorHome(
                             shift,
                             (version as? VersionVerdict.UpdateAvailable)?.takeUnless { updateDismissed },
                             { updateDismissed = true },
                             go,
                         )
-                    } else {
-                        StaffHome(signedIn) { go(ProfilRoute) }
+                        HomeKind.SUPERVISOR -> SupervisorHome(board, units, go)
+                        HomeKind.ADMIN -> StaffHome(signedIn) { go(ProfilRoute) }
                     }
                 }
+                composable<PapanRoute> { PapanScreen(board, it.toRoute<PapanRoute>().filter, back) }
+                composable<CariRoute> { CariScreen(board, back) }
+                composable<UnitStatusRoute> { UnitStatusScreen(units, back, go) }
+                composable<UnitHistoryRoute> { UnitHistoryScreen(api, it.toRoute<UnitHistoryRoute>().code, back) }
+                composable<ScanRoute> { ScanScreen(api, back) }
                 composable<UnitRoute> { UnitScreen(shift, back) }
                 composable<JadwalRoute> { JadwalScreen(api, nik, back) }
                 composable<KartuRoute> { KartuScreen(employee, back, go) }

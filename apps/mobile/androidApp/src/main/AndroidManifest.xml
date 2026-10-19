@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Scan ID reads a card's QR. A phone without a camera still installs and
+         types the NIK by hand. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- The session id is a bearer credential: it never leaves the phone in a
          backup or a device-to-device transfer. -->
