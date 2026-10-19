@@ -1702,8 +1702,8 @@
             `<div class="sheet">${menu([
               ["Papan", "board", "papan"],
               ["Status unit", "truck", "unit-status"],
-              ["Dashboard", "chart", "soon"],
-              ["Laporan", "doc", "soon"],
+              ["Dashboard", "chart", "dashboard"],
+              ["Laporan", "doc", "laporan"],
             ])}
       <div class="section"><h3>Unit kosong</h3><div class="group">${EMPTY.map(([u, w]) => `<button class="row" type="button" data-go="papan-kosong"><span class="txt"><span class="code num">${u}</span><span class="b">${w}</span></span>${badge("Kosong", "bad")}${ic("chev", 16)}</button>`).join("")}</div></div></div>`
           );
@@ -1782,8 +1782,8 @@
               ["Timeline", "timeline", "timeline"],
               ["Akun", "people", "akun"],
               ["Status unit", "truck", "unit-status"],
-              ["Laporan", "doc", "soon"],
-              ["Dashboard", "chart", "soon"],
+              ["Laporan", "doc", "laporan"],
+              ["Dashboard", "chart", "dashboard"],
               ["Notifikasi", "bell", "soon"],
             ])}
       <div class="section"><h3>Perlu tindakan</h3><div class="group"><button class="row" type="button" data-go="papan-kosong"><span class="ico">${ic("warn", 20)}</span><span class="txt"><span class="a">4 unit belum ada operator</span><span class="b">Isi dari kandidat yang memegang SIMPER-nya</span></span>${ic("chev", 16)}</button></div></div></div>`
@@ -1825,6 +1825,174 @@
         },
         "admin:unit-status"() {
           return V["pengawas:unit-status"]();
+        },
+        "pengawas:dashboard"() {
+          const card = (t, h, s, pct, to) => {
+            /* A number with no report that lists exactly it is information, not a link. */
+            const inner = `<span class="t num">${t}</span><span class="h">${h}</span><span class="s">${s}</span>${pct != null ? `<div class="progress" style="margin-top:8px" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${h}"><i style="width:${pct}%"></i></div>` : ""}`;
+            return to
+              ? `<button class="fact" type="button" data-go="${to}" style="border:0;text-align:left">${inner}</button>`
+              : `<div class="fact">${inner}</div>`;
+          };
+          const row = (n, a, b, k, to) => {
+            const inner = `<span class="ico">${ic(n, 20)}</span><span class="txt"><span class="a">${a}</span><span class="b">${b}</span></span>${k ? badge(k[0], k[1]) : ""}`;
+            return to
+              ? `<button class="row" type="button" data-go="${to}">${inner}${ic("chev", 16)}</button>`
+              : `<div class="row">${inner}</div>`;
+          };
+          return (
+            topbar("Dashboard") +
+            `<div class="body">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span class="note num">Sen 19 Okt · Shift Siang</span>${badge("Data 05:42", "info")}</div>
+      <div class="duo">${card("289/332", "Sudah finger", "43 belum finger", 87, "laporan-nofinger")}${card("248/332", "FTW lolos", "84 belum lapor · 12 perlu tindak lanjut", 75)}</div>
+      <div class="duo">${card("124/128", "Unit terisi", "Papan final 05:26", 97, "papan")}${card("394", "Unit aktif", "20 breakdown · 0 standby", null, "unit-status")}</div>
+      <div class="section"><h3>Perlu perhatian</h3><div class="group">
+        ${row("truck", "4 unit belum ada operator", "Equipment No Operator", ["Kosong", "bad"], "laporan-eno")}
+        ${row("heart", "84 operator belum lapor FTW", "Batas upload 05:22 sudah lewat", ["FTW", "warn"])}
+        ${row("card", "3 SIMPER kedaluwarsa", "8 lagi habis dalam 30 hari", ["SIMPER", "bad"])}
+      </div></div>
+      <div class="section"><h3>Per jabatan</h3><div class="group">${[
+        ["Operator DT", "212 siap · 6 belum finger · 9 belum FTW"],
+        ["Operator Digger", "38 siap · 1 belum finger · 2 belum FTW"],
+        ["Operator OHT", "31 siap · 0 belum finger · 4 belum FTW"],
+      ]
+        .map(
+          ([a, b]) =>
+            `<div class="row"><span class="txt"><span class="a">${a}</span><span class="b num">${b}</span></span></div>`
+        )
+        .join("")}</div></div>
+      <p class="note">Shift yang dipantau: siang sebelum jam 12:00, malam sesudahnya, seperti dashboard web. Grafik tetap di console web.</p></div>`
+          );
+        },
+        "pengawas:laporan"() {
+          const R = [
+            [
+              "eno",
+              "Equipment No Operator",
+              "Unit di papan tanpa operator",
+              4,
+              "bad",
+            ],
+            [
+              "one",
+              "Operator No Equipment",
+              "Dijadwalkan, tidak dapat unit",
+              9,
+              "warn",
+            ],
+            [
+              "noftw",
+              "Operator No FTW",
+              "Sudah finger, FTW belum lolos",
+              6,
+              "warn",
+            ],
+            [
+              "nofinger",
+              "Operator No Finger",
+              "Belum finger, atau terlambat",
+              43,
+              "warn",
+            ],
+            [
+              "final",
+              "Final Validation",
+              "Setiap operator dan unit akhirnya",
+              289,
+              "info",
+            ],
+          ];
+          return (
+            topbar("Laporan") +
+            `<div class="body">
+      <div style="display:flex;align-items:center;justify-content:space-between"><button class="back" type="button" aria-label="Hari sebelumnya">${ic("back", 18)}</button><b class="num" style="font-size:17px">Sen 19 Okt</b><button class="back" type="button" aria-label="Hari berikutnya">${ic("chev", 18)}</button></div>
+      <div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="true">Siang</button><button type="button" role="tab" aria-selected="false">Malam</button></div>
+      <div class="group">${R.map(([k, a, b, n, tone]) => `<button class="row" type="button" data-go="laporan-${k}"><span class="ico">${ic("doc", 20)}</span><span class="txt"><span class="a">${a}</span><span class="b">${b}</span></span>${badge(String(n), tone)}${ic("chev", 16)}</button>`).join("")}</div>
+      <p class="note">Hanya lihat, sesuai departemen hak akses kamu. Unduh workbook dari console web.</p></div>`
+          );
+        },
+        "pengawas:laporan-detail"() {
+          const D = {
+            eno: [
+              "Equipment No Operator",
+              EMPTY.map(([u, w]) => [u, w, "Kosong", "bad"]),
+            ],
+            one: [
+              "Operator No Equipment",
+              [
+                [
+                  "Fajar Nugroho",
+                  "NIK 10239911 · Operator DT · A2B, HD785",
+                  "Tanpa unit",
+                  "warn",
+                ],
+                [
+                  "Wahyu Saputra",
+                  "NIK 10240337 · Operator DT · A2B",
+                  "Belum siap",
+                  "warn",
+                ],
+              ],
+            ],
+            noftw: [
+              "Operator No FTW",
+              [
+                [
+                  "Eko Wahyudi",
+                  "NIK 10241276 · tap 05:10",
+                  "Belum FTW",
+                  "warn",
+                ],
+                [
+                  "Rizki Maulana",
+                  "NIK 10233054 · tap 05:19",
+                  "Terlambat FTW (05:31)",
+                  "warn",
+                ],
+              ],
+            ],
+            nofinger: [
+              "Operator No Finger",
+              [
+                [
+                  "Agus Salim",
+                  "NIK 10230011 · Operator DT",
+                  "No Finger",
+                  "bad",
+                ],
+                ["Bayu Saputra", "NIK 10231122 · Operator DT", "05:31", "warn"],
+              ],
+            ],
+            final: [
+              "Final Validation",
+              [
+                [
+                  "Agus Prasetyo",
+                  "NIK 10229001 · EX1203 · PIT 3 SELATAN",
+                  "EX1203",
+                  "info",
+                ],
+                ["Dedi Kurniawan", "NIK 10229002 · tap 05:03", "SPARE", "warn"],
+              ],
+            ],
+          };
+          const [title, rows] = D[S.tab] || D.eno;
+          return (
+            topbar(title, "laporan") +
+            `<div class="body"><div class="search-wrap">${ic("search", 18)}<input class="search" placeholder="Cari nama, NIK atau unit" aria-label="Cari di laporan"></div>
+      <span class="note num">Sen 19 Okt · Shift Siang · ${rows.length} baris</span>
+      <div class="group">${rows.map(([a, b, c, k]) => `<div class="row"><span class="txt"><span class="a">${a}</span><span class="b num">${b}</span></span>${badge(c, k)}</div>`).join("")}</div>
+      <p class="note">Data contoh. Kolom lengkap ada di workbook console web.</p></div>`
+          );
+        },
+        "admin:dashboard"() {
+          return V["pengawas:dashboard"]();
+        },
+        "admin:laporan"() {
+          return V["pengawas:laporan"]();
+        },
+        "admin:laporan-detail"() {
+          return V["pengawas:laporan-detail"]();
         },
         "any:soon"() {
           return (
@@ -2089,6 +2257,11 @@
             "riwayat-ftw": ["riwayat", "ftw"],
             "riwayat-hadir": ["riwayat", "hadir"],
             riwayat: ["riwayat", "unit"],
+            "laporan-eno": ["laporan-detail", "eno"],
+            "laporan-one": ["laporan-detail", "one"],
+            "laporan-noftw": ["laporan-detail", "noftw"],
+            "laporan-nofinger": ["laporan-detail", "nofinger"],
+            "laporan-final": ["laporan-detail", "final"],
           };
           if (map[d.go]) return go(map[d.go][0], { tab: map[d.go][1] });
           if (d.go === "papan-kosong") return go("papan", { filter: "empty" });
