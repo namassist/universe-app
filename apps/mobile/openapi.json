@@ -2688,6 +2688,616 @@
         },
         "operationId": "getV1Attendance"
       }
+    },
+    "/v1/fleet-allocation/actual/display": {
+      "get": {
+        "tags": ["fleet-allocation"],
+        "summary": "The running shift's board, for the fleet TV",
+        "parameters": [
+          {
+            "name": "device",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "servedAt",
+                    "date",
+                    "shift",
+                    "generatedAt",
+                    "provisional",
+                    "ftwClosed",
+                    "fingerClosed",
+                    "rotateSeconds",
+                    "layout",
+                    "cardLayout",
+                    "slideGrid",
+                    "deviceName",
+                    "fleets"
+                  ],
+                  "properties": {
+                    "servedAt": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "shift": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "provisional": {
+                      "type": "boolean"
+                    },
+                    "ftwClosed": {
+                      "type": "boolean"
+                    },
+                    "fingerClosed": {
+                      "type": "boolean"
+                    },
+                    "rotateSeconds": {
+                      "type": "integer"
+                    },
+                    "layout": {
+                      "type": "string"
+                    },
+                    "cardLayout": {
+                      "type": "string"
+                    },
+                    "slideGrid": {
+                      "type": "string"
+                    },
+                    "deviceName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "fleets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "kind",
+                          "leaderCode",
+                          "area",
+                          "busCode",
+                          "total",
+                          "crewed",
+                          "idle",
+                          "substituted",
+                          "units"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "leaderCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "area": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "busCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "total": {
+                            "type": "integer"
+                          },
+                          "crewed": {
+                            "type": "integer"
+                          },
+                          "idle": {
+                            "type": "integer"
+                          },
+                          "substituted": {
+                            "type": "integer"
+                          },
+                          "units": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "unitId",
+                                "unitCode",
+                                "modelName",
+                                "brandName",
+                                "busCode",
+                                "unitArea",
+                                "employeeNik",
+                                "employeeName",
+                                "employeePhotoFile",
+                                "source",
+                                "tappedAt",
+                                "ftw"
+                              ],
+                              "properties": {
+                                "unitId": {
+                                  "type": "string"
+                                },
+                                "unitCode": {
+                                  "type": "string"
+                                },
+                                "modelName": {
+                                  "type": "string"
+                                },
+                                "brandName": {
+                                  "type": "string"
+                                },
+                                "busCode": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "unitArea": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "employeeNik": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "employeeName": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "employeePhotoFile": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "tappedAt": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "ftw": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Fleet-allocationActualDisplay"
+      }
+    },
+    "/v1/unit-status/": {
+      "get": {
+        "tags": ["unit-status"],
+        "summary": "List active units with their operational status",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "code",
+                      "modelName",
+                      "brandName",
+                      "status",
+                      "location",
+                      "updatedAt"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "modelName": {
+                        "type": "string"
+                      },
+                      "brandName": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "location": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Unit-status"
+      }
+    },
+    "/v1/unit-status/{code}/history": {
+      "get": {
+        "tags": ["unit-status"],
+        "summary": "A unit's status changes, newest first",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "status", "reason", "createdAt"],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Unit-statusByCodeHistory"
+      }
+    },
+    "/v1/id-card/{nik}": {
+      "get": {
+        "tags": ["employees"],
+        "summary": "The person a scanned ID card names",
+        "parameters": [
+          {
+            "name": "nik",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "nik",
+                    "name",
+                    "photoFile",
+                    "department",
+                    "position",
+                    "simper",
+                    "shift",
+                    "roster",
+                    "unit",
+                    "area",
+                    "bus",
+                    "checkInAt"
+                  ],
+                  "properties": {
+                    "nik": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "photoFile": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "department": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "position": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "simper": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "shift": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "roster": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unit": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "area": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "bus": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "checkInAt": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Id-cardByNik"
+      }
     }
   }
 }

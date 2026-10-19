@@ -18,6 +18,8 @@ import { API_VERSION } from "@universe/contracts";
 import { as30, sortedResponses } from "./openapi-30";
 import { authRoutes } from "./routes/auth";
 import { employeesRoutes } from "./routes/employees";
+import { fleetActualRoutes } from "./routes/fleet-actual";
+import { idCardRoutes } from "./routes/id-card";
 import {
   attendanceSyncRoutes,
   fitToWorkSyncRoutes,
@@ -25,6 +27,7 @@ import {
 import { meRoutes } from "./routes/me";
 import { mobileRoutes } from "./routes/mobile";
 import { rosterRoutes } from "./routes/roster";
+import { unitStatusRoutes } from "./routes/unit-status";
 
 /** Repo-relative, where the generated document is committed. */
 export const MOBILE_SPEC_PATH = "apps/mobile/openapi.json";
@@ -52,6 +55,12 @@ export const MOBILE_OPERATIONS = [
   "GET /v1/fit-to-work/",
   "GET /v1/attendance/",
   "GET /v1/roster/",
+  /* The Pengawas Lapangan's screens (stage 3, S5): the fleet wall's own board,
+     unit status and its trail, and a scanned card. */
+  "GET /v1/fleet-allocation/actual/display",
+  "GET /v1/unit-status/",
+  "GET /v1/unit-status/{code}/history",
+  "GET /v1/id-card/{nik}",
 ] as const;
 
 type Json = Record<string, unknown>;
@@ -140,6 +149,9 @@ export async function buildMobileSpec(): Promise<Json> {
         .use(employeesRoutes)
         .use(fitToWorkSyncRoutes)
         .use(attendanceSyncRoutes)
+        .use(fleetActualRoutes)
+        .use(unitStatusRoutes)
+        .use(idCardRoutes)
     );
 
   const response = await app.handle(

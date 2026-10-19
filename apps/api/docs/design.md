@@ -272,6 +272,10 @@ with the TV or the ops console:
   each stage with its claim and last logged run, and the heartbeat, from
   `ops/muster-stages.ts`, which `/v1/ops/overview` now uses too. Nothing else
   of the Operations Center leaves through it.
+- **The Pengawas Lapangan reads what the web reads** (S5): unit status and
+  its trail (`/unit-status`), and a scanned card (`/id-card/:nik`, scoped as
+  every read of the register). The spec publishes those GETs only; a status
+  change, a card's photo and the wall's photo feed stay out (test-asserted).
 - **`/me/shift` carries its gates** (`ftwDeadline`, `fingerIn`, `board`,
   `secondFinger`, `busDepart`, "HH:MM" or null), so the app words "Batas
   05:25" from the timeline and never from a constant.

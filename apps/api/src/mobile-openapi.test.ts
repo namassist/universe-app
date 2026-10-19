@@ -45,6 +45,13 @@ describe("buildMobileSpec", () => {
       "/v1/roster/sync",
       "/v1/fit-to-work/sync",
       "/v1/employees",
+      /* Mounted groups whose other routes the phone never calls: the wall's
+         photo feed, a card's photo, a status change, a regenerated board. */
+      "/v1/fleet-allocation/actual/display/photo/{nik}",
+      "/v1/id-card/{nik}/photo",
+      "/v1/unit-status/{code}",
+      "/v1/fleet-allocation/actual/{date}/{shift}/generate",
+      "/v1/ops/overview",
     ])
       expect(paths).not.toContain(internal);
   });
