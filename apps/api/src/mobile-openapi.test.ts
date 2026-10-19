@@ -52,8 +52,20 @@ describe("buildMobileSpec", () => {
       "/v1/unit-status/{code}",
       "/v1/fleet-allocation/actual/{date}/{shift}/generate",
       "/v1/ops/overview",
+      /* The Superadmin's (S6): no account import, no timeline edit, no muster reset. */
+      "/v1/users/import/validate",
+      "/v1/timeline/{id}",
+      "/v1/timeline/reset/{shift}",
     ])
       expect(paths).not.toContain(internal);
+  });
+
+  test("publishes only the verbs the phone sends on a shared path", async () => {
+    const spec = (await buildMobileSpec()) as Spec;
+    /* Deactivating is a PATCH; deleting an account stays on the web. */
+    expect(Object.keys(spec.paths["/v1/users/{id}"] ?? {})).toEqual(["patch"]);
+    /* The monitor reads; a stage is added or retimed only on the web. */
+    expect(spec.paths["/v1/timeline/"]).toBeUndefined();
   });
 
   test("is written in the 3.0 forms a generator reads", async () => {

@@ -27,7 +27,9 @@ import {
 import { meRoutes } from "./routes/me";
 import { mobileRoutes } from "./routes/mobile";
 import { rosterRoutes } from "./routes/roster";
+import { timelineRoutes } from "./routes/timeline";
 import { unitStatusRoutes } from "./routes/unit-status";
+import { usersRoutes } from "./routes/users";
 
 /** Repo-relative, where the generated document is committed. */
 export const MOBILE_SPEC_PATH = "apps/mobile/openapi.json";
@@ -61,6 +63,14 @@ export const MOBILE_OPERATIONS = [
   "GET /v1/unit-status/",
   "GET /v1/unit-status/{code}/history",
   "GET /v1/id-card/{nik}",
+  /* The Superadmin's (S6): a hand placement as the Actual tab makes it, the
+     two account actions, and the muster monitor. */
+  "GET /v1/fleet-allocation/actual/{date}/{shift}/candidates/{unitId}",
+  "PATCH /v1/fleet-allocation/actual/{date}/{shift}/{unitId}",
+  "GET /v1/users/",
+  "PATCH /v1/users/{id}",
+  "POST /v1/users/{id}/reset-password",
+  "GET /v1/timeline/runs",
 ] as const;
 
 type Json = Record<string, unknown>;
@@ -152,6 +162,8 @@ export async function buildMobileSpec(): Promise<Json> {
         .use(fleetActualRoutes)
         .use(unitStatusRoutes)
         .use(idCardRoutes)
+        .use(usersRoutes)
+        .use(timelineRoutes)
     );
 
   const response = await app.handle(

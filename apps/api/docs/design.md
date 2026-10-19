@@ -276,6 +276,10 @@ with the TV or the ops console:
   its trail (`/unit-status`), and a scanned card (`/id-card/:nik`, scoped as
   every read of the register). The spec publishes those GETs only; a status
   change, a card's photo and the wall's photo feed stay out (test-asserted).
+- **The Superadmin acts through the web's own routes** (S6): the Actual
+  tab's candidates and hand placement (with its FTW acknowledgement), account
+  reset and deactivation, and `/timeline/runs`. The spec leaves out deleting
+  an account, the account import, timeline edits and regenerating a board.
 - **`/me/shift` carries its gates** (`ftwDeadline`, `fingerIn`, `board`,
   `secondFinger`, `busDepart`, "HH:MM" or null), so the app words "Batas
   05:25" from the timeline and never from a constant.
