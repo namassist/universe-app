@@ -231,7 +231,9 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
         </DialogIcon>
         <DialogTitle id="tk-reprint-t">{t.tkReprintT}</DialogTitle>
         <DialogBody>
-          {reprintFor?.name ?? reprintFor?.nik} {t.tkReprintB}
+          {fmt(t.tkReprintB, {
+            name: reprintFor?.name ?? reprintFor?.nik ?? "",
+          })}
         </DialogBody>
         <form
           onSubmit={(e) => {

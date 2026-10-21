@@ -48,8 +48,8 @@ describe("the printer test notice", () => {
   });
 });
 
-/* The whole sentence of every notice, in both languages, pinned as it read
-   before the wording moved into the dictionaries. */
+/* The whole sentence of every notice, in both languages, pinned word for
+   word. */
 describe("every notice reads word for word", () => {
   const gen = {
     kind: "allocation-generated",
@@ -68,75 +68,75 @@ describe("every notice reads word for word", () => {
     [
       gen,
       "id",
-      "Papan shift pagi 2026-10-21 selesai digenerate — 40 dari 42 unit dapat operator",
+      "Papan shift pagi 2026-10-21 selesai digenerate: 40 dari 42 unit dapat operator",
     ],
-    [gen, "en", "day board for 2026-10-21 generated — 40 of 42 units crewed"],
+    [gen, "en", "day board for 2026-10-21 generated: 40 of 42 units crewed"],
     [
       fail("no-shift"),
       "id",
-      "Generate papan shift malam 2026-10-21 gagal — stage timeline ini belum diberi shift",
+      "Generate papan shift malam 2026-10-21 gagal: stage timeline ini belum diberi shift",
     ],
     [
       fail("no-finger-deadline"),
       "id",
-      "Generate papan shift malam 2026-10-21 gagal — stage Batas Finger In tidak aktif",
+      "Generate papan shift malam 2026-10-21 gagal: stage Batas Finger In tidak aktif",
     ],
     [
       fail("no-ftw-deadline"),
       "id",
-      "Generate papan shift malam 2026-10-21 gagal — stage Batas Upload FTW tidak aktif",
+      "Generate papan shift malam 2026-10-21 gagal: stage Batas Upload FTW tidak aktif",
     ],
     [
       fail("unexpected"),
       "id",
-      "Generate papan shift malam 2026-10-21 gagal — kesalahan tak terduga — cek log server",
+      "Generate papan shift malam 2026-10-21 gagal: kesalahan tak terduga, cek log server",
     ],
     [
       fail("no-shift"),
       "en",
-      "night board for 2026-10-21 failed to generate — the timeline stage has no shift set",
+      "night board for 2026-10-21 failed to generate: the timeline stage has no shift set",
     ],
     [
       fail("no-finger-deadline"),
       "en",
-      "night board for 2026-10-21 failed to generate — no active finger-in stage",
+      "night board for 2026-10-21 failed to generate: no active finger-in stage",
     ],
     [
       fail("no-ftw-deadline"),
       "en",
-      "night board for 2026-10-21 failed to generate — no active FTW upload deadline",
+      "night board for 2026-10-21 failed to generate: no active FTW upload deadline",
     ],
     [
       fail("unexpected"),
       "en",
-      "night board for 2026-10-21 failed to generate — unexpected error — check the server log",
+      "night board for 2026-10-21 failed to generate: unexpected error, check the server log",
     ],
     [
       fail("something new"),
       "id",
-      "Generate papan shift malam 2026-10-21 gagal — something new",
+      "Generate papan shift malam 2026-10-21 gagal: something new",
     ],
     [
       slip([]),
       "id",
-      "Tes printer shift malam: 2/3 terkirim — cek slip keluar di tiap bilik",
+      "Tes printer shift malam: 2/3 terkirim. Cek slip keluar di tiap bilik",
     ],
     [
       slip(["A", "B"]),
       "id",
-      "Tes printer shift malam: 2/3 terkirim — gagal: A, B",
+      "Tes printer shift malam: 2/3 terkirim, gagal di A, B",
     ],
     [
       slip([]),
       "en",
-      "night printer test: 2/3 sent — check each booth printed its slip",
+      "night printer test: 2/3 sent. Check each booth printed its slip",
     ],
-    [slip(["A", "B"]), "en", "night printer test: 2/3 sent — failed: A, B"],
+    [slip(["A", "B"]), "en", "night printer test: 2/3 sent, failed at A, B"],
     [{ kind: "brand-new-kind", params: {} }, "id", "brand-new-kind"],
     [
       { kind: "allocation-generated", params: { shift: "swing" } },
       "en",
-      "swing board for  generated — 0 of 0 units crewed",
+      "swing board for  generated: 0 of 0 units crewed",
     ],
   ] as const)("%o in %s", (n, lang, text) => {
     expect(notifText(n, lang)).toBe(text);

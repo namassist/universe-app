@@ -68,6 +68,11 @@ The full list. The sharpest ones are repeated in `AGENTS.md`.
       by `fmt(t.key, { name })` — not fragments glued round the numbers, since
       the two languages put the values in different places. Plurals that differ
       in English are two entries (`…1` / `…N`).
+    - No em dash (—) in dictionary copy. Between two values use `·`
+      (`Fleet {code} · {area}`); after a label that is then explained use `:`
+      (`Slideshow: satu fleet bergantian`); in a sentence use a period, a
+      comma or parentheses. The one kept is the slip's own printed text,
+      quoted as “TES PRINTER — BUKAN TIKET”.
     - A module-level table (status badges, filters, label maps) holds
       `keyof Dict` and the component reads `t[entry.label]`; a pure `lib/`
       function takes `t: Dict` (or returns a key) so its test can pass `id`
