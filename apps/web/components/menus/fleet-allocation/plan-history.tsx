@@ -84,7 +84,7 @@ export function PlanHistoryDrawer({
           </div>
           <div className="mb-5">
             <Badge variant={stBadge[unit.status].variant} dot>
-              {stBadge[unit.status].label}
+              {t[stBadge[unit.status].label]}
             </Badge>
           </div>
 

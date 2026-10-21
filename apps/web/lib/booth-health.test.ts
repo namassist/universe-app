@@ -5,6 +5,7 @@ import {
   isBoothProblem,
   matchesReadiness,
 } from "./booth-health";
+import { id } from "./i18n/id";
 
 describe("how a booth's health reads on screen", () => {
   test("only a ready booth is not a problem", () => {
@@ -19,17 +20,19 @@ describe("how a booth's health reads on screen", () => {
   });
 
   test("a dead printer says so, rather than calling the machine offline", () => {
-    expect(boothHealthView("printer_offline").label).toBe("Printer mati");
-    expect(boothHealthView("offline").label).toBe("Offline");
+    expect(id[boothHealthView("printer_offline").label]).toBe("Printer mati");
+    expect(id[boothHealthView("offline").label]).toBe("Offline");
   });
 
   test("a booth without a printer is told apart from one with a dead printer", () => {
-    expect(boothHealthView("no_printer").label).toBe("Tanpa printer");
-    expect(boothHealthView("printer_inactive").label).toBe("Printer nonaktif");
+    expect(id[boothHealthView("no_printer").label]).toBe("Tanpa printer");
+    expect(id[boothHealthView("printer_inactive").label]).toBe(
+      "Printer nonaktif"
+    );
   });
 
   test("a device not yet probed is never called dead", () => {
-    expect(boothHealthView("unchecked").label).toBe("Belum dicek");
+    expect(id[boothHealthView("unchecked").label]).toBe("Belum dicek");
     expect(boothHealthView("unchecked").variant).toBe("neutral");
     expect(isBoothProblem("unchecked")).toBe(true);
   });

@@ -5,7 +5,7 @@ import { Monitor, Volume2, WifiOff } from "lucide-react";
 
 import type { DeviceKind } from "@universe/contracts";
 
-import { useI18n } from "@/lib/i18n";
+import { fmt as fmtText, useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { LogoBadge } from "@/components/ui/logo";
 
@@ -196,13 +196,15 @@ export function DisplayShell({
               />
               <div>
                 <b className="text-[26px] font-bold text-danger-text">
-                  Koneksi terputus — data tidak diperbarui
+                  {t.wlDisconnected}
                 </b>
                 <br />
                 <span className="text-xl text-danger-text opacity-85">
                   {staleSince
-                    ? `Menampilkan data terakhir ${fmt(new Date(staleSince))} WITA. Menghubungkan ulang…`
-                    : "Belum ada data yang berhasil dimuat. Menghubungkan ulang…"}
+                    ? fmtText(t.wlStaleSince, {
+                        time: fmt(new Date(staleSince)),
+                      })
+                    : t.wlNeverLoaded}
                 </span>
               </div>
             </div>

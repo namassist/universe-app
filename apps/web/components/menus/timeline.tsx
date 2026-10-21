@@ -6,18 +6,22 @@ import { Clock, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 
 import {
   DEFAULT_SOUND_OFFSET,
-  MENU_LABELS,
-  SHIFT_KIND_LABELS,
   SHIFT_KINDS,
   TIMELINE_ACTIONS,
-  timelineActionLabel,
   type ShiftKind,
   type TimelineAction,
 } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import {
+  fmt,
+  menuLabel,
+  shiftKindLabel,
+  timelineActionText,
+  useI18n,
+  type Dict,
+} from "@/lib/i18n";
 import { soundsQueryOptions } from "@/lib/queries/sounds";
 import {
   timelineKey,
@@ -111,10 +115,10 @@ function scheduleNotice(input: {
   /** The time the stage carries now, for an edit — absent when adding. */
   wasAt: string | null;
   entries: TimelineStageRow[];
-  lang: "id" | "en";
+  t: Dict;
   now: Date;
 }): string | null {
-  const { action, shift, at, wasAt, entries, lang } = input;
+  const { action, shift, at, wasAt, entries, t } = input;
   if (!shift || LABEL_ONLY.includes(action)) return null;
 
   const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
@@ -124,31 +128,25 @@ function scheduleNotice(input: {
 
   if (action === "shift-start") {
     if (minutesOf(at) <= nowMinutes) return null;
-    return lang === "id"
-      ? `Jam ini belum tiba hari ini. Sampai ${at}, dinding akan menampilkan shift sebelumnya — bukan shift yang sedang berkumpul.`
-      : `This time has not arrived today. Until ${at} the walls will show the previous shift, not the one mustering.`;
+    return fmt(t.tlNoticeShiftStart, { at });
   }
 
   const pull = PULLED_BY[action];
   if (pull) {
     const opened = timeOf(pull);
     if (!opened || minutesOf(opened) > nowMinutes) return null;
-    return lang === "id"
-      ? `Penarikan data sudah dibuka ${opened} hari ini dan sudah mengunci batas lamanya. Aturan lolos/telat dan lencana ikut jam baru seketika, tapi penarikannya tetap berhenti di jam lama sampai besok.`
-      : `The pull opened at ${opened} today and has already fixed the old deadline. The pass rule and the badges follow the new time at once, but the pull still stops at the old one until tomorrow.`;
+    return fmt(t.tlNoticePull, { at: opened });
   }
 
   /* A trigger: claimed once per day, so a time it has already passed is spent
      whatever the new one says. */
   const fired = wasAt ?? at;
   if (minutesOf(fired) > nowMinutes) return null;
-  return lang === "id"
-    ? `Tahap ini sudah menyala ${fired} hari ini dan tidak akan menyala lagi. Jam baru berlaku besok.`
-    : `This stage already fired at ${fired} today and will not fire again. The new time applies tomorrow.`;
+  return fmt(t.tlNoticeFired, { at: fired });
 }
 
 export function TimelineMenu({ mode }: { mode: AccessMode }) {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
   const canW = mode === "manage";
@@ -262,7 +260,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
       setResetOpen(false),
       pushToast(
         "success",
-        `${t.tlReset} ${SHIFT_KIND_LABELS[data.shift]}`,
+        `${t.tlReset} ${shiftKindLabel(t, data.shift)}`,
         data.listenUntil
           ? `${t.tlResetUntil} ${siteClock(data.listenUntil)}`
           : t.tlResetNothing
@@ -294,7 +292,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     return (
       r.name.toLowerCase().includes(needle) ||
       r.at.includes(needle) ||
-      timelineActionLabel(r.action).toLowerCase().includes(needle)
+      timelineActionText(t, r.action).toLowerCase().includes(needle)
     );
   });
   const pg = usePagination(rows);
@@ -331,7 +329,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
     at: fAt,
     wasAt: editing?.at ?? null,
     entries,
-    lang,
+    t,
     now: new Date(),
   });
 
@@ -354,7 +352,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={MENU_LABELS.timeline} sub={t.tlSub}>
+      <PageTitle title={menuLabel(t, "timeline")} sub={t.tlSub}>
         {canW ? (
           /* One flex item, not two: `PageTitle` spreads its children apart,
              which left the reset stranded mid-header rather than beside the
@@ -386,7 +384,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>{MENU_LABELS.timeline}</ToolbarTitle>
+          <ToolbarTitle>{menuLabel(t, "timeline")}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
               className="w-[240px]"
@@ -412,9 +410,9 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
           <Table>
             <TableHeader>
               <tr>
-                <TableHead>Nama Tahap</TableHead>
+                <TableHead>{t.tlStageName}</TableHead>
                 <TableHead>{t.mdJam}</TableHead>
-                <TableHead>Aksi</TableHead>
+                <TableHead>{t.tlAction}</TableHead>
                 <TableHead>{t.tlShift}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
@@ -428,11 +426,11 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
                   </TableCell>
                   <TableCell className="font-mono">{r.at}</TableCell>
                   <TableCell className="text-(--text-secondary)">
-                    {timelineActionLabel(r.action)}
+                    {timelineActionText(t, r.action)}
                   </TableCell>
                   <TableCell>
                     {r.shift ? (
-                      SHIFT_KIND_LABELS[r.shift]
+                      shiftKindLabel(t, r.shift)
                     ) : (
                       <span className="text-(--text-tertiary)">—</span>
                     )}
@@ -520,7 +518,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <Field
               className="mt-4"
-              label="Nama Tahap"
+              label={t.tlStageName}
               htmlFor="tl-name"
               required
               error={errName}
@@ -553,7 +551,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
                   <option value="">{t.tlShiftNone}</option>
                   {SHIFT_KINDS.map((k) => (
                     <option key={k} value={k}>
-                      {SHIFT_KIND_LABELS[k]}
+                      {shiftKindLabel(t, k)}
                     </option>
                   ))}
                 </Select>
@@ -562,7 +560,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
             <p className="mt-2 text-xs text-(--text-tertiary)">
               {t.tlShiftHint}
             </p>
-            <Field className="mt-4" label="Aksi" htmlFor="tl-action">
+            <Field className="mt-4" label={t.tlAction} htmlFor="tl-action">
               {/* The option's value is the contract value; the label is only what
                 it reads as. Submitting the label would make dispatch depend on
                 the wording of a translation. */}
@@ -573,7 +571,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
               >
                 {TIMELINE_ACTIONS.map((a) => (
                   <option key={a} value={a}>
-                    {timelineActionLabel(a)}
+                    {timelineActionText(t, a)}
                   </option>
                 ))}
               </Select>
@@ -658,7 +656,7 @@ export function TimelineMenu({ mode }: { mode: AccessMode }) {
                 active={resetShift === shift}
                 onClick={() => setResetShift(shift)}
               >
-                {SHIFT_KIND_LABELS[shift]}
+                {shiftKindLabel(t, shift)}
                 {shift === runningShift ? ` · ${t.tlResetRunning}` : ""}
               </SegmentedButton>
             ))}

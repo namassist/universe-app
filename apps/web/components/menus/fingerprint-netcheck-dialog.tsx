@@ -4,7 +4,7 @@ import * as React from "react";
 import { Activity, RotateCw } from "lucide-react";
 
 import { api } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -182,12 +182,16 @@ export function NetcheckDialog({
               <tr>
                 <TableHead>{t.mfName}</TableHead>
                 <TableHead>{t.mfIp}</TableHead>
-                <TableHead aria-label={`${t.mfIp} — ping`}>Ping</TableHead>
-                <TableHead>Web</TableHead>
+                <TableHead aria-label={fmt(t.ncPingOf, { target: t.mfIp })}>
+                  {t.cmPing}
+                </TableHead>
+                <TableHead>{t.cmWeb}</TableHead>
                 <TableHead>:4370</TableHead>
                 <TableHead>{t.mfPrinterIp}</TableHead>
-                <TableHead aria-label={`${t.mfPrinterIp} — ping`}>
-                  Ping
+                <TableHead
+                  aria-label={fmt(t.ncPingOf, { target: t.mfPrinterIp })}
+                >
+                  {t.cmPing}
                 </TableHead>
                 <TableHead>:9100</TableHead>
               </tr>
@@ -276,7 +280,7 @@ function StatusCell({
   let content: React.ReactNode;
   if (pending) content = <span className="text-(--text-tertiary)">…</span>;
   else if (!status) content = <span className="text-(--text-tertiary)">—</span>;
-  else if (status === "ok") content = <Badge variant="success">ok</Badge>;
+  else if (status === "ok") content = <Badge variant="success">{t.cmOk}</Badge>;
   else if (status === "fail")
     content = <Badge variant="danger">{t.mfPingFail}</Badge>;
   else content = <Badge variant="neutral">n/a</Badge>;

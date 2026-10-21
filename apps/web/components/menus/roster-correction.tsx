@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Undo2 } from "lucide-react";
 
-import { MENU_LABELS } from "@universe/contracts";
-
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, menuLabel, useI18n } from "@/lib/i18n";
 import {
   rosterCorrectionsQueryOptions,
   rosterCorrectionsRoot,
@@ -108,51 +106,52 @@ export function RosterCorrectionMenu({ mode }: { mode: AccessMode }) {
       await invalidate();
       pushToast(
         "success",
-        "Koreksi dibatalkan",
-        `${row.name} — ${row.date} kembali ${row.fromCode ?? "kosong"}`
+        t.rcRevoked,
+        fmt(t.rcRevokedB, {
+          name: row.name,
+          date: row.date,
+          code: row.fromCode ?? t.rcEmptyCode,
+        })
       );
       setRevokeTarget(null);
     },
     onError: (error) =>
-      pushToast("error", "Gagal membatalkan", errorMessage(error, t.loginErr)),
+      pushToast("error", t.rcRevokeFail, errorMessage(error, t.loginErr)),
   });
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title={MENU_LABELS["roster-correction"]}
-        sub="Ubah roster satu orang untuk satu hari, di atas data unggul_att — berlaku langsung dan tidak tertimpa tarikan berikutnya"
-      >
+      <PageTitle title={menuLabel(t, "roster-correction")} sub={t.rcSub}>
         {canW ? (
           <Button onClick={() => router.push("/roster-correction/new")}>
             <Plus />
-            Tambah Koreksi
+            {t.rcAdd}
           </Button>
         ) : null}
       </PageTitle>
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>Daftar Koreksi</ToolbarTitle>
+          <ToolbarTitle>{t.rcListT}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
               className="w-[240px]"
-              placeholder="Cari NIK atau nama"
-              aria-label="Cari NIK atau nama"
+              placeholder={t.rcSearch}
+              aria-label={t.rcSearch}
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
             <Input
               type="date"
               className="w-[160px]"
-              aria-label="Dari tanggal"
+              aria-label={t.rcFrom}
               value={from}
               onChange={(e) => setFrom(e.target.value)}
             />
             <Input
               type="date"
               className="w-[160px]"
-              aria-label="Sampai tanggal"
+              aria-label={t.rcTo}
               value={to}
               onChange={(e) => setTo(e.target.value)}
             />
@@ -163,14 +162,14 @@ export function RosterCorrectionMenu({ mode }: { mode: AccessMode }) {
           <Table>
             <TableHeader>
               <tr>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>NIK</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Departemen</TableHead>
-                <TableHead>Roster</TableHead>
-                <TableHead>Alasan</TableHead>
-                <TableHead>Dibuat</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t.rcThDate}</TableHead>
+                <TableHead>{t.cmNik}</TableHead>
+                <TableHead>{t.thNama}</TableHead>
+                <TableHead>{t.thDept}</TableHead>
+                <TableHead>{t.rcThRoster}</TableHead>
+                <TableHead>{t.rcThReason}</TableHead>
+                <TableHead>{t.rcThCreated}</TableHead>
+                <TableHead>{t.thStatus}</TableHead>
                 {canW ? (
                   <TableHead style={{ width: 70 }}>{t.thAct}</TableHead>
                 ) : null}
@@ -199,13 +198,16 @@ export function RosterCorrectionMenu({ mode }: { mode: AccessMode }) {
                     {r.revokedAt ? (
                       <Badge
                         variant="neutral"
-                        title={`Dibatalkan oleh ${r.revokedByName ?? "—"}, ${stamp(r.revokedAt)}`}
+                        title={fmt(t.rcRevokedBy, {
+                          name: r.revokedByName ?? "—",
+                          at: stamp(r.revokedAt),
+                        })}
                       >
-                        Dibatalkan
+                        {t.rcStRevoked}
                       </Badge>
                     ) : (
                       <Badge variant="success" dot>
-                        Berlaku
+                        {t.rcStActive}
                       </Badge>
                     )}
                   </TableCell>
@@ -214,7 +216,7 @@ export function RosterCorrectionMenu({ mode }: { mode: AccessMode }) {
                       {r.revokedAt ? null : (
                         <IconButton
                           danger
-                          aria-label="Batalkan koreksi"
+                          aria-label={t.rcRevokeAria}
                           onClick={() => setRevokeTarget(r)}
                         >
                           <Undo2 />
@@ -229,18 +231,16 @@ export function RosterCorrectionMenu({ mode }: { mode: AccessMode }) {
         ) : (
           <StateBox
             icon={<Search className="text-(--color-primary-bright)" />}
-            title={listQ.isError ? "Gagal memuat koreksi" : t.noResTitle}
+            title={listQ.isError ? t.rcLoadFail : t.noResTitle}
             body={
-              listQ.isError
-                ? errorMessage(listQ.error, t.loginErr)
-                : "Belum ada koreksi roster di rentang tanggal ini."
+              listQ.isError ? errorMessage(listQ.error, t.loginErr) : t.rcEmptyB
             }
           />
         )}
 
         <PanelFoot>
           <FootSum>
-            Menampilkan <b>{pg.range}</b> dari <b>{pg.total}</b> koreksi
+            {t.rcSumA} <b>{pg.range}</b> {t.rcSumB} <b>{pg.total}</b> {t.rcSumC}
           </FootSum>
           <Pagination
             page={pg.page}
@@ -261,11 +261,14 @@ export function RosterCorrectionMenu({ mode }: { mode: AccessMode }) {
         <DialogIcon variant="danger">
           <Undo2 />
         </DialogIcon>
-        <DialogTitle id="rcr-t">Batalkan koreksi?</DialogTitle>
+        <DialogTitle id="rcr-t">{t.rcRevokeT}</DialogTitle>
         <DialogBody>
-          Roster {revokeTarget?.name} tanggal {revokeTarget?.date} kembali ke{" "}
-          <b>{revokeTarget?.fromCode ?? "kosong"}</b>, lalu mengikuti unggul_att
-          pada tarikan berikutnya. Board yang sudah terbentuk tidak berubah.
+          {fmt(t.rcRevokeB1, {
+            name: revokeTarget?.name ?? "",
+            date: revokeTarget?.date ?? "",
+          })}{" "}
+          <b>{revokeTarget?.fromCode ?? t.rcEmptyCode}</b>
+          {t.rcRevokeB2}
         </DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setRevokeTarget(null)}>
@@ -276,7 +279,7 @@ export function RosterCorrectionMenu({ mode }: { mode: AccessMode }) {
             disabled={revoke.isPending}
             onClick={() => revokeTarget && revoke.mutate(revokeTarget)}
           >
-            Batalkan Koreksi
+            {t.rcRevokeBtn}
           </Button>
         </DialogActions>
       </Dialog>

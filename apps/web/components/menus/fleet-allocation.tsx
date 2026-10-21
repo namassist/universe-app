@@ -27,7 +27,7 @@ function FleetAllocationInner({ mode: access }: { mode: AccessMode }) {
   return (
     <div className="flex flex-col gap-6">
       <PageTitle title={t.navFleetAlloc}>
-        <Segmented role="group" aria-label="Mode">
+        <Segmented role="group" aria-label={t.faModeAria}>
           <SegmentedButton
             active={mode === "plan"}
             onClick={() => setMode("plan")}

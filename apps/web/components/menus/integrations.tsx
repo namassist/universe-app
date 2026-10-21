@@ -16,13 +16,12 @@ import {
 import {
   INTEGRATION_SCOPE_ENDPOINTS,
   INTEGRATION_SCOPES,
-  MENU_LABELS,
   type IntegrationScope,
 } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, menuLabel, useI18n } from "@/lib/i18n";
 import {
   integrationClientsKey,
   integrationClientsQueryOptions,
@@ -156,11 +155,7 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
       setIssued({ name: row.name, token: row.token });
     },
     onError: (error) =>
-      pushToast(
-        "error",
-        "Gagal membuat token",
-        errorMessage(error, t.loginErr)
-      ),
+      pushToast("error", t.igCreateFail, errorMessage(error, t.loginErr)),
   });
 
   const redate = useMutation({
@@ -178,19 +173,19 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
       await invalidate();
       pushToast(
         "success",
-        "Masa berlaku diperbarui",
+        t.igDatesSaved,
         row.validUntil
-          ? `${row.name} berlaku ${day(row.validFrom)} – ${day(row.validUntil)}`
-          : `${row.name} berlaku mulai ${day(row.validFrom)}, tanpa batas`
+          ? fmt(t.igValidRange, {
+              name: row.name,
+              from: day(row.validFrom),
+              until: day(row.validUntil),
+            })
+          : fmt(t.igValidOpen, { name: row.name, from: day(row.validFrom) })
       );
       setRenew(null);
     },
     onError: (error) =>
-      pushToast(
-        "error",
-        "Gagal mengubah masa berlaku",
-        errorMessage(error, t.loginErr)
-      ),
+      pushToast("error", t.igDatesFail, errorMessage(error, t.loginErr)),
   });
 
   const rotate = useMutation({
@@ -210,11 +205,7 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
       setIssued({ name: row.name, token: row.token });
     },
     onError: (error) =>
-      pushToast(
-        "error",
-        "Gagal mengganti token",
-        errorMessage(error, t.loginErr)
-      ),
+      pushToast("error", t.igRotateFail, errorMessage(error, t.loginErr)),
   });
 
   const revoke = useMutation({
@@ -227,15 +218,11 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
     },
     onSuccess: async (row) => {
       await invalidate();
-      pushToast(
-        "success",
-        "Token dicabut",
-        `${row.name} tidak bisa masuk lagi`
-      );
+      pushToast("success", t.igRevoked, fmt(t.igRevokedB, { name: row.name }));
       setRevokeTarget(null);
     },
     onError: (error) =>
-      pushToast("error", "Gagal mencabut", errorMessage(error, t.loginErr)),
+      pushToast("error", t.igRevokeFail, errorMessage(error, t.loginErr)),
   });
 
   function openAdd() {
@@ -280,11 +267,7 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
       done = document.execCommand("copy");
     }
     if (!done) {
-      pushToast(
-        "error",
-        "Gagal menyalin",
-        "Pilih token di kolom lalu salin manual (Ctrl+C)"
-      );
+      pushToast("error", t.igCopyFail, t.igCopyManual);
       return;
     }
     setCopied(true);
@@ -302,8 +285,10 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
 
   const renewPending = redate.isPending || rotate.isPending;
   const today = siteToday();
-  const addProblem = validityProblem(validity, today);
-  const renewProblem = renew ? validityProblem(renew.validity, today) : null;
+  const addProblemKey = validityProblem(validity, today);
+  const addProblem = addProblemKey ? t[addProblemKey] : null;
+  const renewProblemKey = renew ? validityProblem(renew.validity, today) : null;
+  const renewProblem = renewProblemKey ? t[renewProblemKey] : null;
 
   /** The dialog opens on the client's own dates for a change of dates, and on
    *  today-to-a-year for a new token — a new token is a new start. */
@@ -343,35 +328,32 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title={MENU_LABELS.integrations}
-        sub="Token untuk layanan lain di jaringan site yang membaca data dari Universe"
-      >
+      <PageTitle title={menuLabel(t, "integrations")} sub={t.igSub}>
         {canW ? (
           <Button onClick={openAdd}>
             <Plus />
-            Tambah Klien
+            {t.igAdd}
           </Button>
         ) : null}
       </PageTitle>
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>Klien Terdaftar</ToolbarTitle>
+          <ToolbarTitle>{t.igListT}</ToolbarTitle>
         </Toolbar>
 
         {rows.length ? (
           <Table>
             <TableHeader>
               <tr>
-                <TableHead>Nama</TableHead>
-                <TableHead>Token</TableHead>
-                <TableHead>Akses</TableHead>
-                <TableHead>IP Diizinkan</TableHead>
-                <TableHead>Dibuat</TableHead>
-                <TableHead>Terakhir Dipakai</TableHead>
-                <TableHead>Masa Berlaku</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t.thNama}</TableHead>
+                <TableHead>{t.cmToken}</TableHead>
+                <TableHead>{t.igAccess}</TableHead>
+                <TableHead>{t.igIps}</TableHead>
+                <TableHead>{t.igCreated}</TableHead>
+                <TableHead>{t.igLastUsed}</TableHead>
+                <TableHead>{t.igValidity}</TableHead>
+                <TableHead>{t.thStatus}</TableHead>
                 {canW ? (
                   <TableHead style={{ width: 130 }}>{t.thAct}</TableHead>
                 ) : null}
@@ -398,7 +380,9 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
                       )}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {r.allowedIps.length ? r.allowedIps.join(", ") : "Semua"}
+                      {r.allowedIps.length
+                        ? r.allowedIps.join(", ")
+                        : t.igAllIps}
                     </TableCell>
                     <TableCell className="text-xs whitespace-nowrap">
                       {r.createdByName}
@@ -411,31 +395,34 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
                     </TableCell>
                     <TableCell className="text-xs whitespace-nowrap tabular-nums">
                       {day(r.validFrom)} –{" "}
-                      {r.validUntil ? day(r.validUntil) : "tanpa batas"}
+                      {r.validUntil ? day(r.validUntil) : t.igNoEnd}
                     </TableCell>
                     <TableCell>
                       {r.revokedAt ? (
                         <Badge
                           variant="neutral"
-                          title={`Dicabut oleh ${r.revokedByName ?? "—"}, ${stamp(r.revokedAt)}`}
+                          title={fmt(t.igRevokedBy, {
+                            name: r.revokedByName ?? "—",
+                            at: stamp(r.revokedAt),
+                          })}
                         >
-                          Dicabut
+                          {t.igStRevoked}
                         </Badge>
                       ) : state.kind === "expired" ? (
-                        <Badge variant="danger">Kedaluwarsa</Badge>
+                        <Badge variant="danger">{t.igStExpired}</Badge>
                       ) : state.kind === "scheduled" ? (
                         <Badge variant="info">
-                          Mulai {state.startsIn} hari lagi
+                          {fmt(t.igStStartsIn, { n: state.startsIn })}
                         </Badge>
                       ) : state.kind === "soon" ? (
                         <Badge variant="warning" dot>
                           {state.daysLeft === 0
-                            ? "Hari terakhir"
-                            : `Habis ${state.daysLeft} hari lagi`}
+                            ? t.igStLastDay
+                            : fmt(t.igStEndsIn, { n: state.daysLeft })}
                         </Badge>
                       ) : (
                         <Badge variant="success" dot>
-                          Aktif
+                          {t.igStActive}
                         </Badge>
                       )}
                     </TableCell>
@@ -444,23 +431,23 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
                         {r.revokedAt ? null : (
                           <div className="flex gap-1">
                             <IconButton
-                              aria-label="Ubah masa berlaku"
-                              title="Ubah masa berlaku"
+                              aria-label={t.igRenewDates}
+                              title={t.igRenewDates}
                               onClick={() => openRenew("dates", r)}
                             >
                               <CalendarClock />
                             </IconButton>
                             <IconButton
-                              aria-label="Ganti token"
-                              title="Ganti token"
+                              aria-label={t.igRotate}
+                              title={t.igRotate}
                               onClick={() => openRenew("rotate", r)}
                             >
                               <RefreshCw />
                             </IconButton>
                             <IconButton
                               danger
-                              aria-label="Cabut token"
-                              title="Cabut token"
+                              aria-label={t.igRevoke}
+                              title={t.igRevoke}
                               onClick={() => setRevokeTarget(r)}
                             >
                               <Ban />
@@ -477,18 +464,16 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
         ) : (
           <StateBox
             icon={<Search className="text-(--color-primary-bright)" />}
-            title={listQ.isError ? "Gagal memuat klien" : t.noResTitle}
+            title={listQ.isError ? t.igLoadFail : t.noResTitle}
             body={
-              listQ.isError
-                ? errorMessage(listQ.error, t.loginErr)
-                : "Belum ada layanan yang diberi token."
+              listQ.isError ? errorMessage(listQ.error, t.loginErr) : t.igEmptyB
             }
           />
         )}
 
         <PanelFoot>
           <FootSum>
-            <b>{live}</b> token aktif dari <b>{rows.length}</b> klien
+            <b>{live}</b> {t.igSumA} <b>{rows.length}</b> {t.igSumB}
           </FootSum>
         </PanelFoot>
       </Panel>
@@ -509,18 +494,18 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
           <DialogIcon variant="info">
             <KeyRound />
           </DialogIcon>
-          <DialogTitle id="intadd-t">Tambah Klien</DialogTitle>
+          <DialogTitle id="intadd-t">{t.igAdd}</DialogTitle>
           <div className="mt-4 flex flex-col gap-4">
-            <Field label="Nama layanan" htmlFor="intadd-name" required>
+            <Field label={t.igName} htmlFor="intadd-name" required>
               <Input
                 id="intadd-name"
                 value={name}
                 maxLength={100}
-                placeholder="mis. HRIS Site"
+                placeholder={t.igNamePh}
                 onChange={(e) => setName(e.target.value)}
               />
             </Field>
-            <Field label={<span id="intadd-scopes">Akses</span>}>
+            <Field label={<span id="intadd-scopes">{t.igAccess}</span>}>
               <div
                 role="group"
                 aria-labelledby="intadd-scopes"
@@ -540,9 +525,9 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
               </div>
             </Field>
             <Field
-              label="IP diizinkan"
+              label={t.igIpsField}
               htmlFor="intadd-ips"
-              helper="Opsional. Kosongkan untuk mengizinkan alamat mana pun; pisahkan dengan koma."
+              helper={t.igIpsHelp}
             >
               <Input
                 id="intadd-ips"
@@ -569,7 +554,7 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
               {t.btnCancel}
             </Button>
             <Button type="submit" disabled={!canSubmit || create.isPending}>
-              Buat Token
+              {t.igCreate}
             </Button>
           </DialogActions>
         </form>
@@ -585,11 +570,11 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
         <DialogIcon variant="warning">
           <KeyRound />
         </DialogIcon>
-        <DialogTitle id="inttok-t">Token untuk {issued?.name}</DialogTitle>
+        <DialogTitle id="inttok-t">
+          {fmt(t.igTokenFor, { name: issued?.name ?? "" })}
+        </DialogTitle>
         <DialogBody>
-          Salin sekarang dan serahkan ke pengelola layanan. Token ini{" "}
-          <b>tidak akan ditampilkan lagi</b> — kalau hilang, pakai Ganti Token
-          untuk membuat yang baru. Pakai sebagai header{" "}
+          {t.igShownOnceA} <b>{t.igShownOnceB}</b> {t.igShownOnceC}{" "}
           <code className="font-mono">Authorization: Bearer &lt;token&gt;</code>
           .
         </DialogBody>
@@ -597,18 +582,18 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
           <Input
             ref={tokenInput}
             readOnly
-            aria-label="Token"
+            aria-label={t.cmToken}
             value={issued?.token ?? ""}
             className="font-mono text-xs"
             onFocus={(e) => e.target.select()}
           />
           <Button variant="secondary" onClick={copyToken}>
             {copied ? <Check /> : <Copy />}
-            {copied ? "Tersalin" : "Salin"}
+            {copied ? t.cmCopied : t.cmCopy}
           </Button>
         </div>
         <DialogActions>
-          <Button onClick={closeIssued}>Sudah Disalin</Button>
+          <Button onClick={closeIssued}>{t.igCopiedDone}</Button>
         </DialogActions>
       </Dialog>
 
@@ -629,21 +614,16 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
             {renew?.action === "rotate" ? <RefreshCw /> : <CalendarClock />}
           </DialogIcon>
           <DialogTitle id="intren-t">
-            {renew?.action === "rotate" ? "Ganti token" : "Ubah masa berlaku"}{" "}
+            {renew?.action === "rotate" ? t.igRotate : t.igRenewDates}{" "}
             {renew?.row.name}
           </DialogTitle>
           <DialogBody>
             {renew?.action === "rotate" ? (
               <>
-                Token baru dibuat dan ditampilkan sekali.{" "}
-                <b>Token lama langsung tidak berlaku</b> — pastikan pengelola
-                layanan siap memasang token baru.
+                {t.igRotateB1} <b>{t.igRotateB2}</b> {t.igRotateB3}
               </>
             ) : (
-              <>
-                Token tetap sama; hanya rentang tanggal berlakunya yang diubah.
-                Token yang sudah kedaluwarsa aktif kembali.
-              </>
+              <>{t.igDatesB}</>
             )}
           </DialogBody>
           <div className="mt-4">
@@ -673,7 +653,7 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
               type="submit"
               disabled={renewPending || renewProblem !== null}
             >
-              {renew?.action === "rotate" ? "Ganti Token" : "Simpan"}
+              {renew?.action === "rotate" ? t.igRotateBtn : t.cmSave}
             </Button>
           </DialogActions>
         </form>
@@ -688,11 +668,9 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
         <DialogIcon variant="danger">
           <Ban />
         </DialogIcon>
-        <DialogTitle id="intrev-t">Cabut token?</DialogTitle>
+        <DialogTitle id="intrev-t">{t.igRevokeT}</DialogTitle>
         <DialogBody>
-          <b>{revokeTarget?.name}</b> langsung tidak bisa membaca data lagi
-          sejak permintaan berikutnya. Tindakan ini tidak bisa dibatalkan —
-          untuk mengaktifkan kembali, buat klien baru.
+          <b>{revokeTarget?.name}</b> {t.igRevokeB}
         </DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setRevokeTarget(null)}>
@@ -703,7 +681,7 @@ export function IntegrationsMenu({ mode }: { mode: AccessMode }) {
             disabled={revoke.isPending}
             onClick={() => revokeTarget && revoke.mutate(revokeTarget)}
           >
-            Cabut Token
+            {t.igRevokeBtn}
           </Button>
         </DialogActions>
       </Dialog>

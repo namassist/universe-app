@@ -2,13 +2,9 @@
 
 import * as React from "react";
 
-import {
-  rosterCodeKind,
-  SHIFT_KIND_LABELS,
-  type RosterCode,
-} from "@universe/contracts";
+import { rosterCodeKind, type RosterCode } from "@universe/contracts";
 
-import { useI18n, type Dict } from "@/lib/i18n";
+import { shiftKindLabel, useI18n, type Dict } from "@/lib/i18n";
 import type { PlanBoard } from "@/lib/queries/fleet-allocation";
 import { rosterCodeLabel } from "@/lib/roster-data";
 import { AsyncSelect } from "@/components/ui/async-select";
@@ -355,8 +351,8 @@ export function CrewTable({
           onChange={(e) => setShiftF(e.target.value as ShiftChoice)}
         >
           <option value="all">{t.faCrewShiftAll}</option>
-          <option value="day">{SHIFT_KIND_LABELS.day}</option>
-          <option value="night">{SHIFT_KIND_LABELS.night}</option>
+          <option value="day">{shiftKindLabel(t, "day")}</option>
+          <option value="night">{shiftKindLabel(t, "night")}</option>
         </Select>
         {/* Vacancy is its own control now that the shift no longer removes
               units: the two read together as one sentence — "the morning

@@ -268,7 +268,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
             </Select>
             <Select
               wrapperClassName="w-[170px]"
-              aria-label="Role"
+              aria-label={t.cmRole}
               value={roleF}
               onChange={(e) => setRoleF(e.target.value)}
             >
@@ -287,12 +287,12 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
                 onClick={() => router.push("/users/import")}
               >
                 <Upload />
-                Import
+                {t.cmImport}
               </Button>
             ) : null}
             <Button variant="secondary" onClick={exportCsv}>
               <Download />
-              Export
+              {t.cmExport}
             </Button>
           </ToolbarGroup>
         </Toolbar>
@@ -303,10 +303,10 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
           <Table>
             <TableHeader>
               <tr>
-                <TableHead>Email</TableHead>
+                <TableHead>{t.cmEmail}</TableHead>
                 <TableHead className="max-xl:hidden">{t.thNama}</TableHead>
-                <TableHead className="max-xl:hidden">NIK</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead className="max-xl:hidden">{t.cmNik}</TableHead>
+                <TableHead>{t.cmRole}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead className="w-[150px]">{t.thAct}</TableHead>
               </tr>
@@ -393,8 +393,8 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
 
         <PanelFoot>
           <FootSum>
-            {t.attSumA} <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b> user ·{" "}
-            <b>{activeN}</b> {t.umActiveSum}
+            {t.attSumA} <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b>{" "}
+            {t.umUserUnit} · <b>{activeN}</b> {t.umActiveSum}
           </FootSum>
           <Pagination
             page={pg.page}
@@ -436,14 +436,14 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
           </Field>
           <Field
             className="mt-4"
-            label="Email"
+            label={t.cmEmail}
             htmlFor="um-email"
             helper={t.umIdentHelp}
           >
             <Input
               id="um-email"
               type="email"
-              placeholder="nama@unggul.co.id"
+              placeholder={t.umEmailPh}
               value={fEmail}
               onChange={(e) => {
                 setFEmail(e.target.value);
@@ -451,7 +451,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
               }}
             />
           </Field>
-          <Field className="mt-4" label="NIK" htmlFor="um-nik">
+          <Field className="mt-4" label={t.cmNik} htmlFor="um-nik">
             <Input
               id="um-nik"
               placeholder="503220421"
@@ -464,7 +464,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
           </Field>
           {/* Single-select: an account holds exactly one role. Two roles could
               disagree about scope, so the question has no coherent answer. */}
-          <Field className="mt-4" label="Role" htmlFor="um-role" required>
+          <Field className="mt-4" label={t.cmRole} htmlFor="um-role" required>
             <Select
               id="um-role"
               value={fRole}

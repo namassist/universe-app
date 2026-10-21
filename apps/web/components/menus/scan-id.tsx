@@ -9,10 +9,8 @@ import {
   ScanLine,
 } from "lucide-react";
 
-import { SHIFT_KIND_LABELS } from "@universe/contracts";
-
 import { isStatus } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { shiftKindLabel, useI18n } from "@/lib/i18n";
 import {
   idCardPhotoUrl,
   idCardQueryOptions,
@@ -313,7 +311,7 @@ function IdCardView({ card }: { card: IdCardData }) {
   return (
     <div className="flex flex-col items-center p-2 text-center">
       <div className="mb-4 flex w-full justify-between font-mono text-xs font-bold text-(--text-tertiary)">
-        <span>ACCESS CARD</span>
+        <span>{t.scanAccessCard}</span>
         <span className="tabular-nums">{card.nik}</span>
       </div>
 
@@ -330,7 +328,7 @@ function IdCardView({ card }: { card: IdCardData }) {
           {card.name}
         </h2>
         <p className="mt-1 font-mono text-xs text-(--text-tertiary) tabular-nums">
-          NIK {card.nik}
+          {t.cmNik} {card.nik}
         </p>
         <p className="mt-2 text-sm font-semibold text-(--text-secondary)">
           {card.department ?? "-"}
@@ -348,7 +346,7 @@ function IdCardView({ card }: { card: IdCardData }) {
         <div className="rounded-card bg-(--fill-subtle) p-3">
           <Fact
             label={t.scanShift}
-            value={card.shift ? (SHIFT_KIND_LABELS[card.shift] ?? null) : null}
+            value={card.shift ? (shiftKindLabel(t, card.shift) ?? null) : null}
             strong
           />
         </div>
@@ -361,7 +359,7 @@ function IdCardView({ card }: { card: IdCardData }) {
         <Fact label={t.scanRoster} value={card.roster} />
         <Fact
           label={t.scanShift}
-          value={card.shift ? (SHIFT_KIND_LABELS[card.shift] ?? null) : null}
+          value={card.shift ? (shiftKindLabel(t, card.shift) ?? null) : null}
         />
         <Fact label={t.scanCheckIn} value={card.checkInAt} mono />
         <Fact label={t.scanUnit} value={card.unit} />

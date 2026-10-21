@@ -8,7 +8,7 @@ import type { UnitStatus } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type Dict } from "@/lib/i18n";
 import {
   unitStatusHistoryKey,
   unitStatusHistoryQueryOptions,
@@ -61,11 +61,11 @@ import { useToast } from "@/components/ui/toast";
 
 const statusBadge: Record<
   UnitStatus,
-  { variant: BadgeVariant; label: string }
+  { variant: BadgeVariant; label: keyof Dict }
 > = {
-  ready: { variant: "success", label: "Ready" },
-  breakdown: { variant: "danger", label: "Breakdown" },
-  standby: { variant: "warning", label: "Standby" },
+  ready: { variant: "success", label: "cmReady" },
+  breakdown: { variant: "danger", label: "cmBreakdown" },
+  standby: { variant: "warning", label: "cmStandby" },
 };
 
 const statusDotColor: Record<UnitStatus, string> = {
@@ -149,7 +149,7 @@ export function UnitStatusMenu({ mode }: { mode: AccessMode }) {
       ]);
       pushToast(
         "success",
-        `${input.code} → ${statusBadge[input.status].label}`,
+        `${input.code} → ${t[statusBadge[input.status].label]}`,
         t.toastStD
       );
       setDlg(null);
@@ -222,13 +222,13 @@ export function UnitStatusMenu({ mode }: { mode: AccessMode }) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <Segmented role="group" aria-label="Filter status">
+            <Segmented role="group" aria-label={t.usFilter}>
               {(
                 [
                   ["all", t.segAll],
-                  ["ready", "Ready"],
-                  ["breakdown", "Breakdown"],
-                  ["standby", "Standby"],
+                  ["ready", t.cmReady],
+                  ["breakdown", t.cmBreakdown],
+                  ["standby", t.cmStandby],
                 ] as [FilterKey, string][]
               ).map(([key, label]) => (
                 <SegmentedButton
@@ -267,7 +267,7 @@ export function UnitStatusMenu({ mode }: { mode: AccessMode }) {
                   <TableCell>{typeOf(u)}</TableCell>
                   <TableCell>
                     <Badge variant={statusBadge[u.status].variant} dot>
-                      {statusBadge[u.status].label}
+                      {t[statusBadge[u.status].label]}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-xl:hidden">{locOf(u)}</TableCell>
@@ -309,7 +309,7 @@ export function UnitStatusMenu({ mode }: { mode: AccessMode }) {
         <PanelFoot>
           <FootSum>
             {t.attSumA} <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b>{" "}
-            {t.udbSumB} · <b>{breakN}</b> Breakdown
+            {t.udbSumB} · <b>{breakN}</b> {t.cmBreakdown}
           </FootSum>
           <Pagination
             page={pg.page}
@@ -346,7 +346,7 @@ export function UnitStatusMenu({ mode }: { mode: AccessMode }) {
             </div>
             <div className="mb-5">
               <Badge variant={statusBadge[drawer.status].variant} dot>
-                {statusBadge[drawer.status].label}
+                {t[statusBadge[drawer.status].label]}
               </Badge>
             </div>
             <h4 className="mb-4 text-xs font-semibold tracking-[.05em] text-(--text-tertiary) uppercase">
@@ -359,7 +359,7 @@ export function UnitStatusMenu({ mode }: { mode: AccessMode }) {
                     key={h.id}
                     dotColor={statusDotColor[h.status]}
                     when={whenOf(h.createdAt)}
-                    what={statusBadge[h.status].label}
+                    what={t[statusBadge[h.status].label]}
                     why={h.reason}
                   />
                 ))}
@@ -386,9 +386,9 @@ export function UnitStatusMenu({ mode }: { mode: AccessMode }) {
             value={newSt}
             onChange={(e) => setNewSt(e.target.value as UnitStatus)}
           >
-            <option value="ready">Ready</option>
-            <option value="breakdown">Breakdown</option>
-            <option value="standby">Standby</option>
+            <option value="ready">{t.cmReady}</option>
+            <option value="breakdown">{t.cmBreakdown}</option>
+            <option value="standby">{t.cmStandby}</option>
           </Select>
         </Field>
         <Field

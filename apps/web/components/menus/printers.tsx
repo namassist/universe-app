@@ -4,11 +4,9 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Printer, Search, Trash2 } from "lucide-react";
 
-import { MENU_LABELS } from "@universe/contracts";
-
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, menuLabel, useI18n } from "@/lib/i18n";
 import {
   printersKey,
   printersQueryOptions,
@@ -99,12 +97,12 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
       else
         pushToast(
           "success",
-          "Tes cetak",
-          `${r.sent}/${r.total} slip tes terkirim — cek kertas keluar di printernya`
+          t.prTest,
+          fmt(t.prTestSent, { sent: r.sent, total: r.total })
         );
     },
     onError: (error) =>
-      pushToast("error", "Tes cetak", errorMessage(error, t.loginErr)),
+      pushToast("error", t.prTest, errorMessage(error, t.loginErr)),
   });
   const activeCount = entries.filter((e) => e.active).length;
 
@@ -211,10 +209,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title={MENU_LABELS["mesin-printer"]}
-        sub="Daftar printer tiket — dipasangkan ke mesin fingerprint di menu Mesin Fingerprint"
-      >
+      <PageTitle title={menuLabel(t, "mesin-printer")} sub={t.prSub}>
         {canW ? (
           <div className="flex gap-2">
             <Button
@@ -223,7 +218,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
               onClick={() => setTestAllAsk(true)}
             >
               <Printer />
-              Tes cetak semua
+              {t.prTestAll}
             </Button>
             <Button onClick={openAdd}>
               <Plus />
@@ -235,7 +230,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>{MENU_LABELS["mesin-printer"]}</ToolbarTitle>
+          <ToolbarTitle>{menuLabel(t, "mesin-printer")}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
               className="w-[240px]"
@@ -263,7 +258,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
               <tr>
                 <TableHead>{t.mfName}</TableHead>
                 <TableHead>{t.mfIp}</TableHead>
-                <TableHead>Port</TableHead>
+                <TableHead>{t.cmPort}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
               </tr>
@@ -292,8 +287,8 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
                           {/* An inactive printer is never sent to, so it is
                               never offered a test either. */}
                           <IconButton
-                            aria-label="Tes cetak"
-                            title="Tes cetak"
+                            aria-label={t.prTest}
+                            title={t.prTest}
                             disabled={!r.active || testPrint.isPending}
                             onClick={() => testPrint.mutate([r.id])}
                           >
@@ -324,7 +319,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
           <StateBox
             icon={<Search className="text-(--color-primary-bright)" />}
             title={t.noResTitle}
-            body="Belum ada printer terdaftar."
+            body={t.prEmpty}
           />
         )}
 
@@ -353,10 +348,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
           <Printer />
         </DialogIcon>
         <DialogTitle id="pr-t">{editing ? t.mdEditT : t.mdAdd}</DialogTitle>
-        <DialogBody>
-          Printer tiket muster. Pasangkan ke mesin fingerprint setelah
-          didaftarkan.
-        </DialogBody>
+        <DialogBody>{t.prDlgB}</DialogBody>
         <form onSubmit={submit} noValidate>
           <Field
             className="mt-4"
@@ -389,7 +381,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setFIp(e.target.value)}
             />
           </Field>
-          <Field className="mt-4" label="Port" htmlFor="pr-port">
+          <Field className="mt-4" label={t.cmPort} htmlFor="pr-port">
             <Input
               id="pr-port"
               inputMode="numeric"
@@ -397,9 +389,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setFPort(e.target.value)}
             />
           </Field>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            Biarkan 9100 kecuali printer ini memang disetel lain.
-          </p>
+          <p className="mt-2 text-xs text-(--text-tertiary)">{t.prPortHint}</p>
           <ToggleRow className="mt-4" htmlFor="pr-active">
             <Checkbox
               id="pr-active"
@@ -434,10 +424,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
         <DialogTitle id="prd-t">
           {t.mdDelT} &ldquo;{delTarget?.name}&rdquo;?
         </DialogTitle>
-        <DialogBody>
-          Mesin yang dipasangkan ke printer ini tetap ada, pasangannya saja yang
-          lepas.
-        </DialogBody>
+        <DialogBody>{t.prDelB}</DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setDelTarget(null)}>
             {t.btnCancel}
@@ -461,13 +448,9 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
           <Printer />
         </DialogIcon>
         <DialogTitle id="prt-t">
-          Kirim slip tes ke {activeCount} printer aktif?
+          {fmt(t.prTestAllT, { n: activeCount })}
         </DialogTitle>
-        <DialogBody>
-          Tiap printer mencetak satu slip &ldquo;TES PRINTER — BUKAN
-          TIKET&rdquo;. Slip yang keluar berarti printer siap; yang gagal
-          terkirim ditampilkan beserta alasannya.
-        </DialogBody>
+        <DialogBody>{t.prTestAllB}</DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setTestAllAsk(false)}>
             {t.btnCancel}
@@ -477,7 +460,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
             onClick={() => testPrint.mutate(null)}
           >
             <Printer />
-            {testPrint.isPending ? "Mengirim…" : "Kirim slip tes"}
+            {testPrint.isPending ? t.prSending : t.prSendTest}
           </Button>
         </DialogActions>
       </Dialog>
@@ -492,10 +475,13 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
         </DialogIcon>
         <DialogTitle id="prr-t">
           {testResult
-            ? `${testResult.sent}/${testResult.total} slip tes terkirim`
+            ? fmt(t.prResultT, {
+                sent: testResult.sent,
+                total: testResult.total,
+              })
             : ""}
         </DialogTitle>
-        <DialogBody>Printer berikut tidak bisa dikirimi slip:</DialogBody>
+        <DialogBody>{t.prResultB}</DialogBody>
         <ul className="mt-3 flex flex-col gap-1.5 text-sm">
           {testResult?.failed.map((f) => (
             <li key={f.id} className="flex justify-between gap-3">
@@ -507,7 +493,7 @@ export function PrintersMenu({ mode }: { mode: AccessMode }) {
           ))}
         </ul>
         <DialogActions>
-          <Button onClick={() => setTestResult(null)}>Tutup</Button>
+          <Button onClick={() => setTestResult(null)}>{t.btnClose}</Button>
         </DialogActions>
       </Dialog>
     </div>

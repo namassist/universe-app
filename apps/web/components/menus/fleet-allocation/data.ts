@@ -1,5 +1,6 @@
 import { rosterCodeKind, type RosterCode } from "@universe/contracts";
 
+import type { Dict } from "@/lib/i18n";
 import type { BadgeVariant } from "@/components/ui/badge";
 
 /**
@@ -332,11 +333,11 @@ export function deptAbbrev(name: string): string {
  */
 export const stBadge: Record<
   UnitStatus,
-  { variant: BadgeVariant; label: string }
+  { variant: BadgeVariant; label: keyof Dict }
 > = {
-  ready: { variant: "success", label: "Ready" },
-  breakdown: { variant: "danger", label: "Breakdown" },
-  standby: { variant: "warning", label: "Standby" },
+  ready: { variant: "success", label: "cmReady" },
+  breakdown: { variant: "danger", label: "cmBreakdown" },
+  standby: { variant: "warning", label: "cmStandby" },
 };
 
 /**

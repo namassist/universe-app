@@ -1,4 +1,6 @@
 import { MENU_LABELS, MENU_SLUGS, type MenuSlug } from "./access";
+import type { Dict } from "./i18n";
+import { menuLabel } from "./i18n/menu-labels";
 import { NAV } from "./nav";
 
 /**
@@ -48,18 +50,21 @@ export type PageSection = {
 };
 
 /** Baris matriks RBAC — dikelompokkan mengikuti struktur sidebar (NAV). */
-export function pageSections(): PageSection[] {
+export function pageSections(t: Dict): PageSection[] {
   return NAV.map((e) =>
     e.kind === "item"
       ? {
           key: e.slug,
-          label: e.label,
-          pages: [[e.slug, e.label]] as [MenuSlug, string][],
+          label: menuLabel(t, e.slug),
+          pages: [[e.slug, menuLabel(t, e.slug)]] as [MenuSlug, string][],
         }
       : {
           key: e.key,
-          label: e.label,
-          pages: e.children.map((c): [MenuSlug, string] => [c.slug, c.label]),
+          label: t[e.label],
+          pages: e.children.map((c): [MenuSlug, string] => [
+            c.slug,
+            menuLabel(t, c.slug),
+          ]),
         }
   );
 }

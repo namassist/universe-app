@@ -16,9 +16,9 @@ import {
   User,
 } from "lucide-react";
 
-import { MENU_LABELS, type MenuSlug } from "@/lib/access";
+import { isMenuSlug } from "@/lib/access";
 import { api } from "@/lib/api";
-import { useI18n, type Lang } from "@/lib/i18n";
+import { menuLabel, useI18n, type Dict, type Lang } from "@/lib/i18n";
 import { NAV } from "@/lib/nav";
 import { notifText, notifTime, notifToneDot } from "@/lib/notifications-data";
 import { sessionKey } from "@/lib/queries/session";
@@ -44,7 +44,7 @@ import { useShell } from "./shell-context";
 const hbtnClass =
   "relative inline-flex h-9 min-w-9 cursor-pointer items-center justify-center gap-1.5 rounded-control border border-(--glass-1-border) bg-(--fill-subtle) px-2 text-xs font-bold text-(--text-secondary) hover:border-[rgba(0,212,255,.4)] hover:bg-[rgba(0,212,255,.14)] hover:text-(--text-primary) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-primary) [&_svg]:size-4";
 
-function groupLabelOf(slug: string): string | null {
+function groupLabelOf(slug: string): keyof Dict | null {
   for (const e of NAV) {
     if (e.kind === "group" && e.children.some((c) => c.slug === slug))
       return e.label;
@@ -97,39 +97,38 @@ export function Topbar() {
 
   /* breadcrumb: parent grup (bila ada) + halaman aktif */
   /* Routes are no longer role-prefixed: the menu slug is the first segment. */
-  const slug = pathname.split("/")[1] as MenuSlug | undefined;
-  let cur = slug ? (MENU_LABELS[slug] ?? "") : "";
+  const slug = pathname.split("/")[1];
+  let cur = slug && isMenuSlug(slug) ? menuLabel(t, slug) : "";
   const sub = pathname.split("/")[2];
   if (slug === "employees" && sub === "new") cur = t.efTitleAdd;
   else if (slug === "employees" && sub) cur = t.navEmployees;
   else if (slug === "roster-data" && sub === "upload") cur = t.navR1;
   else if (slug === "roster-data" && sub === "detail") cur = t.rdDetailTitle;
-  else if (slug === "roster-correction" && sub === "new")
-    cur = "Tambah Koreksi Roster";
+  else if (slug === "roster-correction" && sub === "new") cur = t.shRcNew;
   else if (slug === "fit-to-work" && sub === "history") cur = t.ftwHistPage;
-  else if (slug === "fleet-allocation" && sub === "detail") cur = "ACTUAL";
+  else if (slug === "fleet-allocation" && sub === "detail") cur = t.cmActual;
   else if (slug === "users" && sub === "import") cur = t.umImpTitle;
-  else if ((slug as string) === "profile") cur = t.profile;
-  else if ((slug as string) === "notifications") cur = t.notifTitle;
+  else if (slug === "profile") cur = t.profile;
+  else if (slug === "notifications") cur = t.notifTitle;
   const group = slug ? groupLabelOf(slug) : null;
 
   return (
     <header className="sticky top-6 z-40 flex h-16 flex-none items-center gap-4 rounded-panel px-6 glass-panel max-xl:top-4">
       <button
         onClick={() => setSideOpen(true)}
-        aria-label="Buka menu navigasi"
+        aria-label={t.shOpenNav}
         className={cn(hbtnClass, "hidden max-xl:inline-flex")}
       >
         <Menu />
       </button>
       <nav
-        aria-label="Breadcrumb"
+        aria-label={t.shBreadcrumb}
         className="flex min-w-0 items-center gap-2 text-sm"
       >
         {group ? (
           <>
             <span className="whitespace-nowrap text-(--text-tertiary)">
-              {group}
+              {t[group]}
             </span>
             <ChevronRight className="size-3.5 flex-none text-(--text-disabled)" />
           </>
@@ -144,7 +143,7 @@ export function Topbar() {
             onClick={() => toggle("lang")}
             aria-expanded={openDrop === "lang"}
             aria-haspopup="menu"
-            aria-label="Ganti bahasa"
+            aria-label={t.shLang}
             className={hbtnClass}
           >
             <Globe />
@@ -177,7 +176,7 @@ export function Topbar() {
             onClick={() => toggle("theme")}
             aria-expanded={openDrop === "theme"}
             aria-haspopup="menu"
-            aria-label="Tema aplikasi"
+            aria-label={t.shTheme}
             className={hbtnClass}
           >
             {resolved === "dark" ? <Moon /> : <Sun />}

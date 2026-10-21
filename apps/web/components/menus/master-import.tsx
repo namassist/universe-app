@@ -8,7 +8,6 @@ import { ArrowLeft, Download, TriangleAlert, Upload } from "lucide-react";
 import {
   EMPLOYEE_IMPORT_COLUMNS,
   MASTER_IMPORT_COLUMNS,
-  MENU_LABELS,
   UNIT_IMPORT_COLUMNS,
   type MasterImportPreview,
   type MasterImportRowKind,
@@ -17,7 +16,7 @@ import {
 } from "@universe/contracts";
 
 import { api, errorMessage, fetchBlob } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
@@ -111,7 +110,7 @@ export function MasterImport({ target }: { target: ImportTarget }) {
       : target === "employees"
         ? "employees"
         : "catalogue";
-  const label = MENU_LABELS[target];
+  const label = menuLabel(t, target);
   const listHref = `/${target}`;
   const templatePath =
     kind === "units"
@@ -754,7 +753,7 @@ export function MasterImport({ target }: { target: ImportTarget }) {
           {mastersByKind.map(([kind, items]) => (
             <div key={kind}>
               <div className="mb-1.5 text-xs font-semibold tracking-wider text-(--text-tertiary) uppercase">
-                {MENU_LABELS[kind]}
+                {menuLabel(t, kind)}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {items.slice(0, MASTER_CHIP_LIMIT).map((m) => (

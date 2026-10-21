@@ -13,11 +13,11 @@ import {
   Upload,
 } from "lucide-react";
 
-import { MENU_LABELS, type MasterKind } from "@universe/contracts";
+import { type MasterKind } from "@universe/contracts";
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage, fetchBlob } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, useI18n } from "@/lib/i18n";
 import {
   masterQueryOptions,
   recordCode,
@@ -117,18 +117,18 @@ function colsFor(kind: MasterKind, t: ReturnType<typeof useI18n>["t"]): Col[] {
     key: "name",
     label:
       kind === "kelas-unit" || kind === "simper" || kind === "kode-simper"
-        ? "Kode"
+        ? t.mdCode
         : kind === "departemen"
-          ? "Departemen"
+          ? t.thDept
           : kind === "perusahaan" || kind === "jabatan"
-            ? MENU_LABELS[kind]
+            ? menuLabel(t, kind)
             : t.mdNama,
   };
   // The owner leads, because it is what the row's identity starts with: two
   // departments may share a name and the company is what tells them apart.
   const parent = PARENT_OF_KIND[kind];
   const lead: Col[] = parent
-    ? [{ key: "parent", label: MENU_LABELS[parent.kind], kind: "select" }]
+    ? [{ key: "parent", label: menuLabel(t, parent.kind), kind: "select" }]
     : [];
   const code: Col[] =
     kind === "perusahaan" ? [{ key: "code", label: t.mdCode }] : [];
@@ -179,7 +179,7 @@ export function MasterMenu({
   const queryClient = useQueryClient();
   const router = useRouter();
   const canW = mode === "manage";
-  const catLabel = MENU_LABELS[cat];
+  const catLabel = menuLabel(t, cat);
   const cols = colsFor(cat, t);
   const extra = EXTRA_OF_KIND[cat];
   const parent = PARENT_OF_KIND[cat];
@@ -545,9 +545,9 @@ export function MasterMenu({
                 wrapperClassName="w-[220px]"
                 value={parentF}
                 onChange={(e) => setParentF(e.target.value)}
-                aria-label={MENU_LABELS[parent.kind]}
+                aria-label={menuLabel(t, parent.kind)}
               >
-                <option value="">{`${t.allPrefix} ${MENU_LABELS[parent.kind]}`}</option>
+                <option value="">{`${t.allPrefix} ${menuLabel(t, parent.kind)}`}</option>
                 {(parentQ.data ?? []).map((o) => (
                   <option key={o.id} value={o.id}>
                     {parentLabel(o.id)}

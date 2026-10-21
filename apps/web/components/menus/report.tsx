@@ -17,16 +17,14 @@ import {
 
 import {
   REPORT_COLUMNS,
-  REPORT_DESCRIPTIONS,
   REPORT_KINDS,
-  REPORT_LABELS,
   REPORT_NEEDS_BOARD,
   type ReportKind,
   type ShiftKind,
 } from "@universe/contracts";
 
 import { errorMessage, fetchBlob } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, reportDescription, reportLabel, useI18n } from "@/lib/i18n";
 import {
   reportDepartmentsQueryOptions,
   reportParams,
@@ -90,6 +88,7 @@ function ReportCard({
   active: boolean;
   onPick: (kind: ReportKind) => void;
 }) {
+  const { t } = useI18n();
   const Icon = KIND_ICON[kind];
   return (
     <button
@@ -109,9 +108,9 @@ function ReportCard({
       >
         <Icon />
       </span>
-      <span className="text-sm font-semibold">{REPORT_LABELS[kind]}</span>
+      <span className="text-sm font-semibold">{reportLabel(t, kind)}</span>
       <span className="text-xs leading-relaxed text-(--text-secondary)">
-        {REPORT_DESCRIPTIONS[kind]}
+        {reportDescription(t, kind)}
       </span>
     </button>
   );
@@ -207,7 +206,7 @@ function ReportView({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-14 text-center">No</TableHead>
+              <TableHead className="w-14 text-center">{t.cmNo}</TableHead>
               {columns.map((c) => (
                 <TableHead key={c.key}>{c.header}</TableHead>
               ))}
@@ -241,7 +240,7 @@ function ReportView({
   return (
     <Panel>
       <Toolbar>
-        <ToolbarTitle>{REPORT_LABELS[filter.kind]}</ToolbarTitle>
+        <ToolbarTitle>{reportLabel(t, filter.kind)}</ToolbarTitle>
         <ToolbarGroup>
           <Input
             type="date"
@@ -274,16 +273,16 @@ function ReportView({
               yields rows; the list stays whole once one is chosen. */}
           {filter.kind === "final-validation" ? (
             <AsyncSelect
-              ariaLabel="Filter posisi"
+              ariaLabel={t.rptPosFilter}
               wrapperClassName="w-[260px] max-w-full"
               value={filter.position}
               onChange={(option) =>
                 option && setFilter({ ...filter, position: option.value })
               }
-              searchPlaceholder="Cari posisi…"
-              emptyText="Posisi tidak ditemukan"
+              searchPlaceholder={t.rptPosSearch}
+              emptyText={t.rptPosNone}
               options={[
-                { value: "", label: "Semua posisi" },
+                { value: "", label: t.rptPosAll },
                 ...(reportQ.data?.positions ?? []).map((p) => ({
                   value: p,
                   label: p,
@@ -359,7 +358,7 @@ export function ReportMenu() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title="Laporan" sub={t.rptSub} />
+      <PageTitle title={menuLabel(t, "report")} sub={t.rptSub} />
 
       <section aria-label={t.rptPick}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">

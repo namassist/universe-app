@@ -4,11 +4,9 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Search, Trash2, Upload, Volume2 } from "lucide-react";
 
-import { MENU_LABELS } from "@universe/contracts";
-
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, useI18n } from "@/lib/i18n";
 import {
   soundFileUrl,
   soundsKey,
@@ -214,7 +212,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={MENU_LABELS.sound} sub={t.mdSub}>
+      <PageTitle title={menuLabel(t, "sound")} sub={t.mdSub}>
         {canW ? (
           <Button onClick={openAdd}>
             <Plus />
@@ -225,7 +223,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>{MENU_LABELS.sound}</ToolbarTitle>
+          <ToolbarTitle>{menuLabel(t, "sound")}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
               className="w-[240px]"
@@ -252,7 +250,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
             <TableHeader>
               <tr>
                 <TableHead>{t.mdNama}</TableHead>
-                <TableHead>File</TableHead>
+                <TableHead>{t.sdFile}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 150 }}>{t.thAct}</TableHead>
               </tr>
@@ -275,7 +273,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
                   <TableCell>
                     <div className="flex gap-2">
                       <IconButton
-                        aria-label="Putar"
+                        aria-label={t.sdPlay}
                         onClick={() => play(soundFileUrl(r.id))}
                       >
                         <Volume2 />
@@ -356,14 +354,14 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
           {/* Audio is chosen once, on creation: replacing it would leave the
               previous file on disk with nothing pointing at it. */}
           {editing ? (
-            <Field className="mt-4" label="File">
+            <Field className="mt-4" label={t.sdFile}>
               <div className="flex items-center gap-3">
                 <span className="min-w-0 flex-1 truncate text-sm text-(--text-secondary)">
                   {editing.mimeType} · {kb(editing.sizeBytes)}
                 </span>
                 <IconButton
                   type="button"
-                  aria-label="Putar"
+                  aria-label={t.sdPlay}
                   onClick={() => play(soundFileUrl(editing.id))}
                 >
                   <Volume2 />
@@ -373,7 +371,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
           ) : (
             <Field
               className="mt-4"
-              label="File"
+              label={t.sdFile}
               htmlFor="sd-file"
               required
               error={!!errFile}
@@ -399,7 +397,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
                   onClick={() => fileRef.current?.click()}
                 >
                   <Upload />
-                  Pilih file
+                  {t.sdPick}
                 </Button>
                 {fFile ? (
                   <>
@@ -408,7 +406,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
                     </span>
                     <IconButton
                       type="button"
-                      aria-label="Putar"
+                      aria-label={t.sdPlay}
                       onClick={() => fFileUrl && play(fFileUrl)}
                     >
                       <Volume2 />
@@ -416,7 +414,7 @@ export function SoundsMenu({ mode }: { mode: AccessMode }) {
                   </>
                 ) : (
                   <span className="flex-1 text-sm text-(--text-tertiary) italic">
-                    Belum ada file
+                    {t.sdNoFile}
                   </span>
                 )}
               </div>

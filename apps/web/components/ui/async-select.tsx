@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronDown, Search } from "lucide-react";
 
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { Spinner } from "./button";
@@ -55,6 +56,7 @@ function AsyncSelect<T = unknown>({
   wrapperClassName?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const listId = React.useId();
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
@@ -189,7 +191,7 @@ function AsyncSelect<T = unknown>({
                 if (local) setHi(0);
               }}
               onKeyDown={onKey}
-              placeholder={searchPlaceholder ?? "Cari…"}
+              placeholder={searchPlaceholder ?? t.uiSearch}
               aria-autocomplete="list"
               className="min-w-0 flex-1 border-none bg-transparent text-sm tracking-(--tracking-brand) text-(--text-primary) outline-none placeholder:text-(--text-tertiary)"
             />
@@ -240,7 +242,7 @@ function AsyncSelect<T = unknown>({
             ))}
             {!loading && !shown.length ? (
               <li className="px-3 py-2 text-[13px] text-(--text-tertiary)">
-                {emptyText ?? "Tidak ada hasil"}
+                {emptyText ?? t.uiNoResults}
               </li>
             ) : null}
           </ul>

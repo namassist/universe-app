@@ -365,8 +365,8 @@ export function PlanImport() {
                 <tr>
                   <TableHead className="w-[80px]">{t.thRow}</TableHead>
                   <TableHead className="w-[120px]">{t.thType}</TableHead>
-                  <TableHead>Unit</TableHead>
-                  <TableHead>NIK</TableHead>
+                  <TableHead>{t.cmUnit}</TableHead>
+                  <TableHead>{t.cmNik}</TableHead>
                   <TableHead>{t.thNama}</TableHead>
                   <TableHead>{t.faImpFrom}</TableHead>
                 </tr>
@@ -427,7 +427,7 @@ export function PlanImport() {
               <TableHeader>
                 <tr>
                   <TableHead className="w-[90px]">{t.thRow}</TableHead>
-                  <TableHead>NIK</TableHead>
+                  <TableHead>{t.cmNik}</TableHead>
                   <TableHead>{t.thEmp}</TableHead>
                   <TableHead>{t.thIssue}</TableHead>
                   <TableHead>{t.thType}</TableHead>

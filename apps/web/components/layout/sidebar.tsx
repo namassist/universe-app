@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, useI18n } from "@/lib/i18n";
 import { NAV, type NavEntry } from "@/lib/nav";
 import { openDisplay } from "@/lib/open-display";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,8 @@ export function Sidebar() {
   const menuNeedle = menuQ.trim().toLowerCase();
   const searching = menuNeedle.length > 0;
   const hits = (label: string) => label.toLowerCase().includes(menuNeedle);
+  const labelOf = (entry: NavEntry) =>
+    entry.kind === "item" ? menuLabel(t, entry.slug) : t[entry.label];
   /* Taking a result ends the search: the tree the next click reads should be
      the whole tree, not the last query's remains. */
   const clearSearch = () => setMenuQ("");
@@ -81,7 +83,8 @@ export function Sidebar() {
   function renderTop(entry: NavEntry) {
     if (entry.kind === "item") {
       if (!access(entry.slug)) return null;
-      if (searching && !hits(entry.label)) return null;
+      const label = labelOf(entry);
+      if (searching && !hits(label)) return null;
       const Icon = entry.icon;
       return (
         <Link
@@ -93,7 +96,7 @@ export function Sidebar() {
             isActive(entry.slug) && activeClass,
             collapsed && "justify-center px-0 max-xl:justify-start max-xl:px-3"
           )}
-          title={collapsed ? entry.label : undefined}
+          title={collapsed ? label : undefined}
         >
           <Icon className="size-4.5 flex-none" strokeWidth={1.8} />
           <span
@@ -102,18 +105,19 @@ export function Sidebar() {
               collapsed && "hidden max-xl:block"
             )}
           >
-            {entry.label}
+            {label}
           </span>
         </Link>
       );
     }
 
+    const label = labelOf(entry);
     const visible = entry.children.filter((c) => access(c.slug));
     /* A group whose own name matches keeps all of its menus — someone typing
        "master" is asking for the section, not for a menu called Master. */
     const kids =
-      searching && !hits(entry.label)
-        ? visible.filter((c) => hits(c.label))
+      searching && !hits(label)
+        ? visible.filter((c) => hits(menuLabel(t, c.slug)))
         : visible;
     if (!kids.length) return null;
     /* Only sections a *visible* child opens: one whose every menu this role
@@ -136,7 +140,7 @@ export function Sidebar() {
             navBtnClass,
             collapsed && "justify-center px-0 max-xl:justify-start max-xl:px-3"
           )}
-          title={collapsed ? entry.label : undefined}
+          title={collapsed ? label : undefined}
         >
           <Icon className="size-4.5 flex-none" strokeWidth={1.8} />
           <span
@@ -145,7 +149,7 @@ export function Sidebar() {
               collapsed && "hidden max-xl:block"
             )}
           >
-            {entry.label}
+            {label}
           </span>
           <ChevronRight
             className={cn(
@@ -178,7 +182,7 @@ export function Sidebar() {
           {kids.map((c, i) => {
             const heading =
               c.section && c.section !== kids[i - 1]?.section
-                ? c.section
+                ? t[c.section]
                 : null;
             const kidClass = cn(
               "relative ml-7.5 flex h-10 w-[calc(100%-30px)] items-center gap-2 rounded-control border border-transparent px-3 text-left text-[13px] text-(--text-secondary) no-underline transition-colors duration-100 hover:bg-(--fill-hover) hover:text-(--text-primary) hover:no-underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-primary) [&+a]:mt-2 [&+button]:mt-2"
@@ -192,7 +196,7 @@ export function Sidebar() {
                 }}
                 className={cn(kidClass, "cursor-pointer")}
               >
-                {c.label}
+                {menuLabel(t, c.slug)}
               </button>
             ) : (
               <Link
@@ -200,7 +204,7 @@ export function Sidebar() {
                 onClick={clearSearch}
                 className={cn(kidClass, isActive(c.slug) && activeClass)}
               >
-                {c.label}
+                {menuLabel(t, c.slug)}
               </Link>
             );
             return (
@@ -245,7 +249,7 @@ export function Sidebar() {
         )}
       />
       <aside
-        aria-label="Navigasi utama"
+        aria-label={t.shNavMain}
         className={cn(
           "sticky top-6 z-30 flex h-[calc(100vh-48px)] flex-none flex-col self-start rounded-panel px-3 py-5 shadow-[var(--shadow-panel),inset_0_1px_40px_var(--inset-glow)] glass-panel transition-[width] duration-250",
           collapsed ? "w-18 px-2 py-4" : "w-70",
@@ -269,13 +273,13 @@ export function Sidebar() {
           <div className={cn(collapsed && "hidden max-xl:block")}>
             <b className="block text-base">UNIVERSE</b>
             <span className="text-xs text-(--text-tertiary)">
-              Fleet Automation
+              {t.shTagline}
             </span>
           </div>
           <button
             onClick={() => setCollapsed(true)}
-            aria-label="Ciutkan sidebar"
-            title="Ciutkan sidebar"
+            aria-label={t.shCollapse}
+            title={t.shCollapse}
             className={cn(
               "ml-auto grid size-7 flex-none cursor-pointer place-items-center rounded-lg border border-(--glass-1-border) bg-(--fill-subtle) hover:border-[rgba(0,212,255,.4)] hover:bg-[rgba(0,212,255,.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-primary) max-xl:hidden",
               collapsed && "hidden"
@@ -286,8 +290,8 @@ export function Sidebar() {
         </div>
         <button
           onClick={() => setCollapsed(false)}
-          aria-label="Perluas sidebar"
-          title="Perluas sidebar"
+          aria-label={t.shExpand}
+          title={t.shExpand}
           className={cn(
             "mx-auto mb-3 grid size-7 flex-none cursor-pointer place-items-center rounded-lg border border-(--glass-1-border) bg-(--fill-subtle) hover:border-[rgba(0,212,255,.4)] hover:bg-[rgba(0,212,255,.14)] max-xl:hidden",
             !collapsed && "hidden"

@@ -1,3 +1,5 @@
+import { fmt } from "@/lib/i18n/fmt";
+import type { Dict } from "@/lib/i18n/id";
 import { cn } from "@/lib/utils";
 import type { BadgeVariant } from "@/components/ui/badge";
 
@@ -116,12 +118,15 @@ export const ftwRowShift = (row: {
         : 2
       : null;
 
-export const ftwShiftLabel = (row: {
-  sentAt: string | null;
-  rosterShift: "day" | "night" | null;
-}): string => {
+export const ftwShiftLabel = (
+  row: {
+    sentAt: string | null;
+    rosterShift: "day" | "night" | null;
+  },
+  t: Dict
+): string => {
   const shift = ftwRowShift(row);
-  return shift === null ? "—" : `Shift ${shift}`;
+  return shift === null ? "—" : fmt(t.ftwShiftN, { n: shift });
 };
 
 /**

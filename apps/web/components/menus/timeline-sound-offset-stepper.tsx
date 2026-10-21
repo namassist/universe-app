@@ -2,12 +2,9 @@
 
 import { Minus, Plus } from "lucide-react";
 
-import {
-  SOUND_OFFSET_MAX,
-  SOUND_OFFSET_MIN,
-  soundOffsetLabel,
-} from "@universe/contracts";
+import { SOUND_OFFSET_MAX, SOUND_OFFSET_MIN } from "@universe/contracts";
 
+import { fmt, soundOffsetText, useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { IconButton } from "@/components/ui/button";
 
@@ -33,6 +30,7 @@ function SoundOffsetStepper({
   onChange: (next: number) => void;
   className?: string;
 }) {
+  const { t } = useI18n();
   const step = (delta: 1 | -1) => onChange(stepSoundOffset(value, delta));
   const plays = soundTimeFor(at, value);
   const shown = value > 0 ? `+${value}` : String(value);
@@ -42,7 +40,7 @@ function SoundOffsetStepper({
       <div className="flex items-center gap-2">
         <IconButton
           type="button"
-          aria-label="Satu menit lebih awal"
+          aria-label={t.sndEarlier}
           disabled={value <= SOUND_OFFSET_MIN}
           onClick={() => step(-1)}
           className="disabled:cursor-not-allowed disabled:opacity-40"
@@ -53,11 +51,11 @@ function SoundOffsetStepper({
           id={id}
           role="spinbutton"
           tabIndex={0}
-          aria-label="Waktu bunyi, dalam menit dari jam stage"
+          aria-label={t.sndStepperAria}
           aria-valuemin={SOUND_OFFSET_MIN}
           aria-valuemax={SOUND_OFFSET_MAX}
           aria-valuenow={value}
-          aria-valuetext={soundOffsetLabel(value)}
+          aria-valuetext={soundOffsetText(t, value)}
           onKeyDown={(e) => {
             if (e.key === "ArrowUp" || e.key === "ArrowRight") {
               e.preventDefault();
@@ -73,18 +71,18 @@ function SoundOffsetStepper({
         </div>
         <IconButton
           type="button"
-          aria-label="Satu menit lebih lambat"
+          aria-label={t.sndLater}
           disabled={value >= SOUND_OFFSET_MAX}
           onClick={() => step(1)}
           className="disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus />
         </IconButton>
-        <span className="text-sm text-(--text-secondary)">menit</span>
+        <span className="text-sm text-(--text-secondary)">{t.sndMinutes}</span>
       </div>
       <p className="text-xs text-(--text-tertiary)">
-        {soundOffsetLabel(value)}
-        {plays ? ` · berbunyi pukul ${plays}` : ""}
+        {soundOffsetText(t, value)}
+        {plays ? ` ${fmt(t.sndPlaysAt, { at: plays })}` : ""}
       </p>
     </div>
   );

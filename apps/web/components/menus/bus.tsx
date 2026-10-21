@@ -4,11 +4,9 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bus, Pencil, Plus, Trash2 } from "lucide-react";
 
-import { MENU_LABELS } from "@universe/contracts";
-
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, useI18n } from "@/lib/i18n";
 import {
   busSchedulesKey,
   busSchedulesQueryOptions,
@@ -162,7 +160,7 @@ export function BusMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={MENU_LABELS.bus} sub={t.busSub}>
+      <PageTitle title={menuLabel(t, "bus")} sub={t.busSub}>
         {canW && !noBusUnits ? (
           <Button onClick={openAdd} disabled={available.length === 0}>
             <Plus />
@@ -173,7 +171,7 @@ export function BusMenu({ mode }: { mode: AccessMode }) {
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>{MENU_LABELS.bus}</ToolbarTitle>
+          <ToolbarTitle>{menuLabel(t, "bus")}</ToolbarTitle>
         </Toolbar>
 
         {noBusUnits ? (

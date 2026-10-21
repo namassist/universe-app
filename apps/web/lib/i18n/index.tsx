@@ -6,6 +6,16 @@ import { en } from "./en";
 import { id, type Dict } from "./id";
 
 export type { Dict };
+export { fmt } from "./fmt";
+export { menuLabel, menuLabelKey } from "./menu-labels";
+export {
+  reportDescription,
+  reportLabel,
+  runTextKindLabel,
+  shiftKindLabel,
+  soundOffsetText,
+  timelineActionText,
+} from "./contract-labels";
 
 export type Lang = "id" | "en";
 
@@ -49,6 +59,29 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     [lang, setLang]
   );
 
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+/**
+ * One language for a subtree, whatever the reader picked elsewhere.
+ *
+ * For screens whose language is a decision rather than a preference — the
+ * kiosk walls read in Indonesian on every TV and in every preview (owner,
+ * 2026-09-19) — while their words still come from the dictionary.
+ */
+const noop = () => {};
+
+export function FixedLanguage({
+  lang,
+  children,
+}: {
+  lang: Lang;
+  children: React.ReactNode;
+}) {
+  const value = React.useMemo(
+    () => ({ lang, t: dicts[lang], setLang: noop }),
+    [lang]
+  );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

@@ -79,7 +79,18 @@ nowhere.
 
 `I18nProvider` + `useI18n()` → typed dict `t`. Dictionaries in
 `lib/i18n/id.ts` (source of the `Dict` type) and `en.ts`. Default language
-Indonesian, persisted in localStorage.
+Indonesian, persisted in localStorage. `FixedLanguage` pins a subtree to one
+language — `app/display/layout.tsx` uses it to keep the walls Indonesian.
+
+Helpers beside the dictionaries, each with a `bun test`:
+
+- `fmt.ts` — fills `{name}` slots in a dictionary sentence.
+- `menu-labels.ts` — `menuLabel(t, slug)`, the menu names the sidebar,
+  breadcrumb and page titles read. `lib/nav.ts` holds dictionary keys for its
+  group and section headings.
+- `contract-labels.ts` — the contracts' vocabularies (shift kind, report,
+  timeline action, running-text kind, sound offset) in the reader's language.
+  The tests pin every Indonesian word to the contracts' own `*_LABELS`.
 
 ## Related docs
 

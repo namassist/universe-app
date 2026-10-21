@@ -8,7 +8,7 @@ import { ArrowLeft, CalendarClock, Plus, Save, Trash2 } from "lucide-react";
 import { ROSTER_CODES, type RosterCode } from "@universe/contracts";
 
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import {
   rosterCorrectionPeople,
   rosterCorrectionsRoot,
@@ -123,7 +123,9 @@ export function RosterCorrectionNew() {
   const currentOf = (i: number) => {
     const q = currents[i];
     if (!q || q.isPending) return "…";
-    return q.data?.find((p) => p.nik === entries[i]?.nik)?.code ?? "kosong";
+    return (
+      q.data?.find((p) => p.nik === entries[i]?.nik)?.code ?? t.rcEmptyCode
+    );
   };
 
   const loadPeople = React.useCallback(
@@ -160,8 +162,8 @@ export function RosterCorrectionNew() {
       await queryClient.invalidateQueries({ queryKey: rosterCorrectionsRoot });
       pushToast(
         "success",
-        "Roster dikoreksi",
-        `${rows.length} koreksi untuk ${date} sudah berlaku`
+        t.rcnSaved,
+        fmt(t.rcnSavedB, { n: rows.length, date })
       );
       router.push(LIST_HREF);
     },
@@ -171,9 +173,9 @@ export function RosterCorrectionNew() {
       setIssues(byEntry);
       pushToast(
         "error",
-        "Koreksi belum tersimpan",
+        t.rcnNotSaved,
         byEntry.size
-          ? `${byEntry.size} entri perlu diperbaiki — lihat tandanya di daftar`
+          ? fmt(t.rcnFixN, { n: byEntry.size })
           : errorMessage(error, t.loginErr)
       );
     },
@@ -185,11 +187,7 @@ export function RosterCorrectionNew() {
     const text = reason.trim();
     const dupe = person && entries.some((e) => e.nik === person.nik);
     const next = {
-      person: !person
-        ? "Pilih karyawan"
-        : dupe
-          ? "Karyawan ini sudah ada di daftar"
-          : undefined,
+      person: !person ? t.rcnPickPerson : dupe ? t.rcnDupe : undefined,
       reason: text.length < 3,
     };
     setErrs(next);
@@ -216,13 +214,10 @@ export function RosterCorrectionNew() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title="Tambah Koreksi Roster"
-        sub="Satu tanggal, beberapa karyawan sekaligus — berlaku langsung setelah disimpan"
-      >
+      <PageTitle title={t.shRcNew} sub={t.rcnSub}>
         <Button variant="ghost" onClick={() => router.push(LIST_HREF)}>
           <ArrowLeft />
-          Kembali
+          {t.back}
         </Button>
       </PageTitle>
 
@@ -231,10 +226,10 @@ export function RosterCorrectionNew() {
           underneath the panel that follows it. */}
       <Panel className="relative z-10">
         <Toolbar className="mb-4">
-          <ToolbarTitle>Tanggal &amp; Entri</ToolbarTitle>
+          <ToolbarTitle>{t.rcnDateEntries}</ToolbarTitle>
         </Toolbar>
         <div className="grid gap-4 md:grid-cols-[180px_1fr_200px_1fr_auto] md:items-start">
-          <Field label="Tanggal" htmlFor="rcn-date" required>
+          <Field label={t.rcThDate} htmlFor="rcn-date" required>
             <Input
               id="rcn-date"
               type="date"
@@ -246,7 +241,7 @@ export function RosterCorrectionNew() {
             />
           </Field>
           <Field
-            label="Karyawan"
+            label={t.rcnPerson}
             htmlFor="rcn-person"
             required
             error={!!errs.person}
@@ -254,21 +249,25 @@ export function RosterCorrectionNew() {
           >
             <AsyncSelect<RosterCorrectionPerson>
               id="rcn-person"
-              ariaLabel="Karyawan"
+              ariaLabel={t.rcnPerson}
               value={person?.nik ?? ""}
               valueLabel={
                 person
-                  ? `${person.name} (${person.nik}) — roster ${person.code ?? "kosong"}`
+                  ? fmt(t.rcnPersonValue, {
+                      name: person.name,
+                      nik: person.nik,
+                      code: person.code ?? t.rcEmptyCode,
+                    })
                   : ""
               }
-              placeholder="Cari NIK atau nama"
-              searchPlaceholder="Ketik NIK atau nama"
-              emptyText="Tidak ada karyawan yang cocok"
+              placeholder={t.rcSearch}
+              searchPlaceholder={t.rcnPersonSearch}
+              emptyText={t.rcnNoPerson}
               load={loadPeople}
               onChange={(option) => setPerson(option?.row ?? null)}
             />
           </Field>
-          <Field label="Ubah menjadi" htmlFor="rcn-code">
+          <Field label={t.rcnChangeTo} htmlFor="rcn-code">
             <Select
               id="rcn-code"
               value={code}
@@ -282,15 +281,15 @@ export function RosterCorrectionNew() {
             </Select>
           </Field>
           <Field
-            label="Alasan"
+            label={t.rcThReason}
             htmlFor="rcn-reason"
             required
             error={!!errs.reason}
-            errorMessage="Tulis alasannya, minimal 3 huruf"
+            errorMessage={t.rcnReasonErr}
           >
             <Input
               id="rcn-reason"
-              placeholder="Contoh: dipanggil masuk pagi, darurat"
+              placeholder={t.rcnReasonPh}
               value={reason}
               maxLength={500}
               onChange={(e) => setReason(e.target.value)}
@@ -304,25 +303,25 @@ export function RosterCorrectionNew() {
           </Field>
           <Button className="md:mt-[26px]" onClick={addEntry}>
             <Plus />
-            Tambah
+            {t.cmAdd}
           </Button>
         </div>
       </Panel>
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>Daftar Koreksi — {date}</ToolbarTitle>
+          <ToolbarTitle>{fmt(t.rcnListT, { date })}</ToolbarTitle>
         </Toolbar>
         {entries.length ? (
           <Table>
             <TableHeader>
               <tr>
-                <TableHead style={{ width: 48 }}>No</TableHead>
-                <TableHead>NIK</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Departemen</TableHead>
-                <TableHead>Roster</TableHead>
-                <TableHead>Alasan</TableHead>
+                <TableHead style={{ width: 48 }}>{t.cmNo}</TableHead>
+                <TableHead>{t.cmNik}</TableHead>
+                <TableHead>{t.thNama}</TableHead>
+                <TableHead>{t.thDept}</TableHead>
+                <TableHead>{t.rcThRoster}</TableHead>
+                <TableHead>{t.rcThReason}</TableHead>
                 <TableHead style={{ width: 60 }}>{t.thAct}</TableHead>
               </tr>
             </TableHeader>
@@ -349,7 +348,7 @@ export function RosterCorrectionNew() {
                     <TableCell>
                       <IconButton
                         danger
-                        aria-label="Hapus dari daftar"
+                        aria-label={t.rcnRemove}
                         onClick={() => removeEntry(i)}
                       >
                         <Trash2 />
@@ -363,20 +362,20 @@ export function RosterCorrectionNew() {
         ) : (
           <StateBox
             icon={<CalendarClock className="text-(--color-primary-bright)" />}
-            title="Belum ada entri"
-            body="Pilih karyawan, kode baru, dan alasan, lalu tekan Tambah. Ulangi untuk karyawan berikutnya."
+            title={t.rcnEmptyT}
+            body={t.rcnEmptyB}
           />
         )}
         <PanelFoot>
           <FootSum>
-            <b>{entries.length}</b> karyawan akan dikoreksi untuk <b>{date}</b>
+            <b>{entries.length}</b> {t.rcnSumA} <b>{date}</b>
           </FootSum>
           <Button
             disabled={!entries.length || save.isPending}
             onClick={() => setReviewOpen(true)}
           >
             <Save />
-            Simpan Semua ({entries.length})
+            {fmt(t.rcnSaveAllN, { n: entries.length })}
           </Button>
         </PanelFoot>
       </Panel>
@@ -390,13 +389,9 @@ export function RosterCorrectionNew() {
           <CalendarClock />
         </DialogIcon>
         <DialogTitle id="rcn-t">
-          Simpan {entries.length} koreksi untuk {date}?
+          {fmt(t.rcnReviewT, { n: entries.length, date })}
         </DialogTitle>
-        <DialogBody>
-          Berlaku langsung untuk alokasi, tiket, dan display, dan tidak tertimpa
-          tarikan unggul_att. Agar ikut alokasi pagi, simpan sebelum Batas
-          Finger In.
-        </DialogBody>
+        <DialogBody>{t.rcnReviewB}</DialogBody>
         <ul className="mt-4 flex max-h-[280px] flex-col gap-1 overflow-y-auto text-sm">
           {entries.map((e, i) => (
             <li key={e.nik} className="flex justify-between gap-4">
@@ -414,7 +409,7 @@ export function RosterCorrectionNew() {
             {t.btnCancel}
           </Button>
           <Button disabled={save.isPending} onClick={() => save.mutate()}>
-            Simpan Semua
+            {t.rcnSaveAll}
           </Button>
         </DialogActions>
       </Dialog>

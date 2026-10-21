@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Search } from "lucide-react";
 
 import { errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import { ftwQueryOptions } from "@/lib/queries/readiness";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -157,7 +157,7 @@ export function FitToWorkHistory() {
   const catLabel: Record<FtwCatKey, string> = {
     fit: t.bFit,
     istirahat: t.ftwStatKurang,
-    tidak: "Tidak Boleh Bekerja",
+    tidak: t.ftwNoWork,
     belum: t.ftwStatBelum,
   };
 
@@ -191,7 +191,9 @@ export function FitToWorkHistory() {
       <PageTitle
         title={t.ftwHistPage}
         sub={
-          selectedOp ? `${selectedOp.name} — NIK ${selectedOp.nik}` : t.fhSubAll
+          selectedOp
+            ? fmt(t.ftwOpNik, { name: selectedOp.name, nik: selectedOp.nik })
+            : t.fhSubAll
         }
       >
         <Button variant="ghost" onClick={() => router.push(listHref)}>
@@ -307,7 +309,7 @@ export function FitToWorkHistory() {
                   <TableHead>{t.thShift}</TableHead>
                   <TableHead>{t.thSleep}</TableHead>
                   <TableHead>{t.thStatus}</TableHead>
-                  <TableHead>FTW</TableHead>
+                  <TableHead>{t.cmFtw}</TableHead>
                 </tr>
               </TableHeader>
               <TableBody>

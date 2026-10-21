@@ -384,7 +384,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
   const catLabel: Record<CatKey, string> = {
     fit: t.bFit,
     istirahat: t.ftwStatKurang,
-    tidak: "Tidak Boleh Bekerja",
+    tidak: t.ftwNoWork,
     belum: t.ftwStatBelum,
   };
 
@@ -531,7 +531,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                   <TableHead>{t.thCompany}</TableHead>
                   <TableHead>{t.thDept}</TableHead>
                   <TableHead>{t.thPos}</TableHead>
-                  <TableHead>Mess</TableHead>
+                  <TableHead>{t.cmMess}</TableHead>
                   <TableHead>{t.thEmpStatus}</TableHead>
                   <TableHead>{t.thRoster}</TableHead>
                   <TableHead>{t.thShift}</TableHead>
@@ -542,7 +542,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                     onSort={(k) => setSort((cur) => nextSort(cur, k))}
                   />
                   <TableHead>{t.thStatus}</TableHead>
-                  <TableHead>FTW</TableHead>
+                  <TableHead>{t.cmFtw}</TableHead>
                   <SortHead
                     label={t.lblDate}
                     sortKey="date"
@@ -596,7 +596,7 @@ export function FitToWorkMenu({ mode }: { mode: AccessMode }) {
                       <TableCell className="font-mono">
                         {r.rosterCode ?? "—"}
                       </TableCell>
-                      <TableCell>{shiftLabel(r)}</TableCell>
+                      <TableCell>{shiftLabel(r, t)}</TableCell>
                       <TableCell className={sleepClass(rowCat)}>
                         {sleepText(r.sleepMinutes)}
                       </TableCell>

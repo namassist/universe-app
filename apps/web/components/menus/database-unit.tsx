@@ -236,17 +236,17 @@ export function DatabaseUnitMenu({ mode }: { mode: AccessMode }) {
 
   const heads: { label: string; style?: React.CSSProperties }[] = [
     { label: t.thUnitCode },
-    { label: "Kelas Unit" },
-    { label: "Jenis Unit" },
-    { label: "Model" },
-    { label: "Merk" },
-    { label: "Kode Simper" },
-    { label: "Departemen" },
-    { label: "Machine S/N" },
-    { label: "Engine Brand" },
-    { label: "Description" },
+    { label: t.unClass },
+    { label: t.unType },
+    { label: t.unModel },
+    { label: t.unBrand },
+    { label: t.unSimperCode },
+    { label: t.thDept },
+    { label: t.unSerial },
+    { label: t.unEngine },
+    { label: t.unDesc },
     { label: t.thStatus },
-    { label: "FTW" },
+    { label: t.cmFtw },
     { label: t.thAct, style: { width: 110 } },
   ];
 
@@ -308,8 +308,8 @@ export function DatabaseUnitMenu({ mode }: { mode: AccessMode }) {
               onChange={(e) => setFtwF(e.target.value)}
             >
               <option value="">{t.allFtw}</option>
-              <option value="1">FTW</option>
-              <option value="0">Non-FTW</option>
+              <option value="1">{t.cmFtw}</option>
+              <option value="0">{t.cmNonFtw}</option>
             </Select>
             <Button variant="secondary" onClick={exportSheet}>
               <Download />
@@ -424,12 +424,12 @@ export function DatabaseUnitMenu({ mode }: { mode: AccessMode }) {
                         )}
                         {u.standby ? (
                           <Badge variant="warning" dot>
-                            Standby
+                            {t.cmStandby}
                           </Badge>
                         ) : null}
                         {u.breakdown ? (
                           <Badge variant="danger" dot>
-                            Breakdown
+                            {t.cmBreakdown}
                           </Badge>
                         ) : null}
                       </div>
@@ -439,7 +439,7 @@ export function DatabaseUnitMenu({ mode }: { mode: AccessMode }) {
                           recorded", and not being fit to work is a fact about
                           the unit rather than a field nobody filled in. */}
                       <Badge variant={u.ftw ? "success" : "danger"} dot>
-                        {u.ftw ? "FTW" : "Non-FTW"}
+                        {u.ftw ? t.cmFtw : t.cmNonFtw}
                       </Badge>
                     </TableCell>
                     <TableCell>

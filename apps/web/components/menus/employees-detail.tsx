@@ -17,7 +17,7 @@ import {
 
 import type { EmployeeStatus } from "@universe/contracts";
 
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import {
   employeeQueryOptions,
   photoUrl,
@@ -145,7 +145,9 @@ function PhotoBlock({
           className="w-[min(520px,100%)]"
         >
           <DialogTitle id="ed-photo-t">{emp.name}</DialogTitle>
-          <DialogBody className="font-mono">NIK {emp.nik}</DialogBody>
+          <DialogBody className="font-mono">
+            {t.cmNik} {emp.nik}
+          </DialogBody>
           {/* Served by the API behind a session cookie, which the Next image
               optimizer cannot forward — the same reason `Avatar` uses <img>. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -206,7 +208,7 @@ export function EmployeeDetail({ nik }: { nik: string }) {
         <StateBox
           icon={<Search className="text-(--color-primary-bright)" />}
           title={t.noResTitle}
-          body={`NIK ${nik}`}
+          body={fmt(t.cmNikValue, { nik })}
         >
           <Button
             variant="secondary"
@@ -243,7 +245,7 @@ export function EmployeeDetail({ nik }: { nik: string }) {
           <div className="min-w-65 flex-1">
             <h1 className="text-2xl font-bold">{emp.name}</h1>
             <div className="mt-0.5 font-mono text-sm text-(--text-secondary)">
-              NIK {emp.nik} · {emp.companyName}
+              {t.cmNik} {emp.nik} · {emp.companyName}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge
@@ -255,7 +257,7 @@ export function EmployeeDetail({ nik }: { nik: string }) {
               </Badge>
               {emp.simperTypeName ? (
                 <Badge variant="info" dot>
-                  SIMPER {emp.simperTypeName}
+                  {fmt(t.cmSimperValue, { name: emp.simperTypeName ?? "" })}
                 </Badge>
               ) : null}
             </div>
@@ -296,7 +298,7 @@ export function EmployeeDetail({ nik }: { nik: string }) {
         <Panel>
           <SectionTitle>
             <IdCard />
-            SIMPER &amp; {t.kLicense}
+            {t.empSimperAnd} {t.kLicense}
           </SectionTitle>
           {emp.simperTypeName ? (
             <div className="mb-4 flex items-center gap-3">
@@ -366,7 +368,7 @@ export function EmployeeDetail({ nik }: { nik: string }) {
             {t.secMess}
           </SectionTitle>
           <Kv>
-            <KvRow label="Mess">{emp.messName}</KvRow>
+            <KvRow label={t.cmMess}>{emp.messName}</KvRow>
             <KvRow label={t.kBlock}>{emp.block}</KvRow>
             <KvRow label={t.kRoom} mono>
               {emp.room}

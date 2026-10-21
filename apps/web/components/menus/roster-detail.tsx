@@ -8,7 +8,7 @@ import { ArrowLeft, Download, Search } from "lucide-react";
 import { ROSTER_CODE_KIND, type RosterCode } from "@universe/contracts";
 
 import { errorMessage, fetchBlob } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import {
   rosterDaysQueryOptions,
   rosterDocumentQueryOptions,
@@ -343,7 +343,7 @@ export function RosterDetail() {
             >
               <TableHeader>
                 <tr>
-                  <TableHead className="w-[110px]">NIK</TableHead>
+                  <TableHead className="w-[110px]">{t.cmNik}</TableHead>
                   <TableHead className="w-[190px]">{t.thNama}</TableHead>
                   {grid.days.map((d) => (
                     <TableHead
@@ -379,7 +379,12 @@ export function RosterDetail() {
                           style={{ color: rosterCodeColor(c ?? "") }}
                           title={
                             fix
-                              ? `Dikoreksi ${fix.fromCode ?? "—"} → ${fix.toCode} oleh ${fix.createdByName}: ${fix.reason}`
+                              ? fmt(t.rdCorrected, {
+                                  from: fix.fromCode ?? "—",
+                                  to: fix.toCode,
+                                  by: fix.createdByName,
+                                  reason: fix.reason,
+                                })
                               : undefined
                           }
                         >

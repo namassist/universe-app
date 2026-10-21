@@ -4,9 +4,8 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Ban, Clock, HeartPulse } from "lucide-react";
 
-import { SHIFT_KIND_LABELS } from "@universe/contracts";
-
 import { isStatus } from "@/lib/api";
+import { fmt, shiftKindLabel, useI18n, type Dict } from "@/lib/i18n";
 import {
   fitWorkDisplayQueryOptions,
   type FitWorkDisplayRow,
@@ -43,48 +42,57 @@ import { DisplayBadge, type DisplayTone } from "../_components/display-table";
  */
 const GROUP: Record<
   FitWorkDisplayRow["group"],
-  { tone: DisplayTone; label: string }
+  { tone: DisplayTone; label: keyof Dict }
 > = {
-  none: { tone: "danger", label: "Belum upload FTW" },
+  none: { tone: "danger", label: "wlwNone" },
   /* Both read the same on a badge: the difference is in the line under it,
      which names what refused him. */
-  ftwFail: { tone: "danger", label: "Tidak Lolos FTW" },
-  allocFail: { tone: "danger", label: "Tidak Lolos FTW" },
-  rest: { tone: "warning", label: "Istirahat" },
-  fit: { tone: "success", label: "Lolos FTW" },
+  ftwFail: { tone: "danger", label: "wlwFail" },
+  allocFail: { tone: "danger", label: "wlwFail" },
+  rest: { tone: "warning", label: "wlwRest" },
+  fit: { tone: "success", label: "wlwFit" },
 };
 
 /** Why our own rule refused, when it was ours that did. */
-const OUR_REASON: Partial<Record<FitWorkDisplayRow["verdict"], string>> = {
-  late: "Upload lewat batas waktu",
-  unreadable: "Vonis savera tidak dikenali",
+const OUR_REASON: Partial<Record<FitWorkDisplayRow["verdict"], keyof Dict>> = {
+  late: "wlwLate",
+  unreadable: "wlwUnreadable",
 };
 
 /** 445 → "7j 25m". Minutes as savera's rules actually counted them. */
-function sleepText(minutes: number | null): string {
+function sleepText(minutes: number | null, t: Dict): string {
   if (minutes === null || minutes <= 0) return "—";
   const h = Math.floor(minutes / 60);
-  return h ? `${h}j ${String(minutes % 60).padStart(2, "0")}m` : `${minutes}m`;
+  return h
+    ? fmt(t.wlwSleepHM, { h, m: String(minutes % 60).padStart(2, "0") })
+    : fmt(t.wlwSleepM, { m: minutes });
 }
 
 export default function DisplayFitworkPage() {
   const deviceName = useSearchParams().get("name") ?? undefined;
+  const { t } = useI18n();
   const { data, error, isError, dataUpdatedAt } = useQuery(
     fitWorkDisplayQueryOptions()
   );
+  const ourReason = (verdict: FitWorkDisplayRow["verdict"]) => {
+    const key = OUR_REASON[verdict];
+    return key ? t[key] : null;
+  };
 
   const authProblem = isStatus(error, 401) || isStatus(error, 403);
   const disconnected = isError && !authProblem;
 
   const rows = data?.rows ?? [];
-  const shiftLabel = data?.shift ? SHIFT_KIND_LABELS[data.shift] : null;
+  const shiftLabel = data?.shift ? shiftKindLabel(t, data.shift) : null;
   /* Everyone the wall would show if it had room — the cleared are not among
      them, so this is not `total - rows.length`. */
   const exceptions = data ? data.total - data.passed : 0;
 
   return (
     <DisplayShell
-      title={shiftLabel ? `Fit To Work — Shift ${shiftLabel}` : "Fit To Work"}
+      title={
+        shiftLabel ? fmt(t.wlwTitleShift, { shift: shiftLabel }) : t.wlwTitle
+      }
       deviceName={deviceName}
       displayKind="fitwork"
       disconnected={disconnected}
@@ -104,13 +112,17 @@ export default function DisplayFitworkPage() {
         data?.date ? (
           <span className="truncate">
             {exceptions === 0
-              ? `Semua ${data.total} orang wajib FTW sudah lolos`
+              ? fmt(t.wlwAllPassed, { total: data.total })
               : rows.length < exceptions
-                ? `${rows.length} dari ${exceptions} yang perlu dilihat — dari ${data.total} orang wajib FTW`
-                : `${exceptions} perlu dilihat dari ${data.total} orang wajib FTW`}
+                ? fmt(t.wlwSomeOf, {
+                    shown: rows.length,
+                    need: exceptions,
+                    total: data.total,
+                  })
+                : fmt(t.wlwNeed, { need: exceptions, total: data.total })}
           </span>
         ) : (
-          <span className="truncate">Menunggu jadwal shift dari timeline</span>
+          <span className="truncate">{t.wlWaitShift}</span>
         )
       }
       stats={[
@@ -126,26 +138,26 @@ export default function DisplayFitworkPage() {
           icon: <Ban className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
           value: String(data?.allocFailed ?? 0),
-          label: "Tidak Lolos Alokasi",
+          label: t.wlwAllocFail,
         },
         {
           icon: <AlertTriangle className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
           value: String(data?.missing ?? 0),
-          label: "Belum Upload",
+          label: t.wlwNoUpload,
         },
         {
           icon: <HeartPulse className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
           value: String(data?.ftwFailed ?? 0),
-          label: "Tidak Lolos FTW",
+          label: t.wlwFail,
         },
         {
           icon: <Clock className="text-(--badge-warning-text)" />,
           iconClass:
             "bg-(--badge-warning-fill) border-(--badge-warning-border)",
           value: String(data?.rest ?? 0),
-          label: "Istirahat",
+          label: t.wlwRest,
         },
       ]}
     >
@@ -164,20 +176,20 @@ export default function DisplayFitworkPage() {
             cells: [
               <CardField
                 key="who"
-                label="Operator"
+                label={t.wlwOperator}
                 className="w-[23%] flex-none"
               >
                 <span className="truncate text-[26px] leading-tight font-bold">
                   {r.name}
                 </span>
                 <span className="font-mono text-[15px] text-(--text-secondary) tabular-nums">
-                  NIK {r.nik}
+                  {t.cmNik} {r.nik}
                 </span>
               </CardField>,
 
               <CardField
                 key="org"
-                label="Perusahaan / Posisi / Dept"
+                label={t.wlwOrg}
                 className="w-[20%] flex-none"
               >
                 <span className="truncate text-[16px] font-semibold">
@@ -206,19 +218,19 @@ export default function DisplayFitworkPage() {
                * clearance. Nothing is lost either way — the line underneath
                * carries whatever the badge did not.
                */
-              <CardField key="call" label="Keputusan" className="flex-1">
+              <CardField key="call" label={t.wlwCall} className="flex-1">
                 <span className="flex flex-wrap items-center gap-2">
                   <DisplayBadge size="sm" tone={GROUP[r.group].tone}>
                     {r.group === "rest" && r.sleepCategory
                       ? r.sleepCategory
-                      : GROUP[r.group].label}
+                      : t[GROUP[r.group].label]}
                   </DisplayBadge>
                 </span>
                 <span className="truncate text-[15px] text-(--text-secondary)">
                   {[
                     r.group === "rest" ? null : r.sleepCategory,
                     r.ftwDecision,
-                    OUR_REASON[r.verdict],
+                    ourReason(r.verdict),
                   ]
                     .filter(Boolean)
                     .join(" · ") || "\u2014"}
@@ -227,11 +239,11 @@ export default function DisplayFitworkPage() {
 
               <CardField
                 key="sleep"
-                label="Tidur efektif"
+                label={t.wlwSleep}
                 className="w-[11%] flex-none"
               >
                 <span className="font-mono text-[22px] leading-tight font-bold tabular-nums">
-                  {sleepText(r.sleepMinutes)}
+                  {sleepText(r.sleepMinutes, t)}
                 </span>
               </CardField>,
 
@@ -244,7 +256,7 @@ export default function DisplayFitworkPage() {
                 className="w-[136px] flex-none rounded-card border border-(--divider) bg-(--fill-subtle) px-4 py-2.5"
               >
                 <span className="text-[12px] font-semibold tracking-[.12em] text-(--text-tertiary) uppercase">
-                  Jam Upload
+                  {t.wlwSentAt}
                 </span>
                 <div
                   className={
@@ -253,7 +265,7 @@ export default function DisplayFitworkPage() {
                       : "text-[19px] leading-tight font-bold text-(--text-tertiary)"
                   }
                 >
-                  {r.sentAt ? r.sentAt.slice(0, 5) : "Belum"}
+                  {r.sentAt ? r.sentAt.slice(0, 5) : t.wlwNotYet}
                 </div>
               </div>,
             ],

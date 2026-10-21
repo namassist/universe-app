@@ -25,6 +25,7 @@ function PwInput({
   onChange: (v: string) => void;
   autoComplete: string;
 }) {
+  const { t } = useI18n();
   const [show, setShow] = React.useState(false);
   return (
     <div className="relative">
@@ -39,7 +40,7 @@ function PwInput({
       />
       <IconButton
         type="button"
-        aria-label={show ? "Sembunyikan" : "Lihat"}
+        aria-label={show ? t.pfHide : t.pfShow}
         className="absolute top-1/2 right-1.5 -translate-y-1/2"
         onClick={() => setShow((v) => !v)}
       >
@@ -110,7 +111,9 @@ export function ProfilePage() {
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 font-mono text-[13px] text-(--text-tertiary)">
               <span>{email}</span>
-              <span>NIK {account.nik ?? "—"}</span>
+              <span>
+                {t.cmNik} {account.nik ?? "—"}
+              </span>
             </div>
           </div>
         </div>

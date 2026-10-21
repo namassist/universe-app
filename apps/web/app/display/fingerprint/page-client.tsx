@@ -14,6 +14,7 @@ import {
 
 import { isStatus } from "@/lib/api";
 import { boothHealthView, isBoothProblem } from "@/lib/booth-health";
+import { fmt, useI18n, type Dict } from "@/lib/i18n";
 import {
   fingerprintDisplayQueryOptions,
   type FingerprintDisplayMachine,
@@ -41,19 +42,19 @@ import { DisplayShell } from "../_components/display-shell";
  */
 
 /** How long ago, in the shorthand a wall is read at from across a room. */
-function since(iso: string | null): string {
+function since(iso: string | null, t: Dict): string {
   if (!iso) return "—";
   const seconds = Math.max(
     0,
     Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
   );
-  if (seconds < 60) return "baru saja";
+  if (seconds < 60) return t.wlfJustNow;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} m`;
+  if (minutes < 60) return fmt(t.wlfMin, { m: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} j ${minutes % 60} m`;
+  if (hours < 24) return fmt(t.wlfHourMin, { h: hours, m: minutes % 60 });
   const days = Math.floor(hours / 24);
-  return `${days} h ${hours % 24} j`;
+  return fmt(t.wlfDayHour, { d: days, h: hours % 24 });
 }
 
 const clock = (iso: string | null) =>
@@ -96,6 +97,7 @@ function OfflineCard({
   machine: FingerprintDisplayMachine;
   dense: boolean;
 }) {
+  const { t } = useI18n();
   const view = boothHealthView(machine.health);
   const printerFault =
     machine.health === "printer_offline" ||
@@ -150,7 +152,7 @@ function OfflineCard({
         {/* The address somebody will walk to: the printer's, when it is the
             printer that is wrong. */}
         {printerFault && machine.printer
-          ? `Printer ${machine.printer.ip}`
+          ? fmt(t.wlfPrinterAt, { ip: machine.printer.ip })
           : machine.ip}
       </div>
       <div
@@ -159,12 +161,12 @@ function OfflineCard({
           dense ? "text-[14px]" : "text-lg"
         )}
       >
-        {view.label}
+        {t[view.label]}
         {downSince ? (
           <>
             {" "}
             <b className="font-mono font-semibold tabular-nums">
-              {since(downSince)}
+              {since(downSince, t)}
             </b>
           </>
         ) : null}
@@ -181,6 +183,7 @@ function OfflineCard({
  * ones with nothing to stand out against.
  */
 function OnlineCard({ machine }: { machine: FingerprintDisplayMachine }) {
+  const { t } = useI18n();
   return (
     <div className="flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-panel p-3.5 glass-card">
       {/* `shrink-0` on the identity lines is load-bearing, not decoration: a
@@ -204,9 +207,9 @@ function OnlineCard({ machine }: { machine: FingerprintDisplayMachine }) {
         {machine.ip}
       </div>
       <div className="mt-auto truncate text-[14px] text-(--text-tertiary)">
-        Terlihat{" "}
+        {t.wlfSeen}{" "}
         <b className="font-mono font-semibold text-(--text-secondary) tabular-nums">
-          {since(machine.lastSeenAt)}
+          {since(machine.lastSeenAt, t)}
         </b>
       </div>
     </div>
@@ -215,6 +218,7 @@ function OnlineCard({ machine }: { machine: FingerprintDisplayMachine }) {
 
 export default function DisplayFingerprintPage() {
   const params = useSearchParams();
+  const { t } = useI18n();
   const { data, error, isError, dataUpdatedAt } = useQuery(
     fingerprintDisplayQueryOptions()
   );
@@ -282,10 +286,10 @@ export default function DisplayFingerprintPage() {
 
   return (
     <DisplayShell
-      title="Monitoring Mesin Fingerprint"
+      title={t.wlfTitle}
       meta={
         <span>
-          Pengecekan terakhir{" "}
+          {t.wlfLastCheck}{" "}
           <b className="font-mono tabular-nums">{clock(lastCheck)}</b>
         </span>
       }
@@ -322,20 +326,20 @@ export default function DisplayFingerprintPage() {
           icon: <LayoutGrid className="text-(--color-primary-bright)" />,
           iconClass: "bg-(--badge-info-fill) border-(--badge-info-border)",
           value: String(data?.total ?? 0),
-          label: "Total Mesin",
+          label: t.wlfTotal,
         },
         {
           icon: <Wifi className="text-(--badge-success-text)" />,
           iconClass:
             "bg-(--badge-success-fill) border-(--badge-success-border)",
           value: String(data?.ready ?? 0),
-          label: "Siap",
+          label: t.bhReady,
         },
         {
           icon: <WifiOff className="text-(--color-danger-text)" />,
           iconClass: "bg-(--badge-danger-fill) border-(--badge-danger-border)",
           value: String(data?.problems ?? 0),
-          label: "Bermasalah",
+          label: t.wlfProblem,
         },
       ]}
     >
@@ -349,7 +353,7 @@ export default function DisplayFingerprintPage() {
             >
               <h2 className="flex flex-none items-center gap-3 text-2xl font-bold text-(--color-danger-text)">
                 <WifiOff className="size-6" />
-                Perlu Perhatian
+                {t.wlfAttention}
                 <span className="rounded-chip border border-(--badge-danger-border) bg-(--badge-danger-fill) px-3 py-0.5 font-mono text-xl tabular-nums">
                   {offline.length}
                 </span>
@@ -369,7 +373,7 @@ export default function DisplayFingerprintPage() {
             <section className="flex flex-none items-center gap-4 rounded-panel border border-(--badge-success-border) bg-(--badge-success-fill) px-6 py-4">
               <CheckCircle2 className="size-8 flex-none text-(--badge-success-text)" />
               <div className="text-[26px] font-bold text-(--badge-success-text)">
-                Semua mesin siap
+                {t.wlfAllReady}
               </div>
             </section>
           )}
@@ -382,11 +386,11 @@ export default function DisplayFingerprintPage() {
             >
               <h2 className="flex flex-none items-center gap-3 text-xl font-semibold text-(--text-secondary)">
                 <Wifi className="size-5 text-(--badge-success-text)" />
-                Siap
+                {t.bhReady}
                 <span className="font-mono tabular-nums">{online.length}</span>
                 {pages > 1 ? (
                   <span className="font-mono text-lg text-(--text-tertiary) tabular-nums">
-                    halaman {pos + 1}/{pages}
+                    {fmt(t.wlfPage, { p: pos + 1, n: pages })}
                   </span>
                 ) : null}
               </h2>
@@ -421,10 +425,10 @@ export default function DisplayFingerprintPage() {
           {disconnected ? null : (
             <div className="text-center">
               <div className="text-3xl font-bold text-(--text-secondary)">
-                Belum ada data mesin
+                {t.wlfEmptyT}
               </div>
               <div className="mt-2 text-xl text-(--text-tertiary)">
-                Daftarkan mesin di menu Mesin Fingerprint.
+                {t.wlfEmptyB}
               </div>
             </div>
           )}

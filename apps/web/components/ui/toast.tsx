@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckCircle2, Info, XCircle } from "lucide-react";
 
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type ToastType = "success" | "error" | "info";
@@ -82,6 +83,7 @@ const iconColor: Record<ToastType, string> = {
 };
 
 function Toaster() {
+  const { t } = useI18n();
   const { toasts, dismissToast } = React.useContext(ToastContext);
   return (
     <div
@@ -114,7 +116,7 @@ function Toaster() {
               ) : null}
             </div>
             <button
-              aria-label="Tutup"
+              aria-label={t.btnClose}
               onClick={() => dismissToast(toast.id)}
               className="flex-none rounded p-0.5 text-sm leading-none text-(--text-tertiary) hover:bg-(--fill-hover-strong) hover:text-(--text-primary)"
             >

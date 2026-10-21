@@ -7,7 +7,7 @@ import { Download, Lock, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import type { Dict } from "@/lib/i18n/id";
 import { rolesKey, rolesQueryOptions, type RoleRow } from "@/lib/queries/roles";
 import {
@@ -138,7 +138,7 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
   );
   const pg = usePagination(rows);
   const locked = !!editing?.locked;
-  const sections = pageSections();
+  const sections = pageSections(t);
 
   const permStr = (r: RoleRow) => {
     const vals = Object.values(r.permissions);
@@ -223,7 +223,7 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
               />
               <Button variant="secondary" onClick={exportCsv}>
                 <Download />
-                Export
+                {t.cmExport}
               </Button>
             </ToolbarGroup>
           </Toolbar>
@@ -234,11 +234,11 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
             <Table>
               <TableHeader>
                 <tr>
-                  <TableHead>Role</TableHead>
+                  <TableHead>{t.cmRole}</TableHead>
                   <TableHead className="max-xl:hidden">{t.umDesc}</TableHead>
                   <TableHead>{t.umScopeT}</TableHead>
-                  <TableHead>Permission</TableHead>
-                  <TableHead>User</TableHead>
+                  <TableHead>{t.umPermission}</TableHead>
+                  <TableHead>{t.cmUser}</TableHead>
                   <TableHead className="w-[110px]">{t.thAct}</TableHead>
                 </tr>
               </TableHeader>
@@ -303,7 +303,8 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
 
           <PanelFoot>
             <FootSum>
-              {t.attSumA} <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b> role
+              {t.attSumA} <b>{pg.range}</b> {t.attSumB} <b>{pg.total}</b>{" "}
+              {t.umRoleUnit}
             </FootSum>
             <Pagination
               page={pg.page}
@@ -424,7 +425,7 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
             >
               <Input
                 id="um-rname"
-                placeholder="Admin Roster"
+                placeholder={t.umRoleNamePh}
                 disabled={locked}
                 value={fName}
                 onChange={(e) => {
@@ -551,7 +552,10 @@ export function UmRolesMenu({ mode }: { mode: AccessMode }) {
         <DialogBody>
           {delError ??
             (delTarget && delTarget.userCount > 0
-              ? `${t.umRoleDelBlocked} ${delTarget.userCount} user.`
+              ? fmt(t.umRoleDelBlockedN, {
+                  lead: t.umRoleDelBlocked,
+                  n: delTarget.userCount,
+                })
               : t.umRoleDelB)}
         </DialogBody>
         <DialogActions>

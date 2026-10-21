@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -23,10 +24,11 @@ function ValidityFields({
   problem: string | null;
   onChange: (next: ValidityInput) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Berlaku dari" htmlFor={`${idPrefix}-from`} required>
+        <Field label={t.igvFrom} htmlFor={`${idPrefix}-from`} required>
           <Input
             id={`${idPrefix}-from`}
             type="date"
@@ -35,7 +37,7 @@ function ValidityFields({
           />
         </Field>
         <Field
-          label="Berlaku sampai"
+          label={t.igvUntil}
           htmlFor={`${idPrefix}-until`}
           error={problem !== null}
           errorMessage={problem}
@@ -55,7 +57,7 @@ function ValidityFields({
           checked={value.noEnd}
           onChange={(e) => onChange({ ...value, noEnd: e.target.checked })}
         />
-        Tanpa batas
+        {t.cmUnlimited}
       </ToggleRow>
     </div>
   );

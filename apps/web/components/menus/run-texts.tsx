@@ -6,9 +6,7 @@ import { Megaphone, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import {
   COLOR_VAL,
-  MENU_LABELS,
   RUNTEXT_COLORS,
-  RUNTEXT_KIND_LABELS,
   RUNTEXT_KINDS,
   type RunTextColor,
   type RunTextKind,
@@ -16,7 +14,7 @@ import {
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, runTextKindLabel, useI18n } from "@/lib/i18n";
 import {
   runTextsKey,
   runTextsQueryOptions,
@@ -182,7 +180,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={MENU_LABELS["running-text"]} sub={t.mdSub}>
+      <PageTitle title={menuLabel(t, "running-text")} sub={t.mdSub}>
         {canW ? (
           <Button onClick={openAdd}>
             <Plus />
@@ -193,7 +191,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>{MENU_LABELS["running-text"]}</ToolbarTitle>
+          <ToolbarTitle>{menuLabel(t, "running-text")}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
               className="w-[240px]"
@@ -219,9 +217,9 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
           <Table>
             <TableHeader>
               <tr>
-                <TableHead>Teks</TableHead>
-                <TableHead>Jenis</TableHead>
-                <TableHead>Warna</TableHead>
+                <TableHead>{t.rtText}</TableHead>
+                <TableHead>{t.rtKind}</TableHead>
+                <TableHead>{t.rtColor}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead style={{ width: 110 }}>{t.thAct}</TableHead>
               </tr>
@@ -237,11 +235,11 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
                         ticker's own and needs no badge to say so. */}
                     {r.kind === "general" ? (
                       <span className="text-(--text-tertiary)">
-                        {RUNTEXT_KIND_LABELS.general}
+                        {runTextKindLabel(t, "general")}
                       </span>
                     ) : (
                       <Badge variant={r.kind === "hazard" ? "danger" : "info"}>
-                        {RUNTEXT_KIND_LABELS[r.kind]}
+                        {runTextKindLabel(t, r.kind)}
                       </Badge>
                     )}
                   </TableCell>
@@ -321,7 +319,7 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
         <form onSubmit={submit} noValidate>
           <Field
             className="mt-4"
-            label="Teks"
+            label={t.rtText}
             htmlFor="rt-text"
             required
             error={errText}
@@ -335,9 +333,9 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
           </Field>
           <Field
             className="mt-4"
-            label="Jenis"
+            label={t.rtKind}
             htmlFor="rt-kind"
-            helper="Lokasi berbahaya dan pesan safety ikut tercetak di tiket muster. Umum hanya berjalan di display."
+            helper={t.rtKindHelp}
           >
             <Select
               id="rt-kind"
@@ -346,12 +344,12 @@ export function RunTextsMenu({ mode }: { mode: AccessMode }) {
             >
               {RUNTEXT_KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {RUNTEXT_KIND_LABELS[k]}
+                  {runTextKindLabel(t, k)}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field className="mt-4" label="Warna" htmlFor="rt-color">
+          <Field className="mt-4" label={t.rtColor} htmlFor="rt-color">
             <div className="flex items-center gap-3">
               <Select
                 id="rt-color"

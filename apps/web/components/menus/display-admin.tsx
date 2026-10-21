@@ -32,7 +32,7 @@ import {
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n, type Dict } from "@/lib/i18n";
 import { openDisplay } from "@/lib/open-display";
 import {
   devicesKey,
@@ -101,11 +101,11 @@ const MAX_ROTATE = 600;
  * static port is, until the display-configuration change lands.
  */
 /** Example names, per kind — a hint at the naming convention in use. */
-const NAME_PLACEHOLDER: Record<DeviceKind, string> = {
-  att: "TV Gate Utara",
-  fleet: "Fleet EX-22",
-  fitwork: "TV Fit To Work",
-  fingerprint: "TV Monitoring Fingerprint",
+const NAME_PLACEHOLDER: Record<DeviceKind, keyof Dict> = {
+  att: "dspPhAtt",
+  fleet: "dspPhFleet",
+  fitwork: "dspPhFitwork",
+  fingerprint: "dspPhFinger",
 };
 
 export function DisplayAdminMenu({
@@ -562,7 +562,7 @@ export function DisplayAdminMenu({
                   {/* Derived from last_seen_at, not asserted by the row. */}
                   <TableCell>
                     <Badge variant={d.online ? "success" : "danger"} dot>
-                      {d.online ? "Online" : "Offline"}
+                      {d.online ? t.cmOnline : t.cmOffline}
                     </Badge>
                     <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
                       {d.lastSeenLabel}
@@ -783,7 +783,7 @@ export function DisplayAdminMenu({
               <Field
                 label={
                   <span className="flex w-full items-center gap-2">
-                    <span>Fleet</span>
+                    <span>{t.cmFleet}</span>
                     <Badge variant={fSel.length ? "info" : "neutral"}>
                       {fSel.length} {t.dspPicked}
                     </Badge>
@@ -874,9 +874,14 @@ export function DisplayAdminMenu({
                                 onChange={() => toggleFleet(f.id)}
                               />
                               <span className="min-w-0 flex-1 truncate">
-                                {`Fleet ${f.leaderCode}`}
+                                {fmt(t.cmFleetCode, {
+                                  code: String(f.leaderCode),
+                                })}
                                 <span className="text-(--text-tertiary)">
-                                  {` — ${f.workArea} · ${f.units.length + 1} unit`}
+                                  {` ${fmt(t.dspFleetUnits, {
+                                    area: String(f.workArea),
+                                    n: f.units.length + 1,
+                                  })}`}
                                 </span>
                               </span>
                             </ToggleRow>
@@ -941,7 +946,7 @@ export function DisplayAdminMenu({
               <Input
                 id="dsp-name"
                 disabled={locked}
-                placeholder={NAME_PLACEHOLDER[kind]}
+                placeholder={t[NAME_PLACEHOLDER[kind]]}
                 value={fName}
                 onChange={(e) => {
                   setFName(e.target.value);
@@ -967,7 +972,7 @@ export function DisplayAdminMenu({
                       />
                       <Select
                         wrapperClassName="w-[130px] flex-none"
-                        aria-label={`Warna ${i + 1}`}
+                        aria-label={fmt(t.dspColorN, { n: i + 1 })}
                         value={r.color}
                         onChange={(e) =>
                           updateRT(i, { color: e.target.value as RunTextColor })

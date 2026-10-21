@@ -1,3 +1,5 @@
+import type { Dict } from "@/lib/i18n";
+
 /**
  * An integration token's dates, as the Integrasi API list reads them.
  *
@@ -68,18 +70,18 @@ export const validityBody = (input: ValidityInput) => ({
   validUntil: input.noEnd ? null : input.validUntil,
 });
 
-/** What stops the form being sent, in the words shown under the field. The
+/** What stops the form being sent, as the dictionary entry shown under the
+ *  field. The
  *  API refuses the same ranges; this says so before the round trip. */
 export function validityProblem(
   input: ValidityInput,
   today: string
-): string | null {
-  if (!input.validFrom) return "Isi tanggal mulai";
+): keyof Dict | null {
+  if (!input.validFrom) return "igvNoStart";
   if (input.noEnd) return null;
-  if (!input.validUntil) return "Isi tanggal akhir, atau centang Tanpa batas";
-  if (input.validUntil < input.validFrom)
-    return "Tanggal akhir tidak boleh sebelum tanggal mulai";
-  if (input.validUntil < today) return "Tanggal akhir sudah lewat";
+  if (!input.validUntil) return "igvNoEnd";
+  if (input.validUntil < input.validFrom) return "igvEndBeforeStart";
+  if (input.validUntil < today) return "igvEndPast";
   return null;
 }
 

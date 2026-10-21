@@ -4,8 +4,9 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 
-import { MENU_LABELS, type AccessMode } from "@/lib/access";
+import { type AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
+import { fmt, menuLabel, useI18n } from "@/lib/i18n";
 import {
   ticketPrintersQueryOptions,
   ticketsKey,
@@ -56,6 +57,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  * and an operator standing at the booth with an empty hand.
  */
 export function TicketsMenu({ mode }: { mode: AccessMode }) {
+  const { t } = useI18n();
   const { pushToast } = useToast();
   const [date, setDate] = React.useState(today());
   const canW = mode === "manage";
@@ -116,20 +118,17 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
       await queryClient.invalidateQueries({ queryKey: ["tickets"] });
       pushToast(
         r.status === "printed" ? "success" : "error",
-        "Cetak tiket",
-        r.status === "printed" ? "Tiket tercetak" : "Printer menolak"
+        t.tkPrintT,
+        r.status === "printed" ? t.tkPrinted : t.tkRefused
       );
     },
     onError: (error) =>
-      pushToast("error", "Cetak tiket", errorMessage(error, "Gagal")),
+      pushToast("error", t.tkPrintT, errorMessage(error, t.tkFailed)),
   });
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title={MENU_LABELS.tiket}
-        sub="Tiket muster yang terbit hari itu. Saring per departemen, nama, jenis operator atau shift — dan cetak ulang sendiri kalau ada yang tidak sampai ke tangan orangnya."
-      />
+      <PageTitle title={menuLabel(t, "tiket")} sub={t.tkSub} />
 
       <Panel>
         <Toolbar>
@@ -143,8 +142,8 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
             />
             <SearchInput
               className="w-[240px]"
-              placeholder="NIK atau nama"
-              aria-label="Cari tiket"
+              placeholder={t.tkSearchPh}
+              aria-label={t.tkSearchAria}
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               onClear={() => setTyped("")}
@@ -155,9 +154,9 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
               wrapperClassName="w-[210px]"
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
-              aria-label="Departemen"
+              aria-label={t.thDept}
             >
-              <option value="">Semua departemen</option>
+              <option value="">{t.allDepts}</option>
               {(tickets?.departments ?? []).map((d) => (
                 <option key={d} value={d}>
                   {d}
@@ -168,32 +167,32 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
               wrapperClassName="w-[170px]"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              aria-label="Jenis operator"
+              aria-label={t.tkRoleAria}
             >
-              <option value="">Semua jenis</option>
-              <option value="standing">Tetap</option>
-              <option value="spare">Spare</option>
+              <option value="">{t.tkRoleAll}</option>
+              <option value="standing">{t.tkRoleStanding}</option>
+              <option value="spare">{t.cmSpare}</option>
             </Select>
             <Select
               wrapperClassName="w-[150px]"
               value={shift}
               onChange={(e) => setShift(e.target.value)}
-              aria-label="Shift"
+              aria-label={t.thShift}
             >
-              <option value="">Semua shift</option>
-              <option value="day">Siang</option>
-              <option value="night">Malam</option>
+              <option value="">{t.tkShiftAll}</option>
+              <option value="day">{t.shiftDay}</option>
+              <option value="night">{t.shiftNight}</option>
             </Select>
             <Select
               wrapperClassName="w-[170px]"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              aria-label="Status cetak"
+              aria-label={t.tkStatusAria}
             >
-              <option value="">Semua status</option>
-              <option value="printed">Tercetak</option>
-              <option value="failed">Gagal</option>
-              <option value="dry">Cetak kering</option>
+              <option value="">{t.allStatus}</option>
+              <option value="printed">{t.tkStPrinted}</option>
+              <option value="failed">{t.tkStFailed}</option>
+              <option value="dry">{t.tkStDry}</option>
             </Select>
           </ToolbarGroup>
         </Toolbar>
@@ -212,7 +211,11 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
         <PanelFoot>
           <FootSum>
             {tickets
-              ? `${tickets.printed} tercetak · ${tickets.failed} gagal · ${tickets.dry} kering`
+              ? fmt(t.tkSum, {
+                  printed: tickets.printed,
+                  failed: tickets.failed,
+                  dry: tickets.dry,
+                })
               : ""}
           </FootSum>
         </PanelFoot>
@@ -226,10 +229,9 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
         <DialogIcon variant="info">
           <Printer />
         </DialogIcon>
-        <DialogTitle id="tk-reprint-t">Cetak ulang tiket</DialogTitle>
+        <DialogTitle id="tk-reprint-t">{t.tkReprintT}</DialogTitle>
         <DialogBody>
-          {reprintFor?.name ?? reprintFor?.nik} — pilih printer lain kalau
-          printer bilik asalnya tidak mengeluarkan kertas.
+          {reprintFor?.name ?? reprintFor?.nik} {t.tkReprintB}
         </DialogBody>
         <form
           onSubmit={(e) => {
@@ -238,14 +240,18 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
               reprint.mutate({ id: reprintFor.id, printerId: printerChoice });
           }}
         >
-          <Field className="mt-4" label="Printer" htmlFor="tk-reprint-printer">
+          <Field
+            className="mt-4"
+            label={t.cmPrinter}
+            htmlFor="tk-reprint-printer"
+          >
             <Select
               id="tk-reprint-printer"
               value={printerChoice}
               onChange={(e) => setPrinterChoice(e.target.value)}
             >
               <option value="">
-                Printer asal
+                {t.tkOrigin}
                 {reprintFor?.printer ? ` (${reprintFor.printer})` : ""}
               </option>
               {(printersQ.data ?? []).map((p) => (
@@ -261,11 +267,11 @@ export function TicketsMenu({ mode }: { mode: AccessMode }) {
               variant="ghost"
               onClick={() => setReprintFor(null)}
             >
-              Batal
+              {t.btnCancel}
             </Button>
             <Button type="submit" disabled={reprint.isPending}>
               <Printer />
-              Cetak
+              {t.tkPrint}
             </Button>
           </DialogActions>
         </form>
@@ -321,6 +327,7 @@ function TicketsView({
   onReprint: (row: ReprintTarget) => void;
   busy: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = React.useState<string | null>(null);
   const rows = data?.rows ?? [];
 
@@ -328,12 +335,8 @@ function TicketsView({
     return (
       <StateBox
         icon={<Printer className="text-(--text-tertiary)" />}
-        title="Belum ada tiket"
-        body={
-          loading
-            ? "Memuat…"
-            : "Tiket terbit saat seseorang menempel jari di bilik yang sedang didengarkan."
-        }
+        title={t.tkEmptyT}
+        body={loading ? t.cmLoading : t.tkEmptyB}
       />
     );
 
@@ -344,16 +347,16 @@ function TicketsView({
   const chip = (status: string) =>
     status === "printed"
       ? {
-          label: "Tercetak",
+          label: t.tkStPrinted,
           tone: "bg-[rgba(32,200,120,.12)] text-(--badge-success-text)",
         }
       : status === "failed"
         ? {
-            label: "Gagal",
+            label: t.tkStFailed,
             tone: "bg-[rgba(252,60,59,.12)] text-(--color-danger)",
           }
         : {
-            label: "Cetak kering",
+            label: t.tkStDry,
             tone: "bg-(--fill-subtle) text-(--text-secondary)",
           };
 
@@ -361,9 +364,7 @@ function TicketsView({
     <div className="flex flex-col gap-3 px-4 py-4">
       {data && !data.printing ? (
         <p className="text-sm text-(--text-secondary)">
-          Pencetakan sedang dimatikan, jadi tiket hanya disusun dan disimpan.
-          Nyalakan lewat <code>TICKET_PRINTING</code> kalau printernya sudah
-          siap.
+          {t.tkOffA} <code>TICKET_PRINTING</code> {t.tkOffB}
         </p>
       ) : null}
 
@@ -371,16 +372,16 @@ function TicketsView({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Jam absen</TableHead>
-              <TableHead>NIK</TableHead>
-              <TableHead>Nama</TableHead>
-              <TableHead>Departemen</TableHead>
-              <TableHead>Jenis</TableHead>
-              <TableHead>Shift</TableHead>
-              <TableHead>Unit</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Printer</TableHead>
-              <TableHead style={{ width: 160 }}>Tindakan</TableHead>
+              <TableHead>{t.tkThAt}</TableHead>
+              <TableHead>{t.cmNik}</TableHead>
+              <TableHead>{t.thNama}</TableHead>
+              <TableHead>{t.thDept}</TableHead>
+              <TableHead>{t.thType}</TableHead>
+              <TableHead>{t.thShift}</TableHead>
+              <TableHead>{t.cmUnit}</TableHead>
+              <TableHead>{t.thStatus}</TableHead>
+              <TableHead>{t.cmPrinter}</TableHead>
+              <TableHead style={{ width: 160 }}>{t.tkThAction}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -414,7 +415,7 @@ function TicketsView({
                       )}
                     </TableCell>
                     <TableCell className="text-(--text-secondary)">
-                      {r.shift === "night" ? "Malam" : "Siang"}
+                      {r.shift === "night" ? t.shiftNight : t.shiftDay}
                     </TableCell>
                     <TableCell className="font-mono">
                       {/* Most spares hold none, most mornings. */}
@@ -446,7 +447,7 @@ function TicketsView({
                           variant="ghost"
                           onClick={() => setOpen(open === r.id ? null : r.id)}
                         >
-                          {open === r.id ? "Tutup" : "Lihat"}
+                          {open === r.id ? t.btnClose : t.tkView}
                         </Button>
                         {/* Every row, not only the failures (owner,
                             2026-09-14). A slip the printer swallowed, one
@@ -462,7 +463,7 @@ function TicketsView({
                             disabled={busy}
                             onClick={() => onReprint(r)}
                           >
-                            {r.status === "dry" ? "Cetak" : "Cetak ulang"}
+                            {r.status === "dry" ? t.tkPrint : t.tkReprint}
                           </Button>
                         ) : null}
                       </div>

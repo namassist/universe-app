@@ -64,6 +64,28 @@ The full list. The sharpest ones are repeated in `AGENTS.md`.
     from the typed dict. Every new string goes into **both** `lib/i18n/id.ts`
     and `en.ts`; `Dict` derives from `id.ts`, so a missing English entry
     fails typecheck.
+    - A sentence with values in it is **one** entry with `{name}` slots, filled
+      by `fmt(t.key, { name })` — not fragments glued round the numbers, since
+      the two languages put the values in different places. Plurals that differ
+      in English are two entries (`…1` / `…N`).
+    - A module-level table (status badges, filters, label maps) holds
+      `keyof Dict` and the component reads `t[entry.label]`; a pure `lib/`
+      function takes `t: Dict` (or returns a key) so its test can pass `id`
+      and assert the Indonesian words.
+    - Menu names come from `menuLabel(t, slug)`, and the contracts'
+      vocabularies from `shiftKindLabel`, `reportLabel`, `reportDescription`,
+      `timelineActionText`, `runTextKindLabel` and `soundOffsetText` — never
+      from `MENU_LABELS` / `*_LABELS` directly. Those stay the one-language
+      reference for the API and the printed ticket.
+    - `/display/*` is wrapped in `<FixedLanguage lang="id">`: the walls read
+      in Indonesian on every TV and preview (owner, 2026-09-19).
+    - Not translated: page `metadata.title` (server-rendered, so it cannot
+      read the reader's choice), the brand (UNIVERSE, Site Indexim, WITA),
+      key names (`Escape`, `Enter`), device names stored as data
+      (`Fleet Support`, an auto-named `Fleet EX-22`), the slip's own words
+      (`SPARE` / `TETAP`), the report column headers (the site's Excel
+      template), env and header names in prose, and `lib/api.ts`'s transport
+      fallback. `/ops` is internal and stays Indonesian.
 
 ## Verification
 

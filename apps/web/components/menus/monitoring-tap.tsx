@@ -4,8 +4,9 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Fingerprint, Play, Square } from "lucide-react";
 
-import { MENU_LABELS, type AccessMode } from "@/lib/access";
+import { type AccessMode } from "@/lib/access";
 import { api, errorMessage, fetchBlob } from "@/lib/api";
+import { fmt, menuLabel, useI18n } from "@/lib/i18n";
 import {
   deviceStatusQueryOptions,
   liveLogKey,
@@ -52,6 +53,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  * we keep; the machines hold months and remain the archive.
  */
 export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
+  const { t } = useI18n();
   const { pushToast } = useToast();
   const [date, setDate] = React.useState(today());
   const [q, setQ] = React.useState("");
@@ -98,10 +100,10 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
     },
     onSuccess: async (session) => {
       await refreshLive();
-      pushToast("success", "Mendengarkan", session.name);
+      pushToast("success", t.mtListening, session.name);
     },
     onError: (error) =>
-      pushToast("error", "Gagal mendengarkan", errorMessage(error, "Gagal")),
+      pushToast("error", t.mtListenFail, errorMessage(error, t.mtFailed)),
   });
 
   const stopListen = useMutation({
@@ -111,10 +113,10 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
     },
     onSuccess: async () => {
       await refreshLive();
-      pushToast("success", "Berhenti", "Sesi ditutup");
+      pushToast("success", t.mtStopped, t.mtSessionClosed);
     },
     onError: (error) =>
-      pushToast("error", "Gagal berhenti", errorMessage(error, "Gagal")),
+      pushToast("error", t.mtStopFail, errorMessage(error, t.mtFailed)),
   });
 
   const [exporting, setExporting] = React.useState(false);
@@ -134,12 +136,16 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
       a.download = name;
       a.click();
       URL.revokeObjectURL(url);
-      pushToast("success", "Export", `${name} · ${rows.length} baris`);
+      pushToast(
+        "success",
+        t.cmExport,
+        fmt(t.mtExportDone, { name, n: rows.length })
+      );
     } catch (error) {
       pushToast(
         "error",
-        "Export",
-        error instanceof Error ? error.message : "Gagal mengunduh"
+        t.cmExport,
+        error instanceof Error ? error.message : t.mtDownloadFail
       );
     } finally {
       setExporting(false);
@@ -148,20 +154,17 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title={MENU_LABELS["monitoring-tap"]}
-        sub="Tap mentah dari mesin fingerprint — termasuk tap ganda dan tap di mesin berbeda. Disimpan 3 hari."
-      />
+      <PageTitle title={menuLabel(t, "monitoring-tap")} sub={t.mtSub} />
 
       <Panel>
         <Toolbar>
           <ToolbarGroup>
-            <Segmented role="group" aria-label="Tampilan">
+            <Segmented role="group" aria-label={t.mtView}>
               <SegmentedButton
                 active={view === "taps"}
                 onClick={() => setView("taps")}
               >
-                Tap mentah
+                {t.mtRawTaps}
               </SegmentedButton>
               {/* Not a report but an instrument: it answers "is anything down
                   right now", which is only worth asking while a muster runs. */}
@@ -169,7 +172,7 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
                 active={view === "devices"}
                 onClick={() => setView("devices")}
               >
-                Perangkat
+                {t.mtDevices}
               </SegmentedButton>
               {/* A testing instrument: it holds a socket open, so it lives
                   behind its own tab rather than on by default. */}
@@ -177,7 +180,7 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
                 active={view === "live"}
                 onClick={() => setView("live")}
               >
-                Live
+                {t.cmLive}
               </SegmentedButton>
             </Segmented>
             <Input
@@ -189,8 +192,8 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
             />
             <SearchInput
               className={cn("w-[240px]", view !== "taps" && "hidden")}
-              placeholder="NIK, nama, atau mesin"
-              aria-label="Cari tap"
+              placeholder={t.mtSearchPh}
+              aria-label={t.mtSearchAria}
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               onClear={() => setTyped("")}
@@ -203,7 +206,7 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
               disabled={exporting || rows.length === 0 || view !== "taps"}
             >
               <Download />
-              Export Excel
+              {t.rptExport}
             </Button>
           </ToolbarGroup>
         </Toolbar>
@@ -222,23 +225,19 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
         ) : rows.length === 0 ? (
           <StateBox
             icon={<Fingerprint className="text-(--text-tertiary)" />}
-            title="Belum ada tap"
-            body={
-              listQ.isLoading
-                ? "Memuat…"
-                : "Tidak ada tap yang tercatat pada tanggal ini. Pengumpulan hanya berjalan di jendela muster."
-            }
+            title={t.mtEmptyT}
+            body={listQ.isLoading ? t.cmLoading : t.mtEmptyB}
           />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Waktu</TableHead>
-                <TableHead>NIK</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Departemen</TableHead>
-                <TableHead>Arah</TableHead>
-                <TableHead>Mesin</TableHead>
+                <TableHead>{t.cmTime}</TableHead>
+                <TableHead>{t.cmNik}</TableHead>
+                <TableHead>{t.thNama}</TableHead>
+                <TableHead>{t.thDept}</TableHead>
+                <TableHead>{t.mtDirection}</TableHead>
+                <TableHead>{t.cmMachine}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -265,7 +264,7 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
                           : "bg-[rgba(240,160,32,.12)] text-(--badge-warning-text)"
                       )}
                     >
-                      {r.direction === "in" ? "Masuk" : "Pulang"}
+                      {r.direction === "in" ? t.mtIn : t.mtOut}
                     </span>
                   </TableCell>
                   <TableCell className="text-(--text-secondary)">
@@ -283,17 +282,28 @@ export function MonitoringTapMenu({ mode }: { mode: AccessMode }) {
           <FootSum>
             {view === "live"
               ? live
-                ? `${live.sessions.length} sesi aktif · ${live.rows.length} tap terbaru`
+                ? fmt(t.mtLiveSum, {
+                    sessions: live.sessions.length,
+                    rows: live.rows.length,
+                  })
                 : ""
               : view === "devices"
                 ? devices
-                  ? `${devices.answering} mesin menjawab · ${devices.silent} diam` +
+                  ? fmt(t.mtDevSum, {
+                      answering: devices.answering,
+                      silent: devices.silent,
+                    }) +
+                    " " +
                     (devices.lastContact
-                      ? ` · kontak terakhir ${devices.lastContact}`
-                      : " · belum ada kontak hari ini")
+                      ? fmt(t.mtLastContact, { at: devices.lastContact })
+                      : t.mtNoContact)
                   : ""
                 : data
-                  ? `${data.taps} tap · ${data.people} orang · ${data.machines} mesin`
+                  ? fmt(t.mtTapSum, {
+                      taps: data.taps,
+                      people: data.people,
+                      machines: data.machines,
+                    })
                   : ""}
           </FootSum>
         </PanelFoot>
@@ -332,13 +342,14 @@ function DevicesView({
   };
   loading: boolean;
 }) {
+  const { t } = useI18n();
   const rows = data?.rows ?? [];
   if (rows.length === 0)
     return (
       <StateBox
         icon={<Fingerprint className="text-(--text-tertiary)" />}
-        title="Belum ada mesin"
-        body={loading ? "Memuat…" : "Belum ada mesin fingerprint aktif."}
+        title={t.mtNoMachinesT}
+        body={loading ? t.cmLoading : t.mtNoMachinesB}
       />
     );
 
@@ -352,16 +363,16 @@ function DevicesView({
   const chip = (r: (typeof rows)[number]) => {
     if (r.lastSeen === null)
       return {
-        label: "Diam",
+        label: t.mtSilent,
         tone: "bg-[rgba(252,60,59,.12)] text-(--color-danger)",
       };
     if (r.lastError)
       return {
-        label: "Sempat gagal",
+        label: t.mtFailedOnce,
         tone: "bg-[rgba(240,160,32,.12)] text-(--badge-warning-text)",
       };
     return {
-      label: "Menjawab",
+      label: t.mtAnswering,
       tone: "bg-[rgba(32,200,120,.12)] text-(--badge-success-text)",
     };
   };
@@ -370,12 +381,12 @@ function DevicesView({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Mesin</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Isi memori</TableHead>
-          <TableHead>Kontak terakhir</TableHead>
-          <TableHead>Tap hari ini</TableHead>
-          <TableHead>Permintaan</TableHead>
+          <TableHead>{t.cmMachine}</TableHead>
+          <TableHead>{t.thStatus}</TableHead>
+          <TableHead>{t.mtMemory}</TableHead>
+          <TableHead>{t.mtLastContactTh}</TableHead>
+          <TableHead>{t.mtTapsToday}</TableHead>
+          <TableHead>{t.mtRequests}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -414,8 +425,8 @@ function DevicesView({
               </TableCell>
               <TableCell className="font-mono tabular-nums">{r.taps}</TableCell>
               <TableCell className="font-mono text-(--text-secondary) tabular-nums">
-                {r.ok} ok
-                {r.failed > 0 ? ` · ${r.failed} gagal` : ""}
+                {fmt(t.mtOkCount, { n: r.ok })}
+                {r.failed > 0 ? ` ${fmt(t.mtFailCount, { n: r.failed })}` : ""}
               </TableCell>
             </TableRow>
           );
@@ -474,6 +485,7 @@ function LiveView({
   onStop: (ip: string) => void;
   busy: boolean;
 }) {
+  const { t } = useI18n();
   const [picked, setPicked] = React.useState("");
   const free = (data?.machines ?? []).filter((m) => !m.listening);
 
@@ -507,11 +519,11 @@ function LiveView({
         <div className="flex flex-wrap items-end gap-3">
           <Select
             wrapperClassName="w-[280px]"
-            aria-label="Mesin"
+            aria-label={t.cmMachine}
             value={picked}
             onChange={(e) => setPicked(e.target.value)}
           >
-            <option value="">Pilih mesin aktif…</option>
+            <option value="">{t.mtPickMachine}</option>
             {free.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name} — {m.ip}
@@ -520,7 +532,7 @@ function LiveView({
           </Select>
           <Button disabled={!picked || busy} onClick={() => onStart(picked)}>
             <Play />
-            Mulai dengar
+            {t.mtStart}
           </Button>
         </div>
       ) : null}
@@ -537,9 +549,9 @@ function LiveView({
                 {/* Who and since when, so a forgotten session has a name
                     against it — it runs until somebody stops it. */}
                 <div className="font-mono text-[11px] text-(--text-tertiary)">
-                  {s.ip} · {s.source === "manual" ? "manual" : "terjadwal"}
-                  {s.startedBy ? ` · ${s.startedBy}` : ""} · sejak{" "}
-                  {clockOf(s.startedAt)} · {s.taps} tap
+                  {s.ip} · {s.source === "manual" ? t.mtManual : t.mtScheduled}
+                  {s.startedBy ? ` · ${s.startedBy}` : ""} · {t.mtSince}{" "}
+                  {clockOf(s.startedAt)} · {fmt(t.mtTapN, { n: s.taps })}
                 </div>
               </div>
               {canW ? (
@@ -549,7 +561,7 @@ function LiveView({
                   onClick={() => onStop(s.ip)}
                 >
                   <Square />
-                  Berhenti
+                  {t.mtStop}
                 </Button>
               ) : null}
             </div>
@@ -558,12 +570,8 @@ function LiveView({
       ) : (
         <StateBox
           icon={<Fingerprint className="text-(--text-tertiary)" />}
-          title="Tidak ada sesi berjalan"
-          body={
-            loading
-              ? "Memuat…"
-              : "Pilih mesin aktif lalu mulai mendengarkan. Mesin nonaktif tidak ditawarkan."
-          }
+          title={t.mtNoSessionT}
+          body={loading ? t.cmLoading : t.mtNoSessionB}
         />
       )}
 
@@ -571,12 +579,12 @@ function LiveView({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Jam mesin</TableHead>
-              <TableHead>Diterima</TableHead>
-              <TableHead>Selisih</TableHead>
-              <TableHead>NIK</TableHead>
-              <TableHead>Nama</TableHead>
-              <TableHead>Mesin</TableHead>
+              <TableHead>{t.mtMachineClock}</TableHead>
+              <TableHead>{t.mtReceived}</TableHead>
+              <TableHead>{t.mtLag}</TableHead>
+              <TableHead>{t.cmNik}</TableHead>
+              <TableHead>{t.thNama}</TableHead>
+              <TableHead>{t.cmMachine}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -591,7 +599,7 @@ function LiveView({
                     {clockOf(r.receivedAt)}
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">
-                    {seconds === null ? "—" : `${seconds} dtk`}
+                    {seconds === null ? "—" : fmt(t.mtSeconds, { n: seconds })}
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">
                     {r.nik}

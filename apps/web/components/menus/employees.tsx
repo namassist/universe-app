@@ -258,10 +258,10 @@ export function EmployeesMenu({ mode }: { mode: AccessMode }) {
             <TableHeader>
               <tr>
                 <TableHead>{t.thNama}</TableHead>
-                <TableHead>NIK</TableHead>
+                <TableHead>{t.cmNik}</TableHead>
                 <TableHead className="max-xl:hidden">{t.thDept}</TableHead>
                 <TableHead>{t.thPos}</TableHead>
-                <TableHead>SIMPER</TableHead>
+                <TableHead>{t.cmSimper}</TableHead>
                 <TableHead>{t.thStatus}</TableHead>
                 <TableHead className="w-[140px]">{t.thAct}</TableHead>
               </tr>

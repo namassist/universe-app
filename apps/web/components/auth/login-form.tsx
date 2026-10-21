@@ -145,7 +145,7 @@ export function LoginForm() {
                 UNIVERSE
               </p>
               <p className="text-sm font-medium text-(--text-secondary)">
-                Fleet Automation System
+                {t.shTaglineLong}
               </p>
             </div>
           </div>
@@ -191,7 +191,7 @@ export function LoginForm() {
           <div className="flex flex-col items-center gap-1">
             <h2 className="text-[32px] font-bold tracking-(--tracking-brand)">
               {t.loginWelcome}{" "}
-              <span role="img" aria-label="wave">
+              <span role="img" aria-label={t.loginWaveAria}>
                 👋
               </span>
             </h2>

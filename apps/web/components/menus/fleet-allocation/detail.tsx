@@ -16,7 +16,7 @@ import {
 import type { ShiftKind } from "@universe/contracts";
 
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import {
   actualAuditQueryOptions,
   actualBoardKey,
@@ -207,7 +207,7 @@ export function FleetAllocationDetail() {
     : "0";
 
   const sourceBadge = (source: ActualSlot["source"]) => {
-    if (source === "plan") return <Badge variant="success">PLAN</Badge>;
+    if (source === "plan") return <Badge variant="success">{t.cmPlan}</Badge>;
     if (source === "spare")
       return <Badge variant="warning">{t.faViaSpare}</Badge>;
     if (source === "manual")
@@ -217,7 +217,10 @@ export function FleetAllocationDetail() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={`ACTUAL — ${date || "—"}`} sub={shiftLabel}>
+      <PageTitle
+        title={fmt(t.faActualDate, { date: date || "—" })}
+        sub={shiftLabel}
+      >
         <Button
           variant="ghost"
           onClick={() => router.push(`/fleet-allocation?mode=actual`)}
@@ -292,7 +295,9 @@ export function FleetAllocationDetail() {
                 apart. It has no leader to be named after. */}
             {(boardQ.data?.fleets ?? []).map((f) => (
               <option key={f.id} value={f.id}>
-                {f.kind === "support" ? t.faSupport : `Fleet ${f.leaderCode}`}
+                {f.kind === "support"
+                  ? t.faSupport
+                  : fmt(t.cmFleetCode, { code: String(f.leaderCode) })}
               </option>
             ))}
             <option value="none">{t.faActNoFleet}</option>
@@ -371,13 +376,17 @@ export function FleetAllocationDetail() {
                   {s.simperCodeName ? (
                     <Badge variant="neutral">{s.simperCodeName}</Badge>
                   ) : null}
-                  {s.requiresFtw ? <Badge variant="warning">FTW</Badge> : null}
+                  {s.requiresFtw ? (
+                    <Badge variant="warning">{t.cmFtw}</Badge>
+                  ) : null}
                   {s.fleet ? (
                     <>
                       <Badge variant="info">
                         {s.fleet.kind === "support"
                           ? t.faSupport
-                          : `Fleet ${s.fleet.leaderCode}`}
+                          : fmt(t.cmFleetCode, {
+                              code: String(s.fleet.leaderCode),
+                            })}
                       </Badge>
                       {s.fleet.area ? (
                         <span className="text-xs text-(--text-tertiary)">
@@ -487,11 +496,9 @@ export function FleetAllocationDetail() {
         <DialogIcon variant="danger">
           <TriangleAlert />
         </DialogIcon>
-        <DialogTitle id="ftw-ack-t">Tidak lolos fit-to-work</DialogTitle>
+        <DialogTitle id="ftw-ack-t">{t.faUnfitT}</DialogTitle>
         <DialogBody>
-          {unfit?.name || "Operator ini"} tidak lolos fit-to-work untuk unit
-          yang mensyaratkannya. Penempatan tetap bisa dilakukan, tapi akan
-          dicatat beserta nama Anda dan jam penempatannya.
+          {unfit?.name || t.faUnfitWho} {t.faUnfitB}
         </DialogBody>
         <DialogActions>
           <Button variant="ghost" onClick={() => setUnfit(null)}>
@@ -510,7 +517,7 @@ export function FleetAllocationDetail() {
               setUnfit(null);
             }}
           >
-            Tetap tempatkan
+            {t.faUnfitGo}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1093,7 +1100,7 @@ function AuditTable({ date, shift }: { date: string; shift: ShiftKind }) {
             <option value="">{t.faAuditFleetAll}</option>
             {fleetOptions.map((code) => (
               <option key={code} value={code}>
-                Fleet {code}
+                {fmt(t.cmFleetCode, { code })}
               </option>
             ))}
             {hasSupport ? (

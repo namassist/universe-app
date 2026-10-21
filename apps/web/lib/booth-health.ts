@@ -1,3 +1,5 @@
+import type { Dict } from "./i18n";
+
 /**
  * How a booth's health (`apps/api/src/fingerprint-health.ts`) reads on screen.
  *
@@ -16,19 +18,20 @@ export type BoothHealth =
   | "unchecked";
 
 type View = {
-  label: string;
+  /** Read through `t` — the same words on both screens, in either language. */
+  label: keyof Dict;
   /** A `Badge` variant. A setting (no printer, printer off) is amber; an outage is red. */
   variant: "success" | "danger" | "warning" | "neutral";
 };
 
 const VIEWS: Record<BoothHealth, View> = {
-  ready: { label: "Siap", variant: "success" },
-  offline: { label: "Offline", variant: "danger" },
-  printer_offline: { label: "Printer mati", variant: "danger" },
-  printer_inactive: { label: "Printer nonaktif", variant: "warning" },
-  no_printer: { label: "Tanpa printer", variant: "warning" },
+  ready: { label: "bhReady", variant: "success" },
+  offline: { label: "bhOffline", variant: "danger" },
+  printer_offline: { label: "bhPrinterOff", variant: "danger" },
+  printer_inactive: { label: "bhPrinterInactive", variant: "warning" },
+  no_printer: { label: "bhNoPrinter", variant: "warning" },
   /* Not yet probed — never called dead before anybody has asked. */
-  unchecked: { label: "Belum dicek", variant: "neutral" },
+  unchecked: { label: "bhUnchecked", variant: "neutral" },
 };
 
 export const boothHealthView = (health: BoothHealth): View => VIEWS[health];
@@ -53,13 +56,16 @@ export type ReadinessFilter =
   | "setting"
   | "unchecked";
 
-export const READINESS_FILTERS: { value: ReadinessFilter; label: string }[] = [
-  { value: "ready", label: "Siap" },
-  { value: "problem", label: "Bermasalah (semua)" },
-  { value: "offline", label: "Mesin offline" },
-  { value: "printer_offline", label: "Printer mati" },
-  { value: "setting", label: "Tanpa / nonaktif printer" },
-  { value: "unchecked", label: "Belum dicek" },
+export const READINESS_FILTERS: {
+  value: ReadinessFilter;
+  label: keyof Dict;
+}[] = [
+  { value: "ready", label: "bhReady" },
+  { value: "problem", label: "bhfProblem" },
+  { value: "offline", label: "bhfOffline" },
+  { value: "printer_offline", label: "bhPrinterOff" },
+  { value: "setting", label: "bhfSetting" },
+  { value: "unchecked", label: "bhUnchecked" },
 ];
 
 export function matchesReadiness(

@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, UserPlus } from "lucide-react";
 
-import { SHIFT_KIND_LABELS } from "@universe/contracts";
-
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, shiftKindLabel, useI18n } from "@/lib/i18n";
 import {
   planBoardKey,
   planBoardQueryOptions,
@@ -637,7 +635,7 @@ export function AllocBoard({
   const showFleetOnCard = searching || activeFleet === ALL_FLEETS;
   const fleetOfCard = (u: BoardUnit) =>
     u.fleet
-      ? `Fleet ${u.fleet.digger}`
+      ? fmt(t.cmFleetCode, { code: u.fleet.digger })
       : u.fleetSupport
         ? t.faSupport
         : t.faCrewNoFleet;
@@ -754,7 +752,7 @@ export function AllocBoard({
           unrelated controls was not. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented role="group" aria-label="Filter alokasi">
+          <Segmented role="group" aria-label={t.faFilterAria}>
             {(
               [
                 ["all", t.segAll],
@@ -765,7 +763,7 @@ export function AllocBoard({
                       ["vacant", t.faCrewVacant],
                       /* Two holders on one shift today: the second to tap
                          becomes a spare (owner, 2026-10-11). */
-                      ["clash", "Bentrok shift"],
+                      ["clash", t.faClash],
                     ] as [Filter, string][])
                   : []),
                 ["issue", t.faFIssue],
@@ -792,7 +790,7 @@ export function AllocBoard({
               scrolled for the one they wanted. The area rides on the option,
               and a search matches it too — "Disposal" finds its fleet. */}
           <AsyncSelect
-            ariaLabel="Filter fleet"
+            ariaLabel={t.faFleetFilter}
             wrapperClassName="w-[300px] max-w-full"
             value={activeFleet}
             onChange={(option) => {
@@ -806,7 +804,7 @@ export function AllocBoard({
               { value: ALL_FLEETS, label: t.faFleetAll },
               ...fleetOptions.map((f) => ({
                 value: f.id,
-                label: `Fleet ${f.digger} — ${f.area}`,
+                label: fmt(t.faFleetArea, { code: f.digger, area: f.area }),
               })),
               /* PLAN only: on ACTUAL the board carries its own groups, and the
                  filter is built from those instead. */
@@ -830,8 +828,8 @@ export function AllocBoard({
               onChange={(e) => setShiftF(e.target.value as ShiftChoice)}
             >
               <option value="all">{t.faCrewShiftAll}</option>
-              <option value="day">{SHIFT_KIND_LABELS.day}</option>
-              <option value="night">{SHIFT_KIND_LABELS.night}</option>
+              <option value="day">{shiftKindLabel(t, "day")}</option>
+              <option value="night">{shiftKindLabel(t, "night")}</option>
             </Select>
           ) : null}
           {canEdit ? (
@@ -890,7 +888,7 @@ export function AllocBoard({
                     <Badge variant="danger">{t.faCrewVacant}</Badge>
                   ) : null}
                   <Badge variant={st.variant} dot>
-                    {st.label}
+                    {t[st.label]}
                   </Badge>
                 </div>
               </div>
@@ -919,7 +917,9 @@ export function AllocBoard({
                 {u.simperCode ? (
                   <Badge variant="neutral">{u.simperCode}</Badge>
                 ) : null}
-                {u.requiresFtw ? <Badge variant="warning">FTW</Badge> : null}
+                {u.requiresFtw ? (
+                  <Badge variant="warning">{t.cmFtw}</Badge>
+                ) : null}
               </div>
 
               {mode === "plan" ? (
@@ -1004,7 +1004,7 @@ export function AllocBoard({
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Badge variant="info">
                       {slot.simperJenis
-                        ? `SIMPER ${slot.simperJenis}`
+                        ? fmt(t.cmSimperValue, { name: slot.simperJenis })
                         : t.faKompNone}
                     </Badge>
                     {kind === "warn" ? (

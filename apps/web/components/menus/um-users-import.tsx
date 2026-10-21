@@ -347,9 +347,9 @@ export function AccountImport() {
                 <tr>
                   <TableHead className="w-[80px]">{t.thRow}</TableHead>
                   <TableHead className="w-[110px]">{t.thType}</TableHead>
-                  <TableHead>NIK</TableHead>
+                  <TableHead>{t.cmNik}</TableHead>
                   <TableHead>{t.thNama}</TableHead>
-                  <TableHead>Role</TableHead>
+                  <TableHead>{t.cmRole}</TableHead>
                   <TableHead>{t.umImpChanges}</TableHead>
                 </tr>
               </TableHeader>
@@ -420,7 +420,7 @@ export function AccountImport() {
               <TableHeader>
                 <tr>
                   <TableHead className="w-[90px]">{t.thRow}</TableHead>
-                  <TableHead>NIK</TableHead>
+                  <TableHead>{t.cmNik}</TableHead>
                   <TableHead>{t.thEmp}</TableHead>
                   <TableHead>{t.thIssue}</TableHead>
                   <TableHead>{t.thType}</TableHead>

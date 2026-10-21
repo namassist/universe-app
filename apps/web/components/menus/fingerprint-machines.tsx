@@ -13,8 +13,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { MENU_LABELS } from "@universe/contracts";
-
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
 import {
@@ -23,7 +21,7 @@ import {
   READINESS_FILTERS,
   type ReadinessFilter,
 } from "@/lib/booth-health";
-import { useI18n } from "@/lib/i18n";
+import { menuLabel, useI18n } from "@/lib/i18n";
 import {
   fingerprintMachinesKey,
   fingerprintMachinesQueryOptions,
@@ -304,7 +302,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={MENU_LABELS["mesin-fingerprint"]} sub={t.mfSub}>
+      <PageTitle title={menuLabel(t, "mesin-fingerprint")} sub={t.mfSub}>
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={() => setPingOpen(true)}>
             <Activity />
@@ -322,7 +320,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
 
       <Panel>
         <Toolbar>
-          <ToolbarTitle>{MENU_LABELS["mesin-fingerprint"]}</ToolbarTitle>
+          <ToolbarTitle>{menuLabel(t, "mesin-fingerprint")}</ToolbarTitle>
           <ToolbarGroup>
             <SearchInput
               className="w-60"
@@ -347,18 +345,18 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
               wrapperClassName="w-[200px]"
               value={rdF}
               onChange={(e) => setRdF(e.target.value as ReadinessFilter)}
-              aria-label="Kesiapan"
+              aria-label={t.mfReadiness}
             >
-              <option value="">Semua kesiapan</option>
+              <option value="">{t.mfAllReadiness}</option>
               {READINESS_FILTERS.slice(0, 2).map((f) => (
                 <option key={f.value} value={f.value}>
-                  {f.label}
+                  {t[f.label]}
                 </option>
               ))}
-              <optgroup label="Rincian masalah">
+              <optgroup label={t.mfProblemDetail}>
                 {READINESS_FILTERS.slice(2).map((f) => (
                   <option key={f.value} value={f.value}>
-                    {f.label}
+                    {t[f.label]}
                   </option>
                 ))}
               </optgroup>
@@ -484,7 +482,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
                       </span>
                     ) : (
                       <Badge variant={boothHealthView(r.health).variant} dot>
-                        {boothHealthView(r.health).label}
+                        {t[boothHealthView(r.health).label]}
                       </Badge>
                     )}
                   </TableCell>
@@ -597,7 +595,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <Field label="Com Key" htmlFor="mf-comkey">
+            <Field label={t.mfComKey} htmlFor="mf-comkey">
               <Input
                 id="mf-comkey"
                 inputMode="numeric"
@@ -605,7 +603,7 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
                 onChange={(e) => setFComKey(e.target.value)}
               />
             </Field>
-            <Field label="Port" htmlFor="mf-port">
+            <Field label={t.cmPort} htmlFor="mf-port">
               <Input
                 id="mf-port"
                 inputMode="numeric"
@@ -614,17 +612,19 @@ export function FingerprintMachinesMenu({ mode }: { mode: AccessMode }) {
               />
             </Field>
           </div>
-          <p className="mt-2 text-xs text-(--text-tertiary)">
-            Biarkan 0 dan 80 kecuali mesin ini memang disetel lain.
-          </p>
+          <p className="mt-2 text-xs text-(--text-tertiary)">{t.mfPortHint}</p>
 
-          <Field className="mt-4" label="Printer tiket" htmlFor="mf-printer">
+          <Field
+            className="mt-4"
+            label={t.mfTicketPrinter}
+            htmlFor="mf-printer"
+          >
             <Select
               id="mf-printer"
               value={fPrinterId}
               onChange={(e) => setFPrinterId(e.target.value)}
             >
-              <option value="">Tanpa printer</option>
+              <option value="">{t.bhNoPrinter}</option>
               {(printersQ.data ?? [])
                 /* A printer already claimed by another booth is left out: one
                    printer belongs to one machine, and offering a taken one

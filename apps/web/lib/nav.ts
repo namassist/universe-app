@@ -12,11 +12,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { MENU_LABELS, type MenuSlug } from "./access";
+import type { MenuSlug } from "./access";
+import type { Dict } from "./i18n";
 
+/* Labels are dictionary keys, read through `t` at render: a leaf's name is
+   its menu's (`menuLabel`), a group's and a section's are their own. */
 export type NavLeaf = {
   slug: MenuSlug;
-  label: string;
   /* kiosk screens open in a new tab (openDisplay) instead of routing */
   displayUrl?: string;
   /**
@@ -27,19 +29,19 @@ export type NavLeaf = {
    * only when a *visible* child announces one, and a section whose every menu
    * is hidden from this role leaves no orphaned label behind.
    */
-  section?: string;
+  section?: keyof Dict;
 };
 export type NavEntry =
-  | { kind: "item"; slug: MenuSlug; label: string; icon: LucideIcon }
+  | { kind: "item"; slug: MenuSlug; icon: LucideIcon }
   | {
       kind: "group";
       key: string;
-      label: string;
+      label: keyof Dict;
       icon: LucideIcon;
       children: NavLeaf[];
     };
 
-const leaf = (slug: MenuSlug): NavLeaf => ({ slug, label: MENU_LABELS[slug] });
+const leaf = (slug: MenuSlug): NavLeaf => ({ slug });
 
 /**
  * Tag a run of menus with the heading they sit under.
@@ -49,12 +51,11 @@ const leaf = (slug: MenuSlug): NavLeaf => ({ slug, label: MENU_LABELS[slug] });
  * otherwise lose its heading and leave the rest of its run hanging under the
  * previous one.
  */
-const section = (section: string, ...slugs: MenuSlug[]): NavLeaf[] =>
+const section = (section: keyof Dict, ...slugs: MenuSlug[]): NavLeaf[] =>
   slugs.map((slug) => ({ ...leaf(slug), section }));
 const item = (slug: MenuSlug, icon: LucideIcon): NavEntry => ({
   kind: "item",
   slug,
-  label: MENU_LABELS[slug],
   icon,
 });
 
@@ -68,7 +69,7 @@ export const NAV: NavEntry[] = [
   {
     kind: "group",
     key: "display",
-    label: "Display",
+    label: "mnGrpDisplay",
     icon: Monitor,
     children: [
       leaf("display-attendance"),
@@ -81,7 +82,7 @@ export const NAV: NavEntry[] = [
   {
     kind: "group",
     key: "roster",
-    label: "Roster & Attendance",
+    label: "mnGrpRoster",
     icon: CalendarDays,
     /* The monitor sits beside Attendance rather than beside the machine
        health screen: it is read while asking about a person, not about a
@@ -103,7 +104,7 @@ export const NAV: NavEntry[] = [
   {
     kind: "group",
     key: "asset",
-    label: "Asset & Fleet",
+    label: "mnGrpAsset",
     icon: Truck,
     children: [
       leaf("unit-status"),
@@ -119,7 +120,7 @@ export const NAV: NavEntry[] = [
   {
     kind: "group",
     key: "master",
-    label: "Master",
+    label: "mnGrpMaster",
     icon: Database,
     /*
      * Seventeen menus in one flat list, in no order anyone could predict —
@@ -136,30 +137,30 @@ export const NAV: NavEntry[] = [
      */
     children: [
       ...section(
-        "Unit",
+        "mnSecUnit",
         "database-unit",
         "jenis-unit",
         "kelas-unit",
         "merk-unit",
         "model-unit"
       ),
-      ...section("Organisasi", "perusahaan", "departemen", "jabatan"),
-      ...section("SIMPER", "simper", "kode-simper"),
-      ...section("Lokasi & Fasilitas", "bus", "mess"),
+      ...section("mnSecOrg", "perusahaan", "departemen", "jabatan"),
+      ...section("mnSecSimper", "simper", "kode-simper"),
+      ...section("mnSecPlace", "bus", "mess"),
       ...section(
-        "Perangkat & Konten",
+        "mnSecDevice",
         "mesin-fingerprint",
         "mesin-printer",
         "running-text",
         "sound"
       ),
-      ...section("Jadwal", "timeline"),
+      ...section("mnSecSchedule", "timeline"),
     ],
   },
   {
     kind: "group",
     key: "um",
-    label: "User Management",
+    label: "mnGrpUm",
     icon: UserPlus,
     /* Integrasi API sits with the accounts because it is the same question —
        who may read from Universe — asked of a service rather than a person. */

@@ -22,7 +22,6 @@ import {
 import {
   FLEETS_PER_PAGE,
   isMonitorLayout,
-  SHIFT_KIND_LABELS,
   SLIDE_COLS,
   SLIDE_ROWS,
   SLIDE_ROWS_OF,
@@ -33,6 +32,7 @@ import {
 } from "@universe/contracts";
 
 import { isStatus } from "@/lib/api";
+import { fmt, shiftKindLabel, useI18n, type Dict } from "@/lib/i18n";
 import {
   fleetDisplayQueryOptions,
   fleetPhotoUrl,
@@ -91,12 +91,12 @@ const DENSE_ROWS = SLIDE_ROWS;
  */
 function toneOf(unit: FleetDisplayUnit): {
   tone: DisplayTone;
-  label: string;
+  label: keyof Dict;
 } {
-  if (!unit.employeeName) return { tone: "danger", label: "Kosong" };
-  if (unit.source === "spare") return { tone: "warning", label: "Spare" };
-  if (unit.source === "manual") return { tone: "warning", label: "Manual" };
-  return { tone: "success", label: "Plan" };
+  if (!unit.employeeName) return { tone: "danger", label: "wlflEmpty" };
+  if (unit.source === "spare") return { tone: "warning", label: "cmSpare" };
+  if (unit.source === "manual") return { tone: "warning", label: "wlflManual" };
+  return { tone: "success", label: "wlflPlan" };
 }
 
 /**
@@ -125,22 +125,18 @@ type Chip = {
   label: string;
 };
 
-const FTW_BADGE: Record<NonNullable<FleetDisplayUnit["ftw"]>, Chip | null> = {
-  pass: { tone: "success", icon: Check, text: "FTW", label: "Lolos FTW" },
-  missing: {
-    tone: "neutral",
-    icon: Hourglass,
-    text: "FTW",
-    label: "Belum FTW",
-  },
-  fail: { tone: "danger", icon: X, text: "FTW", label: "Tidak lolos FTW" },
-  late: { tone: "warning", icon: Clock3, text: "FTW", label: "FTW terlambat" },
-  unreadable: {
-    tone: "warning",
-    icon: CircleHelp,
-    text: "FTW",
-    label: "FTW tak terbaca",
-  },
+/** An FTW chip before it is put into words: every one of them reads "FTW". */
+type FtwChip = { tone: DisplayTone; icon: LucideIcon; label: keyof Dict };
+
+const FTW_BADGE: Record<
+  NonNullable<FleetDisplayUnit["ftw"]>,
+  FtwChip | null
+> = {
+  pass: { tone: "success", icon: Check, label: "wlflFtwPass" },
+  missing: { tone: "neutral", icon: Hourglass, label: "wlflFtwMissing" },
+  fail: { tone: "danger", icon: X, label: "wlflFtwFail" },
+  late: { tone: "warning", icon: Clock3, label: "wlflFtwLate" },
+  unreadable: { tone: "warning", icon: CircleHelp, label: "wlflFtwUnreadable" },
   "not-required": null,
 };
 
@@ -165,13 +161,15 @@ type Gates = { ftw: boolean; finger: boolean };
  * are facts about the morning whatever time it is read, and they keep the
  * colours they had.
  */
-function ftwBadge(unit: FleetDisplayUnit, gates: Gates): Chip | null {
+function ftwBadge(unit: FleetDisplayUnit, gates: Gates, t: Dict): Chip | null {
   if (!unit.ftw) return null;
   /* Ban rather than the refusal's X: never filed is a different fact from
      filed and refused, and with the words gone the icon has to say which. */
-  if (unit.ftw === "missing" && gates.ftw)
-    return { tone: "danger", icon: Ban, text: "FTW", label: "Tidak FTW" };
-  return FTW_BADGE[unit.ftw];
+  const chip: FtwChip | null =
+    unit.ftw === "missing" && gates.ftw
+      ? { tone: "danger", icon: Ban, label: "wlflFtwNever" }
+      : FTW_BADGE[unit.ftw];
+  return chip ? { ...chip, text: t.cmFtw, label: t[chip.label] } : null;
 }
 
 /**
@@ -187,16 +185,21 @@ function ftwBadge(unit: FleetDisplayUnit, gates: Gates): Chip | null {
  * "Absen" rather than "tap", which is the word on the audit screen: this one
  * is read by people standing in the yard, and it should use theirs.
  */
-function fingerBadge(unit: FleetDisplayUnit, gates: Gates): Chip {
+function fingerBadge(unit: FleetDisplayUnit, gates: Gates, t: Dict): Chip {
   if (unit.tappedAt) {
     const at = unit.tappedAt.slice(0, 5);
-    return { tone: "success", icon: Clock3, text: at, label: `Absen ${at}` };
+    return {
+      tone: "success",
+      icon: Clock3,
+      text: at,
+      label: fmt(t.wlflTappedAt, { at }),
+    };
   }
   /* The clock with an empty time: the colour says whether it is still owed
      (grey) or no longer coming (red). */
   return gates.finger
-    ? { tone: "danger", icon: Clock3, text: "--:--", label: "Tidak Absen" }
-    : { tone: "neutral", icon: Clock3, text: "--:--", label: "Belum Absen" };
+    ? { tone: "danger", icon: Clock3, text: "--:--", label: t.wlflNoTap }
+    : { tone: "neutral", icon: Clock3, text: "--:--", label: t.wlflTapOwed };
 }
 
 /*
@@ -227,12 +230,15 @@ function fingerBadge(unit: FleetDisplayUnit, gates: Gates): Chip {
 const PORTRAIT_CARD = "aspect-[3/4] w-[min(100cqw,75cqh)]";
 
 /** What a group is called on screen. Support has no leader to be named after. */
-const fleetTitle = (fleet: { kind: string; leaderCode: string | null }) =>
+const fleetTitle = (
+  fleet: { kind: string; leaderCode: string | null },
+  t: Dict
+) =>
   fleet.kind === "support"
     ? SUPPORT_DEVICE_NAME
     : fleet.kind === "spare"
       ? SPARE_DEVICE_NAME
-      : `Fleet ${fleet.leaderCode ?? "—"}`;
+      : fmt(t.cmFleetCode, { code: fleet.leaderCode ?? "—" });
 
 /**
  * One turn of the rotation.
@@ -281,6 +287,7 @@ function SeatBadge({
   unit: FleetDisplayUnit;
   compact: boolean;
 }) {
+  const { t } = useI18n();
   const { tone, label } = toneOf(unit);
   return (
     <DisplayBadge
@@ -290,7 +297,7 @@ function SeatBadge({
         compact ? "px-1.5 text-[11px]" : "px-2.5 text-sm"
       )}
     >
-      {label}
+      {t[label]}
     </DisplayBadge>
   );
 }
@@ -317,6 +324,7 @@ function CardDetails({
   showArea: boolean;
   cardLayout: CardLayout;
 }) {
+  const { t } = useI18n();
   return (
     <div className="min-w-0">
       {/* On a Monitor 4 card the code has the row to itself (owner,
@@ -350,7 +358,7 @@ function CardDetails({
             compact ? "text-[14px]" : "text-[21px]"
           )}
         >
-          {unit.employeeName ?? "Belum ada operator"}
+          {unit.employeeName ?? t.wlflNoOperator}
         </div>
       ) : null}
       {/* The area gets a line of its own: it is prose, and long enough
@@ -416,7 +424,7 @@ function CardDetails({
         {/* Only where there is somebody they are about: an idle unit is
             already saying the one thing it has to say. */}
         {unit.employeeName
-          ? [ftwBadge(unit, gates), fingerBadge(unit, gates)]
+          ? [ftwBadge(unit, gates, t), fingerBadge(unit, gates, t)]
               .filter((badge): badge is Chip => !!badge)
               .map((badge) => (
                 <DisplayBadge
@@ -634,6 +642,7 @@ function FleetQuadrant({
   className?: string;
   style?: React.CSSProperties;
 }) {
+  const { t } = useI18n();
   const baseCols = dense ? DENSE_COLS : MONITOR_COLS;
   const rows = dense ? DENSE_ROWS : MONITOR_ROWS;
   /* A panel does not paginate — it is one formation, whole — so a group larger
@@ -668,7 +677,7 @@ function FleetQuadrant({
             dense && "text-[20px]"
           )}
         >
-          {fleetTitle(fleet)}
+          {fleetTitle(fleet, t)}
         </b>
         <span
           className={cn(
@@ -717,9 +726,11 @@ function FleetQuadrant({
             dense && "px-2.5 text-[13px]"
           )}
         >
-          {fleet.total} unit · {fleet.crewed} siap
-          {fleet.idle ? ` · ${fleet.idle} kosong` : ""}
-          {fleet.substituted ? ` · ${fleet.substituted} spare` : ""}
+          {fmt(t.wlflQuadCount, { total: fleet.total, crewed: fleet.crewed })}
+          {fleet.idle ? ` · ${fmt(t.wlflQuadIdle, { n: fleet.idle })}` : ""}
+          {fleet.substituted
+            ? ` · ${fmt(t.wlflQuadSpare, { n: fleet.substituted })}`
+            : ""}
         </span>
       </div>
 
@@ -818,6 +829,7 @@ type FlipPhase = "open" | "closing" | "opening";
 
 export default function DisplayFleetPage() {
   const params = useSearchParams();
+  const { t } = useI18n();
   /* `?device=` is set by the Display menu's preview button; a paired TV has a
      session instead and needs no parameter. */
   const { data, error, isError, dataUpdatedAt } = useQuery(
@@ -914,18 +926,18 @@ export default function DisplayFleetPage() {
   React.useEffect(() => {
     if (!isMonitor || turns < 2) return;
     if (phase === "open") {
-      const t = setTimeout(() => setPhase("closing"), holdMs);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setPhase("closing"), holdMs);
+      return () => clearTimeout(timer);
     }
     if (phase === "closing") {
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         setIdx((i) => i + 1);
         setPhase("opening");
       }, CLOSE_TOTAL);
-      return () => clearTimeout(t);
+      return () => clearTimeout(timer);
     }
-    const t = setTimeout(() => setPhase("open"), OPEN_TOTAL);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setPhase("open"), OPEN_TOTAL);
+    return () => clearTimeout(timer);
   }, [isMonitor, phase, turns, holdMs, CLOSE_TOTAL, OPEN_TOTAL]);
 
   /* Clamped during render, not corrected in an effect: fixing the index in an
@@ -955,12 +967,12 @@ export default function DisplayFleetPage() {
      the wall. A slideshow is headed by the formation on the glass. `?name=` is
      the preview's stand-in for a paired TV's registered name. */
   const screenName = data?.deviceName ?? params.get("name");
-  const shiftLabel = data?.shift ? SHIFT_KIND_LABELS[data.shift] : null;
+  const shiftLabel = data?.shift ? shiftKindLabel(t, data.shift) : null;
   const title = isMonitor
-    ? (screenName ?? "Alokasi Aktual")
+    ? (screenName ?? t.wlflTitle)
     : page
-      ? fleetTitle(page.fleet)
-      : "Alokasi Aktual";
+      ? fleetTitle(page.fleet, t)
+      : t.wlflTitle;
   /* Site-wide counts belong to a slideshow, whose header is about the one
      formation on the glass. A monitor's header would be about several, so it
      drops the tiles entirely and each quadrant carries its own numbers —
@@ -975,7 +987,7 @@ export default function DisplayFleetPage() {
             iconClass:
               "bg-(--badge-warning-fill) border-(--badge-warning-border)",
             value: String(page.fleet.total),
-            label: "Operator Spare",
+            label: t.wlflSpareOps,
           },
         ]
       : [
@@ -983,28 +995,28 @@ export default function DisplayFleetPage() {
             icon: <Truck className="text-(--color-primary-bright)" />,
             iconClass: "bg-(--badge-info-fill) border-(--badge-info-border)",
             value: String(page?.fleet.total ?? 0),
-            label: "Unit Aktif",
+            label: t.wlflActive,
           },
           {
             icon: <CheckCircle2 className="text-(--badge-success-text)" />,
             iconClass:
               "bg-(--badge-success-fill) border-(--badge-success-border)",
             value: String(page?.fleet.crewed ?? 0),
-            label: "Teralokasi",
+            label: t.wlflCrewed,
           },
           {
             icon: <UserX className="text-(--color-danger-text)" />,
             iconClass:
               "bg-(--badge-danger-fill) border-(--badge-danger-border)",
             value: String(page?.fleet.idle ?? 0),
-            label: "Tanpa Operator",
+            label: t.wlflIdle,
           },
           {
             icon: <Repeat2 className="text-(--badge-warning-text)" />,
             iconClass:
               "bg-(--badge-warning-fill) border-(--badge-warning-border)",
             value: String(page?.fleet.substituted ?? 0),
-            label: "Spare",
+            label: t.cmSpare,
           },
         ];
 
@@ -1024,7 +1036,7 @@ export default function DisplayFleetPage() {
               showing is something only the header can say. */}
           {shiftLabel ? (
             <span className="inline-flex flex-none items-center gap-2.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-4.5 py-1 font-bold text-(--color-primary-bright)">
-              Shift {shiftLabel}
+              {fmt(t.cmShiftName, { shift: shiftLabel })}
             </span>
           ) : null}
           {/* The one thing that says this line-up is provisional, since the
@@ -1034,7 +1046,7 @@ export default function DisplayFleetPage() {
           {data?.provisional ? (
             <span className="inline-flex flex-none items-center gap-2.5 rounded-full border border-(--badge-warning-border) bg-(--badge-warning-fill) px-4.5 py-1 font-bold text-(--badge-warning-text)">
               <Hourglass className="size-6" />
-              Line-up sementara — belum digenerate
+              {t.wlflProvisional}
             </span>
           ) : null}
 
@@ -1045,10 +1057,13 @@ export default function DisplayFleetPage() {
           {isMonitor ? (
             data?.fleets.length ? (
               <span className="truncate">
-                Halaman <b className="text-(--text-primary)">{pos + 1}</b>/
+                {t.wlflPage} <b className="text-(--text-primary)">{pos + 1}</b>/
                 {turns}
                 <span className="mx-3 text-(--text-tertiary)">|</span>
-                fleet {pos * perPage + 1}–{pos * perPage + shownCount} dari{" "}
+                {fmt(t.wlflFleetRange, {
+                  from: pos * perPage + 1,
+                  to: pos * perPage + shownCount,
+                })}{" "}
                 {data.fleets.length}
               </span>
             ) : null
@@ -1062,7 +1077,7 @@ export default function DisplayFleetPage() {
               {page?.fleet.busCode ? (
                 <span className="inline-flex flex-none items-center gap-2.5 rounded-full border border-(--badge-info-border) bg-(--badge-info-fill) px-4.5 py-1 font-bold text-(--color-primary-bright)">
                   <Bus className="size-6" />
-                  Bus {page.fleet.busCode}
+                  {fmt(t.wlflBus, { code: page.fleet.busCode })}
                 </span>
               ) : null}
               {page && page.parts > 1 ? (
@@ -1159,14 +1174,10 @@ export default function DisplayFleetPage() {
             {disconnected ? null : (
               <div className="text-center">
                 <div className="text-3xl font-bold text-(--text-secondary)">
-                  {!data
-                    ? "Memuat papan…"
-                    : "Belum ada fleet yang bisa ditampilkan"}
+                  {!data ? t.wlflLoading : t.wlflNoFleet}
                 </div>
                 <div className="mt-2 text-xl text-(--text-tertiary)">
-                  {!data
-                    ? " "
-                    : "Pilih fleet untuk layar ini di menu Display Fleet."}
+                  {!data ? " " : t.wlflPickFleet}
                 </div>
               </div>
             )}
@@ -1220,17 +1231,13 @@ export default function DisplayFleetPage() {
             <div className="text-center">
               <div className="text-3xl font-bold text-(--text-secondary)">
                 {!data
-                  ? "Memuat papan…"
+                  ? t.wlflLoading
                   : !data.date
-                    ? "Timeline belum menentukan shift"
-                    : "Belum ada fleet yang bisa ditampilkan"}
+                    ? t.wlflNoShift
+                    : t.wlflNoFleet}
               </div>
               <div className="mt-2 text-xl text-(--text-tertiary)">
-                {!data
-                  ? " "
-                  : !data.date
-                    ? "Atur tahap Ambil Data FTW untuk shift siang dan malam di Master Timeline."
-                    : "Tidak ada unit fleet yang aktif. Unit di luar fleet tidak ditampilkan di layar."}
+                {!data ? " " : !data.date ? t.wlflSetFtwStage : t.wlflNoActive}
               </div>
             </div>
           )}

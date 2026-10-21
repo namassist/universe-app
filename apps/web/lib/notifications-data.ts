@@ -2,9 +2,13 @@
 
 import {
   isAllocationFailure,
+  type AllocationFailure,
   type NotificationTone,
 } from "@universe/contracts";
 
+import { en } from "@/lib/i18n/en";
+import { fmt } from "@/lib/i18n/fmt";
+import { id, type Dict } from "@/lib/i18n/id";
 import type { Notif } from "@/lib/queries/notifications";
 
 export type { Notif };
@@ -18,9 +22,11 @@ export const notifToneDot: Record<NotificationTone, string> = {
 
 export type Lang = "id" | "en";
 
-const SHIFT: Record<Lang, Record<string, string>> = {
-  id: { day: "pagi", night: "malam" },
-  en: { day: "day", night: "night" },
+const DICT: Record<Lang, Dict> = { id, en };
+
+const SHIFT: Record<string, keyof Dict> = {
+  day: "ntxShiftDay",
+  night: "ntxShiftNight",
 };
 
 /**
@@ -32,19 +38,11 @@ const SHIFT: Record<Lang, Record<string, string>> = {
  * carries a connection string, and pretending to more detail than we have
  * would send the reader hunting for a message that is not there.
  */
-const FAILURE: Record<Lang, Record<string, string>> = {
-  id: {
-    "no-shift": "stage timeline ini belum diberi shift",
-    "no-finger-deadline": "stage Batas Finger In tidak aktif",
-    "no-ftw-deadline": "stage Batas Upload FTW tidak aktif",
-    unexpected: "kesalahan tak terduga — cek log server",
-  },
-  en: {
-    "no-shift": "the timeline stage has no shift set",
-    "no-finger-deadline": "no active finger-in stage",
-    "no-ftw-deadline": "no active FTW upload deadline",
-    unexpected: "unexpected error — check the server log",
-  },
+const FAILURE: Record<AllocationFailure, keyof Dict> = {
+  "no-shift": "ntxFailNoShift",
+  "no-finger-deadline": "ntxFailNoFinger",
+  "no-ftw-deadline": "ntxFailNoFtw",
+  unexpected: "ntxFailUnexpected",
 };
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -63,24 +61,24 @@ export function notifText(
   n: { kind: string; params: Notif["params"] },
   lang: Lang
 ): string {
+  const t = DICT[lang];
   const p = n.params ?? {};
-  const shift = SHIFT[lang][str(p.shift)] ?? str(p.shift);
+  const shiftKey = SHIFT[str(p.shift)];
+  const shift = shiftKey ? t[shiftKey] : str(p.shift);
   const date = str(p.date);
 
-  if (n.kind === "allocation-generated") {
-    const crewed = num(p.crewed);
-    const units = num(p.units);
-    return lang === "id"
-      ? `Papan shift ${shift} ${date} selesai digenerate — ${crewed} dari ${units} unit dapat operator`
-      : `${shift} board for ${date} generated — ${crewed} of ${units} units crewed`;
-  }
+  if (n.kind === "allocation-generated")
+    return fmt(t.ntxGenerated, {
+      shift,
+      date,
+      crewed: num(p.crewed),
+      units: num(p.units),
+    });
 
   if (n.kind === "allocation-failed") {
     const reason = str(p.reason);
-    const why = isAllocationFailure(reason) ? FAILURE[lang][reason] : reason;
-    return lang === "id"
-      ? `Generate papan shift ${shift} ${date} gagal — ${why}`
-      : `${shift} board for ${date} failed to generate — ${why}`;
+    const why = isAllocationFailure(reason) ? t[FAILURE[reason]] : reason;
+    return fmt(t.ntxFailed, { shift, date, why });
   }
 
   /* The test slip at every booth printer when the first finger opens: the
@@ -88,13 +86,9 @@ export function notifText(
   if (n.kind === "printer-test") {
     const count = `${num(p.sent)}/${num(p.total)}`;
     const failed = Array.isArray(p.failed) ? p.failed.map(str).join(", ") : "";
-    if (lang === "id")
-      return failed
-        ? `Tes printer shift ${shift}: ${count} terkirim — gagal: ${failed}`
-        : `Tes printer shift ${shift}: ${count} terkirim — cek slip keluar di tiap bilik`;
     return failed
-      ? `${shift} printer test: ${count} sent — failed: ${failed}`
-      : `${shift} printer test: ${count} sent — check each booth printed its slip`;
+      ? fmt(t.ntxSlipFailed, { shift, count, failed })
+      : fmt(t.ntxSlipSent, { shift, count });
   }
 
   return n.kind;
@@ -112,19 +106,18 @@ const DAY = 24 * HOUR;
  * wrong for as long as the row survives.
  */
 export function notifTime(iso: string, lang: Lang, now = Date.now()): string {
+  const t = DICT[lang];
   const ago = Math.max(0, now - new Date(iso).getTime());
-  if (ago < MINUTE) return lang === "id" ? "Baru saja" : "Just now";
+  if (ago < MINUTE) return t.ntxJustNow;
   if (ago < HOUR) {
     const n = Math.floor(ago / MINUTE);
-    return lang === "id"
-      ? `${n} menit lalu`
-      : `${n} minute${n > 1 ? "s" : ""} ago`;
+    return fmt(n > 1 ? t.ntxMinAgoN : t.ntxMinAgo1, { n });
   }
   if (ago < DAY) {
     const n = Math.floor(ago / HOUR);
-    return lang === "id" ? `${n} jam lalu` : `${n} hour${n > 1 ? "s" : ""} ago`;
+    return fmt(n > 1 ? t.ntxHourAgoN : t.ntxHourAgo1, { n });
   }
   const n = Math.floor(ago / DAY);
-  if (n === 1) return lang === "id" ? "Kemarin" : "Yesterday";
-  return lang === "id" ? `${n} hari lalu` : `${n} days ago`;
+  if (n === 1) return t.ntxYesterday;
+  return fmt(t.ntxDaysAgo, { n });
 }

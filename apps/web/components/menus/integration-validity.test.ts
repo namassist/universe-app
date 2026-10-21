@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { id } from "@/lib/i18n/id";
+
 import {
   addYears,
   defaultValidity,
@@ -9,6 +11,12 @@ import {
 } from "./integration-validity";
 
 const TODAY = "2026-10-09";
+
+/* The words the field shows, in Indonesian — what the owner signed off on. */
+const problemText = (...args: Parameters<typeof validityProblem>) => {
+  const key = validityProblem(...args);
+  return key ? id[key] : null;
+};
 
 describe("validityState", () => {
   test("a token with no end and a start already reached never expires", () => {
@@ -87,29 +95,29 @@ describe("the form's dates", () => {
 
   test("an end before the start, or already past, is a problem", () => {
     const base = { validFrom: TODAY, noEnd: false };
-    expect(validityProblem({ ...base, validUntil: "2026-10-01" }, TODAY)).toBe(
+    expect(problemText({ ...base, validUntil: "2026-10-01" }, TODAY)).toBe(
       "Tanggal akhir tidak boleh sebelum tanggal mulai"
     );
     expect(
-      validityProblem(
+      problemText(
         { validFrom: "2026-09-01", validUntil: "2026-10-08", noEnd: false },
         TODAY
       )
     ).toBe("Tanggal akhir sudah lewat");
-    expect(validityProblem({ ...base, validUntil: "" }, TODAY)).toBe(
+    expect(problemText({ ...base, validUntil: "" }, TODAY)).toBe(
       "Isi tanggal akhir, atau centang Tanpa batas"
     );
-    expect(validityProblem({ ...base, validUntil: "2027-10-09" }, TODAY)).toBe(
+    expect(problemText({ ...base, validUntil: "2027-10-09" }, TODAY)).toBe(
       null
     );
-    expect(
-      validityProblem({ ...base, validUntil: "", noEnd: true }, TODAY)
-    ).toBe(null);
+    expect(problemText({ ...base, validUntil: "", noEnd: true }, TODAY)).toBe(
+      null
+    );
   });
 
   test("a start is always needed", () => {
     expect(
-      validityProblem({ validFrom: "", validUntil: "", noEnd: true }, TODAY)
+      problemText({ validFrom: "", validUntil: "", noEnd: true }, TODAY)
     ).toBe("Isi tanggal mulai");
   });
 });

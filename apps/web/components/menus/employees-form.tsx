@@ -27,7 +27,7 @@ import {
 } from "@universe/contracts";
 
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import {
   employeeQueryOptions,
   photoUrl,
@@ -212,7 +212,7 @@ export function EmployeeForm({ nik }: { nik?: string }) {
         <StateBox
           icon={<Search className="text-(--color-primary-bright)" />}
           title={t.noResTitle}
-          body={`NIK ${nik}`}
+          body={fmt(t.cmNikValue, { nik })}
         >
           <Button
             variant="secondary"
@@ -693,7 +693,7 @@ function EmployeeFields({
                   />
                 </Field>
                 <Field
-                  label="NIK"
+                  label={t.cmNik}
                   htmlFor="ef-nik"
                   required
                   helper={t.helpNik}
@@ -815,7 +815,7 @@ function EmployeeFields({
           <Panel>
             <SectionTitle>
               <IdCard />
-              SIMPER &amp; {t.kLicense}
+              {t.empSimperAnd} {t.kLicense}
             </SectionTitle>
             <FormGrid>
               <Field label={t.kSimperCat} htmlFor="ef-simkat">
@@ -950,7 +950,7 @@ function EmployeeFields({
               {t.secMess}
             </SectionTitle>
             <FormGrid>
-              <Field label="Mess" htmlFor="ef-mess">
+              <Field label={t.cmMess} htmlFor="ef-mess">
                 <Select
                   id="ef-mess"
                   value={f.messId}

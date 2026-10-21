@@ -11,7 +11,7 @@ import {
 
 import type { AccessMode } from "@/lib/access";
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import {
   allocationPriorityKey,
   allocationPriorityQueryOptions,
@@ -62,6 +62,7 @@ function PositionInput({
   total: number;
   onCommit: (to: number) => void;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = React.useState(String(position));
 
   function commit() {
@@ -80,7 +81,7 @@ function PositionInput({
     <input
       type="text"
       inputMode="numeric"
-      aria-label={`Posisi ${position}`}
+      aria-label={fmt(t.apPositionN, { n: position })}
       value={draft}
       onChange={(event) => setDraft(event.target.value.replace(/\D/g, ""))}
       onFocus={(event) => event.target.select()}

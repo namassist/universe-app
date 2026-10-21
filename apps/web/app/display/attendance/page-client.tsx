@@ -4,9 +4,8 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Fingerprint } from "lucide-react";
 
-import { SHIFT_KIND_LABELS } from "@universe/contracts";
-
 import { isStatus } from "@/lib/api";
+import { fmt, shiftKindLabel, useI18n, type Dict } from "@/lib/i18n";
 import {
   attendancePhotoUrl,
   attendanceScansQueryOptions,
@@ -69,6 +68,7 @@ function useTicketQueue(scans: AttendanceScan[] | undefined, polledAt: number) {
 }
 
 export default function DisplayAttendancePage() {
+  const { t } = useI18n();
   const { data, error, isError, dataUpdatedAt } = useQuery(
     attendanceScansQueryOptions()
   );
@@ -78,13 +78,13 @@ export default function DisplayAttendancePage() {
      a lost API is the network's, and one banner must not stand for both. */
   const authProblem = isStatus(error, 401) || isStatus(error, 403);
   const disconnected = isError && !authProblem;
-  const shiftLabel = data?.shift ? SHIFT_KIND_LABELS[data.shift] : null;
+  const shiftLabel = data?.shift ? shiftKindLabel(t, data.shift) : null;
 
   return (
     <DisplayShell
       /* Indonesian throughout (owner, 2026-09-19); the shift moved from the
          title into the line beneath it. */
-      title="Display Absensi"
+      title={t.wlaTitle}
       /* No device-name chip here (owner, 2026-09-19): the TV's own name is
          for whoever administers it, not for the person reading their ticket. */
       displayKind="att"
@@ -93,8 +93,8 @@ export default function DisplayAttendancePage() {
       meta={
         <span className="truncate">
           {shiftLabel
-            ? `Shift ${shiftLabel} · Silakan scan sidik jari di mesin absen`
-            : "Menunggu jadwal shift dari timeline"}
+            ? fmt(t.wlaScanPrompt, { shift: shiftLabel })
+            : t.wlWaitShift}
         </span>
       }
       stats={[]}
@@ -137,6 +137,7 @@ function ScanTicket({
   waiting: number;
   skipped: number;
 }) {
+  const { t } = useI18n();
   return (
     <article
       className={cn(
@@ -147,7 +148,7 @@ function ScanTicket({
     >
       <div className="relative flex flex-col items-center justify-center gap-8 bg-(--color-primary) text-(--color-on-cta)">
         <span className="absolute top-10 left-9 font-mono text-[15px] font-bold [writing-mode:vertical-rl]">
-          KARTU KARYAWAN
+          {t.wlaCard}
         </span>
         <div className="relative aspect-[4/5] w-[300px] overflow-hidden rounded-2xl border-2 border-(--color-on-cta)/25">
           <OperatorFace
@@ -165,7 +166,7 @@ function ScanTicket({
         <div className="flex items-start justify-between gap-8">
           <div className="min-w-0">
             <p className="font-mono text-lg font-bold text-(--color-primary) uppercase">
-              Catatan absensi
+              {t.wlaRecord}
             </p>
             <h2
               className="mt-3 line-clamp-2 text-[60px] leading-none font-bold break-words"
@@ -174,7 +175,7 @@ function ScanTicket({
               {scan.name}
             </h2>
             <p className="mt-3 font-mono text-xl font-bold text-(--text-secondary) tabular-nums">
-              NIK · {scan.nik}
+              {t.cmNik} · {scan.nik}
             </p>
           </div>
           <StatusPill status={scan.status} />
@@ -187,12 +188,12 @@ function ScanTicket({
               look as if it showed all. */}
           {waiting || skipped ? (
             <span className="mr-auto flex gap-5 text-xl font-semibold text-(--text-secondary)">
-              {waiting ? <span>{waiting} antre</span> : null}
-              {skipped ? <span>+{skipped} lainnya</span> : null}
+              {waiting ? <span>{fmt(t.wlaQueued, { n: waiting })}</span> : null}
+              {skipped ? <span>{fmt(t.wlaMore, { n: skipped })}</span> : null}
             </span>
           ) : null}
           <span className="text-xl font-bold text-(--text-secondary)">
-            Jam masuk
+            {t.wlaInAt}
           </span>
           <time className="font-mono text-[96px] leading-none font-bold tabular-nums">
             {scan.scannedAt}
@@ -203,20 +204,20 @@ function ScanTicket({
           {/* Coloured as the Fit to Work page colours its badge — one rule,
               so the booth and the office never disagree about a category. */}
           <Datum
-            label="Kategori FTW"
+            label={t.wlaFtwCat}
             value={scan.ftw}
             tone={FTW_CAT_BADGE[ftwCatOf(scan.ftw)]}
             className="col-span-2"
           />
           {/* SPARE in yellow (owner, 2026-09-19): no unit yet, go to the pool. */}
           <Datum
-            label="Unit"
+            label={t.cmUnit}
             value={scan.unit}
             tone={scan.unit === "SPARE" ? "warning" : "neutral"}
           />
-          <Datum label="Shift" value={SHIFT_KIND_LABELS[scan.shift]} />
-          <Datum label="Area" value={scan.area} />
-          <Datum label="Bus" value={scan.bus} />
+          <Datum label={t.thShift} value={shiftKindLabel(t, scan.shift)} />
+          <Datum label={t.scanArea} value={scan.area} />
+          <Datum label={t.cmBus} value={scan.bus} />
         </div>
       </div>
     </article>
@@ -224,16 +225,17 @@ function ScanTicket({
 }
 
 /** The machine's IN / OUT, in the words the booth reads. */
-const STATUS_LABEL: Record<AttendanceScan["status"], string> = {
-  IN: "Masuk",
-  OUT: "Keluar",
+const STATUS_LABEL: Record<AttendanceScan["status"], keyof Dict> = {
+  IN: "wlaIn",
+  OUT: "wlaOut",
 };
 
 function StatusPill({ status }: { status: AttendanceScan["status"] }) {
+  const { t } = useI18n();
   return (
     <span className="inline-flex flex-none items-center gap-3 rounded-full border border-[rgba(0,212,255,.4)] bg-(--glass-2-fill) px-6 py-3 font-mono text-xl font-bold text-(--color-primary-bright) uppercase">
       <span className="size-2.5 flex-none rounded-full bg-(--color-primary) shadow-[0_0_12px_rgba(0,212,255,.9)]" />
-      Status {STATUS_LABEL[status]}
+      {t.thStatus} {t[STATUS_LABEL[status]]}
     </span>
   );
 }
@@ -302,12 +304,13 @@ function Datum({
 
 /** Before the shift's first scan: say what the screen is for. */
 function AwaitingScan() {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center gap-8 text-(--text-secondary)">
       <div className="grid size-40 place-items-center rounded-full border border-(--badge-info-border) bg-(--badge-info-fill)">
         <Fingerprint className="size-20 text-(--color-primary-bright)" />
       </div>
-      <div className="text-[44px] font-semibold">Menunggu scan</div>
+      <div className="text-[44px] font-semibold">{t.wlaAwait}</div>
     </div>
   );
 }

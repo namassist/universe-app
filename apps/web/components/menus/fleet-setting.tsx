@@ -651,7 +651,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                   />
                 </TableHead>
               ) : null}
-              <TableHead>Fleet</TableHead>
+              <TableHead>{t.cmFleet}</TableHead>
               <TableHead>{t.flLoc}</TableHead>
               <TableHead className="max-xl:hidden">{t.flBus}</TableHead>
               <TableHead>{t.flUnits}</TableHead>
@@ -1043,9 +1043,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                         }
                       >
                         <option value="">
-                          {BUS_OPTS.length
-                            ? "— tanpa angkutan —"
-                            : "— belum ada bus/manhaul —"}
+                          {BUS_OPTS.length ? t.flNoTransport : t.flNoBusYet}
                         </option>
                         {BUS_GROUPS.map((g) => (
                           <optgroup key={g.name} label={g.name}>
@@ -1315,9 +1313,7 @@ export function FleetSettingMenu({ mode }: { mode: AccessMode }) {
                             }
                           >
                             <option value="">
-                              {BUS_OPTS.length
-                                ? "— tanpa angkutan —"
-                                : "— belum ada bus/manhaul —"}
+                              {BUS_OPTS.length ? t.flNoTransport : t.flNoBusYet}
                             </option>
                             {BUS_GROUPS.map((g) => (
                               <optgroup key={g.name} label={g.name}>

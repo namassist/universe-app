@@ -8,7 +8,7 @@ import { Truck } from "lucide-react";
 import type { MasterKind } from "@universe/contracts";
 
 import { api, errorMessage } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type Dict } from "@/lib/i18n";
 import { masterQueryOptions, type MasterRecord } from "@/lib/queries/master";
 import { unitKey, unitQueryOptions } from "@/lib/queries/units";
 import { Button } from "@/components/ui/button";
@@ -35,22 +35,22 @@ import { useToast } from "@/components/ui/toast";
  */
 
 const CATALOGUE_FIELDS = [
-  { key: "classId", kind: "kelas-unit", label: "Kelas Unit", required: true },
-  { key: "typeId", kind: "jenis-unit", label: "Jenis Unit", required: true },
-  { key: "modelId", kind: "model-unit", label: "Model", required: true },
-  { key: "brandId", kind: "merk-unit", label: "Merk", required: true },
+  { key: "classId", kind: "kelas-unit", label: "unClass", required: true },
+  { key: "typeId", kind: "jenis-unit", label: "unType", required: true },
+  { key: "modelId", kind: "model-unit", label: "unModel", required: true },
+  { key: "brandId", kind: "merk-unit", label: "unBrand", required: true },
   {
     key: "simperCodeId",
     // The qualification catalogue, not the permit-type one (design D4): this is
     // what the allocation engine matches a spare's skills against.
     kind: "kode-simper",
-    label: "Kode SIMPER",
+    label: "unSimperCodeForm",
     required: false,
   },
   {
     key: "departmentId",
     kind: "departemen",
-    label: "Departemen",
+    label: "thDept",
     // Optional: a unit no department owns is a company-wide asset. Leaving it
     // blank says so, and is not an unfinished record.
     required: false,
@@ -58,7 +58,7 @@ const CATALOGUE_FIELDS = [
 ] as const satisfies readonly {
   key: string;
   kind: MasterKind;
-  label: string;
+  label: keyof Dict;
   required: boolean;
 }[];
 
@@ -246,7 +246,7 @@ export function UnitForm({ code }: { code?: string }) {
               {CATALOGUE_FIELDS.map((field) => (
                 <Field
                   key={field.key}
-                  label={field.label}
+                  label={t[field.label]}
                   htmlFor={`uf-${field.key}`}
                   required={field.required}
                 >
@@ -279,7 +279,7 @@ export function UnitForm({ code }: { code?: string }) {
                 </Field>
               ))}
 
-              <Field label="Machine S/N" htmlFor="uf-serial">
+              <Field label={t.unSerial} htmlFor="uf-serial">
                 <Input
                   id="uf-serial"
                   className="font-mono"
@@ -287,14 +287,14 @@ export function UnitForm({ code }: { code?: string }) {
                   onChange={(e) => setFSerial(e.target.value)}
                 />
               </Field>
-              <Field label="Engine Brand" htmlFor="uf-engine">
+              <Field label={t.unEngine} htmlFor="uf-engine">
                 <Input
                   id="uf-engine"
                   value={fEngine}
                   onChange={(e) => setFEngine(e.target.value)}
                 />
               </Field>
-              <Field label="Description" htmlFor="uf-desc">
+              <Field label={t.unDesc} htmlFor="uf-desc">
                 <Input
                   id="uf-desc"
                   value={fDesc}
@@ -308,7 +308,7 @@ export function UnitForm({ code }: { code?: string }) {
                 checked={fFtw}
                 onChange={(e) => setFFtw(e.target.checked)}
               />
-              FTW
+              {t.cmFtw}
             </ToggleRow>
             <ToggleRow className="mt-2" htmlFor="uf-active">
               <Checkbox

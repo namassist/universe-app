@@ -426,7 +426,7 @@ export function FleetImport() {
                 <tr>
                   <TableHead className="w-[80px]">{t.thRow}</TableHead>
                   <TableHead className="w-[110px]">{t.thType}</TableHead>
-                  <TableHead>Digger</TableHead>
+                  <TableHead>{t.flDigger}</TableHead>
                   <TableHead>{t.flLoc}</TableHead>
                   <TableHead>{t.flBus}</TableHead>
                   <TableHead>{t.flUnits}</TableHead>
@@ -523,8 +523,8 @@ export function FleetImport() {
               <TableHeader>
                 <tr>
                   <TableHead className="w-[90px]">{t.thRow}</TableHead>
-                  <TableHead>Digger</TableHead>
-                  <TableHead>Detail</TableHead>
+                  <TableHead>{t.flDigger}</TableHead>
+                  <TableHead>{t.cmDetail}</TableHead>
                   <TableHead>{t.thIssue}</TableHead>
                   <TableHead>{t.thType}</TableHead>
                 </tr>

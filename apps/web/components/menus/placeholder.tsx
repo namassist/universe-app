@@ -1,4 +1,7 @@
-import { MENU_LABELS, type AccessMode, type MenuSlug } from "@/lib/access";
+"use client";
+
+import { type AccessMode, type MenuSlug } from "@/lib/access";
+import { menuLabel, useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 
 /**
@@ -12,18 +15,19 @@ export function MenuPlaceholder({
   slug: MenuSlug;
   mode: AccessMode;
 }) {
+  const { t } = useI18n();
   return (
     <section className="rounded-panel p-6 shadow-(--shadow-panel) glass-panel">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-(--text-primary)">
-          {MENU_LABELS[slug]}
+          {menuLabel(t, slug)}
         </h1>
         <Badge variant={mode === "manage" ? "success" : "neutral"}>
-          {mode === "manage" ? "Read & Write" : "Read only"}
+          {mode === "manage" ? t.phReadWrite : t.phReadOnly}
         </Badge>
       </div>
       <p className="mt-2 text-sm text-(--text-secondary)">
-        Halaman <code>{slug}</code> — menyusul.
+        {t.phPage} <code>{slug}</code> {t.phSoon}
       </p>
     </section>
   );
