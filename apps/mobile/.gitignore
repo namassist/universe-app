@@ -11,3 +11,5 @@ local.properties
 keystore.properties
 # Firebase client config, per installation.
 google-services.json
+# Screen baselines (design/baseline): emulator captures against local data, kept local.
+design/
