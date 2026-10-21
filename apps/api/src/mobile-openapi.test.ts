@@ -56,8 +56,19 @@ describe("buildMobileSpec", () => {
       "/v1/users/import/validate",
       "/v1/timeline/{id}",
       "/v1/timeline/reset/{shift}",
+      /* Dashboard and Laporan (S7): the workbook download stays on the web. */
+      "/v1/reports/{kind}/export",
+      "/v1/reports/departments",
     ])
       expect(paths).not.toContain(internal);
+  });
+
+  test("reads the dashboard and one report at a time, view only", async () => {
+    const spec = (await buildMobileSpec()) as Spec;
+    expect(Object.keys(spec.paths["/v1/dashboard/"] ?? {})).toEqual(["get"]);
+    expect(Object.keys(spec.paths["/v1/reports/{kind}"] ?? {})).toEqual([
+      "get",
+    ]);
   });
 
   test("publishes only the verbs the phone sends on a shared path", async () => {

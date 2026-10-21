@@ -280,6 +280,10 @@ with the TV or the ops console:
   tab's candidates and hand placement (with its FTW acknowledgement), account
   reset and deactivation, and `/timeline/runs`. The spec leaves out deleting
   an account, the account import, timeline edits and regenerating a board.
+- **Dashboard and Laporan are the web's** (S7): `GET /v1/dashboard/`, whose
+  sections arrive only for the grants the caller holds, and
+  `GET /v1/reports/{kind}`, one report for a date and shift, scoped as on the
+  web. The workbook export and the departments list stay out (test-asserted).
 - **`/me/shift` carries its gates** (`ftwDeadline`, `fingerIn`, `board`,
   `secondFinger`, `busDepart`, "HH:MM" or null), so the app words "Batas
   05:25" from the timeline and never from a constant.

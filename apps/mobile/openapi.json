@@ -4257,6 +4257,545 @@
         },
         "operationId": "getV1TimelineRuns"
       }
+    },
+    "/v1/dashboard/": {
+      "get": {
+        "tags": ["dashboard"],
+        "summary": "The dashboard's counts, gated by grant and scope",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "date",
+                    "shift",
+                    "attendance",
+                    "ftw",
+                    "units",
+                    "ingest",
+                    "allocation",
+                    "analytics",
+                    "simper",
+                    "me"
+                  ],
+                  "properties": {
+                    "date": {
+                      "type": "string"
+                    },
+                    "shift": {
+                      "type": "string"
+                    },
+                    "attendance": {
+                      "type": "object",
+                      "required": ["scheduled", "tapped"],
+                      "properties": {
+                        "scheduled": {
+                          "type": "integer"
+                        },
+                        "tapped": {
+                          "type": "integer"
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "ftw": {
+                      "type": "object",
+                      "required": ["scheduled", "followUp", "missing"],
+                      "properties": {
+                        "scheduled": {
+                          "type": "integer"
+                        },
+                        "followUp": {
+                          "type": "integer"
+                        },
+                        "missing": {
+                          "type": "integer"
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "units": {
+                      "type": "object",
+                      "required": [
+                        "active",
+                        "breakdown",
+                        "standby",
+                        "breakdownCodes"
+                      ],
+                      "properties": {
+                        "active": {
+                          "type": "integer"
+                        },
+                        "breakdown": {
+                          "type": "integer"
+                        },
+                        "standby": {
+                          "type": "integer"
+                        },
+                        "breakdownCodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "ingest": {
+                      "type": "object",
+                      "required": ["ftwSyncedAt", "fingerSyncedAt"],
+                      "properties": {
+                        "ftwSyncedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "fingerSyncedAt": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "allocation": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["shift", "generatedAt", "slots", "filled"],
+                        "properties": {
+                          "shift": {
+                            "type": "string"
+                          },
+                          "generatedAt": {
+                            "type": "string"
+                          },
+                          "slots": {
+                            "type": "integer"
+                          },
+                          "filled": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "analytics": {
+                      "type": "object",
+                      "required": [
+                        "operators",
+                        "spares",
+                        "resting",
+                        "equipment"
+                      ],
+                      "properties": {
+                        "operators": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "category",
+                              "ready",
+                              "noFinger",
+                              "noFtw"
+                            ],
+                            "properties": {
+                              "category": {
+                                "type": "string"
+                              },
+                              "ready": {
+                                "type": "integer"
+                              },
+                              "noFinger": {
+                                "type": "integer"
+                              },
+                              "noFtw": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "spares": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": ["category", "operators"],
+                            "properties": {
+                              "category": {
+                                "type": "string"
+                              },
+                              "operators": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "resting": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": ["category", "operators"],
+                            "properties": {
+                              "category": {
+                                "type": "string"
+                              },
+                              "operators": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "equipment": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "unitClass",
+                              "qty",
+                              "ready",
+                              "running"
+                            ],
+                            "properties": {
+                              "unitClass": {
+                                "type": "string"
+                              },
+                              "qty": {
+                                "type": "integer"
+                              },
+                              "ready": {
+                                "type": "integer"
+                              },
+                              "running": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "simper": {
+                      "type": "object",
+                      "required": ["expired", "soon"],
+                      "properties": {
+                        "expired": {
+                          "type": "integer"
+                        },
+                        "soon": {
+                          "type": "integer"
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "me": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "nik",
+                        "rosterCode",
+                        "ftwDecision",
+                        "tappedAt",
+                        "unitCode",
+                        "unitSource"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "nik": {
+                          "type": "string"
+                        },
+                        "rosterCode": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "ftwDecision": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tappedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "unitCode": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "unitSource": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1Dashboard"
+      }
+    },
+    "/v1/reports/{kind}": {
+      "get": {
+        "tags": ["report"],
+        "summary": "One report for a date and shift",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "default": "equipment-no-operator",
+              "type": "string",
+              "enum": [
+                "equipment-no-operator",
+                "operator-no-equipment",
+                "operator-no-ftw",
+                "operator-no-finger",
+                "final-validation"
+              ]
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "shift",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "default": "day",
+              "type": "string",
+              "enum": ["day", "night"]
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "position",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "maxLength": 200,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "date",
+                    "shift",
+                    "department",
+                    "boardGenerated",
+                    "rows",
+                    "positions"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "shift": {
+                      "type": "string"
+                    },
+                    "department": {
+                      "type": "object",
+                      "required": ["id", "name"],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "boardGenerated": {
+                      "type": "boolean"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "unit": {
+                            "type": "string"
+                          },
+                          "simperCode": {
+                            "type": "string"
+                          },
+                          "fleet": {
+                            "type": "string"
+                          },
+                          "bus": {
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": "string"
+                          },
+                          "nik": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "roster": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "string"
+                          },
+                          "department": {
+                            "type": "string"
+                          },
+                          "simperMatrix": {
+                            "type": "string"
+                          },
+                          "saveraStatus": {
+                            "type": "string"
+                          },
+                          "jamIn": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "positions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1ReportsByKind"
+      }
     }
   }
 }

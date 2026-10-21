@@ -17,6 +17,7 @@ import { API_VERSION } from "@universe/contracts";
 
 import { as30, sortedResponses } from "./openapi-30";
 import { authRoutes } from "./routes/auth";
+import { dashboardRoutes } from "./routes/dashboard";
 import { employeesRoutes } from "./routes/employees";
 import { fleetActualRoutes } from "./routes/fleet-actual";
 import { idCardRoutes } from "./routes/id-card";
@@ -26,6 +27,7 @@ import {
 } from "./routes/ingest-sync";
 import { meRoutes } from "./routes/me";
 import { mobileRoutes } from "./routes/mobile";
+import { reportRoutes } from "./routes/reports";
 import { rosterRoutes } from "./routes/roster";
 import { timelineRoutes } from "./routes/timeline";
 import { unitStatusRoutes } from "./routes/unit-status";
@@ -71,6 +73,10 @@ export const MOBILE_OPERATIONS = [
   "PATCH /v1/users/{id}",
   "POST /v1/users/{id}/reset-password",
   "GET /v1/timeline/runs",
+  /* Dashboard and Laporan (S7): the dashboard's counts, which arrive only for
+     the grants the caller holds, and one report at a time, view only. */
+  "GET /v1/dashboard/",
+  "GET /v1/reports/{kind}",
 ] as const;
 
 type Json = Record<string, unknown>;
@@ -164,6 +170,8 @@ export async function buildMobileSpec(): Promise<Json> {
         .use(idCardRoutes)
         .use(usersRoutes)
         .use(timelineRoutes)
+        .use(dashboardRoutes)
+        .use(reportRoutes)
     );
 
   const response = await app.handle(
