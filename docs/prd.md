@@ -3007,8 +3007,21 @@ additions, the foundation and the operator; the rest follows.
   reset password, deactivate) and the **timeline monitor** (each stage ran,
   was refused or is next; "scheduler mungkin berhenti" past two minutes
   without a heartbeat). The stages' notes are the scheduler's own sentences.
-- **Next:** a design round for Dashboard and Laporan (still "belum
-  dirancang"), push once the Firebase project exists, and iOS.
+- **Dashboard and Laporan, built (S7, 2026-10-21):** for the Pengawas
+  Lapangan and the Superadmin, each on Beranda only when the account holds
+  its menu (`dashboard`, `report`). The **Dashboard** reads `/v1/dashboard`:
+  fact cards (Sudah finger, FTW lolos, Unit terisi, Unit aktif), "Perlu
+  perhatian" (empty units, FTW not filed, SIMPER expired or due) and the
+  per-category operator counts, **no charts** (they stay on the web
+  console). A section the API withholds for a missing grant is left out,
+  never shown as zero, and a figure opens only a screen that lists exactly it
+  (Unit terisi → Papan, Unit aktif → Status unit, empty units → Equipment No
+  Operator). **Laporan** reads `/v1/reports/{kind}`: the five reports for a
+  date and shift (opening on the running board's), each with its row count,
+  each opening a searchable, view-only list; a report made from the board
+  says "Papan belum dibuat" instead of a zero. The workbook download stays on
+  the web.
+- **Next:** push once the Firebase project exists, and iOS.
 - **Decided while building:**
   - The NIK field takes digits only, as the prototype has it. An account
     that signs in with an email cannot use the app until the staff screens

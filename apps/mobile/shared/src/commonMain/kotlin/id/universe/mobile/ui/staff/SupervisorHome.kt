@@ -3,6 +3,7 @@ package id.universe.mobile.ui.staff
 import androidx.compose.runtime.Composable
 import id.universe.mobile.data.Board
 import id.universe.mobile.data.UnitStatusRow
+import id.universe.mobile.domain.Access
 import id.universe.mobile.domain.BoardFilter
 import id.universe.mobile.domain.Pill
 import id.universe.mobile.domain.Tone
@@ -10,6 +11,8 @@ import id.universe.mobile.domain.UnitTab
 import id.universe.mobile.domain.boardSummary
 import id.universe.mobile.domain.countIn
 import id.universe.mobile.ui.CariRoute
+import id.universe.mobile.ui.DashboardRoute
+import id.universe.mobile.ui.LaporanRoute
 import id.universe.mobile.ui.PapanRoute
 import id.universe.mobile.ui.SoonRoute
 import id.universe.mobile.ui.UnitStatusRoute
@@ -37,7 +40,7 @@ import id.universe.mobile.ui.theme.Theme
  * Lapangan). Every number is the fleet wall's.
  */
 @Composable
-fun SupervisorHome(board: LoadHandle<Board>, units: LoadHandle<List<UnitStatusRow>>, go: (Any) -> Unit) {
+fun SupervisorHome(board: LoadHandle<Board>, units: LoadHandle<List<UnitStatusRow>>, access: Access, go: (Any) -> Unit) {
     val toEmpty = { go(PapanRoute(BoardFilter.EMPTY.name)) }
     val quick = listOf(
         QuickLink("Cari", Glyph.SEARCH) { go(CariRoute) },
@@ -87,11 +90,11 @@ fun SupervisorHome(board: LoadHandle<Board>, units: LoadHandle<List<UnitStatusRo
     ) {
         StaleNote(board)
         MenuGrid(
-            listOf(
+            listOfNotNull(
                 MenuEntry("Papan", Glyph.BOARD) { go(PapanRoute()) },
                 MenuEntry("Status unit", Glyph.TRUCK) { go(UnitStatusRoute) },
-                MenuEntry("Dashboard", Glyph.CHART) { go(SoonRoute("Dashboard")) },
-                MenuEntry("Laporan", Glyph.DOC) { go(SoonRoute("Laporan")) },
+                MenuEntry("Dashboard", Glyph.CHART) { go(DashboardRoute) }.takeIf { access.dashboard },
+                MenuEntry("Laporan", Glyph.DOC) { go(LaporanRoute()) }.takeIf { access.reports },
             ),
         )
         /* Only over a board or a line-up: "empty" before either would be a guess. */

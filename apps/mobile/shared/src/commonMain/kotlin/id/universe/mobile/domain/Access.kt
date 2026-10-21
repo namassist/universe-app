@@ -24,7 +24,14 @@ enum class NavItem(val label: String, val center: Boolean = false) {
     AKUN("Akun"),
 }
 
-data class Access(val home: HomeKind, val nav: List<NavItem>, val canPlace: Boolean)
+data class Access(
+    val home: HomeKind,
+    val nav: List<NavItem>,
+    val canPlace: Boolean,
+    /** Beranda's Dashboard and Laporan entries, each behind its own menu. */
+    val dashboard: Boolean = false,
+    val reports: Boolean = false,
+)
 
 private const val MANAGE = "manage"
 private const val NAV_SLOTS = 5
@@ -51,5 +58,11 @@ fun accessOf(permissions: Permissions): Access {
         }
         if (size < NAV_SLOTS) add(NavItem.PROFIL)
     }
-    return Access(if (places) HomeKind.ADMIN else HomeKind.SUPERVISOR, nav, places)
+    return Access(
+        if (places) HomeKind.ADMIN else HomeKind.SUPERVISOR,
+        nav,
+        places,
+        dashboard = permissions.dashboard != null,
+        reports = permissions.report != null,
+    )
 }

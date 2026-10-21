@@ -3,11 +3,14 @@ package id.universe.mobile.ui.staff
 import androidx.compose.runtime.Composable
 import id.universe.mobile.data.Board
 import id.universe.mobile.data.MusterRuns
+import id.universe.mobile.domain.Access
 import id.universe.mobile.domain.BoardFilter
 import id.universe.mobile.domain.Tone
 import id.universe.mobile.domain.boardSummary
 import id.universe.mobile.domain.musterView
 import id.universe.mobile.ui.AkunRoute
+import id.universe.mobile.ui.DashboardRoute
+import id.universe.mobile.ui.LaporanRoute
 import id.universe.mobile.ui.PapanRoute
 import id.universe.mobile.ui.ProfilRoute
 import id.universe.mobile.ui.SoonRoute
@@ -34,7 +37,7 @@ import id.universe.mobile.ui.icons.Glyph
  * profile, since the Superadmin's bar has no Profil (logout lives there).
  */
 @Composable
-fun AdminHome(board: LoadHandle<Board>, runs: LoadHandle<MusterRuns>, go: (Any) -> Unit) {
+fun AdminHome(board: LoadHandle<Board>, runs: LoadHandle<MusterRuns>, access: Access, go: (Any) -> Unit) {
     val toEmpty = { go(PapanRoute(BoardFilter.EMPTY.name)) }
     val quick = listOf(
         QuickLink("Papan", Glyph.BOARD) { go(PapanRoute()) },
@@ -82,14 +85,14 @@ fun AdminHome(board: LoadHandle<Board>, runs: LoadHandle<MusterRuns>, go: (Any) 
     ) {
         StaleNote(board)
         MenuGrid(
-            listOf(
+            listOfNotNull(
                 MenuEntry("Papan", Glyph.BOARD) { go(PapanRoute()) },
                 MenuEntry("PLAN", Glyph.PLAN) { go(SoonRoute("PLAN")) },
                 MenuEntry("Timeline", Glyph.TIMELINE) { go(TimelineRoute) },
                 MenuEntry("Akun", Glyph.PEOPLE) { go(AkunRoute) },
                 MenuEntry("Status unit", Glyph.TRUCK) { go(UnitStatusRoute) },
-                MenuEntry("Laporan", Glyph.DOC) { go(SoonRoute("Laporan")) },
-                MenuEntry("Dashboard", Glyph.CHART) { go(SoonRoute("Dashboard")) },
+                MenuEntry("Laporan", Glyph.DOC) { go(LaporanRoute()) }.takeIf { access.reports },
+                MenuEntry("Dashboard", Glyph.CHART) { go(DashboardRoute) }.takeIf { access.dashboard },
                 MenuEntry("Notifikasi", Glyph.BELL) { go(SoonRoute("Notifikasi")) },
             ),
         )

@@ -42,6 +42,7 @@ import id.universe.mobile.app.AppState
 import id.universe.mobile.data.Outcome
 import id.universe.mobile.data.UniverseApi
 import id.universe.mobile.domain.HomeKind
+import id.universe.mobile.domain.siteToday
 import id.universe.mobile.domain.NavItem
 import id.universe.mobile.domain.VersionVerdict
 import id.universe.mobile.ui.components.NavBar
@@ -67,6 +68,9 @@ import id.universe.mobile.ui.components.Load
 import id.universe.mobile.ui.staff.AdminHome
 import id.universe.mobile.ui.staff.AkunScreen
 import id.universe.mobile.ui.staff.CariScreen
+import id.universe.mobile.ui.staff.LaporanDetailScreen
+import id.universe.mobile.ui.staff.LaporanScreen
+import id.universe.mobile.ui.staff.DashboardScreen
 import id.universe.mobile.ui.staff.PlaceSheet
 import id.universe.mobile.ui.staff.TimelineScreen
 import id.universe.mobile.ui.staff.PapanScreen
@@ -113,6 +117,13 @@ import kotlinx.serialization.Serializable
 @Serializable data object TimelineRoute
 
 @Serializable data object AkunRoute
+
+@Serializable data object DashboardRoute
+
+/** The five reports; with no date and shift it opens on the running board's. */
+@Serializable data class LaporanRoute(val date: String? = null, val shift: String? = null)
+
+@Serializable data class LaporanDetailRoute(val kind: String, val date: String, val shift: String)
 
 /** What the Android (later iOS) shell builds once per process and hands in. */
 class AppGraph(val api: UniverseApi, val model: AppModel, val info: AppInfo)
@@ -221,6 +232,10 @@ private fun activeItem(entry: NavBackStackEntry?): NavItem? {
         destination.hasRoute<ProfilRoute>() || destination.hasRoute<PasswordRoute>() -> NavItem.PROFIL
         destination.hasRoute<PapanRoute>() -> NavItem.PAPAN
         destination.hasRoute<CariRoute>() -> NavItem.HOME
+        /* Opened from Beranda's menu, as Cari is. */
+        destination.hasRoute<DashboardRoute>() ||
+            destination.hasRoute<LaporanRoute>() ||
+            destination.hasRoute<LaporanDetailRoute>() -> NavItem.HOME
         destination.hasRoute<ScanRoute>() -> NavItem.SCAN
         destination.hasRoute<UnitStatusRoute>() || destination.hasRoute<UnitHistoryRoute>() -> NavItem.UNIT
         destination.hasRoute<TimelineRoute>() -> NavItem.TIMELINE
@@ -347,8 +362,8 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
                             { updateDismissed = true },
                             go,
                         )
-                        HomeKind.SUPERVISOR -> SupervisorHome(board, units, go)
-                        HomeKind.ADMIN -> AdminHome(board, runs, go)
+                        HomeKind.SUPERVISOR -> SupervisorHome(board, units, signedIn.access, go)
+                        HomeKind.ADMIN -> AdminHome(board, runs, signedIn.access, go)
                     }
                 }
                 composable<PapanRoute> {
@@ -380,6 +395,23 @@ private fun SignedInShell(signedIn: AppState.SignedIn, graph: AppGraph, version:
                 composable<TimelineRoute> { TimelineScreen(runs, back) }
                 composable<AkunRoute> { AkunScreen(api, signedIn.principal.id, back) }
                 composable<CariRoute> { CariScreen(board, back) }
+                composable<DashboardRoute> { DashboardScreen(api, back, go) }
+                composable<LaporanRoute> {
+                    val route = it.toRoute<LaporanRoute>()
+                    /* The running board says which date and shift the muster is on; the site's today is the fallback. */
+                    val running = (board.value as? Load.Ready)?.value
+                    LaporanScreen(
+                        api,
+                        route.date ?: running?.date ?: siteToday(),
+                        route.shift ?: running?.shift ?: "day",
+                        back,
+                        go,
+                    )
+                }
+                composable<LaporanDetailRoute> {
+                    val route = it.toRoute<LaporanDetailRoute>()
+                    LaporanDetailScreen(api, route.kind, route.date, route.shift, back)
+                }
                 composable<UnitStatusRoute> { UnitStatusScreen(units, back, go) }
                 composable<UnitHistoryRoute> { UnitHistoryScreen(api, it.toRoute<UnitHistoryRoute>().code, back) }
                 composable<ScanRoute> { ScanScreen(api, back) }

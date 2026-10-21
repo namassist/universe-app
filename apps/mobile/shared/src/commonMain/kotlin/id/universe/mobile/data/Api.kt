@@ -2,6 +2,7 @@ package id.universe.mobile.data
 
 import id.universe.mobile.api.apis.AttendanceApi
 import id.universe.mobile.api.apis.AuthApi
+import id.universe.mobile.api.apis.DashboardApi
 import id.universe.mobile.api.apis.EmployeesApi
 import id.universe.mobile.api.apis.FitToWorkApi
 import id.universe.mobile.api.apis.FleetAllocationApi
@@ -10,6 +11,7 @@ import id.universe.mobile.api.apis.UnitStatusApi
 import id.universe.mobile.api.apis.UsersApi
 import id.universe.mobile.api.apis.MeApi
 import id.universe.mobile.api.apis.MobileApi
+import id.universe.mobile.api.apis.ReportApi
 import id.universe.mobile.api.apis.RosterApi
 import id.universe.mobile.api.infrastructure.HttpResponse
 import io.ktor.client.HttpClient
@@ -100,6 +102,8 @@ class UniverseApi(origin: String, engine: HttpClientEngine, private val session:
     val unitStatus = UnitStatusApi(origin, http)
     val users = UsersApi(origin, http)
     val timeline = TimelineApi(origin, http)
+    val dashboard = DashboardApi(origin, http)
+    val report = ReportApi(origin, http)
 
     /**
      * One request, as an [Outcome]. [sessionBound] is false for the calls a

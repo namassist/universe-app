@@ -56,6 +56,18 @@ class AccessTest {
     }
 
     @Test
+    fun dashboardAndLaporanFollowTheirOwnMenus() {
+        val pengawas = accessOf(Permissions(fleetAllocation = "view", dashboard = "view", report = "view"))
+        assertTrue(pengawas.dashboard)
+        assertTrue(pengawas.reports)
+        val boardOnly = accessOf(Permissions(fleetAllocation = "view"))
+        assertFalse(boardOnly.dashboard)
+        assertFalse(boardOnly.reports)
+        /* An operator's screens are their own muster, whatever else the role holds. */
+        assertFalse(accessOf(Permissions(dashboard = "view", report = "view")).reports)
+    }
+
+    @Test
     fun aMenuNotHeldIsNotOffered() {
         val access = accessOf(Permissions(fleetAllocation = "view"))
         assertEquals(listOf(NavItem.HOME, NavItem.PAPAN, NavItem.PROFIL), access.nav)

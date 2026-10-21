@@ -1,6 +1,16 @@
 package id.universe.mobile.data
 
 import id.universe.mobile.api.models.GetV1Attendance200ResponseRowsInner
+import id.universe.mobile.api.models.GetV1Dashboard200Response
+import id.universe.mobile.api.models.GetV1Dashboard200ResponseAllocationInner
+import id.universe.mobile.api.models.GetV1Dashboard200ResponseAnalytics
+import id.universe.mobile.api.models.GetV1Dashboard200ResponseAnalyticsOperatorsInner
+import id.universe.mobile.api.models.GetV1Dashboard200ResponseAttendance
+import id.universe.mobile.api.models.GetV1Dashboard200ResponseFtw
+import id.universe.mobile.api.models.GetV1Dashboard200ResponseSimper
+import id.universe.mobile.api.models.GetV1Dashboard200ResponseUnits
+import id.universe.mobile.api.models.GetV1ReportsByKind200Response
+import id.universe.mobile.api.models.GetV1ReportsByKind200ResponseRowsInner
 import id.universe.mobile.api.models.GetV1EmployeesByNik200Response
 import id.universe.mobile.api.models.GetV1FitToWork200ResponseRowsInner
 import id.universe.mobile.api.models.GetV1FleetAllocationActualByDateByShiftCandidatesByUnitId200ResponseInner
@@ -63,3 +73,15 @@ typealias MusterRuns = GetV1TimelineRuns200Response
 typealias MusterShift = GetV1TimelineRuns200ResponseRunningShift
 typealias MusterStage = GetV1TimelineRuns200ResponseStagesInner
 typealias MusterLastRun = GetV1TimelineRuns200ResponseStagesInnerLastRun
+
+/* Dashboard and Laporan (stage 3, S7). */
+typealias Dashboard = GetV1Dashboard200Response
+typealias DashboardAttendance = GetV1Dashboard200ResponseAttendance
+typealias DashboardFtw = GetV1Dashboard200ResponseFtw
+typealias DashboardUnits = GetV1Dashboard200ResponseUnits
+typealias DashboardAllocation = GetV1Dashboard200ResponseAllocationInner
+typealias DashboardAnalytics = GetV1Dashboard200ResponseAnalytics
+typealias DashboardOperators = GetV1Dashboard200ResponseAnalyticsOperatorsInner
+typealias DashboardSimper = GetV1Dashboard200ResponseSimper
+typealias Report = GetV1ReportsByKind200Response
+typealias ReportRow = GetV1ReportsByKind200ResponseRowsInner
