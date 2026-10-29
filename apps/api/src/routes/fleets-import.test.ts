@@ -685,14 +685,24 @@ describe("an inactive unit is refused", () => {
       busTypeId,
       unitRefs
     );
-    await whileInactive([twin.id], async () => {
-      const preview = await validate([
-        [digger1.code, miningName, null, null],
-        [hauler1.code, miningName, digger1.code, busUnit.code],
-      ]);
-      expect(preview.errorCount).toBe(0);
-      expect(preview.rows[0]!.transports).toEqual([busUnit.code]);
-    });
+    try {
+      await whileInactive([twin.id], async () => {
+        const preview = await validate([
+          [digger1.code, miningName, null, null],
+          [hauler1.code, miningName, digger1.code, busUnit.code],
+        ]);
+        expect(preview.errorCount).toBe(0);
+        expect(preview.rows[0]!.transports).toEqual([busUnit.code]);
+      });
+    } finally {
+      /* Retired for good. `whileInactive` switches it back on, and two active
+         units on one key leave the import to pick whichever Postgres returns
+         first, which put this twin on every later test's bus. */
+      await db
+        .update(schema.units)
+        .set({ active: false })
+        .where(eq(schema.units.id, twin.id));
+    }
   });
 
   test("a file naming an inactive unit commits nothing", async () => {
