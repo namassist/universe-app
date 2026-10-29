@@ -700,6 +700,11 @@ export const id = {
   faSameShift: "shift sama dengan pasangan unit ini",
   faFilterEligible: "Layak",
   faEligibleN: "operator layak untuk unit ini",
+  faDlgShift:
+    "Shift {shift} · {date}. Layak hanya menampilkan operator yang ber-roster di shift ini.",
+  faDlgNoShift:
+    "Timeline belum bisa menentukan shift berjalan, jadi roster tidak menyaring daftar Layak.",
+  faFtwBelum: "BELUM",
   faComplement: "Melengkapi pasangan",
   faMoreOps: "operator lagi. Persempit pencarian",
   faNoMatch: "Tidak ada operator yang cocok dengan filter/pencarian.",

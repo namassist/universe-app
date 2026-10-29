@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, UserPlus } from "lucide-react";
 
+import type { RosterCode, ShiftKind } from "@universe/contracts";
+
 import { api, errorMessage } from "@/lib/api";
 import { fmt, shiftKindLabel, useI18n } from "@/lib/i18n";
 import {
@@ -42,6 +44,8 @@ import { Segmented, SegmentedButton } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 
+import { FTW_CAT_BADGE, ftwCatOf } from "../fit-to-work-shared";
+import { inDialogView, simperBadges, type DialogView } from "./alloc-dialog";
 import { CheckFilter } from "./check-filter";
 import { CrewTable, RosterBadge } from "./crew-table";
 import {
@@ -131,52 +135,70 @@ const inSelectedFleet = (
  * are two codes and six — while the tail runs to twenty-three, and one card
  * carrying twenty-three badges is several times the height of the cards beside
  * it. The full list is on the card's tooltip, and the filter above is the way
- * to ask about a code that is not shown.
+ * to ask about a code that is not shown. The PLAN operator dialog caps a row's
+ * codes at the same count, for the same reason.
  */
 const SPARE_SKILL_BADGES = 6;
 
 type Filter = "all" | "unalloc" | "alloc" | "vacant" | "clash" | "issue";
 type Kind = "bd" | "none" | "warn" | "dt" | "ok";
 
-/** A dialog row — the static candidate shape plus the pair-shift flag the
- * server adds in plan mode. */
+/** A dialog row — the static candidate shape plus what the server adds in
+ * plan mode: the pair-shift flag, the reasons, and the shift-now readings. */
 type DialogRow = Candidate & {
   standby?: boolean;
   sameShift?: boolean;
   deptOk?: boolean;
   skillOk?: boolean;
   expired?: boolean;
+  /** Every SIMPER code held. Plan mode only. */
+  simperCodes?: string[];
+  /** The roster code on the shift's date. Plan mode only. */
+  rosterCode?: RosterCode | null;
+  /** Rostered to the shift running now. Plan mode only. */
+  onShift?: boolean;
+  /** The FTW category on the shift's date; null is BELUM. Plan mode only. */
+  ftwCategory?: string | null;
 };
+
+/** The shift the PLAN dialog is staffing; null when the timeline cannot say. */
+type DialogShift = { date: string; shift: ShiftKind } | null;
 
 /* ---------- Dialog alokasi operator ---------- */
 function AllocDialog({
   unit,
   mode,
   rows: allRows,
+  shift,
   onClose,
   onAssign,
 }: {
   unit: BoardUnit | null;
   mode: "plan" | "actual";
   rows: DialogRow[];
+  shift: DialogShift;
   onClose: () => void;
   onAssign: (nik: string, name: string) => void;
 }) {
   const { t } = useI18n();
   const [sel, setSel] = React.useState<DialogRow | null>(null);
   const [q, setQ] = React.useState("");
-  const [view, setView] = React.useState<"eligible" | "all">("eligible");
+  const [view, setView] = React.useState<DialogView>("eligible");
 
+  // Only PLAN knows the shift; ACTUAL's rows filter on eligibility as before.
+  const shiftKnown = mode === "plan" && shift !== null;
   const needle = q.trim().toLowerCase();
   const rows = allRows.filter((c) => {
-    if (view === "eligible" && !c.eligible) return false;
+    if (!inDialogView(c, view, shiftKnown)) return false;
     if (!needle) return true;
     return (
       c.name.toLowerCase().includes(needle) ||
       c.nik.toLowerCase().includes(needle)
     );
   });
-  const eligibleN = allRows.filter((c) => c.eligible).length;
+  const eligibleN = allRows.filter((c) =>
+    inDialogView(c, "eligible", shiftKnown)
+  ).length;
 
   return (
     <Dialog
@@ -193,6 +215,16 @@ function AllocDialog({
       </DialogTitle>
       <DialogBody>
         {t.faDlgB} <b>{eligibleN}</b> {t.faEligibleN}.
+        {mode === "plan" ? (
+          <span className="mt-1 block text-xs text-(--text-tertiary)">
+            {shift
+              ? fmt(t.faDlgShift, {
+                  shift: shiftKindLabel(t, shift.shift),
+                  date: shift.date,
+                })
+              : t.faDlgNoShift}
+          </span>
+        ) : null}
       </DialogBody>
       <div className="mt-4 flex items-center gap-2">
         <SearchInput
@@ -222,15 +254,31 @@ function AllocDialog({
       <div className="mt-3 flex max-h-[46vh] min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
         {rows.map((c) => {
           const blocked = !c.eligible;
-          let sub = c.simperJenis ? `SIMPER ${c.simperJenis}` : t.faKompNone;
-          if (c.busyAt) sub += ` · ${t.faBusy} (${c.busyAt})`;
-          if (c.here) sub += ` · ${t.faBusyHere}`;
-          if (c.sameShift) sub += ` · ${t.faSameShift}`;
+          /* PLAN names the codes themselves as badges (owner, 2026-10-29);
+             ACTUAL's static rows still carry only the permit type. */
+          const notes: string[] =
+            mode === "plan"
+              ? []
+              : [c.simperJenis ? `SIMPER ${c.simperJenis}` : t.faKompNone];
+          if (c.busyAt) notes.push(`${t.faBusy} (${c.busyAt})`);
+          if (c.here) notes.push(t.faBusyHere);
+          if (c.sameShift) notes.push(t.faSameShift);
           // The explicit mismatches, so "disabled" always says why.
-          if (c.deptOk === false) sub += ` · ${t.faDeptMismatch}`;
-          if (c.skillOk === false) sub += ` · ${t.faSkillMismatch}`;
-          if (c.expired) sub += ` · ${t.faSimperExpired}`;
+          if (c.deptOk === false) notes.push(t.faDeptMismatch);
+          if (c.skillOk === false) notes.push(t.faSkillMismatch);
+          if (c.expired) notes.push(t.faSimperExpired);
+          const sub = notes.join(" · ");
           const ftw = mode === "actual" && c.ftw ? ftwBadge[c.ftw] : null;
+          const codes =
+            mode === "plan"
+              ? simperBadges(
+                  c.simperCodes ?? [],
+                  unit?.simperCode,
+                  SPARE_SKILL_BADGES
+                )
+              : null;
+          const ftwCat =
+            mode === "plan" ? ftwCatOf(c.ftwCategory ?? null) : null;
           return (
             <div
               key={c.nik}
@@ -258,7 +306,43 @@ function AllocDialog({
                     {c.nik}
                   </span>
                 </b>
-                <span className="text-xs text-(--text-tertiary)">{sub}</span>
+                {codes ? (
+                  <div
+                    className="mt-1 flex flex-wrap gap-1"
+                    title={(c.simperCodes ?? []).join(", ") || undefined}
+                  >
+                    {codes.shown.length ? (
+                      codes.shown.map((code) => (
+                        <Badge
+                          key={code.name}
+                          variant={code.match ? "info" : "neutral"}
+                          className="px-2 py-px text-[11px]"
+                        >
+                          {code.name}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs text-(--text-tertiary)">
+                        {t.faKompNone}
+                      </span>
+                    )}
+                    {codes.more ? (
+                      <Badge
+                        variant="neutral"
+                        className="px-2 py-px text-[11px]"
+                        title={(c.simperCodes ?? []).join(", ")}
+                        aria-label={(c.simperCodes ?? []).join(", ")}
+                      >
+                        +{codes.more}
+                      </Badge>
+                    ) : null}
+                  </div>
+                ) : null}
+                {sub ? (
+                  <span className="mt-0.5 block text-xs text-(--text-tertiary)">
+                    {sub}
+                  </span>
+                ) : null}
               </div>
               {c.departmentName ? (
                 <Badge variant="accent" title={c.departmentName}>
@@ -279,6 +363,15 @@ function AllocDialog({
                 <Badge variant={ftw.variant} dot>
                   {t[ftw.labelKey]}
                 </Badge>
+              ) : null}
+              {ftwCat ? (
+                // Held together and never shrunk: the name column gives way.
+                <div className="flex flex-none items-center gap-1.5">
+                  <RosterBadge t={t} code={c.rosterCode} />
+                  <Badge variant={FTW_CAT_BADGE[ftwCat]} dot>
+                    {c.ftwCategory ?? t.faFtwBelum}
+                  </Badge>
+                </div>
               ) : null}
             </div>
           );
@@ -501,7 +594,7 @@ export function AllocBoard({
   });
   const dialogRows: DialogRow[] = React.useMemo(() => {
     if (mode !== "plan") return CANDIDATES;
-    return (candidatesQ.data ?? []).map((c) => ({
+    return (candidatesQ.data?.candidates ?? []).map((c) => ({
       nik: c.nik,
       name: c.name,
       ...(c.simperTypeName ? { simperJenis: c.simperTypeName } : {}),
@@ -519,6 +612,10 @@ export function AllocBoard({
       deptOk: c.deptOk,
       skillOk: c.skillOk,
       expired: c.expired,
+      simperCodes: c.simperCodes,
+      rosterCode: c.rosterCode as RosterCode | null,
+      onShift: c.onShift,
+      ftwCategory: c.ftwCategory,
     }));
   }, [mode, candidatesQ.data]);
 
@@ -1303,6 +1400,7 @@ export function AllocBoard({
           unit={allocFor}
           mode={mode}
           rows={dialogRows}
+          shift={mode === "plan" ? (candidatesQ.data?.shift ?? null) : null}
           onClose={() => setAllocFor(null)}
           onAssign={(nik, name) => {
             if (allocFor) assign(allocFor, nik, name);

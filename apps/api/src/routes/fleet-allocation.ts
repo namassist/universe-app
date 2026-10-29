@@ -26,18 +26,21 @@ import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
   rosterCodeKind,
+  rosterShift,
   type PlanHistoryAction,
   type PlanHistorySource,
   type PlanImportPreview,
   type RosterCode,
-  type RosterCodeKind,
   type UnitStatus,
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
+import { currentShift } from "../current-shift";
 import { db, isUniqueViolation, schema, type Transaction } from "../db";
 import { rosterDayInForce } from "../roster-in-force";
 import { localDate } from "../scheduler";
+import { normalizeNik } from "../sources/nik";
+import { shiftGates } from "../stage-time";
 import {
   buildPlanTemplate,
   pairingConflicts,
@@ -182,6 +185,27 @@ const CandidateSchema = t.Object({
    * by the engine, so the dialog says so beside the name.
    */
   standby: t.Boolean(),
+  /** Every SIMPER code the operator holds, by name. */
+  simperCodes: t.Array(t.String()),
+  /** The roster code on the shift's date; null when the sheet has no cell. */
+  rosterCode: t.Nullable(t.String()),
+  /** Rostered to the shift running now. False when the timeline cannot say. */
+  onShift: t.Boolean(),
+  /** The FTW category on the shift's date, as the FTW menu shows it; null
+   *  when nothing was uploaded. */
+  ftwCategory: t.Nullable(t.String()),
+});
+
+const CandidateListSchema = t.Object({
+  /** The shift the dialog is about, from the timeline's `shift-start`; null
+   *  when the timeline cannot decide. */
+  shift: t.Nullable(
+    t.Object({
+      date: t.String(),
+      shift: t.Union([t.Literal("day"), t.Literal("night")]),
+    })
+  ),
+  candidates: t.Array(CandidateSchema),
 });
 
 /* ------------------------------------------------------------------ lookups */
@@ -190,9 +214,9 @@ const CandidateSchema = t.Object({
  * The roster code each of these employees carries on one date.
  *
  * The code itself, not what it means: a screen listing today's crew states
- * `CR` or `STB` as the roster states it, and `shiftKinds` below reduces the
- * same rows to the day/night the pairing rules ask about. One query serves
- * both, so the two can never disagree about what the roster says.
+ * `CR` or `STB` as the roster states it, and `rosterShift` reduces the same
+ * rows to the day/night the pairing rules ask about. One query serves both, so
+ * the two can never disagree about what the roster says.
  */
 export async function rosterCodesOf(
   employeeIds: string[],
@@ -214,19 +238,6 @@ export async function rosterCodesOf(
       )
     );
   for (const row of rows) map.set(row.employeeId, row.code);
-  return map;
-}
-
-/** day/night for a set of employees on one date — other kinds read as null. */
-export async function shiftKinds(
-  employeeIds: string[],
-  date: string
-): Promise<Map<string, "day" | "night">> {
-  const map = new Map<string, "day" | "night">();
-  for (const [employeeId, code] of await rosterCodesOf(employeeIds, date)) {
-    const kind: RosterCodeKind = rosterCodeKind(code);
-    if (kind === "day" || kind === "night") map.set(employeeId, kind);
-  }
   return map;
 }
 
@@ -875,13 +886,20 @@ export const fleetAllocationRoutes = new Elysia({
     async ({ query, status }) => {
       const unit = await unitByCode(query.unit, true);
       if (!unit) return status(404, unitNotFound);
-      const today = localDate(new Date());
+      /* The shift the admin is staffing, on the boundary the walls turn over
+         on (owner, 2026-10-29): `shift-start`, not noon. Before the day gate
+         that is yesterday's night, so the roster and the FTW are read for the
+         shift's date rather than the calendar's. */
+      const now = new Date();
+      const today = localDate(now);
+      const shift = currentShift(now, await shiftGates());
+      const date = shift?.date ?? today;
 
       const people = await allocatablePeople(true);
 
       // What blocks or clears each candidate, resolved in bulk: the unit the
-      // plan already gave them, the skill the unit requires, and today's
-      // shift beside the current partner's.
+      // plan already gave them, the skill the unit requires, and their shift
+      // on the shift's date beside the current partner's.
       const busyRows = await db
         .select({
           employeeId: schema.fleetPlanSlots.employeeId,
@@ -908,16 +926,40 @@ export const fleetAllocationRoutes = new Elysia({
           )
         : null;
 
-      const kinds = await shiftKinds(
-        people.map((p) => p.id),
-        today
-      );
+      const ids = people.map((p) => p.id);
+      const [codes, skills, ftwRows] = await Promise.all([
+        rosterCodesOf(ids, date),
+        skillNamesByEmployee(ids),
+        people.length
+          ? db
+              .select({
+                nik: schema.ftwReadings.nik,
+                category: schema.ftwReadings.sleepCategory,
+              })
+              .from(schema.ftwReadings)
+              .where(
+                and(
+                  eq(schema.ftwReadings.date, date),
+                  inArray(
+                    schema.ftwReadings.nik,
+                    people.map((p) => normalizeNik(p.nik))
+                  )
+                )
+              )
+          : [],
+      ]);
+      const ftwByNik = new Map(ftwRows.map((r) => [r.nik, r.category]));
+      const kinds = new Map<string, "day" | "night">();
+      for (const [id, code] of codes) {
+        const kind = rosterShift(code);
+        if (kind) kinds.set(id, kind);
+      }
       const partnerKinds = busyRows
         .filter((r) => r.unitId === unit.id)
         .map((r) => kinds.get(r.employeeId))
         .filter((k): k is "day" | "night" => k !== undefined);
 
-      return people.map((p) => {
+      const candidates = people.map((p) => {
         const busy = busyAt.get(p.id) ?? null;
         const kind = kinds.get(p.id) ?? null;
         const sameShift = kind !== null && partnerKinds.includes(kind);
@@ -945,14 +987,19 @@ export const fleetAllocationRoutes = new Elysia({
           skillOk,
           expired,
           standby: p.statusValue === "standby",
+          simperCodes: skills.get(p.id) ?? [],
+          rosterCode: codes.get(p.id) ?? null,
+          onShift: shift !== null && kind === shift.shift,
+          ftwCategory: ftwByNik.get(normalizeNik(p.nik)) ?? null,
         };
       });
+      return { shift, candidates };
     },
     {
       auth: { menu: "fleet-allocation", mode: "view" },
       query: t.Object({ unit: t.String({ minLength: 1 }) }),
       response: {
-        200: t.Array(CandidateSchema),
+        200: CandidateListSchema,
         401: ErrorSchema,
         403: ErrorSchema,
         404: ErrorSchema,

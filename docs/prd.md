@@ -314,6 +314,30 @@ fill the gap from the spare pool.
   shifts, either shift counts). The card itself carries no extra label (owner,
   2026-10-11, after a first version with a warning badge). Read from today's roster on the board's payload
   (`shiftClash` in `fleet-allocation/data.ts`); no other date is checked.
+- **The operator dialog staffs the shift running now** (owner, 2026-10-29).
+  "Tambah operator" / "Alokasikan" on a PLAN card opens a dialog whose
+  candidates come from `GET /v1/fleet-allocation/plan/candidates`, which now
+  answers `{ shift, candidates }`. The shift is the timeline's — the
+  `shift-start` stages (04:00 / 16:00 seeded), the boundary the walls turn
+  over on (`currentShift`), not noon — and before the day gate it is the
+  previous date's night. Each row states, for that shift's date:
+  - **SIMPER codes**, every one the operator holds, replacing the permit type.
+    The unit's own code leads and is highlighted; six are shown and the rest
+    counted, the full list on the tooltip.
+  - **The roster code**, as the crew table shows it.
+  - **The FTW category** as the FTW menu shows it (`Dapat Bekerja`,
+    `Istirahat Minimal 1/2 Jam`, `Tidak Boleh Bekerja`), toned the same way,
+    and **BELUM** when nothing was uploaded.
+
+  **Layak** lists only operators who are eligible _and_ rostered to that
+  shift: opened at 16:00 on a unit whose two holders both work days, it lists
+  who can cover the night. **Semua** still lists everybody, and an off-shift
+  operator stays selectable there — a standing pairing is not about one day,
+  so the roster is a view in the dialog, not a refusal in `pairingRefusal`.
+  Where the timeline cannot name the shift, the dialog says so and filters on
+  eligibility alone rather than guessing. The ACTUAL tab's dialog is
+  unchanged.
+
 - **A search on the board spans every fleet** (owner, 2026-09-22). With text
   in the search box the formation filter is set aside: "DT4014" is a question
   about one machine, and answering "nowhere" because it sits in a formation

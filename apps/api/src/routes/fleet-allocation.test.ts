@@ -13,9 +13,12 @@ import { Elysia } from "elysia";
 import { eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
+import { currentShift } from "../current-shift";
 import { db, schema } from "../db";
 import { localDate } from "../scheduler";
+import { normalizeNik } from "../sources/nik";
 import { redis } from "../redis";
+import { shiftGates } from "../stage-time";
 import { fleetAllocationRoutes } from "./fleet-allocation";
 
 const app = new Elysia().use(fleetAllocationRoutes);
@@ -34,6 +37,7 @@ const made = {
   companies: [] as string[],
   simperCodes: [] as string[],
   catalogues: [] as string[],
+  ftwReadings: [] as string[],
 };
 
 let admin: { id: string; cookie: string };
@@ -42,6 +46,12 @@ let viewer: { cookie: string };
 let deptA = "";
 let deptB = "";
 let skillCode = { id: "", name: "" };
+/** A second code opFit holds, which the unit does not ask for. */
+let otherCode = { id: "", name: "" };
+/** The shift the dialog is about, read the way the route reads it. */
+let shiftNow: { date: string; shift: "day" | "night" } | null = null;
+/** The date the dialog reads the roster and FTW for. */
+let shiftDate = "";
 
 type Person = { id: string; nik: string; name: string };
 let opFit: Person; //     dept A, skilled, valid SIMPER
@@ -120,17 +130,29 @@ type Candidate = {
   skillOk: boolean;
   expired: boolean;
   standby: boolean;
+  simperCodes: string[];
+  rosterCode: string | null;
+  onShift: boolean;
+  ftwCategory: string | null;
 };
 
-async function candidatesFor(unitCode: string): Promise<Candidate[]> {
+type CandidateList = {
+  shift: { date: string; shift: "day" | "night" } | null;
+  candidates: Candidate[];
+};
+
+async function candidateListFor(unitCode: string): Promise<CandidateList> {
   const response = await send(
     "GET",
     `/fleet-allocation/plan/candidates?unit=${unitCode}`,
     admin.cookie
   );
   expect(response.status).toBe(200);
-  return (await response.json()) as Candidate[];
+  return (await response.json()) as CandidateList;
 }
+
+const candidatesFor = async (unitCode: string) =>
+  (await candidateListFor(unitCode)).candidates;
 
 const candidateOf = (rows: Candidate[], person: Person) =>
   rows.find((c) => c.nik === person.nik);
@@ -177,7 +199,12 @@ beforeAll(async () => {
     .values({ name: `${tag} CODE` })
     .returning({ id: schema.simperCodes.id, name: schema.simperCodes.name });
   skillCode = sc!;
-  made.simperCodes.push(sc!.id);
+  const [oc] = await db
+    .insert(schema.simperCodes)
+    .values({ name: `${tag} AAA OTHER` })
+    .returning({ id: schema.simperCodes.id, name: schema.simperCodes.name });
+  otherCode = oc!;
+  made.simperCodes.push(sc!.id, oc!.id);
 
   const employee = async (input: {
     label: string;
@@ -215,6 +242,9 @@ beforeAll(async () => {
     skilled: true,
     simperExp: "2099-01-01",
   });
+  await db
+    .insert(schema.employeeSkills)
+    .values({ employeeId: opFit.id, simperCodeId: otherCode.id });
   opNoSkill = await employee({
     label: "NoSkill",
     departmentId: deptA,
@@ -353,8 +383,12 @@ beforeAll(async () => {
   unitOff = await unit({ active: false });
 
   // Today's roster for the pair rule: two on Day, one on Night, one absent
-  // from the sheet entirely.
+  // from the sheet entirely. The dialog reads the date of the shift running
+  // now, which is yesterday before the day gate, so that date gets the same
+  // rows when it differs.
   const today = localDate(new Date());
+  shiftNow = currentShift(new Date(), await shiftGates());
+  shiftDate = shiftNow?.date ?? today;
   const month = `${today.slice(0, 7)}-01`;
   const [doc] = await db
     .insert(schema.rosterDocuments)
@@ -366,14 +400,39 @@ beforeAll(async () => {
     })
     .returning({ id: schema.rosterDocuments.id });
   made.rosterDocuments.push(doc!.id);
-  await db.insert(schema.rosterDays).values([
-    { documentId: doc!.id, employeeId: opDay.id, date: today, code: "D" },
-    { documentId: doc!.id, employeeId: opDay2.id, date: today, code: "D" },
-    { documentId: doc!.id, employeeId: opNight.id, date: today, code: "N" },
-  ]);
+  const dates = [...new Set([today, shiftDate])];
+  await db.insert(schema.rosterDays).values(
+    dates.flatMap((date) => [
+      { documentId: doc!.id, employeeId: opDay.id, date, code: "D" as const },
+      { documentId: doc!.id, employeeId: opDay2.id, date, code: "D" as const },
+      { documentId: doc!.id, employeeId: opNight.id, date, code: "N" as const },
+    ])
+  );
+
+  // One FTW verdict on the dialog's date; everybody else has none.
+  const [ftw] = await db
+    .insert(schema.ftwReadings)
+    .values({
+      nik: normalizeNik(opDay.nik),
+      date: shiftDate,
+      name: tag,
+      sleepMinutes: 300,
+      sleepCategory: "Istirahat Minimal 2 Jam",
+      ftwDecision: "FTW aman",
+    })
+    .onConflictDoUpdate({
+      target: [schema.ftwReadings.nik, schema.ftwReadings.date],
+      set: { sleepCategory: "Istirahat Minimal 2 Jam" },
+    })
+    .returning({ id: schema.ftwReadings.id });
+  made.ftwReadings.push(ftw!.id);
 });
 
 afterAll(async () => {
+  if (made.ftwReadings.length)
+    await db
+      .delete(schema.ftwReadings)
+      .where(inArray(schema.ftwReadings.id, made.ftwReadings));
   // Before the units: `fleet_plan_history.unit_id` is `restrict`.
   if (made.units.length)
     await db
@@ -466,6 +525,35 @@ describe("who a unit may be paired with, and why not", () => {
     });
     // A position outside fleet allocation is not a candidate at all.
     expect(candidateOf(rows, clerk)).toBeUndefined();
+  });
+
+  test("each row states its codes, its roster and its FTW for the shift now", async () => {
+    const list = await candidateListFor(unitReq.code);
+    // The shift is the timeline's, the same boundary the walls turn over on.
+    expect(list.shift).toEqual(shiftNow);
+
+    // Every code held, not the permit type; ordering is the screen's job.
+    expect(
+      [...(candidateOf(list.candidates, opFit)?.simperCodes ?? [])].sort()
+    ).toEqual([otherCode.name, skillCode.name].sort());
+    expect(candidateOf(list.candidates, opNoSkill)?.simperCodes).toEqual([]);
+
+    const day = candidateOf(list.candidates, opDay);
+    const night = candidateOf(list.candidates, opNight);
+    const free = candidateOf(list.candidates, opFree);
+    expect(day).toMatchObject({
+      rosterCode: "D",
+      onShift: shiftNow?.shift === "day",
+      ftwCategory: "Istirahat Minimal 2 Jam",
+    });
+    expect(night).toMatchObject({
+      rosterCode: "N",
+      onShift: shiftNow?.shift === "night",
+      // No reading is BELUM on the screen, never a guess.
+      ftwCategory: null,
+    });
+    // Off the sheet is never on shift.
+    expect(free).toMatchObject({ rosterCode: null, onShift: false });
   });
 
   test("a department-owned unit takes only its own people", async () => {

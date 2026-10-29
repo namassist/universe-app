@@ -55,4 +55,4 @@ export type PlanCandidate = Awaited<
   ReturnType<
     NonNullable<ReturnType<typeof planCandidatesQueryOptions>["queryFn"]>
   >
->[number];
+>["candidates"][number];

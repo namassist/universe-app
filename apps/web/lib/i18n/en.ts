@@ -703,6 +703,11 @@ export const en: Dict = {
   faSameShift: "same shift as the unit's current partner",
   faFilterEligible: "Eligible",
   faEligibleN: "operators eligible for this unit",
+  faDlgShift:
+    "{shift} shift · {date}. Eligible lists only operators rostered to this shift.",
+  faDlgNoShift:
+    "The timeline cannot tell which shift is running, so the roster does not filter the Eligible list.",
+  faFtwBelum: "BELUM",
   faComplement: "Completes the pair",
   faMoreOps: "more operators. Narrow your search",
   faNoMatch: "No operators match the filter/search.",
