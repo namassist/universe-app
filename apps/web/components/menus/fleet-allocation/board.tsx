@@ -67,6 +67,12 @@ import {
 } from "./data";
 import { PlanDefaultBar } from "./plan-default-bar";
 import { PlanHistoryDrawer } from "./plan-history";
+import {
+  matchesStatus,
+  statusCounts,
+  type StatusFilter,
+  type UnitFacts,
+} from "./status-filter";
 
 const FA_PLAN_MAX_OPS = 2;
 
@@ -141,7 +147,7 @@ const inSelectedFleet = (
  */
 const SPARE_SKILL_BADGES = 6;
 
-type Filter = "all" | "unalloc" | "alloc" | "vacant" | "clash" | "issue";
+type Filter = StatusFilter;
 type Kind = "bd" | "none" | "warn" | "dt" | "ok";
 
 /** A dialog row — the static candidate shape plus what the server adds in
@@ -640,22 +646,50 @@ export function AllocBoard({
      a formation other than the one on screen sent them hunting through the
      fleet list one entry at a time. */
   const searching = needle.length > 0;
-  const allFiltered = units.filter((u) => {
-    if (!searching && !inSelectedFleet(u, activeFleet, noFleetOffered))
-      return false;
+  function factsOf(u: BoardUnit): UnitFacts {
     const kind = kindOf(u);
-    if (filter === "unalloc" && u.slots.length) return false;
-    if (filter === "alloc" && !u.slots.length) return false;
-    if (filter === "vacant" && !isVacant(u)) return false;
-    if (filter === "clash" && !shiftClash(u.slots, shiftF)) return false;
-    if (filter === "issue" && kind !== "bd" && kind !== "dt" && kind !== "warn")
-      return false;
-    if (!needle) return true;
-    return (
-      u.code.toLowerCase().includes(needle) ||
-      u.slots.some((s) => s.name.toLowerCase().includes(needle))
-    );
-  });
+    return {
+      allocated: u.slots.length > 0,
+      vacant: isVacant(u),
+      clash: shiftClash(u.slots, shiftF),
+      issue: kind === "bd" || kind === "dt" || kind === "warn",
+    };
+  }
+  /* Everything the formation and the search let through, before the status
+     filter: what the segments count over, so each segment's number is the
+     number of cards its click leaves on screen. */
+  const inView = units
+    .filter((u) => {
+      if (!searching && !inSelectedFleet(u, activeFleet, noFleetOffered))
+        return false;
+      if (!needle) return true;
+      return (
+        u.code.toLowerCase().includes(needle) ||
+        u.slots.some((s) => s.name.toLowerCase().includes(needle))
+      );
+    })
+    .map((u) => ({ unit: u, facts: factsOf(u) }));
+  const allFiltered = inView
+    .filter((v) => matchesStatus(filter, v.facts))
+    .map((v) => v.unit);
+  const statusFilters: [Filter, string][] = [
+    ["all", t.segAll],
+    ["unalloc", t.faFUnalloc],
+    ["alloc", t.faFAlloc],
+    ...(mode === "plan"
+      ? ([
+          ["vacant", t.faCrewVacant],
+          /* Two holders on one shift today: the second to tap becomes a
+             spare (owner, 2026-10-11). */
+          ["clash", t.faClash],
+        ] as [Filter, string][])
+      : []),
+    ["issue", t.faFIssue],
+  ];
+  const segmentCounts = statusCounts(
+    inView.map((v) => v.facts),
+    statusFilters.map(([f]) => f)
+  );
   const perN = Number(per);
   const filtered = allFiltered.length;
   const pageCount = Math.max(1, Math.ceil(filtered / perN));
@@ -858,22 +892,7 @@ export function AllocBoard({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-(--divider) pt-5">
         <div className="flex flex-wrap items-center gap-2">
           <Segmented role="group" aria-label={t.faFilterAria}>
-            {(
-              [
-                ["all", t.segAll],
-                ["unalloc", t.faFUnalloc],
-                ["alloc", t.faFAlloc],
-                ...(mode === "plan"
-                  ? ([
-                      ["vacant", t.faCrewVacant],
-                      /* Two holders on one shift today: the second to tap
-                         becomes a spare (owner, 2026-10-11). */
-                      ["clash", t.faClash],
-                    ] as [Filter, string][])
-                  : []),
-                ["issue", t.faFIssue],
-              ] as [Filter, string][]
-            ).map(([f, label]) => (
+            {statusFilters.map(([f, label]) => (
               <SegmentedButton
                 key={f}
                 active={filter === f}
@@ -883,6 +902,11 @@ export function AllocBoard({
                 }}
               >
                 {label}
+                {/* Lighter than the label, in its colour: the word says
+                    which list, the number says how long it is. */}
+                <span className="ml-1.5 font-normal tabular-nums">
+                  {segmentCounts[f]}
+                </span>
               </SegmentedButton>
             ))}
           </Segmented>
