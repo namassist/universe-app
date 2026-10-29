@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Upload } from "lucide-react";
 
 import { api, errorMessage } from "@/lib/api";
 import { fmt, useI18n } from "@/lib/i18n";
@@ -33,12 +34,15 @@ function dateOf(iso: string, lang: string) {
 }
 
 /**
- * The saved default's one-line description and, for whoever may manage the
- * plan, the Reset button. Reset never acts by itself: it opens
- * `ResetDialog`, which shows the diff and waits for a second, explicit click.
+ * The actions that change the plan itself, kept apart from the view filters:
+ * Import (which sets the saved default) and Reset (which brings the live PLAN
+ * back to it), with the default's one-line description beneath them. Reset
+ * never acts by itself: it opens `ResetDialog`, which shows the diff and
+ * waits for a second, explicit click.
  */
 export function PlanDefaultBar({ canManage }: { canManage: boolean }) {
   const { t, lang } = useI18n();
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const defaultQ = useQuery(planDefaultQueryOptions());
   const info = defaultQ.data ?? null;
@@ -55,28 +59,38 @@ export function PlanDefaultBar({ canManage }: { canManage: boolean }) {
         );
 
   return (
-    <>
+    <div className="flex max-w-full min-w-0 flex-col items-start gap-1.5 sm:items-end">
+      {canManage ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            className="h-10"
+            onClick={() => router.push("/fleet-allocation/import")}
+          >
+            <Upload />
+            {t.upImport}
+          </Button>
+          <Button
+            variant="secondary"
+            className="h-10"
+            disabled={!info}
+            onClick={() => setOpen(true)}
+          >
+            <RotateCcw />
+            {t.faResetBtn}
+          </Button>
+        </div>
+      ) : null}
       <span
-        className="max-w-[420px] min-w-0 truncate text-xs text-(--text-tertiary)"
+        className="max-w-[min(420px,100%)] min-w-0 truncate text-xs text-(--text-tertiary)"
         title={line}
       >
         {line}
       </span>
       {canManage ? (
-        <Button
-          variant="secondary"
-          className="h-10"
-          disabled={!info}
-          onClick={() => setOpen(true)}
-        >
-          <RotateCcw />
-          {t.faResetBtn}
-        </Button>
-      ) : null}
-      {canManage ? (
         <ResetDialog open={open} onClose={() => setOpen(false)} />
       ) : null}
-    </>
+    </div>
   );
 }
 

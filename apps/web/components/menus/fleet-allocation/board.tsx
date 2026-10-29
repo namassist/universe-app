@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Upload, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 
 import type { RosterCode, ShiftKind } from "@universe/contracts";
 
@@ -788,67 +788,74 @@ export function AllocBoard({
 
   return (
     <>
-      {/* The board's own reading, on its own line. It is a caption for what
-          follows rather than one more control, and putting it back in the
-          control row is what forced the controls into a single right-aligned
-          huddle in the first place. */}
-      <div ref={boardTopRef} className="scroll-mt-6">
-        <span className="text-sm text-(--text-secondary)">
-          <b className="font-semibold text-(--text-primary)">
-            {summary.allocated}
-          </b>{" "}
-          {t.faAllocOf}{" "}
-          <b className="font-semibold text-(--text-primary)">{summary.total}</b>{" "}
-          {t.faAllocUnits}
-          {/* Once a formation is chosen every card on screen shares its area,
-              so it is stated once, here, instead of on each of them. */}
-          {selectedArea ? (
-            <>
-              {" · "}
-              <b className="font-semibold text-(--text-primary)">
-                {selectedArea}
-              </b>
-            </>
-          ) : null}
-          {mode === "plan" ? (
-            <>
-              {" · "}
-              {t.faPlanHint}
-              {searching ? <> · {t.faSearchAllFleets}</> : null}
-            </>
-          ) : (
-            <>
-              {" · "}
-              {t.faCreatedAt}{" "}
-              <b className="font-mono font-semibold text-(--text-primary)">
-                {createdAt ?? "—"}
-              </b>
-              {generatedAt ? (
-                <>
-                  {" · "}
-                  <b className="font-semibold text-(--color-danger-text)">
-                    {summary.downtime}
-                  </b>{" "}
-                  {t.faDowntime.toLowerCase()} · {t.faGenAt}{" "}
-                  <b className="font-mono font-semibold text-(--text-primary)">
-                    {generatedAt}
-                  </b>
-                </>
-              ) : (
-                <> · {t.faNotGenYet}</>
-              )}
-            </>
-          )}
-        </span>
+      {/* The board's reading first, as a figure rather than a sentence: how
+          many of the formation's units are covered is the number someone
+          opens this page for, so it gets the size and the left edge. What
+          changes the plan itself (import, the saved default, Reset) sits on
+          the right of the same band, away from the controls that only change
+          the view. */}
+      <div
+        ref={boardTopRef}
+        className="flex scroll-mt-6 flex-wrap items-end justify-between gap-x-6 gap-y-3"
+      >
+        <div className="min-w-0">
+          <p className="text-sm text-(--text-secondary)">
+            <b className="text-[32px] leading-none font-bold text-(--text-primary) tabular-nums">
+              {summary.allocated}
+            </b>{" "}
+            {t.faAllocOf}{" "}
+            <b className="text-xl leading-none font-semibold text-(--text-primary) tabular-nums">
+              {summary.total}
+            </b>{" "}
+            {t.faAllocUnits}
+            {/* Once a formation is chosen every card on screen shares its
+                area, so it is stated once, here, instead of on each of them. */}
+            {selectedArea ? (
+              <>
+                {" · "}
+                <b className="font-semibold text-(--text-primary)">
+                  {selectedArea}
+                </b>
+              </>
+            ) : null}
+          </p>
+          <p className="mt-2 text-xs text-(--text-tertiary)">
+            {mode === "plan" ? (
+              <>
+                {t.faPlanHint}
+                {searching ? <> · {t.faSearchAllFleets}</> : null}
+              </>
+            ) : (
+              <>
+                {t.faCreatedAt}{" "}
+                <b className="font-mono font-semibold text-(--text-primary)">
+                  {createdAt ?? "—"}
+                </b>
+                {generatedAt ? (
+                  <>
+                    {" · "}
+                    <b className="font-semibold text-(--color-danger-text)">
+                      {summary.downtime}
+                    </b>{" "}
+                    {t.faDowntime.toLowerCase()} · {t.faGenAt}{" "}
+                    <b className="font-mono font-semibold text-(--text-primary)">
+                      {generatedAt}
+                    </b>
+                  </>
+                ) : (
+                  <> · {t.faNotGenYet}</>
+                )}
+              </>
+            )}
+          </p>
+        </div>
+        {mode === "plan" ? <PlanDefaultBar canManage={canEdit} /> : null}
       </div>
 
-      {/* Two groups, pushed apart. On the left the controls that decide *which*
-          units the board is about — the allocation tabs, the formation, and the
-          import that changes the set itself. On the right the search, which
-          narrows whatever those three settled on. Grouping them by what they do
-          is what makes the split readable; a single right-aligned row of four
-          unrelated controls was not. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* The view controls, together: which units (status, formation, shift)
+          on the left, the search that narrows them on the right. None of them
+          changes the plan, so none of them sits beside the buttons that do. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-(--divider) pt-5">
         <div className="flex flex-wrap items-center gap-2">
           <Segmented role="group" aria-label={t.faFilterAria}>
             {(
@@ -930,19 +937,6 @@ export function AllocBoard({
               <option value="night">{shiftKindLabel(t, "night")}</option>
             </Select>
           ) : null}
-          {canEdit ? (
-            <Button
-              variant="secondary"
-              className="h-10"
-              onClick={() => router.push("/fleet-allocation/import")}
-            >
-              <Upload />
-              {t.upImport}
-            </Button>
-          ) : null}
-          {/* The saved default, and the Reset that brings the live PLAN back
-              to it (behind a confirmation dialog). */}
-          {mode === "plan" ? <PlanDefaultBar canManage={canEdit} /> : null}
         </div>
         <SearchInput
           className="w-55"
