@@ -97,6 +97,37 @@ Consequences, all deliberate:
 - Administrators are still made by hand. Raising a role is the only account
   work left in the Users screen.
 
+## D11 — The PLAN import saves a default; Reset applies it
+
+The PLAN spreadsheet used to write `fleet_plan_slots` directly, adding and
+moving pairings. The owner (2026-10-29) separated the two acts: the file is the
+**whole default plan**, committing it replaces `fleet_plan_defaults` (plus one
+`fleet_plan_default_imports` audit row) and never touches the live plan, and
+`POST /plan/reset` is the only door from the default to the live plan.
+
+Consequences, all deliberate:
+
+- **The engine, the walls and the slips keep reading `fleet_plan_slots`
+  alone.** A bad file cannot reach a running shift; a Reset can, so it goes
+  through a confirmation dialog backed by `GET /plan/reset/preview`.
+- **Capacity is judged within the file.** Neither the live plan nor the old
+  default counts; every accepted row does, unchanged ones included.
+- **Reset skips and lists, it does not force.** Default pairings that fail
+  `pairingRefusal` (planning flag on) today are returned as `skipped` with the
+  refusal text. A live pairing already identical to the default stands even if
+  it would be refused now: Reset restores, it does not audit.
+- **Serialisation.** Import and Reset take the same transaction-scoped advisory
+  lock (a row lock cannot protect a table whose rows are all replaced); Reset
+  additionally locks every unit either plan names, sorted, before recomputing
+  the diff, like the dialog. Max 2 per unit holds because the default is
+  validated to at most two per unit and every non-default live pairing is
+  released.
+- **No default is a state, not an error for reads.** `GET /plan/default` answers
+  JSON `null`; the reset routes answer 409 `no_default`.
+- `fleet_plan_defaults.employee_id` is `set null` (the kept `nik`/`name` still
+  identify the pairing, and Reset lists it as skipped), `unit_id` is `restrict`,
+  `import_id` cascades because a commit always replaces every row.
+
 ## Known debt
 
 - `users` links to employees by NIK string; renaming a NIK orphans the

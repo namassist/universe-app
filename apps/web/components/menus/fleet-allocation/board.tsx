@@ -65,6 +65,7 @@ import {
   type Slot,
   type SpareRow,
 } from "./data";
+import { PlanDefaultBar } from "./plan-default-bar";
 import { PlanHistoryDrawer } from "./plan-history";
 
 const FA_PLAN_MAX_OPS = 2;
@@ -939,6 +940,9 @@ export function AllocBoard({
               {t.upImport}
             </Button>
           ) : null}
+          {/* The saved default, and the Reset that brings the live PLAN back
+              to it (behind a confirmation dialog). */}
+          {mode === "plan" ? <PlanDefaultBar canManage={canEdit} /> : null}
         </div>
         <SearchInput
           className="w-55"

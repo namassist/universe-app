@@ -1,7 +1,10 @@
 /**
  * The PLAN spreadsheet import: every pairing rule the single-slot route
  * enforces, applied to a whole file — including rows that only a file can
- * produce, like an operator moved between units by re-upload.
+ * produce, like an operator moved between units by re-upload. The import saves
+ * the default plan and never writes the live one; the default is one global
+ * thing, so this file puts back whatever stood before it ran. Reset is covered
+ * in fleet-allocation-default.test.ts.
  *
  * Needs the dev Postgres and Redis:
  *   bun --env-file=.env test src/routes/fleet-allocation-import.test.ts
@@ -18,6 +21,7 @@ import { db, schema } from "../db";
 import { localDate } from "../scheduler";
 import { redis } from "../redis";
 import { fleetAllocationRoutes } from "./fleet-allocation";
+import { snapshotPlanDefault } from "./plan-default-snapshot";
 
 const app = new Elysia().use(fleetAllocationRoutes);
 
@@ -39,6 +43,7 @@ const made = {
 
 let admin: { id: string; cookie: string };
 let viewer: { cookie: string };
+let restoreDefault: () => Promise<void>;
 
 let deptA = "";
 let skillCode = { id: "", name: "" };
@@ -142,6 +147,7 @@ beforeAll(async () => {
   // scheduler.test.ts disconnects the shared client in its teardown, and bun
   // runs every file in one process.
   if (redis.status === "end") await redis.connect();
+  restoreDefault = await snapshotPlanDefault();
 
   admin = await makeUser("manage");
   viewer = await makeUser("view");
@@ -340,6 +346,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Before the units: `fleet_plan_defaults.unit_id` is `restrict`. Putting the
+  // earlier default back also removes the one these tests saved.
+  await restoreDefault();
   // Before the units: `fleet_plan_history.unit_id` is `restrict`.
   if (made.units.length)
     await db
@@ -391,8 +400,12 @@ afterAll(async () => {
   await db
     .delete(schema.unitBrands)
     .where(inArray(schema.unitBrands.id, made.catalogues));
-  if (made.users.length)
+  if (made.users.length) {
+    await db
+      .delete(schema.fleetPlanDefaultImports)
+      .where(inArray(schema.fleetPlanDefaultImports.actorUserId, made.users));
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
+  }
   if (made.roles.length)
     await db.delete(schema.roles).where(inArray(schema.roles.id, made.roles));
 });
@@ -487,127 +500,141 @@ describe("every pairing rule refuses by row, with its reason", () => {
 
 /* ---------------------------------------------------------------- commit */
 
-describe("the commit writes the plan whole, or not at all", () => {
+const fixtureSlots = () =>
+  db
+    .select({
+      unitId: schema.fleetPlanSlots.unitId,
+      employeeId: schema.fleetPlanSlots.employeeId,
+    })
+    .from(schema.fleetPlanSlots)
+    .where(inArray(schema.fleetPlanSlots.employeeId, made.employees));
+
+const fixtureHistory = () =>
+  db
+    .select({ id: schema.fleetPlanHistory.id })
+    .from(schema.fleetPlanHistory)
+    .where(inArray(schema.fleetPlanHistory.unitId, made.units));
+
+const defaultOfFixtures = () =>
+  db
+    .select({
+      unitId: schema.fleetPlanDefaults.unitId,
+      employeeId: schema.fleetPlanDefaults.employeeId,
+    })
+    .from(schema.fleetPlanDefaults)
+    .where(inArray(schema.fleetPlanDefaults.unitId, made.units));
+
+describe("the commit saves the default whole, or not at all", () => {
   test("view may not import", async () => {
     const response = await commit([[unitFree.code, opFit.nik]], viewer.cookie);
     expect(response.status).toBe(403);
   });
 
-  test("a file with errors writes nothing", async () => {
+  test("a file with errors saves nothing", async () => {
     const response = await commit([
       [unitFree.code, opFit.nik],
       [unitReq.code, opNoSkill.nik],
     ]);
     expect(response.status).toBe(422);
-    const slots = await db
-      .select()
-      .from(schema.fleetPlanSlots)
-      .where(inArray(schema.fleetPlanSlots.employeeId, made.employees));
-    expect(slots).toEqual([]);
+    expect(await defaultOfFixtures()).toEqual([]);
+    expect(await fixtureSlots()).toEqual([]);
   });
 
-  test("a clean file pairs; a re-upload moves and leaves the rest", async () => {
+  test("a clean file becomes the default and the live plan stays untouched", async () => {
+    const slotsBefore = await fixtureSlots();
+    const historyBefore = await fixtureHistory();
+
     const first = await commit([
       [unitReq.code, opFit.nik],
       [unitFree.code, opDay.nik],
       [unitFree.code, opNight.nik],
     ]);
     expect(first.status).toBe(200);
-    expect(await first.json()).toMatchObject({ created: 3, moved: 0 });
+    expect(await first.json()).toMatchObject({
+      pairs: 3,
+      created: 3,
+      moved: 0,
+    });
 
-    // The re-upload previews the move by name and keeps the unchanged rows
-    // out of the write.
-    const preview = await validate([
-      [unitOther.code, opFit.nik], //  moved from unitReq
-      [unitFree.code, opDay.nik], //   already there
-      [unitFree.code, opNight.nik], // already there
-    ]);
-    expect(preview.errorCount).toBe(0);
-    expect(preview.movedCount).toBe(1);
-    expect(preview.unchangedCount).toBe(2);
-    const moved = preview.rows.find((r) => r.nik === opFit.nik);
-    expect(moved).toMatchObject({ kind: "moved", fromUnit: unitReq.code });
+    expect(await defaultOfFixtures()).toHaveLength(3);
+    expect(await fixtureSlots()).toEqual(slotsBefore);
+    expect(await fixtureHistory()).toEqual(historyBefore);
+  });
 
-    const second = await commit([
-      [unitOther.code, opFit.nik],
+  test("a re-upload previews the move against the default and replaces it", async () => {
+    await commit([
+      [unitReq.code, opFit.nik],
       [unitFree.code, opDay.nik],
       [unitFree.code, opNight.nik],
     ]);
+
+    const rows = [
+      [unitOther.code, opFit.nik], //  moved from unitReq
+      [unitFree.code, opDay.nik], //   already there
+      [unitFree.code, opNight.nik], // already there
+    ];
+    const preview = await validate(rows);
+    expect(preview.errorCount).toBe(0);
+    expect(preview.movedCount).toBe(1);
+    expect(preview.unchangedCount).toBe(2);
+    expect(preview.removedCount).toBe(0);
+    expect(preview.rows.find((r) => r.nik === opFit.nik)).toMatchObject({
+      kind: "moved",
+      fromUnit: unitReq.code,
+    });
+
+    const second = await commit(rows);
     expect(second.status).toBe(200);
-    expect(await second.json()).toMatchObject({ created: 0, moved: 1 });
+    expect(await second.json()).toMatchObject({
+      pairs: 3,
+      created: 0,
+      moved: 1,
+      removed: 0,
+    });
 
-    // The old slot is gone, the new one holds.
-    const slots = await db
-      .select({
-        unitId: schema.fleetPlanSlots.unitId,
-        employeeId: schema.fleetPlanSlots.employeeId,
-      })
-      .from(schema.fleetPlanSlots)
-      .where(inArray(schema.fleetPlanSlots.employeeId, made.employees));
-    const ofFit = slots.filter((s) => s.employeeId === opFit.id);
-    expect(ofFit).toEqual([{ unitId: unitOther.id, employeeId: opFit.id }]);
-
-    // The move is two facts in the history: taken off one unit, put on the
-    // other — each under its own unit, both marked as the import's doing.
-    const trail = await db
-      .select({
-        unitId: schema.fleetPlanHistory.unitId,
-        action: schema.fleetPlanHistory.action,
-        source: schema.fleetPlanHistory.source,
-        actorUserId: schema.fleetPlanHistory.actorUserId,
-      })
-      .from(schema.fleetPlanHistory)
-      .where(inArray(schema.fleetPlanHistory.employeeId, [opFit.id]))
-      .orderBy(schema.fleetPlanHistory.createdAt);
-    expect(trail).toEqual([
-      {
-        unitId: unitReq.id,
-        action: "assigned",
-        source: "import",
-        actorUserId: admin.id,
-      },
-      {
-        unitId: unitReq.id,
-        action: "released",
-        source: "import",
-        actorUserId: admin.id,
-      },
-      {
-        unitId: unitOther.id,
-        action: "assigned",
-        source: "import",
-        actorUserId: admin.id,
-      },
+    const held = await defaultOfFixtures();
+    expect(held.filter((d) => d.employeeId === opFit.id)).toEqual([
+      { unitId: unitOther.id, employeeId: opFit.id },
     ]);
-    // The unchanged rows of the re-upload wrote nothing a second time.
-    const dayTrail = await db
-      .select({ action: schema.fleetPlanHistory.action })
-      .from(schema.fleetPlanHistory)
-      .where(inArray(schema.fleetPlanHistory.employeeId, [opDay.id]));
-    expect(dayTrail).toEqual([{ action: "assigned" }]);
+    expect(held).toHaveLength(3);
+    // Still no live pairing and no history: that is Reset's business.
+    expect(await fixtureSlots()).toEqual([]);
+    expect(await fixtureHistory()).toEqual([]);
   });
 
-  test("capacity counts what the database already holds", async () => {
-    // unitFree holds its Day/Night pair from the commit above; a third
-    // operator must be refused at validation, not at the constraint.
-    const preview = await validate([[unitFree.code, opFit2.nik]]);
-    expect(preview.errorCount).toBe(1);
-    expect(preview.errors[0]!.issue).toContain("2");
+  test("a file that leaves a default pairing out removes it, and says so", async () => {
+    await commit([
+      [unitFree.code, opDay.nik],
+      [unitFree.code, opNight.nik],
+    ]);
+
+    const preview = await validate([[unitFree.code, opDay.nik]]);
+    expect(preview.removed).toEqual([
+      { unit: unitFree.code, nik: opNight.nik, name: opNight.name },
+    ]);
+
+    const response = await commit([[unitFree.code, opDay.nik]]);
+    expect(await response.json()).toMatchObject({ pairs: 1, removed: 1 });
+    expect(await defaultOfFixtures()).toHaveLength(1);
   });
 
-  test("a same-shift partner already in the database is no obstacle", async () => {
-    // opDay holds unitFree; opDay2 is on the same shift and may join them.
-    // Free a slot first so capacity is not the rule that fires.
-    const release = await app.handle(
-      new Request(
-        `http://localhost/fleet-allocation/plan/slots/${unitFree.code}/${opNight.nik}`,
-        { method: "DELETE", headers: { cookie: admin.cookie } }
-      )
-    );
-    expect(release.status).toBe(200);
+  test("capacity counts the file alone, not the default or the live plan", async () => {
+    await commit([
+      [unitFree.code, opDay.nik],
+      [unitFree.code, opNight.nik],
+    ]);
+    // A third operator on the unit is only refused when the file itself
+    // names three; the default's two do not fill it for a new file.
+    const alone = await validate([[unitFree.code, opFit2.nik]]);
+    expect(alone.errors).toEqual([]);
+    expect(alone.removedCount).toBe(2);
 
-    const preview = await validate([[unitFree.code, opDay2.nik]]);
-    expect(preview.errors).toEqual([]);
-    expect(preview.newCount).toBe(1);
+    const three = await validate([
+      [unitFree.code, opDay.nik],
+      [unitFree.code, opNight.nik],
+      [unitFree.code, opFit2.nik],
+    ]);
+    expect(three.errorCount).toBe(1);
+    expect(three.errors[0]!.issue).toContain("2");
   });
 });

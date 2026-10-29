@@ -521,6 +521,8 @@ async function wipeWorkforce(): Promise<void> {
 
   // Plan pairings reference employees and units both, so they go first.
   await db.delete(schema.fleetPlanSlots);
+  await db.delete(schema.fleetPlanDefaults);
+  await db.delete(schema.fleetPlanDefaultImports);
   await db.delete(schema.employeeSkills);
   await db.delete(schema.employees);
   await db

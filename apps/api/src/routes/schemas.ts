@@ -689,6 +689,12 @@ export const FleetImportResultSchema = t.Object({
   released: t.Integer(),
 });
 
+const PlanResetEntrySchema = t.Object({
+  unit: t.String(),
+  nik: t.String(),
+  name: t.String(),
+});
+
 const PlanImportPreviewRowSchema = t.Object({
   row: t.Integer(),
   kind: t.Union([t.Literal("new"), t.Literal("moved"), t.Literal("unchanged")]),
@@ -703,14 +709,46 @@ export const PlanImportPreviewSchema = t.Object({
   newCount: t.Integer(),
   movedCount: t.Integer(),
   unchangedCount: t.Integer(),
+  removedCount: t.Integer(),
   errorCount: t.Integer(),
   rows: t.Array(PlanImportPreviewRowSchema),
+  removed: t.Array(PlanResetEntrySchema),
   errors: t.Array(ImportErrorSchema),
 });
 
 export const PlanImportResultSchema = t.Object({
+  pairs: t.Integer(),
   created: t.Integer(),
   moved: t.Integer(),
+  removed: t.Integer(),
+});
+
+export const PlanDefaultInfoSchema = t.Object({
+  fileName: t.String(),
+  actorName: t.Nullable(t.String()),
+  createdAt: t.String(),
+  pairs: t.Integer(),
+});
+
+const PlanResetSkippedSchema = t.Object({
+  unit: t.String(),
+  nik: t.String(),
+  name: t.String(),
+  reason: t.String(),
+});
+
+export const PlanResetPreviewSchema = t.Object({
+  release: t.Array(PlanResetEntrySchema),
+  assign: t.Array(PlanResetEntrySchema),
+  skipped: t.Array(PlanResetSkippedSchema),
+  unchanged: t.Integer(),
+  defaultInfo: PlanDefaultInfoSchema,
+});
+
+export const PlanResetResultSchema = t.Object({
+  released: t.Integer(),
+  assigned: t.Integer(),
+  skipped: t.Array(PlanResetSkippedSchema),
 });
 
 /** One line of a unit's PLAN history — newest first on read. */

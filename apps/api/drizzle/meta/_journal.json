@@ -414,6 +414,13 @@
       "when": 1791626239105,
       "tag": "0058_talented_pet_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793279651332,
+      "tag": "0059_violet_ultron",
+      "breakpoints": true
     }
   ]
 }

@@ -8,24 +8,25 @@ the code disagree, the code and PRD win. Fix this file in the same change.
 
 ## Glossary
 
-| Term                             | Meaning                                                                                                                                                                                    |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Unit                             | A machine (dump truck, excavator, dozer…), `units`. Has `active`, `breakdown`, `standby`, `ftw` (requires FTW), an optional department and SIMPER code, its own `work_area` and transport. |
-| Formation / fleet                | One **leader** unit (any type, usually a digger) plus 1–13 haulers (`fleets`, `fleet_units`). One work area per formation.                                                                 |
-| Support unit                     | A unit in no formation but crewed (`units.fleet_support`, set by the Fleet Setting import). Grouped as **Support**.                                                                        |
-| No fleet                         | Active units in no formation and not support. Derived and never stored. **Not allocated**, only listed so they don't go unnoticed.                                                         |
-| PLAN                             | Standing unit ↔ operator pairs, max 2 per unit, no date, no shift (`fleet_plan_slots`).                                                                                                    |
-| ACTUAL / board                   | One shift's generated allocation (`fleet_actual_slots`, `fleet_actual_fleets`), built by `spare-validate`.                                                                                 |
-| Standing operator / holder       | An operator with a PLAN slot.                                                                                                                                                              |
-| Spare                            | An allocatable operator with no seat today: no PLAN slot, or a slot on a unit outside allocation, broken down, or taken by the shift partner.                                              |
-| Roster code                      | Per person per day (`roster_days`, active document only). `D` = day, `N` = night; anything else (`CR`, `OFF`, `A`, `TGS`…) means not working. `rosterShift()` in contracts.                |
-| FTW                              | Fit To Work. Sleep-based verdict from savera, snapshotted into `ftw_readings`.                                                                                                             |
-| Finger / tap                     | Fingerprint attendance, snapshotted into `finger_readings` (derived from `device_taps` by `derive.ts`).                                                                                    |
-| SIMPER                           | Operator's permit. Its codes are the skill key; a unit with a SIMPER code only takes an operator holding it, unexpired.                                                                    |
-| `aktif` / `standby` / `nonaktif` | Employee status. **Only `aktif` is ever allocated or printed a seat.** `standby` may be _planned_, never seated.                                                                           |
-| Muster                           | One shift's run of the timeline gates.                                                                                                                                                     |
-| Wall                             | A paired TV page under `/display/*`.                                                                                                                                                       |
-| Slip / ticket                    | ESC/POS paper printed at a Universe booth after a tap.                                                                                                                                     |
+| Term                             | Meaning                                                                                                                                                                                                    |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit                             | A machine (dump truck, excavator, dozer…), `units`. Has `active`, `breakdown`, `standby`, `ftw` (requires FTW), an optional department and SIMPER code, its own `work_area` and transport.                 |
+| Formation / fleet                | One **leader** unit (any type, usually a digger) plus 1–13 haulers (`fleets`, `fleet_units`). One work area per formation.                                                                                 |
+| Support unit                     | A unit in no formation but crewed (`units.fleet_support`, set by the Fleet Setting import). Grouped as **Support**.                                                                                        |
+| No fleet                         | Active units in no formation and not support. Derived and never stored. **Not allocated**, only listed so they don't go unnoticed.                                                                         |
+| PLAN                             | Standing unit ↔ operator pairs, max 2 per unit, no date, no shift (`fleet_plan_slots`).                                                                                                                    |
+| ACTUAL / board                   | One shift's generated allocation (`fleet_actual_slots`, `fleet_actual_fleets`), built by `spare-validate`.                                                                                                 |
+| Default plan                     | The saved whole-file PLAN (`fleet_plan_defaults`, set by the PLAN import, audit in `fleet_plan_default_imports`). Never read by the engine; **Reset** brings the live PLAN to it, skipping stale pairings. |
+| Standing operator / holder       | An operator with a PLAN slot.                                                                                                                                                                              |
+| Spare                            | An allocatable operator with no seat today: no PLAN slot, or a slot on a unit outside allocation, broken down, or taken by the shift partner.                                                              |
+| Roster code                      | Per person per day (`roster_days`, active document only). `D` = day, `N` = night; anything else (`CR`, `OFF`, `A`, `TGS`…) means not working. `rosterShift()` in contracts.                                |
+| FTW                              | Fit To Work. Sleep-based verdict from savera, snapshotted into `ftw_readings`.                                                                                                                             |
+| Finger / tap                     | Fingerprint attendance, snapshotted into `finger_readings` (derived from `device_taps` by `derive.ts`).                                                                                                    |
+| SIMPER                           | Operator's permit. Its codes are the skill key; a unit with a SIMPER code only takes an operator holding it, unexpired.                                                                                    |
+| `aktif` / `standby` / `nonaktif` | Employee status. **Only `aktif` is ever allocated or printed a seat.** `standby` may be _planned_, never seated.                                                                                           |
+| Muster                           | One shift's run of the timeline gates.                                                                                                                                                                     |
+| Wall                             | A paired TV page under `/display/*`.                                                                                                                                                                       |
+| Slip / ticket                    | ESC/POS paper printed at a Universe booth after a tap.                                                                                                                                                     |
 
 ## The timeline drives everything
 
@@ -147,11 +148,11 @@ Invariants:
 Code: `allocation.ts`, `readiness.ts`, `fleet-scope.ts`, `routes/fleet-allocation.ts`
 (PLAN), `routes/fleet-actual.ts` (boards, audit, candidates, manual edit),
 `routes/allocation-priority.ts`, `routes/fleets*.ts` and
-`routes/fleet-allocation-import.ts` (Fleet Setting / imports).
+`routes/fleet-allocation-import.ts` (the PLAN file parsed against the default; Reset lives in `routes/fleet-allocation.ts`).
 Web: `components/menus/fleet-allocation/*`, `fleet-allocation.tsx`,
-`allocation-priority.tsx`, `fleet-setting*.tsx`.
+`allocation-priority.tsx`, `fleet-setting*.tsx`, `plan-default-bar.tsx` (default line + Reset dialog), `plan-default.ts`.
 Tests: `allocation.test.ts`, `readiness.test.ts`, `routes/fleet-allocation*.test.ts`,
-`routes/fleet-actual.test.ts`, `routes/allocation-priority.test.ts`, `crew-rows.test.ts`.
+`routes/fleet-actual.test.ts`, `routes/allocation-priority.test.ts`, `routes/fleet-allocation-default.test.ts` (default + Reset), `crew-rows.test.ts`, `plan-default.test.ts`.
 PRD: _Asset & Fleet_, from _Fleet composition_ through _The Actual tab_.
 
 ## Displays (walls)

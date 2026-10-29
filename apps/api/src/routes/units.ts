@@ -391,6 +391,10 @@ const DELETE_BLOCKED: Record<string, { short: string; full: string }> = {
     short: "Masih punya operator tetap di PLAN",
     full: "Unit masih dipasangkan dengan operator tetap di PLAN — lepaskan pasangannya dulu, atau nonaktifkan unitnya",
   },
+  fleet_plan_defaults_unit_id_units_id_fk: {
+    short: "Ada di default PLAN",
+    full: "Unit ada di default PLAN yang tersimpan — unggah file PLAN baru tanpa unit ini dulu, atau nonaktifkan unitnya",
+  },
   units_transport_unit_id_units_id_fk: {
     short: "Dipakai mengangkut unit lain",
     full: "Unit ini dipakai sebagai kendaraan pengangkut unit lain — ganti pengangkutnya dulu di Setting Fleet, atau nonaktifkan unitnya",

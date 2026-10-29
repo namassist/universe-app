@@ -8,8 +8,12 @@ import { ArrowLeft, Download, Upload } from "lucide-react";
 import type { PlanImportPreview } from "@universe/contracts";
 
 import { api, errorMessage, fetchBlob } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
-import { planBoardKey } from "@/lib/queries/fleet-allocation";
+import { fmt, useI18n } from "@/lib/i18n";
+import {
+  planBoardKey,
+  planDefaultKey,
+  planResetPreviewKey,
+} from "@/lib/queries/fleet-allocation";
 import { useRole } from "@/components/providers/role-context";
 import { Badge } from "@/components/ui/badge";
 import { Button, Spinner } from "@/components/ui/button";
@@ -48,11 +52,13 @@ const KIND_BADGE = {
 } as const;
 
 /**
- * Bulk PLAN pairing, following the shape `um-users-import.tsx` established:
- * template → dropzone → server-side validation preview → explicit commit.
- * One `unit, nik` row per pairing; the API refuses with the same rules the
- * assignment dialog goes through, and a re-upload that reassigns an operator
- * previews as a *move* naming the unit they leave.
+ * The default PLAN by spreadsheet, following the shape `um-users-import.tsx`
+ * established: template → dropzone → server-side validation preview →
+ * explicit commit. One `unit, nik` row per pairing; the file is the *whole*
+ * default, so the API judges it against the saved default (new, moved,
+ * unchanged, and the default pairings the file leaves out) with the same
+ * eligibility rules the assignment dialog goes through. Committing never
+ * touches the live PLAN; the Reset button on the board does that.
  */
 /**
  * The row kinds, in the order the preview leads with them.
@@ -148,11 +154,15 @@ export function PlanImport() {
       pushToast("error", t.upImport, errorMessage(error, t.loginErr));
       return;
     }
-    await queryClient.invalidateQueries({ queryKey: planBoardKey });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: planDefaultKey }),
+      queryClient.invalidateQueries({ queryKey: planResetPreviewKey }),
+      queryClient.invalidateQueries({ queryKey: planBoardKey }),
+    ]);
     pushToast(
       "success",
       t.faImpDoneT,
-      `${data.created} ${t.umImpCreated} · ${data.moved} ${t.faImpMovedN}`
+      fmt(t.faImpDoneD, { pairs: data.pairs })
     );
     setStage("idle");
     setPreview(null);
@@ -214,6 +224,13 @@ export function PlanImport() {
           bg: "var(--badge-neutral-fill)",
           border: "var(--badge-neutral-border)",
           color: "var(--badge-neutral-text)",
+        },
+        {
+          n: preview.removedCount,
+          label: t.faImpRemoved,
+          bg: "var(--badge-warning-fill)",
+          border: "var(--badge-warning-border)",
+          color: "var(--badge-warning-text)",
         },
         {
           n: preview.errorCount,
@@ -410,6 +427,37 @@ export function PlanImport() {
             </PanelFoot>
           </Panel>
 
+          {preview.removedCount > 0 ? (
+            <Panel>
+              <Toolbar className="mb-4">
+                <ToolbarTitle>{t.faImpRemoved}</ToolbarTitle>
+              </Toolbar>
+              <p className="mb-3 text-xs text-(--text-tertiary)">
+                {t.faImpRemovedHint}
+              </p>
+              <Table>
+                <TableHeader>
+                  <tr>
+                    <TableHead>{t.cmUnit}</TableHead>
+                    <TableHead>{t.cmNik}</TableHead>
+                    <TableHead>{t.thNama}</TableHead>
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {preview.removed.map((r) => (
+                    <TableRow key={`${r.unit}-${r.nik}`}>
+                      <TableCell className="font-mono font-semibold">
+                        {r.unit}
+                      </TableCell>
+                      <TableCell className="font-mono">{r.nik}</TableCell>
+                      <TableCell className="font-semibold">{r.name}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Panel>
+          ) : null}
+
           <Panel>
             <Toolbar className="mb-4">
               <ToolbarTitle>{t.upResults}</ToolbarTitle>
@@ -469,7 +517,7 @@ export function PlanImport() {
                   {busy ? <Spinner /> : null}
                   {busy
                     ? t.upImporting
-                    : `${t.upImport} ${preview.newCount + preview.movedCount} ${t.faImpRows}`}
+                    : `${t.upImport} ${preview.rows.length} ${t.faImpRows}`}
                 </Button>
               </div>
             </PanelFoot>

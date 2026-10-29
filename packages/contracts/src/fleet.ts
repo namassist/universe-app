@@ -59,8 +59,14 @@ export type PlanHistoryAction = (typeof PLAN_HISTORY_ACTIONS)[number];
 /**
  * Where a PLAN change came from. `migration` marks the pairings that already
  * stood when the history began: their start is known, who made them is not.
+ * `reset` is the live plan being brought back to the saved default.
  */
-export const PLAN_HISTORY_SOURCES = ["board", "import", "migration"] as const;
+export const PLAN_HISTORY_SOURCES = [
+  "board",
+  "import",
+  "migration",
+  "reset",
+] as const;
 export type PlanHistorySource = (typeof PLAN_HISTORY_SOURCES)[number];
 
 /* --------------------------------------------------- allocation priority */

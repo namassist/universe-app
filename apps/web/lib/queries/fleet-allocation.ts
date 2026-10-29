@@ -30,6 +30,33 @@ export const planCandidatesQueryOptions = (unitCode: string) =>
       ),
   });
 
+export const planDefaultKey = ["fleet-allocation", "plan", "default"] as const;
+
+/** The saved default plan's file, author, date and size; null before the first import. */
+export const planDefaultQueryOptions = () =>
+  queryOptions({
+    queryKey: planDefaultKey,
+    queryFn: () => unwrap(api.v1["fleet-allocation"].plan.default.get()),
+  });
+
+export const planResetPreviewKey = [
+  "fleet-allocation",
+  "plan",
+  "reset-preview",
+] as const;
+
+/**
+ * What a Reset would do right now. Never cached for reuse: the dialog must
+ * show the diff as it stands when it opens, so it refetches on every open.
+ */
+export const planResetPreviewQueryOptions = () =>
+  queryOptions({
+    queryKey: planResetPreviewKey,
+    queryFn: () => unwrap(api.v1["fleet-allocation"].plan.reset.preview.get()),
+    staleTime: 0,
+    gcTime: 0,
+  });
+
 export const planHistoryKey = (unitCode: string) =>
   ["fleet-allocation", "plan", "history", unitCode] as const;
 

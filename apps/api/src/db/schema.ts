@@ -914,6 +914,65 @@ export const fleetPlanHistory = pgTable(
 );
 
 /**
+ * One committed PLAN import: which file set the default, and who.
+ *
+ * Kept after the next import replaces the default, as the audit trail of who
+ * changed the standing plan and when; the newest row is "the default". The
+ * file name and actor are plain text beside a nullable user reference, like
+ * `fleet_plan_history`, so removing a user never governs the trail.
+ */
+export const fleetPlanDefaultImports = pgTable("fleet_plan_default_imports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fileName: text("file_name").notNull(),
+  actorUserId: uuid("actor_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  actorName: text("actor_name"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * The saved default PLAN: the whole pairing list the last import named.
+ *
+ * Importing no longer writes the live plan (`fleet_plan_slots`); it replaces
+ * these rows, and an explicit Reset brings the live plan back to them. That
+ * keeps a mid-shift edit on the board from being silently overwritten by a
+ * file, while still giving the owner one place to return to.
+ *
+ * Every commit deletes all rows and inserts the file's, so the table only ever
+ * holds one import's pairings; `import_id` cascades from the import row for
+ * that reason alone (an import row is never deleted today). The operator is
+ * kept by `nik` and `name` as they were at import, with the employee reference
+ * set to null if the employee is deleted, so a stale default is listed by
+ * Reset as "employee deleted" instead of blocking the deletion. The unit is
+ * `restrict`, like every other unit reference. `unique(employee_id)` keeps one
+ * unit per operator; nulls are distinct, so deleted employees do not collide.
+ */
+export const fleetPlanDefaults = pgTable(
+  "fleet_plan_defaults",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    importId: uuid("import_id")
+      .notNull()
+      .references(() => fleetPlanDefaultImports.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    nik: text("nik").notNull(),
+    name: text("name").notNull(),
+  },
+  (table) => [
+    uniqueIndex("fleet_plan_defaults_employee_idx").on(table.employeeId),
+    index("fleet_plan_defaults_unit_id_idx").on(table.unitId),
+  ]
+);
+
+/**
  * Every status change a unit has been through, newest first on read.
  *
  * The unit's *current* status stays derived from the two flags on `units` —

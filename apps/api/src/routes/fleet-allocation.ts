@@ -27,16 +27,25 @@ import { Elysia, t } from "elysia";
 import {
   rosterCodeKind,
   rosterShift,
+  type PlanDefaultInfo,
   type PlanHistoryAction,
   type PlanHistorySource,
   type PlanImportPreview,
+  type PlanResetEntry,
+  type PlanResetSkipped,
   type RosterCode,
   type UnitStatus,
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
 import { currentShift } from "../current-shift";
-import { db, isUniqueViolation, schema, type Transaction } from "../db";
+import {
+  db,
+  isForeignKeyViolation,
+  isUniqueViolation,
+  schema,
+  type Transaction,
+} from "../db";
 import { rosterDayInForce } from "../roster-in-force";
 import { localDate } from "../scheduler";
 import { normalizeNik } from "../sources/nik";
@@ -51,14 +60,20 @@ import {
 import { MAX_IMPORT_BYTES } from "./import-columns";
 import {
   ErrorSchema,
+  PlanDefaultInfoSchema,
   PlanHistoryRowSchema,
   PlanImportPreviewSchema,
   PlanImportResultSchema,
+  PlanResetPreviewSchema,
+  PlanResetResultSchema,
   UnitStatusSchema,
 } from "./schemas";
 import { statusOf } from "./unit-status";
 
 const FA_PLAN_MAX_OPS = 2;
+
+/** The advisory-lock key that serialises Reset and the default import. */
+const PLAN_DEFAULT_LOCK = 7_300_001;
 
 const digger = alias(schema.units, "leader_unit");
 
@@ -581,8 +596,69 @@ export async function refusePairing(
 
 /* -------------------------------------------------------------- import */
 
-/** Everything the parser needs to resolve codes and read the current plan. */
-async function planCatalogues(): Promise<PlanCatalogues> {
+/** One pairing of the saved default, as stored. */
+type DefaultRow = {
+  unitId: string;
+  unitCode: string;
+  employeeId: string | null;
+  nik: string;
+  name: string;
+};
+
+/** The saved default's pairings, from `runner` (the db or a transaction). */
+async function loadDefaultRows(
+  runner: Pick<typeof db, "select"> = db
+): Promise<DefaultRow[]> {
+  return runner
+    .select({
+      unitId: schema.fleetPlanDefaults.unitId,
+      unitCode: schema.units.code,
+      employeeId: schema.fleetPlanDefaults.employeeId,
+      nik: schema.fleetPlanDefaults.nik,
+      name: schema.fleetPlanDefaults.name,
+    })
+    .from(schema.fleetPlanDefaults)
+    .innerJoin(
+      schema.units,
+      eq(schema.units.id, schema.fleetPlanDefaults.unitId)
+    )
+    .orderBy(asc(schema.units.code), asc(schema.fleetPlanDefaults.nik));
+}
+
+/**
+ * The saved default's description: the newest import row, with the pairings it
+ * left. Null until the first import after the feature shipped.
+ */
+async function savedDefaultInfo(
+  runner: Pick<typeof db, "select"> = db
+): Promise<PlanDefaultInfo | null> {
+  const [latest] = await runner
+    .select({
+      id: schema.fleetPlanDefaultImports.id,
+      fileName: schema.fleetPlanDefaultImports.fileName,
+      actorName: schema.fleetPlanDefaultImports.actorName,
+      createdAt: schema.fleetPlanDefaultImports.createdAt,
+    })
+    .from(schema.fleetPlanDefaultImports)
+    .orderBy(desc(schema.fleetPlanDefaultImports.createdAt))
+    .limit(1);
+  if (!latest) return null;
+  const [{ pairs } = { pairs: 0 }] = await runner
+    .select({ pairs: sql<number>`count(*)::int` })
+    .from(schema.fleetPlanDefaults)
+    .where(eq(schema.fleetPlanDefaults.importId, latest.id));
+  return {
+    fileName: latest.fileName,
+    actorName: latest.actorName,
+    createdAt: latest.createdAt.toISOString(),
+    pairs,
+  };
+}
+
+/** Everything the parser needs to resolve codes and read the saved default. */
+async function planCatalogues(
+  defaultRows: DefaultRow[]
+): Promise<PlanCatalogues> {
   /* Inactive units included (owner, 2026-09-23): the plan may hold a machine
      that is out of service, and the board shows that pairing rather than
      hiding it. */
@@ -596,32 +672,22 @@ async function planCatalogues(): Promise<PlanCatalogues> {
       name: schema.employees.name,
     })
     .from(schema.employees);
-  const slots = await db
-    .select({
-      unitId: schema.fleetPlanSlots.unitId,
-      unitCode: schema.units.code,
-      employeeId: schema.fleetPlanSlots.employeeId,
-    })
-    .from(schema.fleetPlanSlots)
-    .innerJoin(schema.units, eq(schema.units.id, schema.fleetPlanSlots.unitId));
-
-  const heldByUnit = new Map<string, string[]>();
-  for (const s of slots)
-    heldByUnit.set(s.unitId, [
-      ...(heldByUnit.get(s.unitId) ?? []),
-      s.employeeId,
-    ]);
 
   return {
     unitsByCode: new Map(units.map((u) => [u.code.toLowerCase(), u])),
     peopleByNik: new Map(people.map((p) => [p.nik, p])),
-    slotOf: new Map(
-      slots.map((s) => [
-        s.employeeId,
-        { unitId: s.unitId, unitCode: s.unitCode },
-      ])
+    defaultOf: new Map(
+      defaultRows.flatMap((d) =>
+        d.employeeId
+          ? [
+              [
+                d.employeeId,
+                { unitId: d.unitId, unitCode: d.unitCode },
+              ] as const,
+            ]
+          : []
+      )
     ),
-    heldByUnit,
   };
 }
 
@@ -632,13 +698,15 @@ type PlanImportOutcome = {
 
 /**
  * Parse, hold every surviving row against `refusePairing` — the same
- * function the dialog goes through — then judge capacity against the
- * effective plan. The Day/Night pair left this path on 2026-09-23.
+ * function the dialog goes through — then judge capacity within the file
+ * alone. Kinds and `removed` are relative to the saved default, never the
+ * live plan. The Day/Night pair left this path on 2026-09-23.
  */
 async function parsePlanImport(
   file: File
 ): Promise<PlanImportOutcome | { code: string; message: string }> {
-  const catalogues = await planCatalogues();
+  const defaultRows = await loadDefaultRows();
+  const catalogues = await planCatalogues(defaultRows);
   const parsed = await validatePlanWorkbook(
     await file.arrayBuffer(),
     catalogues
@@ -668,24 +736,212 @@ async function parsePlanImport(
     eligible.push(row);
   }
 
-  const conflicts = pairingConflicts(eligible, catalogues);
+  const conflicts = pairingConflicts(eligible);
   errors.push(...conflicts.errors);
   errors.sort((a, b) => Number(a.row) - Number(b.row));
 
   const rows = conflicts.rows;
+  // A default pairing is "named" by any row about that NIK, even a refused
+  // one: the file spoke of it, so it is not silently dropped.
+  const named = new Set([
+    ...parsed.rows.map((r) => r.preview.nik),
+    ...parsed.errors.map((e) => e.nik),
+    ...errors.map((e) => e.nik),
+  ]);
+  const removed = defaultRows
+    .filter((d) => !named.has(d.nik))
+    .map((d) => ({ unit: d.unitCode, nik: d.nik, name: d.name }));
   return {
     preview: {
       fileName: file.name,
       newCount: rows.filter((r) => r.preview.kind === "new").length,
       movedCount: rows.filter((r) => r.preview.kind === "moved").length,
       unchangedCount: rows.filter((r) => r.preview.kind === "unchanged").length,
+      removedCount: removed.length,
       errorCount: errors.length,
       rows: rows.map((r) => r.preview),
+      removed,
       errors,
     },
     rows,
   };
 }
+
+/* ---------------------------------------------------------------- reset */
+
+type Reader = Pick<typeof db, "select">;
+
+/** A live pairing, with what a release needs to write and record. */
+type LivePairing = PlanResetEntry & {
+  slotId: string;
+  unitId: string;
+  employeeId: string;
+};
+
+type ResetDiff = {
+  release: LivePairing[];
+  assign: (PlanResetEntry & { unitId: string; employeeId: string })[];
+  skipped: PlanResetSkipped[];
+  unchanged: number;
+  /** Every unit either plan names, for the caller to lock. */
+  unitIds: string[];
+};
+
+/** The longest import file name kept for the toolbar's default line. */
+const MAX_FILE_NAME = 255;
+
+const EMPLOYEE_DELETED = "Karyawan sudah dihapus dari data karyawan";
+
+/**
+ * Live plan versus saved default, as Reset would apply it.
+ *
+ * Eligibility goes through `pairingRefusal` with the planning flag, the same
+ * function the dialog and the import use, so what Reset may seat cannot drift
+ * from what a hand-made pairing may. Everything is loaded in bulk (the default
+ * can be a few hundred pairings) and the rule itself stays pure.
+ *
+ * A live pairing that is already in the default stands untouched even if it
+ * would be refused today: Reset restores the default, it does not audit it.
+ * Every other live pairing is released, which is also what keeps two operators
+ * per unit true — the default holds at most two per unit and nothing else
+ * remains.
+ */
+async function resetDiff(reader: Reader): Promise<ResetDiff> {
+  const defaults = await loadDefaultRows(reader);
+  const live: LivePairing[] = await reader
+    .select({
+      slotId: schema.fleetPlanSlots.id,
+      unitId: schema.fleetPlanSlots.unitId,
+      employeeId: schema.fleetPlanSlots.employeeId,
+      unit: schema.units.code,
+      nik: schema.employees.nik,
+      name: schema.employees.name,
+    })
+    .from(schema.fleetPlanSlots)
+    .innerJoin(schema.units, eq(schema.units.id, schema.fleetPlanSlots.unitId))
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.fleetPlanSlots.employeeId)
+    )
+    .orderBy(asc(schema.units.code), asc(schema.employees.nik));
+
+  const liveUnitOf = new Map(live.map((l) => [l.employeeId, l.unitId]));
+  const defaultUnitOf = new Map(
+    defaults.flatMap((d) => (d.employeeId ? [[d.employeeId, d.unitId]] : []))
+  );
+
+  const release = live.filter(
+    (l) => defaultUnitOf.get(l.employeeId) !== l.unitId
+  );
+  const unchanged = live.length - release.length;
+  const toMake = defaults.filter(
+    (d) => !d.employeeId || liveUnitOf.get(d.employeeId) !== d.unitId
+  );
+
+  const employeeIds = toMake.flatMap((d) =>
+    d.employeeId ? [d.employeeId] : []
+  );
+  const unitIds = [...new Set(toMake.map((d) => d.unitId))];
+  const unitRows = unitIds.length
+    ? await reader
+        .select({
+          id: schema.units.id,
+          code: schema.units.code,
+          simperCodeId: schema.units.simperCodeId,
+          simperCodeName: schema.simperCodes.name,
+          departmentId: schema.units.departmentId,
+          departmentName: schema.departments.name,
+        })
+        .from(schema.units)
+        .leftJoin(
+          schema.simperCodes,
+          eq(schema.simperCodes.id, schema.units.simperCodeId)
+        )
+        .leftJoin(
+          schema.departments,
+          eq(schema.departments.id, schema.units.departmentId)
+        )
+        .where(inArray(schema.units.id, unitIds))
+    : [];
+  const personRows = employeeIds.length
+    ? await reader
+        .select({
+          id: schema.employees.id,
+          nik: schema.employees.nik,
+          name: schema.employees.name,
+          statusValue: schema.employees.status,
+          departmentId: schema.employees.departmentId,
+          simperExp: schema.employees.simperExp,
+          positionName: schema.positions.name,
+          fleetAllocation: schema.positions.fleetAllocation,
+        })
+        .from(schema.employees)
+        .innerJoin(
+          schema.positions,
+          eq(schema.positions.id, schema.employees.positionId)
+        )
+        .where(inArray(schema.employees.id, employeeIds))
+    : [];
+  const skillRows = employeeIds.length
+    ? await reader
+        .select({
+          employeeId: schema.employeeSkills.employeeId,
+          simperCodeId: schema.employeeSkills.simperCodeId,
+        })
+        .from(schema.employeeSkills)
+        .where(inArray(schema.employeeSkills.employeeId, employeeIds))
+    : [];
+  const unitById = new Map(unitRows.map((u) => [u.id, u]));
+  const personById = new Map(personRows.map((p) => [p.id, p]));
+  const skills = new Set(
+    skillRows.map((k) => `${k.employeeId}:${k.simperCodeId}`)
+  );
+  const today = localDate(new Date());
+
+  const assign: ResetDiff["assign"] = [];
+  const skipped: PlanResetSkipped[] = [];
+  for (const d of toMake) {
+    const entry = { unit: d.unitCode, nik: d.nik, name: d.name };
+    const unit = unitById.get(d.unitId);
+    const person = d.employeeId ? personById.get(d.employeeId) : undefined;
+    if (!d.employeeId || !person || !unit) {
+      skipped.push({ ...entry, reason: EMPLOYEE_DELETED });
+      continue;
+    }
+    const reason = pairingRefusal(unit, person, {
+      holdsCode:
+        !!unit.simperCodeId && skills.has(`${person.id}:${unit.simperCodeId}`),
+      today,
+      planning: true,
+    });
+    if (reason) skipped.push({ ...entry, reason });
+    else assign.push({ ...entry, unitId: d.unitId, employeeId: d.employeeId });
+  }
+
+  return {
+    release,
+    assign,
+    skipped,
+    unchanged,
+    unitIds: [
+      ...new Set([
+        ...live.map((l) => l.unitId),
+        ...defaults.map((d) => d.unitId),
+      ]),
+    ],
+  };
+}
+
+const entryOf = (e: PlanResetEntry): PlanResetEntry => ({
+  unit: e.unit,
+  nik: e.nik,
+  name: e.name,
+});
+
+const noDefault = {
+  code: "no_default",
+  message: "Belum ada default PLAN — unggah file PLAN dulu",
+};
 
 /**
  * A conflict the commit's own recheck finds under lock — the race between
@@ -1066,7 +1322,7 @@ export const fleetAllocationRoutes = new Elysia({
     "/plan/import/commit",
     async ({ body, status, principal }) => {
       // Re-validated rather than trusted from the client: the preview the
-      // caller saw is advisory, this parse is what gets written.
+      // caller saw is advisory, this parse is what gets saved.
       const outcome = await parsePlanImport(body.file);
       if ("code" in outcome) return status(422, outcome);
       if (outcome.preview.errorCount > 0)
@@ -1074,120 +1330,67 @@ export const fleetAllocationRoutes = new Elysia({
           code: "validation_failed",
           message: `${outcome.preview.errorCount} baris masih bermasalah`,
         });
+      // An empty file would silently clear the default; that is not an
+      // import, and there is no other way to say "no pairings" on purpose.
+      if (!outcome.rows.length)
+        return status(422, {
+          code: "empty_plan",
+          message: "File tidak berisi pasangan unit-operator",
+        });
 
-      const writes = outcome.rows.filter((r) => r.preview.kind !== "unchanged");
-      const moved = writes.filter((r) => r.fromUnitId !== null);
-      if (!writes.length) return { created: 0, moved: 0 };
-
+      const actor = planActorOf(principal);
       try {
         await db.transaction(async (tx) => {
-          // The unit rows are the locks, taken in one sorted set so two
-          // imports (or an import and the dialog) serialise instead of
-          // deadlocking. Everything the file touches is locked: targets,
-          // and the units moves release.
-          const lockIds = [
-            ...new Set([
-              ...writes.map((r) => r.unitId),
-              ...moved.map((r) => r.fromUnitId!),
-            ]),
-          ].sort();
-          await tx
-            .select({ id: schema.units.id })
-            .from(schema.units)
-            .where(inArray(schema.units.id, lockIds))
-            .for("update");
-
-          if (moved.length)
-            await tx.delete(schema.fleetPlanSlots).where(
-              inArray(
-                schema.fleetPlanSlots.employeeId,
-                moved.map((r) => r.employeeId)
-              )
-            );
-          await tx.insert(schema.fleetPlanSlots).values(
-            writes.map((r) => ({
+          // Serialises with Reset (and another import) on the default itself;
+          // a plain row lock cannot, because this replaces every row.
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(${PLAN_DEFAULT_LOCK})`
+          );
+          await tx.delete(schema.fleetPlanDefaults);
+          const [saved] = await tx
+            .insert(schema.fleetPlanDefaultImports)
+            .values({
+              // Shown on the toolbar; a name past this is noise, not a name.
+              fileName: body.file.name.slice(0, MAX_FILE_NAME),
+              actorUserId: actor?.id ?? null,
+              actorName: actor?.name ?? null,
+            })
+            .returning({ id: schema.fleetPlanDefaultImports.id });
+          await tx.insert(schema.fleetPlanDefaults).values(
+            outcome.rows.map((r) => ({
+              importId: saved!.id,
               unitId: r.unitId,
               employeeId: r.employeeId,
+              nik: r.preview.nik,
+              name: r.preview.name,
             }))
           );
-
-          // Releases first, as their own statement, so a move reads in the
-          // order it happened: off the old unit, then onto the new one.
-          const actor = planActorOf(principal);
-          const who = (r: (typeof writes)[number]) => ({
-            employeeId: r.employeeId,
-            nik: r.preview.nik,
-            name: r.preview.name,
-          });
-          await recordPlanChanges(
-            tx,
-            moved.map((r) => ({
-              ...who(r),
-              unitId: r.fromUnitId!,
-              action: "released" as const,
-            })),
-            "import",
-            actor
-          );
-          await recordPlanChanges(
-            tx,
-            writes.map((r) => ({
-              ...who(r),
-              unitId: r.unitId,
-              action: "assigned" as const,
-            })),
-            "import",
-            actor
-          );
-
-          // The recheck under lock — validation read the plan a moment
-          // before this transaction, and the dialog may have written in
-          // between. Capacity is re-judged on what the table now actually
-          // holds; a violation rolls the whole file back.
-          const targets = [...new Set(writes.map((r) => r.unitId))];
-          const codeOf = new Map(writes.map((r) => [r.unitId, r.preview.unit]));
-          const held = await tx
-            .select({
-              unitId: schema.fleetPlanSlots.unitId,
-              employeeId: schema.fleetPlanSlots.employeeId,
-            })
-            .from(schema.fleetPlanSlots)
-            .where(inArray(schema.fleetPlanSlots.unitId, targets));
-          const byUnit = new Map<string, string[]>();
-          for (const h of held)
-            byUnit.set(h.unitId, [
-              ...(byUnit.get(h.unitId) ?? []),
-              h.employeeId,
-            ]);
-
-          for (const [unitId, ids] of byUnit)
-            if (ids.length > FA_PLAN_MAX_OPS)
-              throw new PlanImportConflict(
-                409,
-                "unit_full",
-                `Unit ${codeOf.get(unitId)} baru saja terisi penuh — validasi ulang filenya`
-              );
         });
       } catch (error) {
-        if (error instanceof PlanImportConflict)
-          return status(error.httpStatus, {
-            code: error.code,
-            message: error.message,
-          });
-        // The race the locks cannot see: an operator paired with another
-        // unit between the read and this insert.
-        if (isUniqueViolation(error, "fleet_plan_slots_employee_id_unique"))
+        // The race the validation cannot see: the same operator twice is
+        // refused in the parse, so this is a belt over the unique index.
+        if (isUniqueViolation(error, "fleet_plan_defaults_employee_idx"))
           return status(409, {
-            code: "operator_busy",
+            code: "operator_duplicated",
             message:
-              "Seorang operator dalam file ini baru saja dipasangkan dengan unit lain — validasi ulang filenya",
+              "Seorang operator muncul dua kali — validasi ulang filenya",
+          });
+        // A unit or employee removed between the parse and this write.
+        if (isForeignKeyViolation(error))
+          return status(409, {
+            code: "plan_changed",
+            message:
+              "Unit atau karyawan di file berubah saat disimpan — validasi ulang filenya",
           });
         throw error;
       }
 
+      const { preview } = outcome;
       return {
-        created: writes.length - moved.length,
-        moved: moved.length,
+        pairs: outcome.rows.length,
+        created: preview.newCount,
+        moved: preview.movedCount,
+        removed: preview.removedCount,
       };
     },
     {
@@ -1200,7 +1403,165 @@ export const fleetAllocationRoutes = new Elysia({
         409: ErrorSchema,
         422: ErrorSchema,
       },
-      detail: { summary: "Commit a validated PLAN spreadsheet" },
+      detail: {
+        summary:
+          "Commit a validated PLAN spreadsheet as the saved default (the live plan is untouched)",
+      },
+    }
+  )
+
+  .get(
+    "/plan/default",
+    // `Response.json` because Elysia sends a bare `null` as an empty body,
+    // which no client can parse; this keeps "no default" a real JSON value.
+    async () => Response.json(await savedDefaultInfo()),
+    {
+      auth: { menu: "fleet-allocation", mode: "view" },
+      response: {
+        200: t.Nullable(PlanDefaultInfoSchema),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: {
+        summary: "The saved default PLAN: file, who, when, pairings (or null)",
+      },
+    }
+  )
+
+  .get(
+    "/plan/reset/preview",
+    async ({ status }) => {
+      const defaultInfo = await savedDefaultInfo();
+      if (!defaultInfo) return status(409, noDefault);
+      const diff = await resetDiff(db);
+      return {
+        release: diff.release.map(entryOf),
+        assign: diff.assign.map(entryOf),
+        skipped: diff.skipped,
+        unchanged: diff.unchanged,
+        defaultInfo,
+      };
+    },
+    {
+      auth: { menu: "fleet-allocation", mode: "view" },
+      response: {
+        200: PlanResetPreviewSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        409: ErrorSchema,
+      },
+      detail: {
+        summary:
+          "What Reset would do: live PLAN versus the saved default (409 no_default when none)",
+      },
+    }
+  )
+
+  .post(
+    "/plan/reset",
+    async ({ status, principal }) => {
+      const actor = planActorOf(principal);
+      try {
+        return await db.transaction(async (tx) => {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(${PLAN_DEFAULT_LOCK})`
+          );
+          if (!(await savedDefaultInfo(tx)))
+            throw new PlanImportConflict(
+              409,
+              noDefault.code,
+              noDefault.message
+            );
+
+          // Lock first, diff second: every unit either plan names, in one
+          // sorted set (same discipline as the old import commit), so the
+          // dialog cannot slip a write between the read and the writes.
+          const { unitIds } = await resetDiff(tx);
+          if (unitIds.length)
+            await tx
+              .select({ id: schema.units.id })
+              .from(schema.units)
+              .where(inArray(schema.units.id, [...unitIds].sort()))
+              .orderBy(asc(schema.units.id))
+              .for("update");
+          const diff = await resetDiff(tx);
+
+          if (diff.release.length)
+            await tx.delete(schema.fleetPlanSlots).where(
+              inArray(
+                schema.fleetPlanSlots.id,
+                diff.release.map((r) => r.slotId)
+              )
+            );
+          if (diff.assign.length)
+            await tx.insert(schema.fleetPlanSlots).values(
+              diff.assign.map((a) => ({
+                unitId: a.unitId,
+                employeeId: a.employeeId,
+              }))
+            );
+
+          // Releases first, as their own statement, so a move reads in the
+          // order it happened: off the old unit, then onto the new one.
+          await recordPlanChanges(
+            tx,
+            diff.release.map((r) => ({
+              unitId: r.unitId,
+              employeeId: r.employeeId,
+              nik: r.nik,
+              name: r.name,
+              action: "released" as const,
+            })),
+            "reset",
+            actor
+          );
+          await recordPlanChanges(
+            tx,
+            diff.assign.map((a) => ({
+              unitId: a.unitId,
+              employeeId: a.employeeId,
+              nik: a.nik,
+              name: a.name,
+              action: "assigned" as const,
+            })),
+            "reset",
+            actor
+          );
+
+          return {
+            released: diff.release.length,
+            assigned: diff.assign.length,
+            skipped: diff.skipped,
+          };
+        });
+      } catch (error) {
+        if (error instanceof PlanImportConflict)
+          return status(409, {
+            code: error.code,
+            message: error.message,
+          });
+        // A dialog write on a unit this reset did not need to lock.
+        if (isUniqueViolation(error, "fleet_plan_slots_employee_id_unique"))
+          return status(409, {
+            code: "operator_busy",
+            message:
+              "Seorang operator baru saja dipasangkan di papan — coba reset lagi",
+          });
+        throw error;
+      }
+    },
+    {
+      auth: { menu: "fleet-allocation", mode: "manage" },
+      response: {
+        200: PlanResetResultSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        409: ErrorSchema,
+      },
+      detail: {
+        summary:
+          "Bring the live PLAN back to the saved default (skips and lists pairings that cannot be made now)",
+      },
     }
   )
 

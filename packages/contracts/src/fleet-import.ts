@@ -190,10 +190,9 @@ export const PLAN_IMPORT_COLUMNS = ["unit", "nik"] as const;
 export type PlanImportColumn = (typeof PLAN_IMPORT_COLUMNS)[number];
 
 /**
- * One accepted row of the preview. A `moved` row names the unit the operator
- * leaves, so a re-uploaded plan shows every reassignment before it happens; an
- * `unchanged` row is a pairing the database already holds and the commit will
- * not touch.
+ * One accepted row of the preview, judged against the saved default plan. A
+ * `moved` row names the unit the default had the operator on; an `unchanged`
+ * row is a pairing the default already holds.
  */
 export type PlanImportPreviewRow = {
   /** 1-based spreadsheet row, as the operator sees it. */
@@ -202,8 +201,15 @@ export type PlanImportPreviewRow = {
   unit: string;
   nik: string;
   name: string;
-  /** The unit a `moved` operator is released from; null otherwise. */
+  /** The unit the default has a `moved` operator on; null otherwise. */
   fromUnit: string | null;
+};
+
+/** A pairing the saved default holds and the file does not name. */
+export type PlanImportRemovedRow = {
+  unit: string;
+  nik: string;
+  name: string;
 };
 
 export type PlanImportPreview = {
@@ -212,12 +218,48 @@ export type PlanImportPreview = {
   newCount: number;
   movedCount: number;
   unchangedCount: number;
+  /** Default pairings the file does not name; listed before the commit. */
+  removedCount: number;
   errorCount: number;
   rows: PlanImportPreviewRow[];
+  removed: PlanImportRemovedRow[];
   errors: ImportErrorRow[];
 };
 
+/** What the saved default became, relative to the one it replaced. */
 export type PlanImportResult = {
+  /** Pairings in the new default. */
+  pairs: number;
   created: number;
   moved: number;
+  removed: number;
+};
+
+/** The saved default plan, as the PLAN toolbar describes it. */
+export type PlanDefaultInfo = {
+  fileName: string;
+  actorName: string | null;
+  createdAt: string;
+  pairs: number;
+};
+
+/** One pairing named in a reset diff. */
+export type PlanResetEntry = { unit: string; nik: string; name: string };
+
+/** A default pairing a reset cannot make now, and why. */
+export type PlanResetSkipped = PlanResetEntry & { reason: string };
+
+/** Live plan versus the saved default: what a reset would do. */
+export type PlanResetPreview = {
+  release: PlanResetEntry[];
+  assign: PlanResetEntry[];
+  skipped: PlanResetSkipped[];
+  unchanged: number;
+  defaultInfo: PlanDefaultInfo;
+};
+
+export type PlanResetResult = {
+  released: number;
+  assigned: number;
+  skipped: PlanResetSkipped[];
 };

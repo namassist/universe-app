@@ -115,8 +115,8 @@ fill the gap from the spare pool.
   vehicle may not be anyone's ride nor the spare pool's — each refused on its
   row ("Unit DT4027 nonaktif", "Transport UD-BU09 nonaktif"), so the import
   cannot be committed until it is fixed. The row still counts toward its
-  formation, so an inactive digger is one error, not three. The PLAN import is
-  the exception and keeps admitting inactive units (2026-09-23).
+  formation, so an inactive digger is one error, not three. The PLAN import (the default
+  plan) is the exception and keeps admitting inactive units (2026-09-23).
 - **Released means cleared, not merely unflagged.** A unit the file does not
   name loses its support flag, its work area and its transport together — a
   machine nobody named today is not working anywhere, and a leftover area had
@@ -350,6 +350,31 @@ fill the gap from the spare pool.
   table's fleet and department filters (`AsyncSelect` fed from the page's own
   data; a search matches the fleet's area as well as its leader). Selects of
   two or three options stay native.
+- **The PLAN file is the default, and Reset applies it** (owner, 2026-10-29).
+  Importing a PLAN file no longer writes the live plan. The file is the
+  **whole saved default plan**: committing it replaces the default
+  (`fleet_plan_defaults`, one `fleet_plan_default_imports` row per commit as
+  the audit trail) and leaves `fleet_plan_slots` and `fleet_plan_history`
+  untouched. The preview compares the file with the saved default (new / moved
+  / unchanged) and lists the **removed** default pairings the file does not name,
+  before commit. Capacity (max 2 per unit) is judged inside the file alone;
+  an empty file is refused. There is **no default until the first import after
+  release**; until then Reset is disabled and the toolbar asks for an upload.
+  The PLAN toolbar shows "Default: file, date, who, pairings" and, with manage
+  permission, a **Reset** button. Reset never acts by itself: it opens a
+  **confirmation dialog** that fetches `GET /plan/reset/preview` and shows how
+  many pairings would be released, assigned and skipped, the skipped list with
+  reasons, and a warning that the allocation engine, the provisional fleet wall
+  and the slips read the PLAN, so a reset before the board is generated changes
+  this shift. Confirming calls `POST /plan/reset`: in one transaction (unit rows
+  locked, sorted) it releases every live pairing not in the default and assigns
+  every default pairing not live, recording both in `fleet_plan_history` with
+  source `reset`. **Stale pairings are skipped and listed, not forced**: an
+  employee deleted, not `aktif`/`standby`, in a position outside fleet
+  allocation, with a missing or expired SIMPER, or in another department than
+  the unit (the same `pairingRefusal` the dialog uses, planning flag on). After
+  a reset the live plan equals the default minus the skipped; a second reset
+  changes nothing. With no default, both reset routes answer 409 `no_default`.
 - **Standing-operator history** (owner, 2026-09-22). Every change to a unit's
   PLAN pairings is kept in `fleet_plan_history` — assigned or released, the
   operator (NIK and name as they were), from the board or an import, by whom,

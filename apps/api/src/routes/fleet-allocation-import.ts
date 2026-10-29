@@ -1,12 +1,15 @@
 /**
- * Bulk PLAN pairing by spreadsheet — one operator ↔ unit row at a time.
+ * The default PLAN by spreadsheet — one operator ↔ unit row at a time.
  *
- * This module parses and checks what a file can prove about itself: the codes
- * it names, its own internal consistency (the same pairing twice, one
- * operator on two units), and — via `pairingConflicts`, run after the route
- * has filtered rows through `refusePairing` — capacity against the
- * *effective* plan: what the database holds, minus what the file moves away,
- * plus what it adds.
+ * The file is the *whole* saved default plan: committing it replaces the
+ * default and never touches the live PLAN (owner, 2026-10-29). This module
+ * parses and checks what a file can prove about itself: the codes it names,
+ * its own internal consistency (the same pairing twice, one operator on two
+ * units), the kind of each row relative to the saved default (new, moved,
+ * unchanged), and — via `pairingConflicts`, run after the route has filtered
+ * rows through `refusePairing` — capacity judged within the file alone: every
+ * accepted row counts, unchanged ones included, and nothing from the live plan
+ * or the old default does.
  */
 
 import ExcelJS from "exceljs";
@@ -33,10 +36,8 @@ export type PlanCatalogues = {
   unitsByCode: Map<string, { id: string; code: string }>;
   /** Every employee, keyed NIK exactly as stored. */
   peopleByNik: Map<string, { id: string; nik: string; name: string }>;
-  /** employeeId → the unit currently holding them in the plan. */
-  slotOf: Map<string, { unitId: string; unitCode: string }>;
-  /** unitId → employeeIds currently held. */
-  heldByUnit: Map<string, string[]>;
+  /** employeeId → the unit the saved default has them on. */
+  defaultOf: Map<string, { unitId: string; unitCode: string }>;
 };
 
 /** A row the file itself could not refute, ready for the eligibility checks. */
@@ -44,7 +45,7 @@ export type ParsedPlanRow = {
   preview: PlanImportPreviewRow;
   unitId: string;
   employeeId: string;
-  /** The unit a `moved` operator leaves; null for `new` and `unchanged`. */
+  /** The unit the default has a `moved` operator on; null otherwise. */
   fromUnitId: string | null;
 };
 
@@ -189,7 +190,7 @@ export async function validatePlanWorkbook(
     }
     spokenFor.set(person.id, n);
 
-    const held = catalogues.slotOf.get(person.id) ?? null;
+    const held = catalogues.defaultOf.get(person.id) ?? null;
     const kind =
       held === null
         ? ("new" as const)
@@ -216,7 +217,7 @@ export async function validatePlanWorkbook(
 }
 
 /**
- * Capacity, judged against the effective plan.
+ * Capacity, judged within the file alone.
  *
  * Walked in file order so the refusal lands on the row that overfilled the
  * unit — the rows before it remain importable. Run this on rows that already
@@ -227,32 +228,17 @@ export async function validatePlanWorkbook(
  * operators no longer have to be on opposite shifts, because the plan says
  * who holds a machine rather than who drives it today.
  */
-export function pairingConflicts(
-  rows: ParsedPlanRow[],
-  catalogues: PlanCatalogues
-): { rows: ParsedPlanRow[]; errors: ImportErrorRow[] } {
-  // What each unit holds once every move in the file has released its old
-  // slot — additions then land on top of this.
-  const effective = new Map<string, string[]>();
-  const leaving = new Set(
-    rows.filter((r) => r.fromUnitId !== null).map((r) => r.employeeId)
-  );
-  for (const [unitId, held] of catalogues.heldByUnit)
-    effective.set(
-      unitId,
-      held.filter((id) => !leaving.has(id))
-    );
-
+export function pairingConflicts(rows: ParsedPlanRow[]): {
+  rows: ParsedPlanRow[];
+  errors: ImportErrorRow[];
+} {
+  const held = new Map<string, number>();
   const kept: ParsedPlanRow[] = [];
   const errors: ImportErrorRow[] = [];
 
   for (const row of rows) {
-    if (row.preview.kind === "unchanged") {
-      kept.push(row);
-      continue;
-    }
-    const held = effective.get(row.unitId) ?? [];
-    if (held.length >= PLAN_MAX_OPS) {
+    const count = held.get(row.unitId) ?? 0;
+    if (count >= PLAN_MAX_OPS) {
       errors.push(
         danger(
           row.preview.row,
@@ -263,7 +249,7 @@ export function pairingConflicts(
       );
       continue;
     }
-    effective.set(row.unitId, [...held, row.employeeId]);
+    held.set(row.unitId, count + 1);
     kept.push(row);
   }
 

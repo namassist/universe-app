@@ -60,8 +60,17 @@ the definition — when they disagree, the code wins. Change flow: edit
 - `fleet_plan_slots` — the standing PLAN pairings. `employee_id` unique (an
   operator holds one unit); max-2-per-unit and the Day/Night pair rule are
   route-enforced (they need the roster, which the table cannot see).
+- `fleet_plan_default_imports` — one row per committed PLAN import (`file_name`,
+  `actor_user_id` set null, `actor_name`, `created_at`); the newest row
+  describes the saved default and older rows stay as the audit trail.
+- `fleet_plan_defaults` — the saved default PLAN, replaced whole by each import
+  (the live `fleet_plan_slots` is not touched). `import_id` cascades from the
+  import row, `unit_id` is `restrict`, `employee_id` is `set null` (`nik` and
+  `name` are kept as at import); unique index on `employee_id` (nulls allowed)
+  and an index on `unit_id`. Reset reads it; nothing else does.
 - `fleet_plan_history` — append-only trail of PLAN pairing changes:
-  `action` (`assigned`/`released`), `source` (`board`/`import`/`migration`),
+  `action` (`assigned`/`released`), `source` (`board`/`import`/`migration`/
+  `reset`),
   the operator's `nik` and `name` as they were, and the actor's user id and
   name. Written in the same transaction as the slot write; read only by the
   history route. `unit_id` is `restrict` like `unit_status_history` (a unit
