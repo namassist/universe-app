@@ -102,6 +102,18 @@ export function isForeignKeyViolation(error: unknown): boolean {
   return driverError(error)?.code === FOREIGN_KEY_VIOLATION;
 }
 
+/** `lock_not_available` (a `lock_timeout` ran out) and `deadlock_detected`. */
+const LOCK_CONFLICTS = new Set(["55P03", "40P01"]);
+
+/**
+ * A write that gave up waiting for another one — a lock timeout or the
+ * deadlock Postgres broke — rather than one that was refused. Worth trying
+ * again, so a route answers 409 instead of letting it become a 500.
+ */
+export function isLockConflict(error: unknown): boolean {
+  return LOCK_CONFLICTS.has(driverError(error)?.code ?? "");
+}
+
 /**
  * Which constraint refused it, so the refusal can name the real referrer.
  *

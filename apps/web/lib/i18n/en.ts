@@ -828,6 +828,24 @@ export const en: Dict = {
   faResetConfirm: "Reset",
   faResetDoneT: "PLAN reset",
   faResetDoneD: "{released} released, {assigned} assigned, {skipped} skipped",
+  faPlanGenBtn: "Generate",
+  faPlanGenT: "Fill empty units with spares?",
+  faPlanGenB:
+    "Active spares rostered to today's {shift} shift ({date}) are paired with the units nobody works on that shift, in Prioritas Alokasi order, by matching SIMPER code. No FTW or finger checks.",
+  faPlanGenLoading: "Working out the spare pairings",
+  faPlanGenUnfilled: "Left empty",
+  faPlanGenListT: "Pairings to be made",
+  faPlanGenReplaces: "replaces",
+  faPlanGenUnfilledT:
+    "Units left empty — no spare on this shift holds the SIMPER code",
+  faPlanGenSparesLeft: "{n} spares on this shift are not used.",
+  faPlanGenEmpty: "No empty unit can be filled by this shift's spares.",
+  faPlanGenWarn:
+    "The allocation engine, the provisional fleet wall and the slips read the PLAN. Released operators go back to their unit through Reset.",
+  faPlanGenConfirm: "Generate",
+  faPlanGenDoneT: "Spares assigned",
+  faPlanGenDoneD:
+    "{assigned} assigned, {released} released, {unfilled} left empty",
   flSub:
     "Fleet formations: 1 digger (leader) + OHT units + work location + default bus. Used by the daily Unit No-Operator board.",
   flImpTitle: "Import fleets from a spreadsheet",
@@ -1039,6 +1057,7 @@ export const en: Dict = {
   faHistSrcBoard: "on the board",
   faHistSrcImport: "by import",
   faHistSrcReset: "by reset to default",
+  faHistSrcGenerate: "by Generate",
   faHistSrcMigration: "already paired when the history began",
   faHistBy: "by",
   udbSerial: "Serial no.",

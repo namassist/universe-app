@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RotateCcw, Upload } from "lucide-react";
+import { RotateCcw, Sparkles, Upload } from "lucide-react";
 
 import { api, errorMessage } from "@/lib/api";
 import { fmt, useI18n } from "@/lib/i18n";
@@ -23,6 +23,8 @@ import {
 import { useToast } from "@/components/ui/toast";
 
 import { canConfirmReset, defaultLine, resetSummary } from "./plan-default";
+import { GenerateDialog } from "./plan-generate-dialog";
+import { PlanStat } from "./plan-stat";
 
 /** "29 Okt 2026" — the day matters, a default can be weeks old. */
 function dateOf(iso: string, lang: string) {
@@ -35,15 +37,17 @@ function dateOf(iso: string, lang: string) {
 
 /**
  * The actions that change the plan itself, kept apart from the view filters:
- * Import (which sets the saved default) and Reset (which brings the live PLAN
- * back to it), with the default's one-line description beneath them. Reset
- * never acts by itself: it opens `ResetDialog`, which shows the diff and
- * waits for a second, explicit click.
+ * Generate (spares onto today's empty units), Import (which sets the saved
+ * default) and Reset (which brings the live PLAN back to it), with the
+ * default's one-line description beneath them. Neither Generate nor Reset
+ * acts by itself: each opens a dialog that shows what would change and waits
+ * for a second, explicit click.
  */
 export function PlanDefaultBar({ canManage }: { canManage: boolean }) {
   const { t, lang } = useI18n();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
+  const [generating, setGenerating] = React.useState(false);
   const defaultQ = useQuery(planDefaultQueryOptions());
   const info = defaultQ.data ?? null;
   // A failed read is not "no default": saying so would send someone to
@@ -62,6 +66,14 @@ export function PlanDefaultBar({ canManage }: { canManage: boolean }) {
     <div className="flex max-w-full min-w-0 flex-col items-start gap-1.5 sm:items-end">
       {canManage ? (
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            className="h-10"
+            onClick={() => setGenerating(true)}
+          >
+            <Sparkles />
+            {t.faPlanGenBtn}
+          </Button>
           <Button
             variant="secondary"
             className="h-10"
@@ -88,17 +100,13 @@ export function PlanDefaultBar({ canManage }: { canManage: boolean }) {
         {line}
       </span>
       {canManage ? (
-        <ResetDialog open={open} onClose={() => setOpen(false)} />
+        <>
+          <ResetDialog open={open} onClose={() => setOpen(false)} />
+          {generating ? (
+            <GenerateDialog onClose={() => setGenerating(false)} />
+          ) : null}
+        </>
       ) : null}
-    </div>
-  );
-}
-
-function Stat({ n, label }: { n: number; label: string }) {
-  return (
-    <div className="flex-1 rounded-card border border-(--glass-2-border) px-3 py-2 text-center">
-      <div className="text-lg font-bold tabular-nums">{n}</div>
-      <div className="text-xs text-(--text-secondary)">{label}</div>
     </div>
   );
 }
@@ -198,9 +206,9 @@ function ResetDialog({
         ) : (
           <>
             <div className="flex gap-2">
-              <Stat n={summary.release} label={t.faResetRelease} />
-              <Stat n={summary.assign} label={t.faResetAssign} />
-              <Stat n={summary.skipped} label={t.faResetSkipped} />
+              <PlanStat n={summary.release} label={t.faResetRelease} />
+              <PlanStat n={summary.assign} label={t.faResetAssign} />
+              <PlanStat n={summary.skipped} label={t.faResetSkipped} />
             </div>
             {summary.empty ? (
               <p className="text-sm text-(--text-secondary)">

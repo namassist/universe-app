@@ -421,6 +421,13 @@
       "when": 1793279651332,
       "tag": "0059_violet_ultron",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793321158374,
+      "tag": "0060_military_shiver_man",
+      "breakpoints": true
     }
   ]
 }

@@ -826,6 +826,24 @@ export const id = {
   faResetConfirm: "Reset",
   faResetDoneT: "PLAN direset",
   faResetDoneD: "{released} dilepas, {assigned} dipasang, {skipped} dilewati",
+  faPlanGenBtn: "Generate",
+  faPlanGenT: "Isi unit kosong dengan spare?",
+  faPlanGenB:
+    "Spare aktif yang bertugas shift {shift} hari ini ({date}) dipasangkan ke unit yang tidak ada operatornya di shift itu, berurutan menurut Prioritas Alokasi, dengan SIMPER yang cocok. Tanpa cek FTW dan finger.",
+  faPlanGenLoading: "Menghitung pasangan spare",
+  faPlanGenUnfilled: "Tetap kosong",
+  faPlanGenListT: "Pasangan yang akan dibuat",
+  faPlanGenReplaces: "menggantikan",
+  faPlanGenUnfilledT:
+    "Unit yang tetap kosong — tidak ada spare shift ini dengan SIMPER yang cocok",
+  faPlanGenSparesLeft: "{n} spare shift ini tidak terpakai.",
+  faPlanGenEmpty: "Tidak ada unit kosong yang bisa diisi spare shift ini.",
+  faPlanGenWarn:
+    "Mesin alokasi, wall fleet sementara, dan slip membaca PLAN. Operator yang dilepas kembali ke unitnya lewat Reset.",
+  faPlanGenConfirm: "Generate",
+  faPlanGenDoneT: "Spare dipasang",
+  faPlanGenDoneD:
+    "{assigned} dipasang, {released} dilepas, {unfilled} tetap kosong",
   flSub:
     "Formasi fleet: 1 digger (leader) + unit OHT + lokasi kerja + bus default. Dipakai papan Unit No-Operator harian.",
   flImpTitle: "Import fleet dari spreadsheet",
@@ -1037,6 +1055,7 @@ export const id = {
   faHistSrcBoard: "lewat papan",
   faHistSrcImport: "lewat import",
   faHistSrcReset: "lewat reset ke default",
+  faHistSrcGenerate: "lewat Generate",
   faHistSrcMigration: "sudah terpasang saat riwayat mulai dicatat",
   faHistBy: "oleh",
   udbSerial: "No. seri",

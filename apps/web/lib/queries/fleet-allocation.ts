@@ -57,6 +57,25 @@ export const planResetPreviewQueryOptions = () =>
     gcTime: 0,
   });
 
+export const planGeneratePreviewKey = [
+  "fleet-allocation",
+  "plan",
+  "generate-preview",
+] as const;
+
+/**
+ * What Generate would do right now — the clock's shift, each empty unit's
+ * spare. Never reused, for the same reason as the reset preview.
+ */
+export const planGeneratePreviewQueryOptions = () =>
+  queryOptions({
+    queryKey: planGeneratePreviewKey,
+    queryFn: () =>
+      unwrap(api.v1["fleet-allocation"].plan.generate.preview.get()),
+    staleTime: 0,
+    gcTime: 0,
+  });
+
 export const planHistoryKey = (unitCode: string) =>
   ["fleet-allocation", "plan", "history", unitCode] as const;
 

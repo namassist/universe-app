@@ -128,6 +128,44 @@ Consequences, all deliberate:
   identify the pairing, and Reset lists it as skipped), `unit_id` is `restrict`,
   `import_id` cascades because a commit always replaces every row.
 
+## D12 — PLAN Generate puts spares on today's empty units
+
+Owner (2026-10-30): the PLAN tab fills the units nobody works today from the
+shift's spares, so a unit whose operator is on leave is crewed in the plan
+before the board is built. The rule is pure (`planGenerate` in
+`src/plan-generate.ts`); `routes/fleet-allocation-generate.ts` loads and
+writes, and is mounted beside the PLAN routes under `/fleet-allocation`.
+
+- **The engine's spare step without readiness.** Same eligibility
+  (`pairingRefusal`, planning flag off, so `aktif` only) and the same order
+  (Prioritas Alokasi rank, unranked last, ties `asc(code)`); no FTW, no finger.
+  Spares are taken by NIK so the answer is deterministic.
+- **Shift from the clock at noon**, not the timeline's `shift-start`: before
+  12:00 the day shift, after it the night, on today's roster date. The owner
+  named the boundary; the PLAN's crew table already opens on the same rule.
+- **Spare = no PLAN slot anywhere**, rostered `D`/`N` for that shift. A holder
+  whose own unit is broken down is not moved.
+- **A full unit gives up a seat.** With two holders and neither on the shift,
+  the standby one is released first, then one not working today, then one on
+  the other shift (lower NIK on ties). Max 2 per unit holds; the released
+  operator comes back through Reset.
+- **Preview, then confirm.** `GET /plan/generate/preview` (view) and
+  `POST /plan/generate { shift }` (manage). The commit takes the D11 advisory
+  lock, locks every unit in allocation sorted by id, recomputes, and refuses
+  409 `shift_changed` when the clock has crossed noon or midnight since the
+  preview. History lines carry source `generate`, releases before
+  assignments.
+- **The commit writes what was previewed.** The preview carries a token, a
+  sha256 over its (unit, spare, released holder) lines; the commit recomputes
+  under lock and answers 409 `preview_stale` when the token differs, so a
+  release nobody saw is never written. It reads only the units it locked.
+- **Lock order is units before slots, everywhere.** The commit sets
+  `lock_timeout` 5 s (55P03 and 40P01 answer 409 `plan_busy`). The slot
+  release route (`DELETE /plan/slots/:unitCode/:nik`) now locks its unit
+  first, like the assign route: its history insert needs a key-share lock on
+  the unit, and taking the slot first could deadlock with a commit holding
+  every unit.
+
 ## Known debt
 
 - `users` links to employees by NIK string; renaming a NIK orphans the

@@ -60,14 +60,68 @@ export type PlanHistoryAction = (typeof PLAN_HISTORY_ACTIONS)[number];
  * Where a PLAN change came from. `migration` marks the pairings that already
  * stood when the history began: their start is known, who made them is not.
  * `reset` is the live plan being brought back to the saved default.
+ * `generate` is the PLAN's Generate button putting spares on today's empty
+ * units.
  */
 export const PLAN_HISTORY_SOURCES = [
   "board",
   "import",
   "migration",
   "reset",
+  "generate",
 ] as const;
 export type PlanHistorySource = (typeof PLAN_HISTORY_SOURCES)[number];
+
+/* ------------------------------------------------------------ plan generate */
+
+/** The operator a full unit gives up so a spare can take the seat. */
+export type PlanGenerateReleased = {
+  nik: string;
+  name: string;
+  /** Their roster code today — why they are not on this shift. */
+  rosterCode: string | null;
+  standby: boolean;
+};
+
+/** One spare put on one empty unit. */
+export type PlanGenerateAssignment = {
+  unit: string;
+  simperCode: string | null;
+  /** Prioritas Alokasi rank of the unit; null = unranked. */
+  priority: number | null;
+  nik: string;
+  name: string;
+  released: PlanGenerateReleased | null;
+};
+
+/** An empty unit no spare on the shift can take. */
+export type PlanGenerateUnfilled = {
+  unit: string;
+  simperCode: string | null;
+  priority: number | null;
+};
+
+/**
+ * What Generate would do (owner, 2026-10-30): the shift it read off the clock
+ * (before noon the day shift, after it the night), the spare each empty unit
+ * gets, and the units left empty.
+ */
+export type PlanGeneratePreview = {
+  date: string;
+  shift: "day" | "night";
+  assign: PlanGenerateAssignment[];
+  unfilled: PlanGenerateUnfilled[];
+  /** Spares on the shift that no empty unit took. */
+  sparesLeft: number;
+  /** Echoed by the commit, which refuses (409) if the answer has changed. */
+  token: string;
+};
+
+export type PlanGenerateResult = {
+  assigned: number;
+  released: number;
+  unfilled: number;
+};
 
 /* --------------------------------------------------- allocation priority */
 

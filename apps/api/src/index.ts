@@ -24,6 +24,7 @@ import { printerRoutes } from "./routes/printers";
 import { reportRoutes } from "./routes/reports";
 import { fleetActualRoutes } from "./routes/fleet-actual";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
+import { planGenerateRoutes } from "./routes/fleet-allocation-generate";
 import { allocationPriorityRoutes } from "./routes/allocation-priority";
 import { notificationRoutes } from "./routes/notifications";
 import { opsRoutes } from "./routes/ops";
@@ -78,6 +79,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(ticketRoutes)
   .use(unitStatusRoutes)
   .use(fleetAllocationRoutes)
+  .use(planGenerateRoutes)
   .use(fleetActualRoutes)
   .use(fitToWorkSyncRoutes)
   .use(attendanceSyncRoutes)

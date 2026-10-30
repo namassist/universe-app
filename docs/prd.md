@@ -375,6 +375,44 @@ fill the gap from the spare pool.
   the unit (the same `pairingRefusal` the dialog uses, planning flag on). After
   a reset the live plan equals the default minus the skipped; a second reset
   changes nothing. With no default, both reset routes answer 409 `no_default`.
+- **Generate fills today's empty units with spares** (owner, 2026-10-30).
+  A **Generate** button beside Import and Reset (manage permission) pairs the
+  shift's spare operators with the units nobody works on that shift — a unit
+  whose operator is on leave, for instance — in the PLAN itself. It is the
+  ACTUAL engine's spare step without the FTW and finger checks:
+  - **The shift is the clock's**: pressed from 00:00 to 11:59 it fills the day
+    shift (spares rostered `D`), from 12:00 the night (`N`), on today's
+    roster date.
+  - **Empty** means what **Kosong** means on the board: in allocation, and no
+    `aktif` holder rostered to that shift (`vacantOn`).
+  - **A spare** is an `aktif` fleet-allocation operator with no PLAN slot at
+    all, rostered to that shift. `standby` and `nonaktif` operators are never
+    assigned; a missing roster cell is not a shift.
+  - **Matching** is the board's eligibility: the unit's SIMPER code held and
+    unexpired, and a department-owned unit takes only its department.
+  - **Priority** is the Prioritas Alokasi order (unranked last, then unit
+    code): a spare who fits both EX6xx (rank 2) and EX5xx (rank 3) goes to
+    EX6xx. Spares are taken in NIK order, so the same day gives the same
+    answer.
+  - **A unit already holding two operators** (say a Day operator on leave
+    and a Night operator) gives up one to make room — a standby holder first,
+    then one not working today, then one on the other shift. Reset brings
+    the default pairing back when the operator returns.
+
+  Like Reset it never acts by itself: a dialog fetches
+  `GET /plan/generate/preview` and shows the shift, each unit → spare pairing,
+  the holder a full unit gives up, the units left empty for want of a SIMPER
+  match, and how many spares stay unused, with the warning that the engine,
+  the provisional wall and the slips read the PLAN. Confirming calls
+  `POST /plan/generate` with the previewed shift and the preview's token, and
+  it writes **only what the dialog showed**: if the clock has crossed noon or
+  midnight it answers 409 `shift_changed`, if the PLAN, roster or permits
+  changed the answer it answers 409 `preview_stale`, and if another PLAN write
+  holds it up for more than five seconds, 409 `plan_busy` — each asks for
+  Generate to be opened again. Every change is recorded in the history with
+  source `generate`. A second Generate on the
+  same shift finds nothing more to do.
+
 - **Standing-operator history** (owner, 2026-09-22). Every change to a unit's
   PLAN pairings is kept in `fleet_plan_history` — assigned or released, the
   operator (NIK and name as they were), from the board or an import, by whom,

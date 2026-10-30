@@ -14,7 +14,7 @@ the code disagree, the code and PRD win. Fix this file in the same change.
 | Formation / fleet                | One **leader** unit (any type, usually a digger) plus 1–13 haulers (`fleets`, `fleet_units`). One work area per formation.                                                                                 |
 | Support unit                     | A unit in no formation but crewed (`units.fleet_support`, set by the Fleet Setting import). Grouped as **Support**.                                                                                        |
 | No fleet                         | Active units in no formation and not support. Derived and never stored. **Not allocated**, only listed so they don't go unnoticed.                                                                         |
-| PLAN                             | Standing unit ↔ operator pairs, max 2 per unit, no date, no shift (`fleet_plan_slots`).                                                                                                                    |
+| PLAN                             | Standing unit ↔ operator pairs, max 2 per unit, no date, no shift (`fleet_plan_slots`). **Generate** fills the shift's empty units from its spares, in the PLAN (`plan-generate.ts`).                      |
 | ACTUAL / board                   | One shift's generated allocation (`fleet_actual_slots`, `fleet_actual_fleets`), built by `spare-validate`.                                                                                                 |
 | Default plan                     | The saved whole-file PLAN (`fleet_plan_defaults`, set by the PLAN import, audit in `fleet_plan_default_imports`). Never read by the engine; **Reset** brings the live PLAN to it, skipping stale pairings. |
 | Standing operator / holder       | An operator with a PLAN slot.                                                                                                                                                                              |
@@ -148,11 +148,12 @@ Invariants:
 Code: `allocation.ts`, `readiness.ts`, `fleet-scope.ts`, `routes/fleet-allocation.ts`
 (PLAN), `routes/fleet-actual.ts` (boards, audit, candidates, manual edit),
 `routes/allocation-priority.ts`, `routes/fleets*.ts` and
-`routes/fleet-allocation-import.ts` (the PLAN file parsed against the default; Reset lives in `routes/fleet-allocation.ts`).
+`routes/fleet-allocation-import.ts` (the PLAN file parsed against the default; Reset lives in `routes/fleet-allocation.ts`),
+`plan-generate.ts` + `routes/fleet-allocation-generate.ts` (PLAN Generate: no FTW/finger, shift by noon, same eligibility and priority order as step 5).
 Web: `components/menus/fleet-allocation/*`, `fleet-allocation.tsx`,
-`allocation-priority.tsx`, `fleet-setting*.tsx`, `plan-default-bar.tsx` (default line + Reset dialog), `plan-default.ts`.
+`allocation-priority.tsx`, `fleet-setting*.tsx`, `plan-default-bar.tsx` (default line + Reset dialog), `plan-default.ts`, `plan-generate-dialog.tsx` + `plan-generate.ts` (Generate).
 Tests: `allocation.test.ts`, `readiness.test.ts`, `routes/fleet-allocation*.test.ts`,
-`routes/fleet-actual.test.ts`, `routes/allocation-priority.test.ts`, `routes/fleet-allocation-default.test.ts` (default + Reset), `crew-rows.test.ts`, `plan-default.test.ts`.
+`routes/fleet-actual.test.ts`, `routes/allocation-priority.test.ts`, `routes/fleet-allocation-default.test.ts` (default + Reset), `plan-generate.test.ts`, `routes/fleet-allocation-generate.test.ts`, `crew-rows.test.ts`, `plan-default.test.ts`, web `plan-generate.test.ts`.
 PRD: _Asset & Fleet_, from _Fleet composition_ through _The Actual tab_.
 
 ## Displays (walls)

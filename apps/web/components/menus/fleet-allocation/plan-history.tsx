@@ -43,7 +43,9 @@ function howOf(t: Dict, row: PlanHistoryRow) {
         ? t.faHistSrcImport
         : row.source === "reset"
           ? t.faHistSrcReset
-          : t.faHistSrcMigration;
+          : row.source === "generate"
+            ? t.faHistSrcGenerate
+            : t.faHistSrcMigration;
   return row.actorName ? `${source} · ${t.faHistBy} ${row.actorName}` : source;
 }
 

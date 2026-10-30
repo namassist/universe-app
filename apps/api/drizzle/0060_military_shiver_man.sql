@@ -1,0 +1,1 @@
+ALTER TYPE "public"."plan_history_source" ADD VALUE 'generate';

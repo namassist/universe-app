@@ -70,10 +70,10 @@ import {
 } from "./schemas";
 import { statusOf } from "./unit-status";
 
-const FA_PLAN_MAX_OPS = 2;
+export const FA_PLAN_MAX_OPS = 2;
 
-/** The advisory-lock key that serialises Reset and the default import. */
-const PLAN_DEFAULT_LOCK = 7_300_001;
+/** The advisory-lock key that serialises Reset, Generate and the default import. */
+export const PLAN_DEFAULT_LOCK = 7_300_001;
 
 const digger = alias(schema.units, "leader_unit");
 
@@ -395,7 +395,7 @@ type PlanActor = { id: string; name: string } | null;
 
 /* A device session never reaches a write route (the macro refuses it), so a
    null actor only ever means "not a person" rather than "unknown". */
-const planActorOf = (principal: {
+export const planActorOf = (principal: {
   kind: string;
   id: string;
   name: string;
@@ -414,7 +414,7 @@ type PlanChange = {
  * Appends to `fleet_plan_history`, inside the caller's transaction — so a
  * pairing and its record commit or roll back together.
  */
-async function recordPlanChanges(
+export async function recordPlanChanges(
   tx: Transaction,
   changes: PlanChange[],
   source: Exclude<PlanHistorySource, "migration">,
