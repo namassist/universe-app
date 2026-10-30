@@ -314,13 +314,16 @@ fill the gap from the spare pool.
   shifts, either shift counts). The card itself carries no extra label (owner,
   2026-10-11, after a first version with a warning badge). Read from today's roster on the board's payload
   (`shiftClash` in `fleet-allocation/data.ts`); no other date is checked.
-- **The operator dialog staffs the shift running now** (owner, 2026-10-29).
-  "Tambah operator" / "Alokasikan" on a PLAN card opens a dialog whose
-  candidates come from `GET /v1/fleet-allocation/plan/candidates`, which now
-  answers `{ shift, candidates }`. The shift is the timeline's — the
-  `shift-start` stages (04:00 / 16:00 seeded), the boundary the walls turn
-  over on (`currentShift`), not noon — and before the day gate it is the
-  previous date's night. Each row states, for that shift's date:
+- **The operator dialog staffs the shift the desk is on** (owner, 2026-10-29;
+  clock rule 2026-10-30). "Tambah operator" / "Alokasikan" on a PLAN card
+  opens a dialog whose candidates come from
+  `GET /v1/fleet-allocation/plan/candidates`, which answers
+  `{ shift, candidates }`. The shift follows the clock on the day the dialog
+  is opened (`deskShift`): 00:00–11:59 is today's morning (day) shift, 12:00–
+  23:59 today's night. It replaced the `shift-start` boundary (04:00 / 16:00,
+  `currentShift`) the first version used: an admin at 13:00 is staffing
+  tonight, and at 02:00 the coming day shift. The walls, the engine and the
+  tickets keep `shift-start`. Each row states, for today:
   - **SIMPER codes**, every one the operator holds, replacing the permit type.
     The unit's own code leads and is highlighted; six are shown and the rest
     counted, the full list on the tooltip.
@@ -330,7 +333,7 @@ fill the gap from the spare pool.
     and **BELUM** when nothing was uploaded.
 
   **Layak** lists only operators who are eligible _and_ rostered to that
-  shift: opened at 16:00 on a unit whose two holders both work days, it lists
+  shift: opened at 13:00 on a unit whose two holders both work days, it lists
   who can cover the night. **Semua** still lists everybody, and an off-shift
   operator stays selectable there — a standing pairing is not about one day,
   so the roster is a view in the dialog, not a refusal in `pairingRefusal`.

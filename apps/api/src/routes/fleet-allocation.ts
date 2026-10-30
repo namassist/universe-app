@@ -38,7 +38,7 @@ import {
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
-import { currentShift } from "../current-shift";
+import { deskShift } from "../current-shift";
 import {
   db,
   isForeignKeyViolation,
@@ -49,7 +49,6 @@ import {
 import { rosterDayInForce } from "../roster-in-force";
 import { localDate } from "../scheduler";
 import { normalizeNik } from "../sources/nik";
-import { shiftGates } from "../stage-time";
 import {
   buildPlanTemplate,
   pairingConflicts,
@@ -1142,14 +1141,15 @@ export const fleetAllocationRoutes = new Elysia({
     async ({ query, status }) => {
       const unit = await unitByCode(query.unit, true);
       if (!unit) return status(404, unitNotFound);
-      /* The shift the admin is staffing, on the boundary the walls turn over
-         on (owner, 2026-10-29): `shift-start`, not noon. Before the day gate
-         that is yesterday's night, so the roster and the FTW are read for the
-         shift's date rather than the calendar's. */
+      /* The shift the admin is staffing, by the desk's clock (owner,
+         2026-10-30, replacing the `shift-start` boundary of 2026-10-29):
+         before noon today's morning shift, from noon today's night. The
+         roster and the FTW are read for today; an admin at 13:00 is staffing
+         tonight, not the day shift the walls still show until 16:00. */
       const now = new Date();
       const today = localDate(now);
-      const shift = currentShift(now, await shiftGates());
-      const date = shift?.date ?? today;
+      const shift = deskShift(now);
+      const date = shift.date;
 
       const people = await allocatablePeople(true);
 
@@ -1245,7 +1245,7 @@ export const fleetAllocationRoutes = new Elysia({
           standby: p.statusValue === "standby",
           simperCodes: skills.get(p.id) ?? [],
           rosterCode: codes.get(p.id) ?? null,
-          onShift: shift !== null && kind === shift.shift,
+          onShift: kind === shift.shift,
           ftwCategory: ftwByNik.get(normalizeNik(p.nik)) ?? null,
         };
       });

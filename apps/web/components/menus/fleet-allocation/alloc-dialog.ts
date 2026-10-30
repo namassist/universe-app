@@ -35,11 +35,12 @@ export type DialogView = "eligible" | "all";
 /**
  * Whether a candidate is listed under the dialog's current view.
  *
- * "Eligible" is staffing the shift running now (owner, 2026-10-29): only the
- * operators who may take the unit *and* are rostered to that shift. Opened at
- * 16:00 on a unit whose two holders work days, it lists who can cover the
- * night. Where the timeline cannot say which shift is running, the roster is
- * not guessed at and eligibility alone decides. "All" lists everybody, so a
+ * "Eligible" is staffing the shift the desk is on (owner, 2026-10-29; clock
+ * rule 2026-10-30): only the operators who may take the unit *and* are
+ * rostered to that shift, today's morning before noon and today's night from
+ * noon. Opened at 13:00 on a unit whose two holders work days, it lists who
+ * can cover the night. Where the server names no shift, the roster is not
+ * guessed at and eligibility alone decides. "All" lists everybody, so a
  * standing pairing with someone off today can still be made.
  */
 export function inDialogView(

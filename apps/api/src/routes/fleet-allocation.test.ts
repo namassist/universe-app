@@ -8,17 +8,23 @@
  *   bun --env-file=.env test src/routes/fleet-allocation.test.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  setSystemTime,
+  test,
+} from "bun:test";
 import { Elysia } from "elysia";
 import { eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
-import { currentShift } from "../current-shift";
+import { deskShift } from "../current-shift";
 import { db, schema } from "../db";
 import { localDate } from "../scheduler";
 import { normalizeNik } from "../sources/nik";
 import { redis } from "../redis";
-import { shiftGates } from "../stage-time";
 import { fleetAllocationRoutes } from "./fleet-allocation";
 
 const app = new Elysia().use(fleetAllocationRoutes);
@@ -383,12 +389,11 @@ beforeAll(async () => {
   unitOff = await unit({ active: false });
 
   // Today's roster for the pair rule: two on Day, one on Night, one absent
-  // from the sheet entirely. The dialog reads the date of the shift running
-  // now, which is yesterday before the day gate, so that date gets the same
-  // rows when it differs.
+  // from the sheet entirely. The dialog reads today's date whatever the hour,
+  // so today is the only date that needs rows.
   const today = localDate(new Date());
-  shiftNow = currentShift(new Date(), await shiftGates());
-  shiftDate = shiftNow?.date ?? today;
+  shiftNow = deskShift(new Date());
+  shiftDate = today;
   const month = `${today.slice(0, 7)}-01`;
   const [doc] = await db
     .insert(schema.rosterDocuments)
@@ -400,14 +405,11 @@ beforeAll(async () => {
     })
     .returning({ id: schema.rosterDocuments.id });
   made.rosterDocuments.push(doc!.id);
-  const dates = [...new Set([today, shiftDate])];
-  await db.insert(schema.rosterDays).values(
-    dates.flatMap((date) => [
-      { documentId: doc!.id, employeeId: opDay.id, date, code: "D" as const },
-      { documentId: doc!.id, employeeId: opDay2.id, date, code: "D" as const },
-      { documentId: doc!.id, employeeId: opNight.id, date, code: "N" as const },
-    ])
-  );
+  await db.insert(schema.rosterDays).values([
+    { documentId: doc!.id, employeeId: opDay.id, date: today, code: "D" },
+    { documentId: doc!.id, employeeId: opDay2.id, date: today, code: "D" },
+    { documentId: doc!.id, employeeId: opNight.id, date: today, code: "N" },
+  ]);
 
   // One FTW verdict on the dialog's date; everybody else has none.
   const [ftw] = await db
@@ -529,7 +531,7 @@ describe("who a unit may be paired with, and why not", () => {
 
   test("each row states its codes, its roster and its FTW for the shift now", async () => {
     const list = await candidateListFor(unitReq.code);
-    // The shift is the timeline's, the same boundary the walls turn over on.
+    // The shift is the desk's: today's, split at noon.
     expect(list.shift).toEqual(shiftNow);
 
     // Every code held, not the permit type; ordering is the screen's job.
@@ -554,6 +556,38 @@ describe("who a unit may be paired with, and why not", () => {
     });
     // Off the sheet is never on shift.
     expect(free).toMatchObject({ rosterCode: null, onShift: false });
+  });
+
+  /* The two hours the shift-start stages (04:00 / 16:00) and the clock
+     disagree on. The owner chose the clock (2026-10-30): an admin opening the
+     dialog at 13:00 is staffing tonight, and at 02:00 the coming day shift,
+     both on today's roster. */
+  test("the roster shown is today's, morning before noon and night from it", async () => {
+    const today = localDate(new Date());
+    const at = (hour: number) => {
+      const d = new Date();
+      d.setHours(hour, 0, 0, 0);
+      return d;
+    };
+    try {
+      setSystemTime(at(13));
+      const afternoon = await candidateListFor(unitReq.code);
+      expect(afternoon.shift).toEqual({ date: today, shift: "night" });
+      expect(candidateOf(afternoon.candidates, opNight)?.onShift).toBe(true);
+      expect(candidateOf(afternoon.candidates, opDay)?.onShift).toBe(false);
+
+      setSystemTime(at(2));
+      const night = await candidateListFor(unitReq.code);
+      expect(night.shift).toEqual({ date: today, shift: "day" });
+      expect(candidateOf(night.candidates, opDay)).toMatchObject({
+        rosterCode: "D",
+        onShift: true,
+        ftwCategory: "Istirahat Minimal 2 Jam",
+      });
+      expect(candidateOf(night.candidates, opNight)?.onShift).toBe(false);
+    } finally {
+      setSystemTime();
+    }
   });
 
   test("a department-owned unit takes only its own people", async () => {
