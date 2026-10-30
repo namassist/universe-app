@@ -1,16 +1,19 @@
 /**
  * A report as the site's own template workbook.
  *
- * Rebuilt in code rather than filled into the files under
- * `docs/template_reports/` (owner, 2026-09-24): the templates carry a morning's
- * sample rows, and a runtime asset that must be emptied before it is used is
- * one whose leftovers eventually get printed. The layout is theirs, cell for
- * cell — title across row 1, Date and Shift in B3:C4, the table's header on
- * row 6 and its rows from 7 — because the sheet is printed and filed beside the
- * ones people made by hand, and it should read like them.
+ * Rebuilt in code rather than filled into the site's templates (owner,
+ * 2026-09-24): the templates carry a morning's sample rows, and a runtime
+ * asset that must be emptied before it is used is one whose leftovers
+ * eventually get printed. The layout is theirs, cell for cell — title across
+ * row 1, Date and Shift in B3:C4, the table's header on row 6 and its rows
+ * from 7 — because the sheet is printed and filed beside the ones people made
+ * by hand, and it should read like them.
  *
  * One addition: Department on row 5, which the templates leave blank. A sheet
  * narrowed to one department that did not say so would read as the whole site.
+ *
+ * A report about the whole day (Induction Operators) leaves the Shift row
+ * empty: its template prints one, but the sheet is not about a shift.
  */
 
 import ExcelJS from "exceljs";
@@ -50,6 +53,8 @@ const WIDTHS: Record<ReportColumnKey, number> = {
   simperMatrix: 80,
   saveraStatus: 26,
   jamIn: 12,
+  sleepStatus: 24,
+  remarks: 22,
 };
 
 /** Columns read as a word or a code sit centred; prose sits left. */
@@ -87,7 +92,8 @@ const asText = (value: string): string =>
 export type ReportSheet = {
   kind: ReportKind;
   date: string;
-  shift: ShiftKind;
+  /** Null for a report about the whole day — no Shift row is written. */
+  shift: ShiftKind | null;
   /** The department it was narrowed to, or null for the whole site. */
   department: string | null;
   rows: ReportRow[];
@@ -101,11 +107,15 @@ function writeHeading(ws: ExcelJS.Worksheet, sheet: ReportSheet, span: number) {
   title.alignment = { horizontal: "center", vertical: "middle" };
   ws.getRow(TITLE_ROW).height = 24;
 
-  const labels: [number, string, ExcelJS.CellValue][] = [
+  type Label = [row: number, label: string, value: ExcelJS.CellValue];
+  const shift: Label[] = sheet.shift
+    ? [[SHIFT_ROW, "Shift", SHIFT_KIND_LABELS[sheet.shift]]]
+    : [];
+  const labels: Label[] = [
     /* A real date, not text, so the sheet sorts and filters as one. Midnight
        UTC because exceljs writes a Date's UTC day. */
     [DATE_ROW, "Date", new Date(`${sheet.date}T00:00:00Z`)],
-    [SHIFT_ROW, "Shift", SHIFT_KIND_LABELS[sheet.shift]],
+    ...shift,
     [DEPARTMENT_ROW, "Department", sheet.department ?? ALL_DEPARTMENTS],
   ];
   for (const [row, label, value] of labels) {

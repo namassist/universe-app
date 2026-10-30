@@ -1400,6 +1400,8 @@ export const en: Dict = {
   rptLoadErr: "Could not load the report.",
   rptNowNote:
     "FTW and finger columns read the data as it stands now, the same as the Fit To Work and Attendance menus.",
+  rptTodayNote:
+    "Today only, read from the employee register as it stands now. The day is induction whichever shift the roster had them on, so there is no shift to choose.",
   /* --- menu labels: one per MenuSlug (lib/i18n/menu-labels.ts) --- */
   mnDashboard: "Dashboard",
   mnDisplayAttendance: "Attendance Display",
@@ -1588,12 +1590,15 @@ export const en: Dict = {
   rpkOpNoFtw: "Operator No FTW",
   rpkOpNoFinger: "Operator No Finger",
   rpkFinal: "Final Validation",
+  rpkInduction: "Induction Operators",
   rpdEquipNoOp: "Units on the board that got no operator",
   rpdOpNoEquip: "Operators who tapped in and passed FTW but got no unit",
   rpdOpNoFtw:
     "Scheduled operators who tapped in but failed or have not uploaded FTW",
   rpdOpNoFinger: "Scheduled operators who did not tap in or tapped in late",
   rpdFinal: "The final allocation: every operator and their unit",
+  rpdInduction:
+    "Operators on standby today for induction, their first day back from leave",
   tlaShiftStart: "Shift start (screens change over)",
   tlaFtwDeadline: "FTW upload deadline",
   tlaFtwIngest: "Pull FTW data",

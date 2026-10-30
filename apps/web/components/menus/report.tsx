@@ -7,6 +7,7 @@ import {
   Download,
   FileSpreadsheet,
   Fingerprint,
+  HardHat,
   HeartPulse,
   SearchX,
   TriangleAlert,
@@ -19,6 +20,7 @@ import {
   REPORT_COLUMNS,
   REPORT_KINDS,
   REPORT_NEEDS_BOARD,
+  REPORT_TODAY_ONLY,
   type ReportKind,
   type ShiftKind,
 } from "@universe/contracts";
@@ -68,7 +70,11 @@ const KIND_ICON: Record<ReportKind, LucideIcon> = {
   "operator-no-ftw": HeartPulse,
   "operator-no-finger": Fingerprint,
   "final-validation": ClipboardCheck,
+  "induction-operators": HardHat,
 };
+
+/** The note under the toolbar, which also says why a today-only date is fixed. */
+const REPORT_NOTE_ID = "report-note";
 
 /** The shift being mustered: Siang before noon, Malam after — as elsewhere. */
 const shiftNow = (): ShiftKind =>
@@ -76,7 +82,7 @@ const shiftNow = (): ShiftKind =>
 
 /**
  * One report to choose. A button, not a link: choosing one keeps the date,
- * shift and department already set, which is how somebody walks the five
+ * shift and department already set, which is how somebody walks the
  * reports of one morning.
  */
 function ReportCard({
@@ -124,6 +130,9 @@ function ReportCard({
  * read a report. Department opens on the whole site for a role that sees it,
  * and on its own for one scoped to a department; the API enforces the second
  * either way, and the select only says so.
+ *
+ * A today-only report (Induction Operators) shows today's date, fixed, and no
+ * shift: the API reads its own today and refuses any other day.
  */
 function ReportView({
   filter,
@@ -137,8 +146,15 @@ function ReportView({
   const { scope } = useRole();
   const [exporting, setExporting] = React.useState(false);
 
+  const todayOnly = REPORT_TODAY_ONLY[filter.kind];
   const deptQ = useQuery(reportDepartmentsQueryOptions());
-  const reportQ = useQuery(reportQueryOptions(filter));
+  /* Today, read at each render: a page left open past midnight keys a new
+     day, not yesterday's cached rows. */
+  const reportQ = useQuery(
+    reportQueryOptions(
+      todayOnly ? { ...filter, date: isoDate(new Date()) } : filter
+    )
+  );
 
   const columns = REPORT_COLUMNS[filter.kind];
   const rows = reportQ.data?.rows ?? [];
@@ -146,6 +162,10 @@ function ReportView({
   const noBoard =
     REPORT_NEEDS_BOARD[filter.kind] && reportQ.data?.boardGenerated === false;
   const siteWide = scope === "all";
+  /* The day the rows are for: the server's own for a today-only report. */
+  const date = todayOnly
+    ? (reportQ.data?.date ?? isoDate(new Date()))
+    : filter.date;
 
   async function exportSheet() {
     setExporting(true);
@@ -156,7 +176,8 @@ function ReportView({
         `/v1/reports/${filter.kind}/export?${reportParams(filter)}`
       );
       const shift = filter.shift === "day" ? t.shiftDay : t.shiftNight;
-      const name = `${filter.kind}-${filter.date}-${shift.toLowerCase()}.xlsx`;
+      const shiftPart = todayOnly ? "" : `-${shift.toLowerCase()}`;
+      const name = `${filter.kind}-${date}${shiftPart}.xlsx`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -245,7 +266,9 @@ function ReportView({
           <Input
             type="date"
             className="w-40 font-mono"
-            value={filter.date}
+            value={date}
+            disabled={todayOnly}
+            aria-describedby={todayOnly ? REPORT_NOTE_ID : undefined}
             onChange={(e) =>
               e.target.value &&
               setFilter({ ...filter, date: e.target.value, position: "" })
@@ -290,19 +313,21 @@ function ReportView({
               ]}
             />
           ) : null}
-          <Segmented role="group" aria-label={t.rptShift}>
-            {(["day", "night"] as const).map((shift) => (
-              <SegmentedButton
-                key={shift}
-                type="button"
-                active={filter.shift === shift}
-                aria-pressed={filter.shift === shift}
-                onClick={() => setFilter({ ...filter, shift, position: "" })}
-              >
-                {shift === "day" ? t.shiftDay : t.shiftNight}
-              </SegmentedButton>
-            ))}
-          </Segmented>
+          {todayOnly ? null : (
+            <Segmented role="group" aria-label={t.rptShift}>
+              {(["day", "night"] as const).map((shift) => (
+                <SegmentedButton
+                  key={shift}
+                  type="button"
+                  active={filter.shift === shift}
+                  aria-pressed={filter.shift === shift}
+                  onClick={() => setFilter({ ...filter, shift, position: "" })}
+                >
+                  {shift === "day" ? t.shiftDay : t.shiftNight}
+                </SegmentedButton>
+              ))}
+            </Segmented>
+          )}
           <Button
             onClick={exportSheet}
             disabled={exporting || reportQ.isPending || !rows.length}
@@ -314,7 +339,9 @@ function ReportView({
       </Toolbar>
 
       {filter.kind !== "equipment-no-operator" ? (
-        <p className="mb-4 text-xs text-(--text-tertiary)">{t.rptNowNote}</p>
+        <p id={REPORT_NOTE_ID} className="mb-4 text-xs text-(--text-tertiary)">
+          {todayOnly ? t.rptTodayNote : t.rptNowNote}
+        </p>
       ) : null}
 
       {body}
@@ -339,8 +366,9 @@ function ReportView({
 }
 
 /**
- * The Report menu: pick one of five reports, then read it for a date, shift
- * and department — or take it away as the site's template workbook.
+ * The Report menu: pick a report, then read it for a date, shift and
+ * department — or, for Induction Operators, today — or take it away as the
+ * site's template workbook.
  *
  * Read-only for every role that holds it, so it takes no access mode.
  */
@@ -361,7 +389,7 @@ export function ReportMenu() {
       <PageTitle title={menuLabel(t, "report")} sub={t.rptSub} />
 
       <section aria-label={t.rptPick}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {REPORT_KINDS.map((k) => (
             <ReportCard key={k} kind={k} active={kind === k} onPick={setKind} />
           ))}

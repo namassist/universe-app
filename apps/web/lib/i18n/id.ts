@@ -1397,6 +1397,8 @@ export const id = {
   rptLoadErr: "Gagal memuat laporan.",
   rptNowNote:
     "Kolom FTW dan finger dibaca sesuai data saat ini, sama seperti menu Fit To Work dan Attendance.",
+  rptTodayNote:
+    "Hanya hari ini, dibaca dari data karyawan saat ini. Hari induksi berlaku apa pun shift di roster, jadi tidak ada shift yang dipilih.",
   /* --- menu labels: one per MenuSlug (lib/i18n/menu-labels.ts) --- */
   mnDashboard: "Dashboard",
   mnDisplayAttendance: "Display Attendance",
@@ -1586,6 +1588,7 @@ export const id = {
   rpkOpNoFtw: "Operator No FTW",
   rpkOpNoFinger: "Operator No Finger",
   rpkFinal: "Final Validation",
+  rpkInduction: "Induction Operators",
   rpdEquipNoOp: "Unit di papan yang tidak mendapat operator",
   rpdOpNoEquip:
     "Operator yang sudah finger dan FTW-nya oke, tetapi tidak mendapat unit",
@@ -1593,6 +1596,8 @@ export const id = {
     "Operator terjadwal yang sudah finger, tetapi FTW-nya tidak lolos atau belum upload",
   rpdOpNoFinger: "Operator terjadwal yang tidak tap atau terlambat tap",
   rpdFinal: "Hasil akhir alokasi: setiap operator dan unitnya",
+  rpdInduction:
+    "Operator yang hari ini standby karena induksi, hari pertama kembali dari cuti",
   tlaShiftStart: "Awal shift (pergantian layar)",
   tlaFtwDeadline: "Batas upload FTW",
   tlaFtwIngest: "Ambil data FTW",

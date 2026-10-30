@@ -1,5 +1,5 @@
 /**
- * The Report menu's five reports, as rows — pure, over data already loaded.
+ * The Report menu's six reports, as rows — pure, over data already loaded.
  *
  * Which operator lands on which report is the whole of the feature's
  * judgement, so it lives here with no database in reach and is tested that
@@ -12,6 +12,7 @@
  */
 
 import {
+  INDUCTION_ROSTER_LABEL,
   NO_FINGER_LABEL,
   NO_FTW_READING_LABEL,
   SPARE_UNIT_LABEL,
@@ -66,8 +67,10 @@ function personCells(line: AuditLine, departments: Map<string, string>) {
  * order (formation, then decision) is what the audit table is for; a report
  * is somebody looking a person up.
  */
+const nameOrder = (a: string, b: string) =>
+  a.localeCompare(b, "id", { sensitivity: "base" });
 const byName = (a: AuditLine, b: AuditLine) =>
-  a.row.name.localeCompare(b.row.name, "id", { sensitivity: "base" });
+  nameOrder(a.row.name, b.row.name);
 
 /**
  * Everyone who came to work and was cleared to, yet got no unit (owner,
@@ -212,6 +215,53 @@ export function finalValidationRows(
         location: placed ? (l.area ?? "") : "",
       };
     });
+}
+
+/** Someone held on standby for today's induction, as the register has them. */
+export type InductionHolder = {
+  nik: string;
+  name: string;
+  position: string | null;
+  departmentId: string | null;
+};
+
+/**
+ * JAM TIDUR: the sleep category Universe worked out from savera's rules —
+ * the template's own words (Dapat Bekerja, Istirahat Minimal 1 Jam…). No
+ * reading, or savera's "not filled in", reads Belum FTW, as on Operator No
+ * FTW.
+ */
+function sleepStatus(reading: FtwText | undefined): string {
+  if (!reading) return NO_FTW_READING_LABEL;
+  if (reading.ftwDecision?.trim().toLowerCase() === NOT_FILLED_DECISION)
+    return NO_FTW_READING_LABEL;
+  return reading.sleepCategory?.trim() || NO_FTW_READING_LABEL;
+}
+
+/**
+ * Everyone held on standby for today's induction (owner, 2026-10-30) — the
+ * first day back from leave. Who is held is decided by the loader; this only
+ * prints them. ROSTER is always IN: the day is induction whatever shift the
+ * roster had them on. KETERANGAN is left for a hand on the printed sheet.
+ *
+ * `readings` is keyed by normalized NIK — the only key savera shares with us.
+ */
+export function inductionOperatorRows(
+  holders: InductionHolder[],
+  departments: Map<string, string>,
+  readings: Map<string, FtwText>
+): ReportRow[] {
+  return [...holders]
+    .sort((a, b) => nameOrder(a.name, b.name))
+    .map((h) => ({
+      nik: h.nik,
+      name: h.name,
+      position: h.position ?? "",
+      roster: INDUCTION_ROSTER_LABEL,
+      department: h.departmentId ? (departments.get(h.departmentId) ?? "") : "",
+      sleepStatus: sleepStatus(readings.get(normalizeNik(h.nik))),
+      remarks: "",
+    }));
 }
 
 /**

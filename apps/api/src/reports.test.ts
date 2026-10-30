@@ -1,5 +1,5 @@
 /**
- * The five reports' rows, from lines already loaded.
+ * The six reports' rows, from lines already loaded.
  *
  * Pure on purpose: which operator lands on which report is the whole of the
  * feature's judgement, and it deserves tests that need no database to say it.
@@ -11,10 +11,12 @@ import type { AuditLine, AuditRow } from "./board-audit";
 import {
   equipmentNoOperatorRows,
   finalValidationRows,
+  inductionOperatorRows,
   narrowToPosition,
   operatorNoEquipmentRows,
   operatorNoFingerRows,
   operatorNoFtwRows,
+  type InductionHolder,
   type VacantSeat,
 } from "./reports";
 
@@ -464,5 +466,112 @@ describe("person reports read by name", () => {
       DEPTS
     );
     expect(rows.map((r) => r.name)).toEqual(["adi", "Budi", "Zul"]);
+  });
+});
+
+describe("Induction Operators", () => {
+  const holder = (over: Partial<InductionHolder> = {}): InductionHolder => ({
+    nik: "507231085",
+    name: "Danang Arifin",
+    position: "Operator Dozer",
+    departmentId: "d-mo",
+    ...over,
+  });
+
+  test("prints the template's columns, ROSTER always IN, KETERANGAN blank", () => {
+    const rows = inductionOperatorRows(
+      [holder()],
+      DEPTS,
+      new Map([
+        [
+          "507231085",
+          { ftwDecision: "FTW aman", sleepCategory: "Dapat Bekerja" },
+        ],
+      ])
+    );
+    expect(rows).toEqual([
+      {
+        nik: "507231085",
+        name: "Danang Arifin",
+        position: "Operator Dozer",
+        roster: "IN",
+        department: "Mining Operation",
+        sleepStatus: "Dapat Bekerja",
+        remarks: "",
+      },
+    ]);
+  });
+
+  test("JAM TIDUR is the sleep category, as Universe worked it out", () => {
+    const [row] = inductionOperatorRows(
+      [holder()],
+      DEPTS,
+      new Map([
+        [
+          "507231085",
+          {
+            ftwDecision: "FTW tidak aman",
+            sleepCategory: " Istirahat Minimal 2 Jam ",
+          },
+        ],
+      ])
+    );
+    expect(row!.sleepStatus).toBe("Istirahat Minimal 2 Jam");
+  });
+
+  test("no reading, savera's 'not filled in', or no category reads Belum FTW", () => {
+    const rows = inductionOperatorRows(
+      [
+        holder({ nik: "1", name: "A" }),
+        holder({ nik: "2", name: "B" }),
+        holder({ nik: "3", name: "C" }),
+      ],
+      DEPTS,
+      new Map([
+        [
+          "2",
+          { ftwDecision: "Belum mengisi FTW", sleepCategory: "Dapat Bekerja" },
+        ],
+        ["3", { ftwDecision: "FTW aman", sleepCategory: null }],
+      ])
+    );
+    expect(rows.map((r) => r.sleepStatus)).toEqual([
+      "Belum FTW",
+      "Belum FTW",
+      "Belum FTW",
+    ]);
+  });
+
+  test("matches a reading whatever leading zeros the register kept", () => {
+    const [row] = inductionOperatorRows(
+      [holder({ nik: "0501241668" })],
+      DEPTS,
+      new Map([
+        [
+          "501241668",
+          { ftwDecision: "FTW aman", sleepCategory: "Istirahat Minimal 1 Jam" },
+        ],
+      ])
+    );
+    expect(row!.sleepStatus).toBe("Istirahat Minimal 1 Jam");
+  });
+
+  test("reads by name, and a missing position or department prints blank", () => {
+    const rows = inductionOperatorRows(
+      [
+        holder({ name: "robinson Sumbayak", nik: "1" }),
+        holder({ name: "Laban Tangkelangan", nik: "2", position: null }),
+        holder({ name: "Darma Yanto Kendek", nik: "3", departmentId: null }),
+      ],
+      DEPTS,
+      new Map()
+    );
+    expect(rows.map((r) => r.name)).toEqual([
+      "Darma Yanto Kendek",
+      "Laban Tangkelangan",
+      "robinson Sumbayak",
+    ]);
+    expect(rows[1]!.position).toBe("");
+    expect(rows[0]!.department).toBe("");
   });
 });

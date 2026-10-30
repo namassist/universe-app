@@ -1,6 +1,7 @@
 /**
  * Loads what `reports.ts` builds from: the board's audit lines, the empty
- * seats, savera's texts, and the department names they print.
+ * seats, today's induction holds, savera's texts, and the department names
+ * they print.
  *
  * The department filter is applied to ids here, after scope has already been
  * decided by the route — this module takes the department it is given and
@@ -15,11 +16,13 @@ import { db, schema } from "./db";
 import {
   equipmentNoOperatorRows,
   finalValidationRows,
+  inductionOperatorRows,
   narrowToPosition,
   operatorNoEquipmentRows,
   operatorNoFingerRows,
   operatorNoFtwRows,
   type FtwText,
+  type InductionHolder,
   type VacantSeat,
 } from "./reports";
 import { normalizeNik } from "./sources/nik";
@@ -42,14 +45,11 @@ async function departmentNames(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
-/** normalized NIK → savera's texts, for the operators who did not pass. */
+/** normalized NIK → savera's texts, for the NIKs given. */
 async function ftwTexts(
   date: string,
-  lines: AuditLine[]
+  niks: string[]
 ): Promise<Map<string, FtwText>> {
-  const niks = lines
-    .filter((l) => l.row.ftw !== "pass" && l.row.ftw !== "not-required")
-    .map((l) => normalizeNik(l.row.nik));
   if (!niks.length) return new Map();
   const rows = await db
     .select({
@@ -135,9 +135,12 @@ async function vacantSeats(
   }));
 }
 
+/** The reports read for one date and one shift. */
+export type ShiftReportKind = Exclude<ReportKind, "induction-operators">;
+
 /** The four reports about people, from the board's audit lines. */
 async function personRows(
-  kind: Exclude<ReportKind, "equipment-no-operator">,
+  kind: Exclude<ShiftReportKind, "equipment-no-operator">,
   date: string,
   boardGenerated: boolean,
   lines: AuditLine[]
@@ -152,8 +155,16 @@ async function personRows(
       return boardGenerated ? finalValidationRows(lines, departments) : [];
     case "operator-no-finger":
       return operatorNoFingerRows(lines, departments);
-    case "operator-no-ftw":
-      return operatorNoFtwRows(lines, departments, await ftwTexts(date, lines));
+    case "operator-no-ftw": {
+      const failed = lines
+        .filter((l) => l.row.ftw !== "pass" && l.row.ftw !== "not-required")
+        .map((l) => normalizeNik(l.row.nik));
+      return operatorNoFtwRows(
+        lines,
+        departments,
+        await ftwTexts(date, failed)
+      );
+    }
   }
 }
 
@@ -163,7 +174,7 @@ async function personRows(
  * reports only; a unit has no position).
  */
 export async function loadReport(
-  kind: ReportKind,
+  kind: ShiftReportKind,
   date: string,
   shift: ShiftKind,
   departmentId: string | null,
@@ -191,5 +202,63 @@ export async function loadReport(
     boardGenerated: audit.boardGenerated,
     rows: narrowed.rows,
     positions: narrowed.positions,
+  };
+}
+
+/**
+ * Who is held on standby for `date`'s induction right now: the rule the
+ * employee register's "Standby · Induksi" badge reads (`routes/employees.ts`
+ * — an open hold, on someone still on standby), narrowed to holds for `date`.
+ * An admin who set them back to aktif has the last word. The badge also shows
+ * a hold left open from yesterday, until the first hold run of the new day
+ * releases it; the report does not, because that hold is not today's.
+ */
+async function inductionHolders(
+  date: string,
+  departmentId: string | null
+): Promise<InductionHolder[]> {
+  const emp = schema.employees;
+  return db
+    .select({
+      nik: emp.nik,
+      name: emp.name,
+      position: schema.positions.name,
+      departmentId: emp.departmentId,
+    })
+    .from(schema.inductionHolds)
+    .innerJoin(emp, eq(emp.id, schema.inductionHolds.employeeId))
+    .leftJoin(schema.positions, eq(schema.positions.id, emp.positionId))
+    .where(
+      and(
+        eq(schema.inductionHolds.date, date),
+        isNull(schema.inductionHolds.releasedAt),
+        eq(emp.status, "standby"),
+        departmentId ? eq(emp.departmentId, departmentId) : undefined
+      )
+    );
+}
+
+/**
+ * Induction Operators for `date` — the route only ever asks for today (owner,
+ * 2026-10-30). Reads the register, not the board, so it stands whether or not
+ * a board was built and needs no deadline from the timeline.
+ */
+export async function loadInductionReport(
+  date: string,
+  departmentId: string | null
+): Promise<Extract<ReportData, { kind: "ok" }>> {
+  const holders = await inductionHolders(date, departmentId);
+  const [departments, readings] = await Promise.all([
+    departmentNames(),
+    ftwTexts(
+      date,
+      holders.map((h) => normalizeNik(h.nik))
+    ),
+  ]);
+  return {
+    kind: "ok",
+    boardGenerated: false,
+    rows: inductionOperatorRows(holders, departments, readings),
+    positions: [],
   };
 }

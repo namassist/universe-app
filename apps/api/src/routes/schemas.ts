@@ -296,6 +296,8 @@ export const OptionalRunTextKindSchema = t.Optional(RunTextKindUnion);
 export const OptionalTimelineActionSchema = t.Optional(TimelineActionUnion);
 /** Nullable as well as optional: absent leaves the shift, `null` clears it. */
 export const OptionalShiftKindSchema = t.Optional(t.Nullable(ShiftKindUnion));
+/** A shift in a query string that may be left out — absent stays absent. */
+export const OptionalShiftQuerySchema = t.Optional(ShiftKindUnion);
 export const OptionalEmployeeStatusSchema = t.Optional(EmployeeStatusUnion);
 /** Nullable as well as optional: absent leaves it, `null` clears it. */
 export const OptionalMcuResultSchema = t.Optional(t.Nullable(McuResultUnion));

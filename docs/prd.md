@@ -1734,8 +1734,10 @@ reads "-".
   Granted `view` to `manpower`, `manajer` and `admin` (seeded through
   `NEW_SLUG_GRANTS`, so existing installs gain it on the next `db:seed`);
   `superadmin` has it by reconciliation. Read-only: nothing on it writes.
-- **Five reports, one date × shift each**, their columns and titles taken word
-  for word from the site's templates (`docs/template_reports/`), held once in
+- **Six reports: five for one date × shift each, one for today as a whole**,
+  their columns and titles taken word for word from the site's template
+  workbooks (kept out of the repo: their sample rows carry real names and
+  NIKs; the latest sits locally at `apps/web/docs/templates/`), held once in
   `@universe/contracts` (`REPORT_COLUMNS`) so the screen and the workbook cannot
   drift:
   - **Equipment No Operator**: every seat on the generated board nobody was put
@@ -1765,14 +1767,38 @@ reads "-".
     workbook too); the choices are the positions the sheet holds, read
     before narrowing, and the choice resets when date, shift or department
     changes.
-- **Built on the board's audit lines** (`board-audit.ts`), the same lines the
-  Actual tab's audit table shows, extracted from that route so a sheet and the
+  - **Induction Operators** (owner, 2026-10-30): everyone on standby for
+    today's induction, the first day back from leave (`induction-hold.ts`).
+    The rule is the employee register's _Standby · Induksi_ badge (an open
+    hold, on someone still `standby`), narrowed to holds for today. An
+    admin who set them back to `aktif` drops off the list. The badge also
+    shows a hold left open from yesterday until the first hold run of the
+    new day releases it; the report does not, because it is not today's. **Today only, and for the whole day**
+    (`REPORT_TODAY_ONLY`): the screen shows today's date fixed and no shift
+    toggle, the API reads today by its own clock, and asking for another
+    day is a 422 (`today_only`) rather than today under the wrong heading.
+    A hold is released the next day, so no other day can be read from it
+    honestly. **ROSTER always reads _IN_**, as the template prints it,
+    whatever `D`/`N` the roster had them on. **JAM TIDUR** is today's FTW
+    sleep category, the template's own words (_Dapat Bekerja_,
+    _Istirahat Minimal 1 Jam_…); no reading, or savera's "Belum mengisi
+    FTW", reads _Belum FTW_. **KETERANGAN** is left blank for a hand on
+    the printed sheet. The holds are written just before each board
+    (05:26 / 17:26) and after each roster pull, so the list is complete
+    from the morning board on; the sheet is pulled between about 06:00 and
+    10:00.
+- **The per-shift reports are built on the board's audit lines**
+  (`board-audit.ts`), the same lines the Actual tab's audit table shows, extracted from that route so a sheet and the
   screen cannot name a different outcome for one operator. The readiness
   columns are therefore read as they stand now, not as the engine saw them.
 - **A board that was never generated is said, not shown as empty.** The three
   reports that read the board (`REPORT_NEEDS_BOARD`) show _Papan belum dibuat_;
-  the FTW and finger reports stand on readiness alone and render either way.
+  the FTW and finger reports stand on readiness alone and render either way,
+  and Induction Operators reads the register, not the board.
   A shift with no deadline on the timeline is a 422, as on the audit table.
+  A per-shift report asked without its date or shift is a 422
+  (`missing_date`, `missing_shift`); a missing shift was once read as the
+  day's.
 - **Department scope is the server's.** An `all` role picks any department or
   the whole site; a `dept` role (admin, manajer) reads its own, and asking for
   another is a 403 rather than a silent swap; a `self` role reads nothing. Person
@@ -1786,7 +1812,8 @@ reads "-".
   One addition: **Department** on row 5, since a sheet narrowed to one
   department that did not say so reads as the whole site. The shift reads
   **Siang / Malam**, the app's own words, not the templates' _Pagi_ (owner,
-  2026-09-24).
+  2026-09-24). Induction Operators leaves the Shift row empty and its file
+  carries no shift (`induction-operators-YYYY-MM-DD.xlsx`).
 - **Rows read by name** in the person reports — a printed list is searched for
   a person — and board-order (formation, support, no fleet; unit code within)
   in Equipment No Operator.

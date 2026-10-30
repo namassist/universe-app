@@ -27,6 +27,7 @@ const REPORT: Record<ReportKind, keyof Dict> = {
   "operator-no-ftw": "rpkOpNoFtw",
   "operator-no-finger": "rpkOpNoFinger",
   "final-validation": "rpkFinal",
+  "induction-operators": "rpkInduction",
 };
 
 const REPORT_DESCRIPTION: Record<ReportKind, keyof Dict> = {
@@ -35,6 +36,7 @@ const REPORT_DESCRIPTION: Record<ReportKind, keyof Dict> = {
   "operator-no-ftw": "rpdOpNoFtw",
   "operator-no-finger": "rpdOpNoFinger",
   "final-validation": "rpdFinal",
+  "induction-operators": "rpdInduction",
 };
 
 const TIMELINE_ACTION: Record<TimelineAction, keyof Dict> = {

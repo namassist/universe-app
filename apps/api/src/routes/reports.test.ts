@@ -18,6 +18,7 @@ import { eq, inArray } from "drizzle-orm";
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
+import { localDate } from "../scheduler";
 import { reportRoutes } from "./reports";
 
 const app = new Elysia().use(reportRoutes);
@@ -29,6 +30,9 @@ const tag = `ZZ Laporan ${uid()}`;
 const DATE = "1998-03-03";
 /** A date with a roster and no board. */
 const NO_BOARD_DATE = "1998-03-04";
+/** Induction Operators reads today alone, by the server's clock. */
+const TODAY = localDate(new Date());
+const YESTERDAY = localDate(new Date(Date.now() - 86_400_000));
 
 const made = {
   users: [] as string[],
@@ -54,6 +58,11 @@ let nikPlaced: string, nikLeftA: string, nikLeftB: string;
 let nikDozerOnly: string, nikBoth: string;
 /** Tapped in, FTW failed / never uploaded — Operator No FTW's own people. */
 let nikTapFail: string, nikTapNoFtw: string;
+/** Induction: held today in A and in B; and four who must not be listed —
+    reactivated by hand, held yesterday, released, standby by hand. */
+let nikHeldA: string, nikHeldB: string;
+let nikReactivated: string, nikHeldYesterday: string;
+let nikReleased: string, nikHandStandby: string;
 let unitPlaced: string,
   unitEmptyA: string,
   unitEmptyB: string,
@@ -389,6 +398,53 @@ beforeAll(async () => {
     { documentId: doc!.id, unitId: unitEmptyB, employeeId: null, source: null },
     { documentId: doc!.id, unitId: unitGlobal, employeeId: null, source: null },
   ]);
+
+  nikHeldA = `9891${digits()}`;
+  nikHeldB = `9892${digits()}`;
+  nikReactivated = `9893${digits()}`;
+  nikHeldYesterday = `9894${digits()}`;
+  nikReleased = `9895${digits()}`;
+  nikHandStandby = `9896${digits()}`;
+  const inductees = await db
+    .insert(schema.employees)
+    .values(
+      (
+        [
+          [nikHeldA, "Held A", deptA, posA, "standby"],
+          [nikHeldB, "Held B", deptB, posB, "standby"],
+          [nikReactivated, "Reactivated", deptA, posA, "aktif"],
+          [nikHeldYesterday, "Held Yesterday", deptA, posA, "standby"],
+          [nikReleased, "Released", deptA, posA, "standby"],
+          [nikHandStandby, "Hand Standby", deptA, posA, "standby"],
+        ] as const
+      ).map(([nik, name, departmentId, positionId, status]) => ({
+        nik,
+        name: `${tag} ${name}`,
+        companyId: co!.id,
+        departmentId,
+        positionId,
+        status,
+      }))
+    )
+    .returning({ id: schema.employees.id });
+  made.employees.push(...inductees.map((p) => p.id));
+  const [heldA, heldB, reactivated, heldYesterday, released] = inductees.map(
+    (p) => p.id
+  ) as [string, string, string, string, string];
+  await db.insert(schema.inductionHolds).values([
+    { employeeId: heldA, date: TODAY },
+    { employeeId: heldB, date: TODAY },
+    { employeeId: reactivated, date: TODAY },
+    { employeeId: heldYesterday, date: YESTERDAY },
+    { employeeId: released, date: TODAY, releasedAt: new Date() },
+  ]);
+  await db.insert(schema.ftwReadings).values({
+    nik: nikHeldA,
+    date: TODAY,
+    name: `${tag} FTW`,
+    ftwDecision: "FTW Perlu Tindak Lanjut",
+    sleepCategory: "Istirahat Minimal 1 Jam",
+  });
 });
 
 afterAll(async () => {
@@ -400,6 +456,7 @@ afterAll(async () => {
         nikLeftA,
         nikLeftB,
         nikTapFail,
+        nikHeldA,
       ])
     );
   await db
@@ -454,7 +511,7 @@ afterAll(async () => {
 type Report = {
   kind: string;
   date: string;
-  shift: string;
+  shift: string | null;
   department: { id: string; name: string } | null;
   boardGenerated: boolean;
   rows: Record<string, string>[];
@@ -487,6 +544,10 @@ describe("who may read a report", () => {
       selfUser
     );
     expect(res.status).toBe(403);
+
+    /* Scope is decided before the query is: a caller with no right to the
+       report learns nothing more from it, however it asks. */
+    expect((await get(`/reports/final-validation`, selfUser)).status).toBe(403);
   });
 });
 
@@ -713,5 +774,108 @@ describe("the export", () => {
     expect(ws.getCell("C5").value).toBe(`${tag} Dept A`);
     expect(ws.getCell("B7").value).toBe(`${tag}-EA`);
     expect(ws.getCell("B8").value).toBeNull();
+  });
+});
+
+describe("Induction Operators", () => {
+  const induction = (query = "", cookie = all) =>
+    get(`/reports/induction-operators${query ? `?${query}` : ""}`, cookie);
+
+  test("reads today with no date and no shift asked", async () => {
+    const res = await induction();
+    expect(res.status).toBe(200);
+    const body = await read(res);
+    expect(body.date).toBe(TODAY);
+    expect(body.shift).toBeNull();
+  });
+
+  /* The rule the Employees screen's "Standby · Induksi" badge reads: held
+     today, the hold still open, and still on standby (owner, 2026-10-30). */
+  test("lists who is held on standby for induction today, and no one else", async () => {
+    const body = await read(await induction());
+    const niks = body.rows.map((r) => r.nik);
+    expect(niks).toContain(nikHeldA);
+    expect(niks).toContain(nikHeldB);
+    expect(niks).not.toContain(nikReactivated);
+    expect(niks).not.toContain(nikHeldYesterday);
+    expect(niks).not.toContain(nikReleased);
+    expect(niks).not.toContain(nikHandStandby);
+  });
+
+  test("prints ROSTER as IN and JAM TIDUR from today's FTW", async () => {
+    const body = await read(await induction(`department=${deptA}`));
+    expect(body.rows).toEqual([
+      {
+        nik: nikHeldA,
+        name: `${tag} Held A`,
+        position: `${tag} Operator`,
+        roster: "IN",
+        department: `${tag} Dept A`,
+        sleepStatus: "Istirahat Minimal 1 Jam",
+        remarks: "",
+      },
+    ]);
+  });
+
+  test("today's date may be named; any other is refused, not swapped", async () => {
+    expect((await induction(`date=${TODAY}`)).status).toBe(200);
+    const res = await induction(`date=${YESTERDAY}`);
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code: string }).code).toBe("today_only");
+  });
+
+  test("a department-scoped role reads only its own department", async () => {
+    const body = await read(await induction("", deptAdmin));
+    expect(body.department?.id).toBe(deptA);
+    const niks = body.rows.map((r) => r.nik);
+    expect(niks).toContain(nikHeldA);
+    expect(niks).not.toContain(nikHeldB);
+    expect((await induction(`department=${deptB}`, deptAdmin)).status).toBe(
+      403
+    );
+    expect((await induction("", selfUser)).status).toBe(403);
+  });
+
+  test("the workbook is the template's, with no Shift row", async () => {
+    const res = await get(
+      `/reports/induction-operators/export?department=${deptA}`,
+      all
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toBe(
+      `attachment; filename="induction-operators-${TODAY}.xlsx"`
+    );
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await res.arrayBuffer());
+    const ws = wb.worksheets[0]!;
+    expect(ws.getCell("A1").value).toBe("OPERATOR INDUKSI");
+    expect(ws.getCell("B3").value).toBe("Date");
+    expect(ws.getCell("B4").value).toBeNull();
+    expect(ws.getCell("C5").value).toBe(`${tag} Dept A`);
+    expect(ws.getRow(6).values).toEqual([
+      undefined,
+      "NO",
+      "NIK",
+      "NAMA LENGKAP",
+      "POSISI",
+      "ROSTER",
+      "DEPARTMENT",
+      "JAM TIDUR",
+      "KETERANGAN",
+    ]);
+    expect(ws.getCell("B7").value).toBe(nikHeldA);
+    expect(ws.getCell("E7").value).toBe("IN");
+    expect(ws.getCell("G7").value).toBe("Istirahat Minimal 1 Jam");
+  });
+});
+
+describe("a per-shift report", () => {
+  test("still needs its date and its shift", async () => {
+    expect((await get(`/reports/final-validation?shift=day`, all)).status).toBe(
+      422
+    );
+    expect(
+      (await get(`/reports/final-validation?date=${DATE}`, all)).status
+    ).toBe(422);
   });
 });
