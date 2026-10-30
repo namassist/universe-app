@@ -1699,6 +1699,14 @@ export const fleetAllocationRoutes = new Elysia({
         });
 
       await db.transaction(async (tx) => {
+        // The unit row first, as the assign route and Generate take it: the
+        // history insert below needs a key-share lock on the unit, and taking
+        // the slot first let Generate (holding every unit) deadlock with it.
+        await tx
+          .select({ id: schema.units.id })
+          .from(schema.units)
+          .where(eq(schema.units.id, row.unitId))
+          .for("update");
         // `returning` so a slot another request released a moment earlier
         // does not get a second "released" line in the history.
         const gone = await tx
