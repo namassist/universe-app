@@ -389,7 +389,7 @@ export function ReportMenu() {
       <PageTitle title={menuLabel(t, "report")} sub={t.rptSub} />
 
       <section aria-label={t.rptPick}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {REPORT_KINDS.map((k) => (
             <ReportCard key={k} kind={k} active={kind === k} onPick={setKind} />
           ))}
