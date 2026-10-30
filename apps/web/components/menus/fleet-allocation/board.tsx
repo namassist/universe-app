@@ -651,7 +651,7 @@ export function AllocBoard({
     return {
       allocated: u.slots.length > 0,
       vacant: isVacant(u),
-      clash: shiftClash(u.slots, shiftF),
+      clash: shiftClash(u.slots, shiftF) !== null,
       issue: kind === "bd" || kind === "dt" || kind === "warn",
     };
   }
