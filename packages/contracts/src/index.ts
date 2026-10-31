@@ -17,6 +17,7 @@ export * from "./master-import";
 export * from "./notifications";
 export * from "./report";
 export * from "./ops";
+export * from "./points";
 export * from "./roster";
 export * from "./session";
 

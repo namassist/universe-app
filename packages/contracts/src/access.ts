@@ -25,6 +25,7 @@ export const MENU_SLUGS = [
   "fleet-setting",
   "allocation-priority",
   "report",
+  "leaderboard",
   "database-unit",
   "jenis-unit",
   "model-unit",
@@ -78,6 +79,8 @@ export const MENU_LABELS: Record<MenuSlug, string> = {
   "fleet-setting": "Setting Fleet",
   "allocation-priority": "Prioritas Alokasi",
   report: "Laporan",
+  // Points per operator per unit type, settled from each shift's board.
+  leaderboard: "Peringkat Operator",
   "database-unit": "Database Unit",
   "jenis-unit": "Jenis Unit",
   "model-unit": "Model Unit",
