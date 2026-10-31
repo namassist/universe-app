@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Monitor,
   Settings,
+  Trophy,
   Truck,
   UserPlus,
   Users,
@@ -117,6 +118,7 @@ export const NAV: NavEntry[] = [
      read the muster as a whole — the FTW and the finger as much as the fleet —
      and they are opened by roles that see none of the fleet screens. */
   item("report", FileSpreadsheet),
+  item("leaderboard", Trophy),
   {
     kind: "group",
     key: "master",

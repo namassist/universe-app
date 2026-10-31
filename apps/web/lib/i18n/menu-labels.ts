@@ -28,6 +28,7 @@ const MENU_KEYS: Record<MenuSlug, keyof Dict> = {
   "fleet-setting": "mnFleetSetting",
   "allocation-priority": "mnAllocationPriority",
   report: "mnReport",
+  leaderboard: "mnLeaderboard",
   "database-unit": "mnDatabaseUnit",
   "jenis-unit": "mnJenisUnit",
   "model-unit": "mnModelUnit",

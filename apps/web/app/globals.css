@@ -118,6 +118,34 @@
   --badge-accent-border: rgba(167, 139, 250, 0.4);
   --badge-accent-text: #c4b5fd;
 
+  /* ---- Peringkat Operator: the podium cards ----
+     Three metals, the same in both themes: a card is an object on the page,
+     like a trophy, not a surface that follows the theme. Each ramp is dark
+     enough at its lightest for the white figures on it. */
+  --podium-first: linear-gradient(
+    160deg,
+    #b3561f 0%,
+    #8a3a12 55%,
+    #4f1d08 100%
+  );
+  --podium-second: linear-gradient(
+    160deg,
+    #6f737d 0%,
+    #50535c 55%,
+    #2e3037 100%
+  );
+  --podium-third: linear-gradient(
+    160deg,
+    #9a6a5e 0%,
+    #714539 55%,
+    #42261e 100%
+  );
+  --podium-text: #ffffff;
+  --podium-text-muted: rgba(255, 255, 255, 0.88);
+  --podium-border: rgba(255, 255, 255, 0.22);
+  --podium-trophy: rgba(255, 255, 255, 0.22);
+  --podium-shadow: 0 22px 44px -20px rgba(0, 0, 0, 0.7);
+
   /* ---- Kiosk: latar baris yang perlu dilihat ----
      Jauh lebih tipis dari --badge-*-fill: ini menyapu seluruh baris, bukan
      satu pil. Pada kepekatan badge, satu dinding penuh baris merah berhenti
@@ -255,6 +283,31 @@
     rgba(0, 212, 255, 0.3),
     rgba(37, 99, 235, 0.14)
   );
+
+  /* Podium: the same metals as the dark block; only the shadow lightens. */
+  --podium-first: linear-gradient(
+    160deg,
+    #b3561f 0%,
+    #8a3a12 55%,
+    #4f1d08 100%
+  );
+  --podium-second: linear-gradient(
+    160deg,
+    #6f737d 0%,
+    #50535c 55%,
+    #2e3037 100%
+  );
+  --podium-third: linear-gradient(
+    160deg,
+    #9a6a5e 0%,
+    #714539 55%,
+    #42261e 100%
+  );
+  --podium-text: #ffffff;
+  --podium-text-muted: rgba(255, 255, 255, 0.88);
+  --podium-border: rgba(255, 255, 255, 0.3);
+  --podium-trophy: rgba(255, 255, 255, 0.22);
+  --podium-shadow: 0 22px 44px -22px rgba(10, 27, 58, 0.45);
 
   /* Langkah terang dari ramp yang sama — lihat catatan di blok gelap. */
   --chart-1: #2a78d6;

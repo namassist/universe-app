@@ -18,6 +18,7 @@ import { FitToWorkMenu } from "./fit-to-work";
 import { FleetAllocationMenu } from "./fleet-allocation";
 import { FleetSettingMenu } from "./fleet-setting";
 import { IntegrationsMenu } from "./integrations";
+import { LeaderboardMenu } from "./leaderboard";
 import { MasterMenu } from "./master";
 import { MonitoringTapMenu } from "./monitoring-tap";
 import { MenuPlaceholder } from "./placeholder";
@@ -58,6 +59,7 @@ const REGISTRY: Partial<Record<MenuSlug, MenuComponent>> = {
   integrations: IntegrationsMenu,
   "allocation-priority": AllocationPriorityMenu,
   report: ReportMenu,
+  leaderboard: LeaderboardMenu,
   "monitoring-tap": MonitoringTapMenu,
   "scan-id": ScanIdMenu,
   tiket: TicketsMenu,
