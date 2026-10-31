@@ -1818,6 +1818,98 @@ reads "-".
   a person — and board-order (formation, support, no fleet; unit code within)
   in Equipment No Operator.
 
+## Operator Leaderboard (Peringkat Operator) — shipped
+
+- **A menu of its own** (owner, 2026-10-31), slug `leaderboard`, label
+  _Peringkat Operator_, under _Laporan_ in the sidebar. Granted `view` to
+  `manpower`, `manajer` and `admin` through `NEW_SLUG_GRANTS`;
+  `superadmin` has it (`manage`) by reconciliation. Read-only.
+  A period of points per operator, ranked, on one board per unit type plus
+  an _All units_ board.
+- **Points are scored from the board's audit lines** (`board-audit.ts`), the
+  same lines as the audit table and the per-shift reports, so the three never
+  name a different outcome for one operator. Scoring is `points-rules.ts`;
+  the values are `POINTS` in `@universe/contracts` (`points.ts`).
+
+  | Outcome       | When                                                    | Points                                         | Streak |
+  | ------------- | ------------------------------------------------------- | ---------------------------------------------- | ------ |
+  | _operated_    | seated, tapped (on time or late), FTW pass/not required | +10, +2 on time, +3 sleep ≥ 6 h, + consistency | grows  |
+  | _stood-down_  | not seated, tapped on time, FTW ok                      | the same as operated                           | grows  |
+  | _not-counted_ | seated, but FTW not passed or no tap                    | 0                                              | resets |
+  | _not-ready_   | not ready, PLAN holder or spare                         | −15                                            | resets |
+  | _unreadable_  | FTW unreadable, tap otherwise fine                      | 0                                              | holds  |
+
+  The consistency bonus is +2 for each consecutive counted shift after the
+  first, at most +10 (`streakBonus`). The streak runs over rostered shifts:
+  a day off the D/N roster is not on the board and neither breaks nor
+  extends it, and nor does a shift that settled nothing (no board). The run
+  carries on from the person's last settled shift, whatever the gap. Sleep
+  is savera's sleep minutes for the date.
+
+- **A PLAN holder and a spare earn the same** (owner, 2026-10-31). Both top
+  out at 25 a shift. The draft's +5 substitute bonus was dropped: it made a
+  spare's best shift 30 against a holder's 25, and everyone would rather be a
+  spare. A stand-down earns the full points, bonuses included, rather than
+  the draft's base-only +10, because standing down is the engine's choice,
+  not the operator's. The −15 applies to everybody who is not ready, not only
+  PLAN holders.
+- **Points follow the unit.** A shift is credited to the type of the unit
+  sat on, otherwise of the person's standing (PLAN) unit. A shift with
+  neither, usually a spare standing down, is stored untyped. A type's board
+  counts it for the type that person operated most in the period, counting
+  operated shifts only (being not ready against a planned unit does not make
+  its type theirs), ties going to the one operated last. Somebody who operated nothing in the period counts
+  on _All units_ only. A versatile operator (several SIMPER types) therefore
+  appears on each type they actually operated, with those shifts' points.
+  Their streak is one run per person, not per type.
+- **Settled once, onto a ledger** (`operator_points`, one row per date ×
+  shift × employee). A shift is settled when the next one starts
+  (`shift-start` in `scheduler.ts`, `previousShift`): the day shift at the
+  night's start, a night at the next day's start, filed under the date it
+  began. By then manual placements and late FTW uploads have landed. Each row
+  keeps the department, NIK, name and unit as they stood, so a later PLAN edit,
+  roster change or transfer does not rewrite a past month. Settling a shift
+  again replaces that shift's rows only. A shift with no board settles nothing,
+  and the board is never generated for it. There is no backfill: the ledger
+  starts with the first shift settled after deploy.
+- **Department scope is the Report menu's** (`reportDepartment`): `all` picks
+  any department or the whole site, `dept` reads its own (another is a 403),
+  `self` reads nothing. The department list is
+  `GET /v1/leaderboard/departments`, under this menu's grant.
+- **Ranking:** total points, then counted shifts (operated + stood down), then
+  name. Equal points and equal counted shifts share a rank (1, 1, 3). The
+  search narrows rows already ranked, so a name keeps its rank.
+- **Periods** (owner, 2026-10-31): _weekly_ (Monday to Sunday, picked by any
+  day in the week), _monthly_, or a _custom_ range of at most 366 days
+  (`LEADERBOARD_MAX_DAYS`). The menu opens on the current month. The API takes
+  `from` and `to`, both ends counted; one without the other, a date that does
+  not exist, a range that runs backwards or one too long is a 422
+  (`bad_period`, `period_too_long`). A night is filed under the date it began,
+  so a period's last night belongs to it.
+- **The podium** (owner, 2026-10-31): the board's first three as cards above
+  the table, second–first–third (stacked in rank order on a narrow screen).
+  Each card has the points, the photo (initials when there is none, or the reader
+  holds no `employees` grant), the name, and three figures: operation ratio,
+  attendance and average sleep on _All units_, operation ratio, penalty and
+  streak on a type's board. The metal follows the rank, so a tie shares it.
+  The podium is the board's own top three whatever the search holds.
+- **Columns.** _All units_: rank, operator, department, points, operation
+  ratio, penalty, streak, attendance, average sleep. A type's board: rank,
+  operator, units operated (three shown, the rest behind a _+x_ that names
+  them), points, operation ratio, penalty, streak.
+  - **Operation ratio** = shifts operating a unit ÷ rostered (D/N) shifts on
+    the ledger, as _20/27_: a 31-day month with 20 shifts driven, 4 days off
+    the roster and 7 stood down or not ready reads 20/27. On a type's board
+    the numerator is the shifts on that type and the denominator stays all
+    their rostered shifts, so the ratio is the share of their roster spent
+    on that type.
+  - **Penalty** is the points lost (the not-ready −15s), shown negative.
+  - **Streak** is the run their last shift in the period ended on.
+  - **Attendance** = shifts with an IN tap, on time or late ÷ rostered shifts.
+  - **Average sleep** is over the shifts with a savera reading; none reads —.
+  - Department, attendance and sleep are the person's whatever they drove;
+    points, counts, penalty and units are the board's.
+
 ## Kiosk access
 
 **A kiosk admits two kinds of viewer, because it has two.** A wall-mounted TV

@@ -74,6 +74,12 @@ nowhere.
   menu read the readiness snapshots via `lib/queries/readiness.ts` —
   date-range queries plus a manage-mode manual sync, with `lastSyncedAt`
   shown as the page's freshness stamp.
+- The Peringkat Operator menu (`menus/leaderboard.tsx`, with
+  `leaderboard-period.tsx`, `leaderboard-podium.tsx`, `leaderboard-table.tsx`)
+  reads `lib/queries/leaderboard.ts`: one period's ranked board, keyed by
+  from, to, unit type and department. Its period and table helpers
+  (`leaderboard-rows.ts`) carry a `bun test`. The podium's metals are the
+  `--podium-*` tokens in `globals.css`.
 
 ## i18n
 

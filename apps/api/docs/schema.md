@@ -151,10 +151,26 @@ the definition — when they disagree, the code wins. Change flow: edit
   people this system has no record for. NIKs are normalized (digits-only, no
   leading zeros); timestamps are source-local strings, never timezone-shifted.
 
+**Points ledger** (Peringkat Operator)
+
+- `operator_points` — one row per `(date, shift, employee_id)` (unique), written
+  when the shift is settled at the next `shift-start` (`points-settle.ts`) and
+  replaced as a whole shift if settled again. The `outcome` (`point_outcome`
+  enum) and the point parts (`base`, `on_time`, `sleep`, `streak_bonus`,
+  `total`) as scored, plus the `streak` the shift ended on, which the next
+  shift reads, whether they `attended` (an IN tap, on time or late) and
+  savera's `sleep_minutes` for the attendance and sleep columns. NIK, name,
+  department and unit code are **copied** as they
+  stood, so a past month does not move with a transfer or a PLAN edit.
+  `unit_type_id` is null for a shift with no seat and no PLAN unit; the
+  leaderboard places such rows at read time. Employee cascade, department set
+  null, unit type restrict.
+
 ## Enums
 
 `access_mode`, `scope`, `roster_code`, `employee_status`, `blood_type`,
-`mcu_result`, `area_type`, `device_kind`, `timeline_action`, `unit_status` —
+`mcu_result`, `area_type`, `device_kind`, `timeline_action`, `unit_status`,
+`point_outcome` —
 all Postgres enums in `schema.ts`, with values from `@universe/contracts`.
 
 ## Conventions

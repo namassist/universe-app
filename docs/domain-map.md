@@ -36,7 +36,7 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 
 | Time  | Action           | What happens                                                                                               |
 | ----- | ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| 04:00 | `shift-start`    | Walls turn over to this shift; tap collection arms                                                         |
+| 04:00 | `shift-start`    | Walls turn over to this shift; tap collection arms; the shift before is settled for points                 |
 | 04:00 | `ftw-ingest`     | FTW pull begins, re-pulls every minute until `ftw-deadline`                                                |
 | 04:30 | `finger-ingest`  | Live listening opens on every active machine; a test slip goes to every booth printer (`printer-check.ts`) |
 | 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                                                          |
@@ -155,6 +155,23 @@ Web: `components/menus/fleet-allocation/*`, `fleet-allocation.tsx`,
 Tests: `allocation.test.ts`, `readiness.test.ts`, `routes/fleet-allocation*.test.ts`,
 `routes/fleet-actual.test.ts`, `routes/allocation-priority.test.ts`, `routes/fleet-allocation-default.test.ts` (default + Reset), `plan-generate.test.ts`, `routes/fleet-allocation-generate.test.ts`, `crew-rows.test.ts`, `plan-default.test.ts`, web `plan-generate.test.ts`.
 PRD: _Asset & Fleet_, from _Fleet composition_ through _The Actual tab_.
+
+### Points (Peringkat Operator)
+
+Points **read** the board's audit (`boardAudit`) once per shift, at the next
+`shift-start` (`previousShift`), and write the `operator_points` ledger. They
+never judge readiness themselves, never build or regenerate a board, and a
+shift with no board settles nothing. A PLAN holder and a spare who did the same
+score the same (max 25); keep it that way. A shift is credited to the seat's
+unit type, else the PLAN unit's. An untyped row counts, at read time, on the
+type the person operated most in the period (a week, a month or a range).
+
+Code: `points-rules.ts` (scoring, pure), `points-settle.ts` (ledger),
+`leaderboard.ts` + `routes/leaderboard.ts` (ranking, month board), values in
+contracts `points.ts`. Web: `components/menus/leaderboard*.tsx` (menu, period, podium, table), `leaderboard-rows.ts`.
+Tests: `points-rules.test.ts`, `points-settle.test.ts`, `leaderboard.test.ts`,
+`routes/leaderboard.test.ts`, web `leaderboard-rows.test.ts`.
+PRD: _Operator Leaderboard (Peringkat Operator)_.
 
 ## Displays (walls)
 

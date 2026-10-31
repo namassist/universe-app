@@ -17,6 +17,9 @@ src/
     savera.ts     # FTW verdicts from saverawatch (company-filtered)
     nakula.ts     # first-in/first-out taps from the raw tap log
   storage.ts      # SOUND_DIR / PHOTO_DIR / IMPORT_DIR, health-checked at boot
+  points-rules.ts # one shift's points from its audit line (pure)
+  points-settle.ts # a closed shift's points onto operator_points
+  leaderboard.ts  # month range + ranking for the leaderboard (pure)
   auth/
     macro.ts      # the auth macro — THE security boundary for every route
     session.ts    # Redis-backed sessions, httpOnly cookie
@@ -118,6 +121,20 @@ so the window is retry and late-arrival tolerance in one. Manual pulls:
 Source connections are lazy, read-only at the session level, and idle out
 between windows. The post-deadline snapshot is _final for the day's
 decision_ by business rule — an upload after the deadline does not count.
+
+## Points settlement
+
+The leaderboard is read from a ledger, not computed per request. The
+`shift-start` hook settles the shift that just closed (`previousShift`):
+`settleShift` reads that board's audit lines (`boardAudit`), savera's sleep
+minutes and the last streak per person, scores each line (`scoreShift`) and
+replaces the shift's rows in `operator_points` in one transaction. It runs
+detached from tap collection and logs `points for … settled` (or the reason
+it did not) to the server log only, not the stage log: the Operations Center
+shows a stage's latest run, and the settle must not cover `collect`'s answer
+for `shift-start`. A shift with no board writes nothing.
+`GET /v1/leaderboard` only sums and ranks the ledger for a period
+(`from`..`to`, a week, a month or up to 366 days).
 
 ## The prober
 
