@@ -31,6 +31,7 @@ import {
   NOTIFICATION_TONES,
   PLAN_HISTORY_ACTIONS,
   PLAN_HISTORY_SOURCES,
+  POINT_OUTCOMES,
   ROSTER_CODES,
   ROSTER_DOCUMENT_SOURCES,
   ROSTER_DOCUMENT_STATUSES,
@@ -55,6 +56,7 @@ export const notificationKind = pgEnum("notification_kind", NOTIFICATION_KINDS);
 export const notificationTone = pgEnum("notification_tone", NOTIFICATION_TONES);
 export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
 export const runTextKind = pgEnum("run_text_kind", RUNTEXT_KINDS);
+export const pointOutcome = pgEnum("point_outcome", POINT_OUTCOMES);
 export const actualSlotSource = pgEnum("actual_slot_source", [
   "plan",
   "spare",
@@ -1355,6 +1357,72 @@ export const inductionHolds = pgTable(
 );
 
 /**
+ * One operator's points for one shift — the Peringkat Operator ledger (owner,
+ * 2026-10-31).
+ *
+ * Settled, not derived on read, because the audit it is scored from reads the
+ * PLAN and the register *as they stand now*: a leaderboard computed on every
+ * request would rescore last month whenever somebody edits the PLAN. So a
+ * shift is scored once, when the next one starts (`points-settle.ts`), and
+ * what it was is kept here.
+ *
+ * Every rostered operator in the shift's pool gets a row, zero or negative
+ * included — the streak runs from one row to the next, and a missing row would
+ * read as a shift that never happened.
+ *
+ * The NIK, name and department are copied as they were at settle time, like
+ * the board's own formation copy: the leaderboard of a past month must not
+ * move because somebody changed department since. The unit type is the one
+ * the points are credited to — the unit operated, or for a shift with no seat
+ * the operator's standing unit; null when there was neither.
+ */
+export const operatorPoints = pgTable(
+  "operator_points",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The board's date: a night shift is filed under the date it began. */
+    date: date("date").notNull(),
+    shift: shiftKind("shift").notNull(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    nik: text("nik").notNull(),
+    name: text("name").notNull(),
+    departmentId: uuid("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
+    unitTypeId: uuid("unit_type_id").references(() => unitTypes.id, {
+      onDelete: "restrict",
+    }),
+    unitCode: text("unit_code"),
+    outcome: pointOutcome("outcome").notNull(),
+    base: integer("base").notNull(),
+    onTime: integer("on_time").notNull(),
+    sleep: integer("sleep").notNull(),
+    streakBonus: integer("streak_bonus").notNull(),
+    total: integer("total").notNull(),
+    /** The run of counted shifts after this one; the next shift starts here. */
+    streak: integer("streak").notNull(),
+    /** Tapped in for the shift, on time or late: the attendance column. */
+    attended: boolean("attended").notNull().default(false),
+    /** savera's sleep minutes for the date, as scored; null with no reading. */
+    sleepMinutes: integer("sleep_minutes"),
+    settledAt: timestamp("settled_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("operator_points_date_shift_employee_idx").on(
+      table.date,
+      table.shift,
+      table.employeeId
+    ),
+    /** The previous shift's streak, per person. */
+    index("operator_points_employee_date_idx").on(table.employeeId, table.date),
+  ]
+);
+
+/**
  * A submission: one operator, one moment, N entries (design D10).
  *
  * `code` is the readable identifier (`REV-0001`) the screens show, generated
@@ -1862,6 +1930,7 @@ export type RosterDocumentRow = typeof rosterDocuments.$inferSelect;
 export type RosterDayRow = typeof rosterDays.$inferSelect;
 export type RosterRevisionRow = typeof rosterRevisions.$inferSelect;
 export type RosterRevisionItemRow = typeof rosterRevisionItems.$inferSelect;
+export type OperatorPointsRow = typeof operatorPoints.$inferSelect;
 
 /**
  * What the application has told the people who run it.

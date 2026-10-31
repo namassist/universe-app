@@ -61,6 +61,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "fleet-allocation",
       "fleet-setting",
       "report",
+      "leaderboard",
     ],
     manage: ["employees", "roster-data", "attendance"],
   },
@@ -82,6 +83,7 @@ const ROLE_SEEDS: RoleSeed[] = [
       "fleet-allocation",
       "fleet-setting",
       "report",
+      "leaderboard",
     ],
     manage: ["roster-data"],
   },
@@ -93,7 +95,7 @@ const ROLE_SEEDS: RoleSeed[] = [
     description: "Konfigurasi display, fleet, dan master operasional",
     scope: "all",
     locked: false,
-    view: ["report"],
+    view: ["report", "leaderboard"],
     manage: [
       "dashboard",
       "display-attendance",
@@ -203,6 +205,13 @@ const NEW_SLUG_GRANTS: { slug: MenuSlug; mode: AccessMode; roles: string[] }[] =
        the whole grant. Manpower runs the muster; admin and manajer answer for
        their own department, which their `dept` scope narrows the reports to. */
     { slug: "report", mode: "view", roles: ["manpower", "manajer", "admin"] },
+    /* Peringkat Operator reads the settled points ledger and writes nothing.
+       The same readers as the reports, narrowed by the same `dept` scope. */
+    {
+      slug: "leaderboard",
+      mode: "view",
+      roles: ["manpower", "manajer", "admin"],
+    },
   ];
 
 /** Kiosks provisioned without an admin UI, by design (D6). */

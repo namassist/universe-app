@@ -22,6 +22,7 @@ import { employeesRoutes } from "./routes/employees";
 import { fingerprintMachineRoutes } from "./routes/fingerprint-machines";
 import { printerRoutes } from "./routes/printers";
 import { reportRoutes } from "./routes/reports";
+import { leaderboardRoutes } from "./routes/leaderboard";
 import { fleetActualRoutes } from "./routes/fleet-actual";
 import { fleetAllocationRoutes } from "./routes/fleet-allocation";
 import { planGenerateRoutes } from "./routes/fleet-allocation-generate";
@@ -93,6 +94,7 @@ const api = new Elysia({ prefix: `/${API_VERSION}` })
   .use(fingerprintMachineRoutes)
   .use(printerRoutes)
   .use(reportRoutes)
+  .use(leaderboardRoutes)
   .use(opsRoutes)
   .use(integrationClientRoutes)
   .use(integrationRoutes);

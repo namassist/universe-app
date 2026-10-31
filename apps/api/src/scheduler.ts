@@ -38,6 +38,7 @@ import { buildBoard, storeBoard } from "./allocation";
 import { reconcileInductionHolds } from "./induction-hold";
 import { runIngestWindow, type IngestKind } from "./ingest";
 import { notify } from "./notify";
+import { previousShift, settleShift } from "./points-settle";
 import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { pullClosesAt, stageTimeOf } from "./stage-time";
@@ -532,10 +533,43 @@ const listen: Hook = async (dispatch) => {
   void runListenWindow(endsAt);
 };
 
+/**
+ * Score the shift this one's start closes onto the points ledger
+ * (`points-settle.ts`): the day shift at the night's start, the night at the
+ * next day's. The timeline says when; nothing here names a time.
+ *
+ * Detached, and a failure is logged rather than thrown: points are a record
+ * of the muster, and settling them must never hold up the one about to begin.
+ *
+ * Server log only, never `record`: the Operations Center shows a stage's
+ * latest run, and a settle finishing after `collect` would put its note — red
+ * on a shift with no board — over collection's own answer for `shift-start`.
+ */
+function settlePoints(dispatch: Dispatch): void {
+  const shift = dispatch.stage.shift;
+  /* `collect` has already said why a stage with no shift did nothing. */
+  if (!shift) return;
+  const key = previousShift(dispatch.date, shift);
+  const which = `[scheduler] points for ${key.date} ${key.shift}`;
+  void settleShift(key.date, key.shift).then(
+    (result) =>
+      console.log(
+        result.kind === "settled"
+          ? `${which}: ${result.rows} operators settled`
+          : `${which}: not settled (${result.kind})`
+      ),
+    (error) => console.error(`${which}: failed to settle`, error)
+  );
+}
+
 const HOOKS: Record<TimelineAction, Hook> = {
-  /* The changeover, and now also when collecting begins. Its time is read by
-     `shiftGates` for the walls as it always was. */
-  "shift-start": collect,
+  /* The changeover, when collecting begins, and when the shift before is
+     settled for points. Its time is read by `shiftGates` for the walls as it
+     always was. */
+  "shift-start": async (dispatch) => {
+    settlePoints(dispatch);
+    await collect(dispatch);
+  },
   "ftw-deadline": marker,
   "finger-in": marker,
   /* No hook: printing is driven by the tap. Its *time* is what holds a

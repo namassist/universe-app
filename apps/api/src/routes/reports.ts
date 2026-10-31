@@ -76,8 +76,11 @@ async function departmentById(id: string): Promise<Department | null> {
   return row ?? null;
 }
 
-/** The department a caller's report is narrowed to — never wider than theirs. */
-async function reportDepartment(
+/**
+ * The department a caller's report is narrowed to — never wider than theirs.
+ * Peringkat Operator narrows by the same rule (`routes/leaderboard.ts`).
+ */
+export async function reportDepartment(
   principal: SessionPrincipal,
   requested: string | undefined
 ): Promise<DepartmentScope> {
@@ -97,6 +100,37 @@ async function reportDepartment(
   if (!own || (requested && requested !== own)) return { kind: "forbidden" };
   const department = await departmentById(own);
   return department ? { kind: "ok", department } : { kind: "forbidden" };
+}
+
+/**
+ * The departments a caller may narrow a report to — every one for a site-wide
+ * role, their own for a `dept` role, none otherwise. Peringkat Operator's
+ * filter offers the same list.
+ */
+export async function departmentsFor(
+  principal: SessionPrincipal
+): Promise<{ id: string; name: string; company: string }[]> {
+  if (principal.kind !== "user") return [];
+  const base = db
+    .select({
+      id: schema.departments.id,
+      name: schema.departments.name,
+      company: schema.companies.code,
+    })
+    .from(schema.departments)
+    .innerJoin(
+      schema.companies,
+      eq(schema.companies.id, schema.departments.companyId)
+    )
+    .$dynamic();
+  if (principal.scope === "all")
+    return base.orderBy(
+      asc(schema.departments.name),
+      asc(schema.companies.code)
+    );
+  const scope = await reportDepartment(principal, undefined);
+  if (scope.kind !== "ok" || !scope.department) return [];
+  return base.where(eq(schema.departments.id, scope.department.id));
 }
 
 /*
@@ -229,43 +263,17 @@ export const reportRoutes = new Elysia({ prefix: "/reports", tags: ["report"] })
    * hold — and a list offering departments the report would then refuse is a
    * filter that only ever produces a 403.
    */
-  .get(
-    "/departments",
-    async ({ principal }) => {
-      if (principal.kind !== "user") return [];
-      const base = db
-        .select({
-          id: schema.departments.id,
-          name: schema.departments.name,
-          company: schema.companies.code,
-        })
-        .from(schema.departments)
-        .innerJoin(
-          schema.companies,
-          eq(schema.companies.id, schema.departments.companyId)
-        )
-        .$dynamic();
-      if (principal.scope === "all")
-        return base.orderBy(
-          asc(schema.departments.name),
-          asc(schema.companies.code)
-        );
-      const scope = await reportDepartment(principal, undefined);
-      if (scope.kind !== "ok" || !scope.department) return [];
-      return base.where(eq(schema.departments.id, scope.department.id));
+  .get("/departments", ({ principal }) => departmentsFor(principal), {
+    auth: { menu: "report", mode: "view" },
+    response: {
+      200: t.Array(
+        t.Object({ id: t.String(), name: t.String(), company: t.String() })
+      ),
+      401: ErrorSchema,
+      403: ErrorSchema,
     },
-    {
-      auth: { menu: "report", mode: "view" },
-      response: {
-        200: t.Array(
-          t.Object({ id: t.String(), name: t.String(), company: t.String() })
-        ),
-        401: ErrorSchema,
-        403: ErrorSchema,
-      },
-      detail: { summary: "Departments this caller may narrow a report to" },
-    }
-  )
+    detail: { summary: "Departments this caller may narrow a report to" },
+  })
 
   .get(
     "/:kind",
