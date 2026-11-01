@@ -1913,6 +1913,47 @@ reads "-".
   - **Average sleep** is over the shifts with a savera reading; none reads —.
   - Department, attendance and sleep are the person's whatever they drove;
     points, counts, penalty and units are the board's.
+- **Point breakdown** (owner, 2026-11-01). An operator's points in the table
+  open _Rincian Poin_ (`/leaderboard/:employeeId`), carrying the board's
+  period, unit type and department, so its total is the number clicked. One
+  line per shift, oldest first: date, shift (D/N, or the roster code), the
+  condition, the unit, +10 / +2 / +3 / consistency bonus, the shift's points,
+  the streak after it and a running total. A header states the period total,
+  the current streak, counted shifts and the penalty; a legend lists the
+  scheme's categories with how many of this person's lines fell in each.
+  - **Seven kinds of line**: the five outcomes (_Beroperasi_; _Stand down_
+    — no unit available; _Beroperasi tanpa lolos FTW_ for `not-counted`;
+    _Tidak siap / diganti_; _FTW tidak terbaca_), _Di luar roster D/N_ for
+    a day whose in-force roster code is not D or N (OFF, CR, AL, S …: 0
+    points, streak unchanged; the code is shown as the roster states it,
+    medical and leave codes included — owner, 2026-11-01, under the
+    leaderboard grant alone), and _Belum ditetapkan_ for a rostered D/N
+    shift with no ledger row — not closed yet, no board built, or before the
+    ledger began (0 points, streak unchanged). Roster lines stop at today; a
+    settled date shows its ledger line only, whatever the roster now says.
+  - **The reason comes from what the ledger keeps** (owner: no schema change
+    for this page). A not-ready shift without an IN tap reads _Tidak tap
+    absen_, one with a tap _Terlambat atau FTW tidak lolos_; a not-counted one
+    reads _Ditempatkan tanpa tap absen_ or _… tanpa lolos FTW_ the same way.
+  - **The unit**: a seat's unit for operated and not-counted lines; _PLAN
+    DT1_ for a stand-down or not-ready line against a PLAN unit, _Spare_
+    with none; an unreadable FTW shows the unit without saying which.
+  - **On a type's board every shift is still listed** (owner), because the
+    streak runs over all of them. Shifts credited to another type are muted,
+    named with that type's board, and left out of the total and the running
+    total. Roster lines are muted too.
+  - **Scope is the board's.** The same grant and `reportDepartment` rule;
+    ledger rows and roster documents are the scoped department's. Somebody
+    with no settled shift in scope for the period is a 404, which is also
+    what another department's operator is to a `dept` role. Somebody who
+    has since left a `dept` role's department shows that department's
+    roster days only up to their last shift settled there.
+  - **Back** returns to the board the page was opened from: the board reads
+    period, type and department from its address (`/leaderboard?from=…`),
+    the period kind inferred (a Monday–Sunday week, a calendar month, else
+    a custom range). Opened without them, it is this month, every type.
+    `GET /v1/leaderboard/operators/:employeeId` takes the board's `from`,
+    `to`, `unitType` and `department`; an unknown unit type is a 422.
 
 ## Kiosk access
 

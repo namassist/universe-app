@@ -166,11 +166,21 @@ score the same (max 25); keep it that way. A shift is credited to the seat's
 unit type, else the PLAN unit's. An untyped row counts, at read time, on the
 type the person operated most in the period (a week, a month or a range).
 
+The breakdown page (`/leaderboard/:employeeId`) lays one person's ledger rows
+beside their in-force roster days and sums them by the board's rules, so its
+total is the board's number; it scores nothing either.
+
 Code: `points-rules.ts` (scoring, pure), `points-settle.ts` (ledger),
-`leaderboard.ts` + `routes/leaderboard.ts` (ranking, month board), values in
-contracts `points.ts`. Web: `components/menus/leaderboard*.tsx` (menu, period, podium, table), `leaderboard-rows.ts`.
+`leaderboard.ts` + `routes/leaderboard.ts` (ranking, month board),
+`leaderboard-breakdown.ts` (one operator's lines and sums, pure) +
+`routes/leaderboard-breakdown.ts` (its reads), values in contracts
+`points.ts` (`POINTS`, `POINT_OUTCOMES`, `BREAKDOWN_KINDS`). Web:
+`components/menus/leaderboard*.tsx` (menu, period, podium, table, breakdown),
+`leaderboard-rows.ts`, `leaderboard-breakdown-rows.ts`.
 Tests: `points-rules.test.ts`, `points-settle.test.ts`, `leaderboard.test.ts`,
-`routes/leaderboard.test.ts`, web `leaderboard-rows.test.ts`.
+`leaderboard-breakdown.test.ts`, `routes/leaderboard.test.ts`,
+`routes/leaderboard-breakdown.test.ts`, web `leaderboard-rows.test.ts`,
+`leaderboard-breakdown-rows.test.ts`.
 PRD: _Operator Leaderboard (Peringkat Operator)_.
 
 ## Displays (walls)

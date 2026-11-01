@@ -20,6 +20,7 @@ src/
   points-rules.ts # one shift's points from its audit line (pure)
   points-settle.ts # a closed shift's points onto operator_points
   leaderboard.ts  # month range + ranking for the leaderboard (pure)
+  leaderboard-breakdown.ts # one operator's lines + the board's sums (pure)
   auth/
     macro.ts      # the auth macro — THE security boundary for every route
     session.ts    # Redis-backed sessions, httpOnly cookie
@@ -135,6 +136,12 @@ shows a stage's latest run, and the settle must not cover `collect`'s answer
 for `shift-start`. A shift with no board writes nothing.
 `GET /v1/leaderboard` only sums and ranks the ledger for a period
 (`from`..`to`, a week, a month or up to 366 days).
+`GET /v1/leaderboard/operators/:employeeId` breaks one person's points down
+shift by shift for the same period, type and department: their ledger rows,
+plus the in-force roster days the ledger has none for (`off-roster`,
+`unsettled`), summed by the board's rules (`leaderboard-breakdown.ts`, reads
+in `routes/leaderboard-breakdown.ts`). Nobody in scope with a settled shift
+is a 404.
 
 ## The prober
 

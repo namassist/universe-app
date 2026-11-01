@@ -79,7 +79,11 @@ nowhere.
   reads `lib/queries/leaderboard.ts`: one period's ranked board, keyed by
   from, to, unit type and department. Its period and table helpers
   (`leaderboard-rows.ts`) carry a `bun test`. The podium's metals are the
-  `--podium-*` tokens in `globals.css`.
+  `--podium-*` tokens in `globals.css`. A row's points link to
+  `/leaderboard/[employeeId]` (`menus/leaderboard-breakdown.tsx`), the
+  board's filter in the search params; the page reads
+  `leaderboardOperatorQueryOptions`, and its reason, unit and count helpers
+  (`leaderboard-breakdown-rows.ts`) carry a `bun test`.
 
 ## i18n
 

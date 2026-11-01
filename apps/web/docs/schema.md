@@ -19,8 +19,10 @@ no server code — see `packages/contracts/AGENTS.md`):
 - `roster.ts` — roster codes, upload/validation/revision shapes.
 - `account-import.ts` — user-import contracts.
 - `points.ts` — the leaderboard's point values (`POINTS`, `streakBonus`) and
-  `POINT_OUTCOMES`, shared with the API's scoring, and `LEADERBOARD_MAX_DAYS`,
-  the longest period either side reads.
+  `POINT_OUTCOMES`, shared with the API's scoring, `BREAKDOWN_KINDS` (the
+  outcomes plus `off-roster` and `unsettled`, the lines of an operator's
+  breakdown), and `LEADERBOARD_MAX_DAYS`, the longest period either side
+  reads.
 - `ApiError` — `{ code, message }`, the shape of every non-2xx body.
 
 `lib/access.ts` re-exports the access vocabulary so old imports keep
