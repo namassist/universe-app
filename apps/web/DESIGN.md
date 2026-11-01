@@ -280,6 +280,9 @@ NIKs, times and counters, always with tabular figures.
 - **Label** (600, 12px, uppercase, wide tracking): table headers. The same
   size in sentence case is used for badges, helper text and metadata.
 - **Mono** (500–600, 12px, tabular): codes, NIKs, timestamps, numeric cells.
+- **Display** (Barlow Condensed 700–800, `font-display`): the Peringkat
+  Operator medal stage only — the podium's names, points, rank discs and stat
+  figures, which stand tall and narrow to read across a room. Nowhere else.
 
 On walls, type is sized in canvas pixels on the 1920px stage (for example
 `text-[44px]`), so a wall's type scale is that canvas's own, not the
@@ -421,6 +424,13 @@ A 10px-radius group with an input fill, a hairline border and 4px padding.
 Each option is 13px semibold. The active option gets a cyan 12% fill, a 40%
 border and Cyan Bright text. Inactive options use secondary text and gain the
 hover fill.
+
+The `tabs` variant draws the same choice as an underlined row for switching
+between views of one panel (the unit types on Peringkat Operator), so it is
+never read as one more filter beside a pill. There is no fill and no radius,
+just a divider along the bottom. Options are 14px semibold, and the active one
+gets a 2px cyan underline and Cyan Bright text. The row scrolls sideways
+instead of wrapping.
 
 ### Tables
 

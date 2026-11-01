@@ -101,3 +101,25 @@ export function podiumOrder<T>(rows: readonly T[]): T[] {
   const [first, second, third] = rows;
   return [second, first, third].filter((r): r is T => r !== undefined);
 }
+
+export type PodiumGap = { kind: "lead" | "behind"; points: number };
+
+/**
+ * What a podium place says about the distance between places: the winner's
+ * lead over second, everyone else's distance to first. Nothing when there is
+ * no distance to state — a shared first place, or a winner standing alone.
+ * `top` is the board in rank order.
+ */
+export function podiumGap(
+  row: { rank: number; total: number },
+  top: readonly { rank: number; total: number }[]
+): PodiumGap | null {
+  const [leader, next] = top;
+  if (!leader) return null;
+  if (row.rank === 1) {
+    const lead = next ? row.total - next.total : 0;
+    return lead > 0 ? { kind: "lead", points: lead } : null;
+  }
+  const behind = leader.total - row.total;
+  return behind > 0 ? { kind: "behind", points: behind } : null;
+}

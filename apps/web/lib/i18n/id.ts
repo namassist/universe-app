@@ -1417,6 +1417,8 @@ export const id = {
   lbPlace1: "Juara 1",
   lbPlace2: "Juara 2",
   lbPlace3: "Juara 3",
+  lbLead: "Unggul {n} poin",
+  lbBehind: "−{n} dari peringkat 1",
   lbRank: "Peringkat",
   lbOperator: "Operator",
   lbDepartment: "Departemen",

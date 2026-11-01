@@ -13,6 +13,7 @@ import {
   monthPeriod,
   operationRatio,
   percentOf,
+  podiumGap,
   podiumOrder,
   signedPoints,
   sleepHours,
@@ -131,5 +132,32 @@ describe("podiumOrder", () => {
       [1, "A"],
       [3, "C"],
     ]);
+  });
+});
+
+describe("podiumGap", () => {
+  const row = (rank: number, total: number) => ({ rank, total });
+
+  test("the winner leads by the distance to second", () => {
+    const top = [row(1, 220), row(2, 203), row(3, 192)];
+    expect(podiumGap(top[0], top)).toEqual({ kind: "lead", points: 17 });
+  });
+
+  test("the others trail the winner by their distance to first", () => {
+    const top = [row(1, 220), row(2, 203), row(3, 192)];
+    expect(podiumGap(top[1], top)).toEqual({ kind: "behind", points: 17 });
+    expect(podiumGap(top[2], top)).toEqual({ kind: "behind", points: 28 });
+  });
+
+  test("a shared first place leads nobody and trails nobody", () => {
+    const top = [row(1, 210), row(1, 210), row(3, 190)];
+    expect(podiumGap(top[0], top)).toBeNull();
+    expect(podiumGap(top[1], top)).toBeNull();
+    expect(podiumGap(top[2], top)).toEqual({ kind: "behind", points: 20 });
+  });
+
+  test("a winner alone on the board has no lead to state", () => {
+    const top = [row(1, 40)];
+    expect(podiumGap(top[0], top)).toBeNull();
   });
 });

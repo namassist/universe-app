@@ -1420,6 +1420,8 @@ export const en: Dict = {
   lbPlace1: "1st",
   lbPlace2: "2nd",
   lbPlace3: "3rd",
+  lbLead: "Ahead by {n} pts",
+  lbBehind: "−{n} from 1st",
   lbRank: "Rank",
   lbOperator: "Operator",
   lbDepartment: "Department",

@@ -26,6 +26,8 @@ import {
 const PODIUM = 3;
 
 const NUM = "text-right font-mono tabular-nums";
+/** The supporting figures step back a tone so the points column leads. */
+const SUPPORT = `${NUM} text-(--text-secondary)`;
 
 /** At most three unit codes; the rest behind a "+x" that names them on hover
     and to a screen reader. */
@@ -80,7 +82,9 @@ export function LeaderboardTable({
             ) : (
               <TableHead>{t.lbDepartment}</TableHead>
             )}
-            <TableHead className="text-right">{t.lbPoints}</TableHead>
+            <TableHead className="text-right text-(--text-primary)">
+              {t.lbPoints}
+            </TableHead>
             <TableHead className="text-right" title={t.lbRatioHint}>
               {t.lbRatio}
             </TableHead>
@@ -120,13 +124,15 @@ export function LeaderboardTable({
                 <TableCell
                   className={cn(
                     NUM,
-                    "font-semibold",
-                    row.total < 0 && "text-(--badge-danger-text)"
+                    "text-base font-bold",
+                    row.total < 0
+                      ? "text-(--badge-danger-text)"
+                      : "text-(--text-primary)"
                   )}
                 >
                   {signedPoints(row.total)}
                 </TableCell>
-                <TableCell className={NUM}>
+                <TableCell className={SUPPORT}>
                   {operationRatio(row.operated, row.shifts)}
                 </TableCell>
                 <TableCell
@@ -139,13 +145,13 @@ export function LeaderboardTable({
                 >
                   {signedPoints(row.penalty)}
                 </TableCell>
-                <TableCell className={NUM}>{row.streak}</TableCell>
+                <TableCell className={SUPPORT}>{row.streak}</TableCell>
                 {perType ? null : (
                   <>
-                    <TableCell className={NUM}>
+                    <TableCell className={SUPPORT}>
                       {attendance === null ? "—" : `${attendance}%`}
                     </TableCell>
-                    <TableCell className={NUM}>
+                    <TableCell className={SUPPORT}>
                       {sleep === null ? "—" : fmt(t.lbHours, { h: sleep })}
                     </TableCell>
                   </>

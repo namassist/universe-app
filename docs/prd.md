@@ -1886,13 +1886,17 @@ reads "-".
   not exist, a range that runs backwards or one too long is a 422
   (`bad_period`, `period_too_long`). A night is filed under the date it began,
   so a period's last night belongs to it.
-- **The podium** (owner, 2026-10-31): the board's first three as cards above
-  the table, second–first–third (stacked in rank order on a narrow screen).
-  Each card has the points, the photo (initials when there is none, or the reader
-  holds no `employees` grant), the name, and three figures: operation ratio,
+- **The podium** (owner, 2026-10-31; medal stage 2026-10-31): the board's
+  first three above the table, second–first–third on plinths of their places'
+  heights (stacked in rank order on a narrow screen). Each place has the photo
+  as a medal — framed in gold, silver or bronze, hung from a ribbon — then the
+  name, the points, a rank disc and three figures: operation ratio,
   attendance and average sleep on _All units_, operation ratio, penalty and
-  streak on a type's board. The metal follows the rank, so a tie shares it.
-  The podium is the board's own top three whatever the search holds.
+  streak on a type's board. First place states its lead over second ("Unggul
+  17 poin"); second and third their distance to first ("−17 dari peringkat
+  1"); a shared first place states neither. The medal follows the rank, so a
+  tie shares it. The podium is the board's own top three whatever the search
+  holds.
 - **Columns.** _All units_: rank, operator, department, points, operation
   ratio, penalty, streak, attendance, average sleep. A type's board: rank,
   operator, units operated (three shown, the rest behind a _+x_ that names

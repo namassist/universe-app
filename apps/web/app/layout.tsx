@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Instrument_Sans } from "next/font/google";
+import {
+  Barlow_Condensed,
+  Geist_Mono,
+  Instrument_Sans,
+} from "next/font/google";
 
 import "./globals.css";
 
@@ -8,6 +12,15 @@ import { Providers } from "@/components/providers/providers";
 const instrumentSans = Instrument_Sans({
   variable: "--font-instrument-sans",
   subsets: ["latin"],
+});
+
+/* A condensed display face for the podium's names and figures only — the
+   medal stage reads them from across the room, so they stand tall and narrow.
+   Everything else stays in Instrument Sans. */
+const barlowCondensed = Barlow_Condensed({
+  variable: "--font-barlow-condensed",
+  subsets: ["latin"],
+  weight: ["700", "800"],
 });
 
 const geistMono = Geist_Mono({
@@ -45,7 +58,7 @@ export default function RootLayout({
     <html
       lang="id"
       suppressHydrationWarning
-      className={`${instrumentSans.variable} ${geistMono.variable} antialiased`}
+      className={`${instrumentSans.variable} ${geistMono.variable} ${barlowCondensed.variable} antialiased`}
     >
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />

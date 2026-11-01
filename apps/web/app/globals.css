@@ -118,33 +118,30 @@
   --badge-accent-border: rgba(167, 139, 250, 0.4);
   --badge-accent-text: #c4b5fd;
 
-  /* ---- Peringkat Operator: the podium cards ----
-     Three metals, the same in both themes: a card is an object on the page,
-     like a trophy, not a surface that follows the theme. Each ramp is dark
-     enough at its lightest for the white figures on it. */
-  --podium-first: linear-gradient(
-    160deg,
-    #b3561f 0%,
-    #8a3a12 55%,
-    #4f1d08 100%
+  /* ---- Peringkat Operator: the medal stage ----
+     Gold, silver and bronze are the places' own colours — the portrait's
+     frame, the rank disc, the plinth's lit lip, the winner's score — and never
+     a status. The ribbon hangs the medal: red for the winner, blue for the
+     rest. The plinths are glass lit from above, darker as they go down. */
+  --medal-gold: #f5b43c;
+  --medal-silver: #d3d9e4;
+  --medal-bronze: #d98a4e;
+  --medal-gold-text: #f5b43c;
+  --medal-ink: #0a1b3a;
+  --medal-ribbon-first: #d23a3f;
+  --medal-ribbon: #3457a6;
+  --plinth-fill: linear-gradient(
+    180deg,
+    rgba(59, 98, 196, 0.32),
+    rgba(23, 42, 92, 0.12)
   );
-  --podium-second: linear-gradient(
-    160deg,
-    #6f737d 0%,
-    #50535c 55%,
-    #2e3037 100%
+  --plinth-fill-first: linear-gradient(
+    180deg,
+    rgba(74, 118, 228, 0.42),
+    rgba(26, 48, 104, 0.14)
   );
-  --podium-third: linear-gradient(
-    160deg,
-    #9a6a5e 0%,
-    #714539 55%,
-    #42261e 100%
-  );
-  --podium-text: #ffffff;
-  --podium-text-muted: rgba(255, 255, 255, 0.88);
-  --podium-border: rgba(255, 255, 255, 0.22);
-  --podium-trophy: rgba(255, 255, 255, 0.22);
-  --podium-shadow: 0 22px 44px -20px rgba(0, 0, 0, 0.7);
+  --plinth-tile: rgba(255, 255, 255, 0.08);
+  --portrait-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.6);
 
   /* ---- Kiosk: latar baris yang perlu dilihat ----
      Jauh lebih tipis dari --badge-*-fill: ini menyapu seluruh baris, bukan
@@ -284,30 +281,27 @@
     rgba(37, 99, 235, 0.14)
   );
 
-  /* Podium: the same metals as the dark block; only the shadow lightens. */
-  --podium-first: linear-gradient(
-    160deg,
-    #b3561f 0%,
-    #8a3a12 55%,
-    #4f1d08 100%
+  /* Medal stage: the medals deepen a step so they hold on paper; the winner's
+     score takes a darker gold to stay readable as text. */
+  --medal-gold: #f0a92a;
+  --medal-silver: #a7b1c2;
+  --medal-bronze: #c97a3e;
+  --medal-gold-text: #9a6200;
+  --medal-ink: #0a1b3a;
+  --medal-ribbon-first: #d23a3f;
+  --medal-ribbon: #3457a6;
+  --plinth-fill: linear-gradient(
+    180deg,
+    rgba(0, 84, 199, 0.1),
+    rgba(0, 84, 199, 0.03)
   );
-  --podium-second: linear-gradient(
-    160deg,
-    #6f737d 0%,
-    #50535c 55%,
-    #2e3037 100%
+  --plinth-fill-first: linear-gradient(
+    180deg,
+    rgba(0, 84, 199, 0.15),
+    rgba(0, 84, 199, 0.04)
   );
-  --podium-third: linear-gradient(
-    160deg,
-    #9a6a5e 0%,
-    #714539 55%,
-    #42261e 100%
-  );
-  --podium-text: #ffffff;
-  --podium-text-muted: rgba(255, 255, 255, 0.88);
-  --podium-border: rgba(255, 255, 255, 0.3);
-  --podium-trophy: rgba(255, 255, 255, 0.22);
-  --podium-shadow: 0 22px 44px -22px rgba(10, 27, 58, 0.45);
+  --plinth-tile: rgba(10, 27, 58, 0.06);
+  --portrait-shadow: 0 14px 28px -14px rgba(10, 27, 58, 0.45);
 
   /* Langkah terang dari ramp yang sama — lihat catatan di blok gelap. */
   --chart-1: #2a78d6;
@@ -336,6 +330,9 @@
 @theme inline {
   --font-sans: var(--font-instrument-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display:
+    var(--font-barlow-condensed), var(--font-instrument-sans), system-ui,
+    sans-serif;
 
   --color-primary: var(--color-primary);
   --color-primary-bright: var(--color-primary-bright);

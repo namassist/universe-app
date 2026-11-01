@@ -124,57 +124,41 @@ export function LeaderboardMenu() {
     return <LeaderboardTable rows={pg.rows} perType={perType} />;
   })();
 
+  /* Three tiers, each beside what it acts on: the page header picks the
+     board (period, department), the tabs pick a view of it (unit type), and
+     the search sits on the table it narrows — so it visibly cannot reach the
+     podium above it. */
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle title={menuLabel(t, "leaderboard")} sub={t.lbSub} />
+      <PageTitle title={menuLabel(t, "leaderboard")} sub={t.lbSub}>
+        <ToolbarGroup className="w-full justify-start sm:w-auto sm:justify-end">
+          <PeriodControls kind={kind} period={period} onChange={changePeriod} />
+          <Select
+            wrapperClassName="w-full sm:w-[220px]"
+            value={department}
+            onChange={(e) => {
+              setDepartment(e.target.value);
+              rebase();
+            }}
+            disabled={!siteWide}
+            aria-label={t.allDepts}
+          >
+            {siteWide ? <option value="">{t.allDepts}</option> : null}
+            {(deptQ.data ?? []).map((d) => (
+              <option key={d.id} value={siteWide ? d.id : ""}>
+                {d.name} · {d.company}
+              </option>
+            ))}
+          </Select>
+        </ToolbarGroup>
+      </PageTitle>
 
       <Panel>
-        <Toolbar>
-          <ToolbarTitle>{title}</ToolbarTitle>
-          <ToolbarGroup>
-            <PeriodControls
-              kind={kind}
-              period={period}
-              onChange={changePeriod}
-            />
-            <Select
-              wrapperClassName="w-[220px]"
-              value={department}
-              onChange={(e) => {
-                setDepartment(e.target.value);
-                rebase();
-              }}
-              disabled={!siteWide}
-              aria-label={t.allDepts}
-            >
-              {siteWide ? <option value="">{t.allDepts}</option> : null}
-              {(deptQ.data ?? []).map((d) => (
-                <option key={d.id} value={siteWide ? d.id : ""}>
-                  {d.name} · {d.company}
-                </option>
-              ))}
-            </Select>
-            <SearchInput
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                pg.setPage(1);
-              }}
-              onClear={() => {
-                setSearch("");
-                pg.setPage(1);
-              }}
-              clearLabel={t.lbClear}
-              placeholder={t.lbSearch}
-              aria-label={t.lbSearch}
-            />
-          </ToolbarGroup>
-        </Toolbar>
-
         <Segmented
+          variant="tabs"
           role="group"
           aria-label={t.lbTypes}
-          className="mb-5 flex-wrap"
+          className="-mt-2 mb-6"
         >
           {[{ id: "", name: t.lbAllTypes }, ...unitTypes].map((u) => (
             <SegmentedButton
@@ -195,6 +179,25 @@ export function LeaderboardMenu() {
         {rangeError || !boardQ.isSuccess ? null : (
           <Podium rows={ranked} perType={perType} />
         )}
+
+        <Toolbar>
+          <ToolbarTitle>{title}</ToolbarTitle>
+          <SearchInput
+            className="w-full sm:w-65"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              pg.setPage(1);
+            }}
+            onClear={() => {
+              setSearch("");
+              pg.setPage(1);
+            }}
+            clearLabel={t.lbClear}
+            placeholder={t.lbSearch}
+            aria-label={t.lbSearch}
+          />
+        </Toolbar>
 
         {body}
 
