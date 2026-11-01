@@ -46,6 +46,10 @@ import { requireAuth } from "../auth/macro";
 import { db, schema } from "../db";
 import { monthOf, periodRange, rankLeaderboard } from "../leaderboard";
 import { localDate } from "../scheduler";
+import {
+  OperatorBreakdownSchema,
+  operatorBreakdown,
+} from "./leaderboard-breakdown";
 import { departmentsFor, reportDepartment } from "./reports";
 import { ErrorSchema } from "./schemas";
 
@@ -264,6 +268,35 @@ async function boardRows(inScope: SQL | undefined, unitType: string | null) {
   });
 }
 
+/**
+ * The period a query asks for: both ends or neither, neither being the
+ * current month by the server's clock. The board and the breakdown refuse the
+ * same spans.
+ */
+function readPeriod(query: { from?: string; to?: string }) {
+  if ((query.from === undefined) !== (query.to === undefined))
+    return { kind: "error" as const, error: badPeriod };
+  const thisMonth = monthOf(localDate(new Date()));
+  const period = periodRange(
+    query.from ?? thisMonth.from,
+    query.to ?? thisMonth.to
+  );
+  if (period.kind === "ok") return period;
+  return {
+    kind: "error" as const,
+    error: period.kind === "too-long" ? periodTooLong : badPeriod,
+  };
+}
+
+const operatorNotFound = {
+  code: "operator_not_found",
+  message: "Operator tidak punya poin pada periode ini",
+};
+const unknownUnitType = {
+  code: "unit_type_not_found",
+  message: "Jenis unit tidak ditemukan",
+};
+
 export const leaderboardRoutes = new Elysia({
   prefix: "/leaderboard",
   tags: ["leaderboard"],
@@ -292,15 +325,8 @@ export const leaderboardRoutes = new Elysia({
       if (scope.kind === "unknown") return status(422, unknownDepartment);
       const department = scope.department;
 
-      if ((query.from === undefined) !== (query.to === undefined))
-        return status(422, badPeriod);
-      const thisMonth = monthOf(localDate(new Date()));
-      const period = periodRange(
-        query.from ?? thisMonth.from,
-        query.to ?? thisMonth.to
-      );
-      if (period.kind === "too-long") return status(422, periodTooLong);
-      if (period.kind !== "ok") return status(422, badPeriod);
+      const period = readPeriod(query);
+      if (period.kind !== "ok") return status(422, period.error);
 
       const inScope = and(
         gte(p.date, period.from),
@@ -340,5 +366,46 @@ export const leaderboardRoutes = new Elysia({
         422: ErrorSchema,
       },
       detail: { summary: "A period of operator points, ranked" },
+    }
+  )
+
+  /** One operator's period, shift by shift: what the board's points are
+      made of. The board's scope, period and unit type; somebody with no
+      settled shift in scope is not found, which is also what another
+      department's operator is to a department-scoped role. */
+  .get(
+    "/operators/:employeeId",
+    async ({ params, query, principal, status }) => {
+      const scope = await reportDepartment(principal, query.department);
+      if (scope.kind === "forbidden") return status(403, forbidden);
+      if (scope.kind === "unknown") return status(422, unknownDepartment);
+
+      const period = readPeriod(query);
+      if (period.kind !== "ok") return status(422, period.error);
+
+      const result = await operatorBreakdown({
+        employeeId: params.employeeId,
+        period,
+        department: scope.department,
+        unitType: query.unitType ?? null,
+        today: localDate(new Date()),
+      });
+      if (result.kind === "not-found") return status(404, operatorNotFound);
+      if (result.kind === "unknown-unit-type")
+        return status(422, unknownUnitType);
+      return result.body;
+    },
+    {
+      auth: { menu: "leaderboard", mode: "view" },
+      params: t.Object({ employeeId: t.String({ format: "uuid" }) }),
+      query: LeaderboardQuery,
+      response: {
+        200: OperatorBreakdownSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: { summary: "One operator's points for a period, shift by shift" },
     }
   );
