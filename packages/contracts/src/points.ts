@@ -60,6 +60,22 @@ export const POINT_OUTCOME_LABELS: Record<PointOutcome, string> = {
   unreadable: "FTW tidak terbaca",
 };
 
+/**
+ * What one line of an operator's point breakdown is: a settled shift's
+ * outcome, or one of two days the ledger has no row for.
+ *
+ * - `off-roster` — the roster gave the day a code other than D/N (OFF, CR,
+ *   AL, S …). Not scheduled: no points, and the streak neither grows nor breaks.
+ * - `unsettled` — rostered D/N, but nothing was settled: the shift has not
+ *   closed yet, no board was built for it, or it ran before the ledger began.
+ */
+export const BREAKDOWN_KINDS = [
+  ...POINT_OUTCOMES,
+  "off-roster",
+  "unsettled",
+] as const;
+export type BreakdownKind = (typeof BREAKDOWN_KINDS)[number];
+
 /** The streak bonus a run of `streak` counted shifts earns on its last one. */
 export function streakBonus(streak: number): number {
   if (streak <= 1) return 0;
