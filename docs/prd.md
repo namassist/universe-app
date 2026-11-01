@@ -1875,7 +1875,11 @@ reads "-".
 - **Department scope is the Report menu's** (`reportDepartment`): `all` picks
   any department or the whole site, `dept` reads its own (another is a 403),
   `self` reads nothing. The department list is
-  `GET /v1/leaderboard/departments`, under this menu's grant.
+  `GET /v1/leaderboard/departments`, under this menu's grant. The department
+  filters _All units_ and every type's board alike, and changing it keeps
+  the type tab picked (owner, 2026-11-01); a type with no points in the new
+  department keeps its tab, over an empty board. A new period still opens
+  on _All units_.
 - **Ranking:** total points, then counted shifts (operated + stood down), then
   name. Equal points and equal counted shifts share a rank (1, 1, 3). The
   search narrows rows already ranked, so a name keeps its rank.
@@ -1897,10 +1901,11 @@ reads "-".
   1"); a shared first place states neither. The medal follows the rank, so a
   tie shares it. The podium is the board's own top three whatever the search
   holds.
-- **Columns.** _All units_: rank, operator, department, points, operation
-  ratio, penalty, streak, attendance, average sleep. A type's board: rank,
-  operator, units operated (three shown, the rest behind a _+x_ that names
-  them), points, operation ratio, penalty, streak.
+- **Columns** (points last, owner, 2026-11-01). _All units_: rank,
+  operator, department, operation ratio, penalty, streak, attendance,
+  average sleep, points. A type's board: rank, operator, units operated
+  (three shown, the rest behind a _+x_ that names them), operation ratio,
+  penalty, streak, points.
   - **Operation ratio** = shifts operating a unit ÷ rostered (D/N) shifts on
     the ledger, as _20/27_: a 31-day month with 20 shifts driven, 4 days off
     the roster and 7 stood down or not ready reads 20/27. On a type's board

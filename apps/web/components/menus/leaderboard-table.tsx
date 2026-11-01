@@ -91,9 +91,6 @@ export function LeaderboardTable({
             ) : (
               <TableHead>{t.lbDepartment}</TableHead>
             )}
-            <TableHead className="text-right text-(--text-primary)">
-              {t.lbPoints}
-            </TableHead>
             <TableHead className="text-right" title={t.lbRatioHint}>
               {t.lbRatio}
             </TableHead>
@@ -105,6 +102,9 @@ export function LeaderboardTable({
                 <TableHead className="text-right">{t.lbSleepAvg}</TableHead>
               </>
             )}
+            <TableHead className="text-right text-(--text-primary)">
+              {t.lbPoints}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -130,27 +130,6 @@ export function LeaderboardTable({
                     (row.department ?? "—")
                   )}
                 </TableCell>
-                <TableCell
-                  className={cn(
-                    NUM,
-                    "text-base font-bold",
-                    row.total < 0
-                      ? "text-(--badge-danger-text)"
-                      : "text-(--text-primary)"
-                  )}
-                >
-                  {/* The total opens what it is made of, shift by shift,
-                      for this board's period, type and department. */}
-                  <Link
-                    href={breakdownHref(row.employeeId, filter)}
-                    prefetch={false}
-                    aria-label={`${signedPoints(row.total)} — ${fmt(t.lbBdOpen, { name: row.name })}`}
-                    title={fmt(t.lbBdOpen, { name: row.name })}
-                    className="rounded-sm text-inherit underline decoration-(--divider) decoration-dotted underline-offset-4 hover:text-primary-bright hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                  >
-                    {signedPoints(row.total)}
-                  </Link>
-                </TableCell>
                 <TableCell className={SUPPORT}>
                   {operationRatio(row.operated, row.shifts)}
                 </TableCell>
@@ -175,6 +154,29 @@ export function LeaderboardTable({
                     </TableCell>
                   </>
                 )}
+                {/* Points last: the figures before it are what it is read
+                    against (owner, 2026-11-01). */}
+                <TableCell
+                  className={cn(
+                    NUM,
+                    "text-base font-bold",
+                    row.total < 0
+                      ? "text-(--badge-danger-text)"
+                      : "text-(--text-primary)"
+                  )}
+                >
+                  {/* The total opens what it is made of, shift by shift,
+                      for this board's period, type and department. */}
+                  <Link
+                    href={breakdownHref(row.employeeId, filter)}
+                    prefetch={false}
+                    aria-label={`${signedPoints(row.total)} — ${fmt(t.lbBdOpen, { name: row.name })}`}
+                    title={fmt(t.lbBdOpen, { name: row.name })}
+                    className="rounded-sm text-inherit underline decoration-(--divider) decoration-dotted underline-offset-4 hover:text-primary-bright hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    {signedPoints(row.total)}
+                  </Link>
+                </TableCell>
               </TableRow>
             );
           })}

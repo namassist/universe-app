@@ -123,3 +123,19 @@ export function podiumGap(
   const behind = leader.total - row.total;
   return behind > 0 ? { kind: "behind", points: behind } : null;
 }
+
+type UnitTab = { id: string; name: string };
+
+/**
+ * The unit-type tabs: the types this board has points on, plus the one held
+ * when it has none here. A department change keeps the tab picked (owner,
+ * 2026-11-01), and a tab that vanished would leave the table filtered by a
+ * type nobody can see — so it stays, over an empty board.
+ */
+export function boardTabs(
+  types: readonly UnitTab[],
+  held: UnitTab | null
+): UnitTab[] {
+  if (!held || types.some((t) => t.id === held.id)) return [...types];
+  return [...types, held];
+}

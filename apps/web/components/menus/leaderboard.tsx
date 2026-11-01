@@ -41,6 +41,7 @@ import {
 } from "./leaderboard-period";
 import { Podium } from "./leaderboard-podium";
 import {
+  boardTabs,
   customPeriodError,
   matchesSearch,
   type Period,
@@ -78,6 +79,11 @@ export function LeaderboardMenu() {
       : openPeriod("month", { from: "", to: "" })
   );
   const [unitType, setUnitType] = React.useState(opened?.unitType ?? "");
+  /* The tab picked, kept by name for a board that has no points on it. */
+  const [heldType, setHeldType] = React.useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [department, setDepartment] = React.useState(opened?.department ?? "");
   const [search, setSearch] = React.useState("");
 
@@ -94,14 +100,18 @@ export function LeaderboardMenu() {
   const pg = usePagination(rows, "25");
   const siteWide = scope === "all";
   const perType = unitType !== "";
-  const unitTypes = boardQ.data?.unitTypes ?? [];
+  const unitTypes = boardTabs(
+    boardQ.data?.unitTypes ?? [],
+    unitType ? heldType : null
+  );
   const title = unitTypes.find((u) => u.id === unitType)?.name ?? t.lbAllTypes;
 
-  /* Any change of board starts at its first page. A new period or department
-     also drops the type tab: the tabs are that board's, and a type with no
-     points there would leave the table filtered by a tab nobody can see. */
+  /* Any change of board starts at its first page. A new period also drops
+     the type tab, being a new set of tabs; a new department keeps it (owner,
+     2026-11-01), its tab held by `boardTabs` where it has no points. */
   const rebase = () => {
     setUnitType("");
+    setHeldType(null);
     pg.setPage(1);
   };
   const changePeriod = (nextKind: PeriodKind, next: Period) => {
@@ -159,7 +169,7 @@ export function LeaderboardMenu() {
             value={department}
             onChange={(e) => {
               setDepartment(e.target.value);
-              rebase();
+              pg.setPage(1);
             }}
             disabled={!siteWide}
             aria-label={t.allDepts}
@@ -189,6 +199,7 @@ export function LeaderboardMenu() {
               aria-pressed={unitType === u.id}
               onClick={() => {
                 setUnitType(u.id);
+                setHeldType(u.id ? u : null);
                 pg.setPage(1);
               }}
             >

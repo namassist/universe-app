@@ -7,6 +7,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  boardTabs,
   customPeriodError,
   isoDay,
   matchesSearch,
@@ -159,5 +160,20 @@ describe("podiumGap", () => {
   test("a winner alone on the board has no lead to state", () => {
     const top = [row(1, 40)];
     expect(podiumGap(top[0], top)).toBeNull();
+  });
+});
+
+describe("boardTabs", () => {
+  const dump = { id: "t1", name: "Dump Truck" };
+  const exca = { id: "t2", name: "Excavator" };
+
+  test("the board's own types, as they come", () => {
+    expect(boardTabs([dump, exca], null)).toEqual([dump, exca]);
+    expect(boardTabs([dump, exca], exca)).toEqual([dump, exca]);
+  });
+
+  test("a held type with no points on this board keeps its tab", () => {
+    /* Picked on the site's board, then a department that never drove it. */
+    expect(boardTabs([dump], exca)).toEqual([dump, exca]);
   });
 });
