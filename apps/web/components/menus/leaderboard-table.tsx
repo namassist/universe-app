@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { fmt, useI18n } from "@/lib/i18n";
 import type { LeaderboardRow } from "@/lib/queries/leaderboard";
 import { cn } from "@/lib/utils";
@@ -14,6 +16,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+import {
+  breakdownHref,
+  type BreakdownFilter,
+} from "./leaderboard-breakdown-rows";
 import {
   operationRatio,
   percentOf,
@@ -65,9 +71,12 @@ function UnitsCell({ units }: { units: LeaderboardRow["units"] }) {
 export function LeaderboardTable({
   rows,
   perType,
+  filter,
 }: {
   rows: LeaderboardRow[];
   perType: boolean;
+  /** The board's filter, carried into each operator's breakdown. */
+  filter: BreakdownFilter;
 }) {
   const { t, lang } = useI18n();
   return (
@@ -130,7 +139,17 @@ export function LeaderboardTable({
                       : "text-(--text-primary)"
                   )}
                 >
-                  {signedPoints(row.total)}
+                  {/* The total opens what it is made of, shift by shift,
+                      for this board's period, type and department. */}
+                  <Link
+                    href={breakdownHref(row.employeeId, filter)}
+                    prefetch={false}
+                    aria-label={`${signedPoints(row.total)} — ${fmt(t.lbBdOpen, { name: row.name })}`}
+                    title={fmt(t.lbBdOpen, { name: row.name })}
+                    className="rounded-sm text-inherit underline decoration-(--divider) decoration-dotted underline-offset-4 hover:text-primary-bright hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    {signedPoints(row.total)}
+                  </Link>
                 </TableCell>
                 <TableCell className={SUPPORT}>
                   {operationRatio(row.operated, row.shifts)}

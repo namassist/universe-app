@@ -41,6 +41,42 @@ export const leaderboardQueryOptions = (filter: LeaderboardFilter) => {
   });
 };
 
+/** One operator's period, shift by shift — the page a board's points open.
+    With no filter the API reads the current month for every type. */
+export const leaderboardOperatorQueryOptions = (
+  employeeId: string,
+  filter: LeaderboardFilter | null
+) => {
+  const query = filter
+    ? {
+        from: filter.from,
+        to: filter.to,
+        ...(filter.unitType ? { unitType: filter.unitType } : {}),
+        ...(filter.department ? { department: filter.department } : {}),
+      }
+    : {};
+  return queryOptions({
+    queryKey: [
+      "leaderboard",
+      "operator",
+      employeeId,
+      filter?.from ?? "",
+      filter?.to ?? "",
+      filter?.unitType ?? "",
+      filter?.department ?? "",
+    ] as const,
+    queryFn: () =>
+      unwrap(api.v1.leaderboard.operators({ employeeId }).get({ query })),
+  });
+};
+
+export type OperatorBreakdown = Awaited<
+  ReturnType<
+    NonNullable<ReturnType<typeof leaderboardOperatorQueryOptions>["queryFn"]>
+  >
+>;
+export type BreakdownLine = OperatorBreakdown["lines"][number];
+
 export type LeaderboardBoard = Awaited<
   ReturnType<NonNullable<ReturnType<typeof leaderboardQueryOptions>["queryFn"]>>
 >;

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarX, SearchX, TriangleAlert } from "lucide-react";
 
@@ -30,6 +31,10 @@ import { StateBox } from "@/components/ui/state-box";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 
 import {
+  periodKindOf,
+  readBreakdownFilter,
+} from "./leaderboard-breakdown-rows";
+import {
   openPeriod,
   PeriodControls,
   type PeriodKind,
@@ -58,12 +63,22 @@ import { LeaderboardTable } from "./leaderboard-table";
 export function LeaderboardMenu() {
   const { t } = useI18n();
   const { scope } = useRole();
-  const [kind, setKind] = React.useState<PeriodKind>("month");
-  const [period, setPeriod] = React.useState<Period>(() =>
-    openPeriod("month", { from: "", to: "" })
+  /* Opened from a breakdown's "back", the address names the board it came
+     from; otherwise the board opens on this month, every type. */
+  const params = useSearchParams();
+  const [opened] = React.useState(() =>
+    readBreakdownFilter(new URLSearchParams(params.toString()))
   );
-  const [unitType, setUnitType] = React.useState("");
-  const [department, setDepartment] = React.useState("");
+  const [kind, setKind] = React.useState<PeriodKind>(() =>
+    opened ? periodKindOf(opened) : "month"
+  );
+  const [period, setPeriod] = React.useState<Period>(() =>
+    opened
+      ? { from: opened.from, to: opened.to }
+      : openPeriod("month", { from: "", to: "" })
+  );
+  const [unitType, setUnitType] = React.useState(opened?.unitType ?? "");
+  const [department, setDepartment] = React.useState(opened?.department ?? "");
   const [search, setSearch] = React.useState("");
 
   const rangeError =
@@ -121,7 +136,13 @@ export function LeaderboardMenu() {
       return (
         <StateBox icon={<SearchX />} title={t.lbEmptyT} body={t.lbEmptyB} />
       );
-    return <LeaderboardTable rows={pg.rows} perType={perType} />;
+    return (
+      <LeaderboardTable
+        rows={pg.rows}
+        perType={perType}
+        filter={{ ...period, unitType, department }}
+      />
+    );
   })();
 
   /* Three tiers, each beside what it acts on: the page header picks the
