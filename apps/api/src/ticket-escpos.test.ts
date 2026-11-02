@@ -65,6 +65,7 @@ describe("the slip a person reads", () => {
         "BAHAYA FATIGUE MENULAR",
         "SESUAI APLIKASI",
         "--------------------------------",
+        "Dicetak UNIVERSE",
       ].join("\n")
     );
   });
@@ -206,7 +207,7 @@ describe("the hazards and the safety messages", () => {
         "Lapor P5M di front masing-masing.",
       ],
     }).split("\n");
-    expect(lines.slice(-5)).toEqual([
+    expect(lines.slice(-6, -1)).toEqual([
       "Patuhi batas kecepatan 40 km/jam",
       "di jalan hauling.",
       "Lapor P5M di front",
@@ -221,10 +222,57 @@ describe("the hazards and the safety messages", () => {
       "\n"
     );
     expect(lines).not.toContain("LOKASI BERBAHAYA");
-    expect(lines.slice(-2)).toEqual([
+    expect(lines.slice(-3)).toEqual([
       "FTW            : Dapat Bekerja",
       "--------------------------------",
+      "Dicetak UNIVERSE",
     ]);
+  });
+});
+
+/* Owner, 2026-11-02: every slip says which system printed it, so one from
+   UNIVERSE is never mistaken for one from ShiftCorner. */
+describe("the UNIVERSE stamp", () => {
+  test("is the last line, under the closing rule", () => {
+    expect(ticketPreview(full).split("\n").slice(-2)).toEqual([
+      "--------------------------------",
+      "Dicetak UNIVERSE",
+    ]);
+  });
+
+  test("is printed centred, after the closing rule and before the cut", () => {
+    const bytes = renderTicket(full).toString("latin1");
+    expect(bytes).toContain(
+      "--------------------------------\r\n\x1b\x61\x01\x1b\x4d\x01Dicetak UNIVERSE\r\n"
+    );
+    expect(bytes.indexOf("Dicetak UNIVERSE")).toBeGreaterThan(
+      bytes.lastIndexOf("--------------------------------")
+    );
+  });
+
+  /* Smaller than the slip's own text (owner, 2026-11-02): a mark of where
+     the slip came from, not a field anybody acts on. Font B is the smallest
+     a printer has; the font goes back to A so nothing after it shrinks. */
+  test("is printed in the printer's small font, then the font is restored", () => {
+    const bytes = renderTicket(full).toString("latin1");
+    expect(bytes).toContain("\x1b\x4d\x01Dicetak UNIVERSE\r\n\x1b\x4d\x00");
+  });
+
+  test("is centred even when there are no safety messages to centre", () => {
+    const bytes = renderTicket({ ...full, hazards: [], safety: [] }).toString(
+      "latin1"
+    );
+    expect(bytes).toContain("\x1b\x61\x01\x1b\x4d\x01Dicetak UNIVERSE\r\n");
+  });
+
+  test("never appears on the booth test slip, which is not a ticket", () => {
+    const slip = renderTestSlip({
+      machine: "Mesin 18 KM 31",
+      printerIp: "192.168.179.100",
+      at: "16:30",
+      shift: "night",
+    }).toString("latin1");
+    expect(slip).not.toContain("Dicetak UNIVERSE");
   });
 });
 

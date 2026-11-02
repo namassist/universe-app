@@ -2287,11 +2287,18 @@ KASTURI BAWAH, KASTURI ATAS
 BAHAYA FATIGUE MENULAR              (centred)
 SESUAI APLIKASI                     (centred)
 --------------------------------
+Dicetak UNIVERSE                    (centred, small font)
 ```
 
 - **No title, no operator kind, no thank-you lines.** BUKTI ABSEN MASUK,
   JENIS OPERATOR and the three closing sentences were removed. The kind is
   still stored with the slip, for the Tiket menu's filter.
+- **The last line is always `Dicetak UNIVERSE`** (owner, 2026-11-02),
+  centred under the closing rule in the printer's small font (Font B), so a
+  slip from UNIVERSE is never taken for one from ShiftCorner. A thermal roll
+  has no watermark layer; this stamp is the watermark. The booth test slip
+  does not carry it. Slips stored before keep their old preview text, but a
+  reprint of one carries the stamp.
 - **FTW sits in the field column, bold.** A category too long for the roll
   ("Istirahat Minimal 1 Jam") breaks at a word and hangs under the value.
   Nothing uploaded reads "Belum Upload".

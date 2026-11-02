@@ -93,6 +93,9 @@ function wrapAt(sentence: string, indent = ""): string[] {
   return out;
 }
 
+/** Which system printed the slip, on its last line (owner, 2026-11-02). */
+const STAMP = "Dicetak UNIVERSE";
+
 /** The owner's words for no FTW on file (2026-09-15). */
 export const NOT_UPLOADED = "Belum Upload";
 
@@ -156,6 +159,12 @@ export function ticketLines(fields: TicketFields): {
    * never run into one line.
    */
   footer: string[];
+  /**
+   * The last line, centred under the closing rule: which system printed the
+   * slip (owner, 2026-11-02), so one from UNIVERSE is never taken for one
+   * from ShiftCorner.
+   */
+  stamp: string;
 } {
   /* Only a slip reading UNIT SPARE rides the spare bus. */
   const spareRide =
@@ -203,12 +212,13 @@ export function ticketLines(fields: TicketFields): {
         ]
       : [],
     footer: fields.safety.flatMap((line) => wrapAt(line)),
+    stamp: STAMP,
   };
 }
 
 /** A dry run's output: the whole slip as one block of text. */
 export function ticketPreview(fields: TicketFields): string {
-  const { centred, body, ftw, notices, footer } = ticketLines(fields);
+  const { centred, body, ftw, notices, footer, stamp } = ticketLines(fields);
   return [
     ...centred,
     RULE,
@@ -217,6 +227,7 @@ export function ticketPreview(fields: TicketFields): string {
     ...notices.flatMap((section) => [RULE, section.heading, ...section.lines]),
     RULE,
     ...(footer.length ? [...footer, RULE] : []),
+    stamp,
   ].join("\n");
 }
 
@@ -230,6 +241,9 @@ const BOLD_ON = Buffer.from([0x1b, 0x45, 0x01]);
 const BOLD_OFF = Buffer.from([0x1b, 0x45, 0x00]);
 const SIZE_NORMAL = Buffer.from([0x1d, 0x21, 0x00]);
 const SIZE_DOUBLE = Buffer.from([0x1d, 0x21, 0x11]);
+/** The printer's small font (9x17 against A's 12x24), and back. */
+const FONT_SMALL = Buffer.from([0x1b, 0x4d, 0x01]);
+const FONT_NORMAL = Buffer.from([0x1b, 0x4d, 0x00]);
 const FEED = Buffer.from([0x1b, 0x64, 0x06]);
 /** Partial cut: the slip tears off, the roll stays threaded. */
 const CUT = Buffer.from([0x1d, 0x56, 0x42, 0x00]);
@@ -244,7 +258,7 @@ const CUT = Buffer.from([0x1d, 0x56, 0x42, 0x00]);
 const text = (line: string) => Buffer.from(`${line}\r\n`, "latin1");
 
 export function renderTicket(fields: TicketFields): Buffer {
-  const { centred, body, ftw, notices, footer } = ticketLines(fields);
+  const { centred, body, ftw, notices, footer, stamp } = ticketLines(fields);
   return Buffer.concat([
     INIT,
     CODEPAGE,
@@ -271,6 +285,10 @@ export function renderTicket(fields: TicketFields): Buffer {
     ]),
     text(RULE),
     ...(footer.length ? [ALIGN_CENTRE, ...footer.map(text), text(RULE)] : []),
+    ALIGN_CENTRE,
+    FONT_SMALL,
+    text(stamp),
+    FONT_NORMAL,
     Buffer.from("\r\n", "latin1"),
     FEED,
     CUT,
