@@ -29,3 +29,7 @@ CLAUDE.local.md
 # Uploaded sound files (SOUND_DIR). Runtime data, not source.
 apps/api/storage/
 
+.claude/
+.agents/
+.impeccable/
+PRODUCT.md
