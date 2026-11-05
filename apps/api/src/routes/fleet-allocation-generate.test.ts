@@ -404,6 +404,59 @@ describe("GET /plan/generate/preview", () => {
     expect(unfilled.map((u) => u.unit)).toEqual([uUnranked.code]);
   });
 
+  test("offers the higher SIMPER class first, whatever the NIK (owner, 2026-11-05)", async () => {
+    /* C also holds a code found on a machine ranked above everything here —
+       outside allocation, so it is a class and never a vacancy. */
+    const [big] = await db
+      .insert(schema.simperCodes)
+      .values({ name: `${tag} BIG` })
+      .returning({ id: schema.simperCodes.id });
+    const description = `${tag} BIG UNIT`;
+    const [rank] = await db
+      .insert(schema.allocationPriorities)
+      .values({ description, rank: 0 })
+      .returning({ id: schema.allocationPriorities.id });
+    const [like] = await db
+      .select()
+      .from(schema.units)
+      .where(eq(schema.units.id, uRank1.id));
+    const [source] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZGU${uid()}`,
+        classId: like!.classId,
+        typeId: like!.typeId,
+        modelId: like!.modelId,
+        brandId: like!.brandId,
+        simperCodeId: big!.id,
+        description,
+      })
+      .returning({ id: schema.units.id });
+    await db
+      .insert(schema.employeeSkills)
+      .values({ employeeId: spareC.id, simperCodeId: big!.id });
+
+    try {
+      const { assign } = mine(await preview());
+      expect(assign.map((a) => [a.unit, a.nik])).toEqual([
+        [uRank1.code, spareC.nik],
+        [uRank2.code, spareA.nik],
+        [uFull.code, spareB.nik],
+      ]);
+    } finally {
+      await db
+        .delete(schema.employeeSkills)
+        .where(eq(schema.employeeSkills.simperCodeId, big!.id));
+      await db.delete(schema.units).where(eq(schema.units.id, source!.id));
+      await db
+        .delete(schema.allocationPriorities)
+        .where(eq(schema.allocationPriorities.id, rank!.id));
+      await db
+        .delete(schema.simperCodes)
+        .where(eq(schema.simperCodes.id, big!.id));
+    }
+  });
+
   test("never offers the off-shift, standby, unskilled or paired spare", async () => {
     const { assign } = mine(await preview());
     const niks = assign.map((a) => a.nik);

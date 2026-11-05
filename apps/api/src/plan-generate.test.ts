@@ -9,6 +9,7 @@ import {
   type GenerateSpare,
   type GenerateUnit,
 } from "./plan-generate";
+import type { SimperClasses } from "./spare-class";
 
 const TODAY = "2026-10-30";
 
@@ -23,6 +24,7 @@ const unit = (
   departmentId: null,
   departmentName: null,
   priority: null,
+  typeId: "t-exc",
   holders: [],
   ...over,
 });
@@ -59,8 +61,20 @@ const spare = (
 const run = (
   units: GenerateUnit[],
   spares: GenerateSpare[],
-  shift: "day" | "night" = "day"
-) => planGenerate({ units, spares, shift, today: TODAY });
+  shift: "day" | "night" = "day",
+  classes: SimperClasses = new Map()
+) => planGenerate({ units, spares, shift, today: TODAY, classes });
+
+/** employee → unit type → best rank, written as `{ "e-1": { "t-exc": 2 } }`. */
+const classesOf = (
+  entries: Record<string, Record<string, number>>
+): SimperClasses =>
+  new Map(
+    Object.entries(entries).map(([id, byType]) => [
+      id,
+      new Map(Object.entries(byType)),
+    ])
+  );
 
 describe("generateShiftAt", () => {
   test("before noon is the day shift, from midnight on", () => {
@@ -213,6 +227,59 @@ describe("planGenerate — priority", () => {
     const units = [unit("EX1"), unit("EX2", { priority: 1 })];
     const spares = [spare("2"), spare("1")];
     expect(run(units, spares)).toEqual(run(units, spares));
+  });
+});
+
+/* Owner, 2026-11-05: the board's rule — the highest SIMPER class in the
+   unit's own type goes first, NIK only breaks a tie. */
+describe("planGenerate — SIMPER class", () => {
+  test("the higher class takes the higher-ranked unit, whatever the NIK", () => {
+    const out = run(
+      [unit("EX4011", { priority: 5 }), unit("EX2014", { priority: 7 })],
+      [spare("504253212"), spare("507242409")],
+      "day",
+      classesOf({
+        "e-504253212": { "t-exc": 5 },
+        "e-507242409": { "t-exc": 1 },
+      })
+    );
+    expect(out.assign.map((a) => [a.unit, a.nik])).toEqual([
+      ["EX4011", "507242409"],
+      ["EX2014", "504253212"],
+    ]);
+  });
+
+  test("the same class falls back to NIK", () => {
+    const out = run(
+      [unit("EX1", { priority: 1 })],
+      [spare("20"), spare("10")],
+      "day",
+      classesOf({ "e-10": { "t-exc": 3 }, "e-20": { "t-exc": 3 } })
+    );
+    expect(out.assign.map((a) => a.nik)).toEqual(["10"]);
+  });
+
+  test("a class in another unit type does not count", () => {
+    const out = run(
+      [unit("EX1", { priority: 4 })],
+      [spare("10"), spare("20")],
+      "day",
+      classesOf({
+        "e-10": { "t-exc": 4 },
+        "e-20": { "t-exc": 4, "t-dt": 1 },
+      })
+    );
+    expect(out.assign.map((a) => a.nik)).toEqual(["10"]);
+  });
+
+  test("a spare with no class waits behind one who has one", () => {
+    const out = run(
+      [unit("EX1", { priority: 4 })],
+      [spare("10"), spare("20")],
+      "day",
+      classesOf({ "e-20": { "t-exc": 4 } })
+    );
+    expect(out.assign.map((a) => a.nik)).toEqual(["20"]);
   });
 });
 

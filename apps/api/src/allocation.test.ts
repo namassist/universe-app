@@ -122,13 +122,17 @@ async function addUnit(input: {
   standby?: boolean;
   /** Keyed on by Prioritas Alokasi; blank unless a test is about the order. */
   description?: string;
+  /** The suite's one type unless a test is about comparing across types. */
+  typeId?: string;
+  active?: boolean;
 }) {
   const [row] = await db
     .insert(schema.units)
     .values({
       code: input.code,
       classId: cls,
-      typeId: typ,
+      typeId: input.typeId ?? typ,
+      active: input.active ?? true,
       modelId: mdl,
       brandId: brd,
       ftw: input.ftw ?? false,
@@ -1132,6 +1136,226 @@ describe("an unattached spare outranks a standing operator", () => {
 
     const seat = (await mine(date)).find((s) => s.unitId === vacant);
     expect(seat?.employeeId).toBe(opA);
+  });
+});
+
+/*
+ * Owner, 2026-11-05. On the 2026-11-04 day board EX4011 (40T) went to the
+ * spare who tapped first and held nothing above EXC 470, while two who tapped
+ * later held codes up to the 200T and 250T diggers. Inside each tier, the
+ * spare holding the highest SIMPER class now goes first; the tap only breaks
+ * a tie. A class is the best Prioritas Alokasi rank among the active units
+ * whose SIMPER code they hold — counted in the vacancy's own unit type,
+ * because the ranks run across types and a dump-truck code says nothing about
+ * driving an excavator.
+ */
+describe("spares are ranked by the highest SIMPER class they hold", () => {
+  let otherType: string;
+  const code: Record<"top" | "mid" | "low" | "other", string> = {
+    top: "",
+    mid: "",
+    low: "",
+    other: "",
+  };
+  const ticketNiks: string[] = [];
+  const desc = {
+    other: `${tag} KELAS LAIN`,
+    top: `${tag} KELAS ATAS`,
+    mid: `${tag} KELAS TENGAH`,
+    low: `${tag} KELAS BAWAH`,
+  };
+
+  beforeAll(async () => {
+    for (const key of Object.keys(code) as (keyof typeof code)[]) {
+      const [row] = await db
+        .insert(schema.simperCodes)
+        .values({ name: `${tag} KELAS ${key}` })
+        .returning({ id: schema.simperCodes.id });
+      code[key] = row!.id;
+      made.simperCodes.push(row!.id);
+    }
+    const [type] = await db
+      .insert(schema.unitTypes)
+      .values({ name: `${tag} T2` })
+      .returning({ id: schema.unitTypes.id });
+    otherType = type!.id;
+  });
+
+  /* The ladder each test climbs. Another type sits at the very top, as the
+     site's excavators sit above its trucks. */
+  const ladder = () =>
+    db.insert(schema.allocationPriorities).values([
+      { description: desc.other, rank: 1 },
+      { description: desc.top, rank: 2 },
+      { description: desc.mid, rank: 3 },
+      { description: desc.low, rank: 4 },
+    ]);
+
+  afterEach(async () => {
+    await db
+      .delete(schema.allocationPriorities)
+      .where(
+        inArray(schema.allocationPriorities.description, Object.values(desc))
+      );
+    if (ticketNiks.length)
+      await db
+        .delete(schema.tickets)
+        .where(inArray(schema.tickets.nik, ticketNiks));
+  });
+
+  afterAll(async () => {
+    if (otherType)
+      await db
+        .delete(schema.unitTypes)
+        .where(eq(schema.unitTypes.id, otherType));
+  });
+
+  /** A machine that only gives its SIMPER code a class — broken down, so
+      never a vacancy of its own. */
+  const classSource = (
+    simperCodeId: string,
+    description: string,
+    over: { typeId?: string; active?: boolean } = {}
+  ) =>
+    addUnit({
+      code: `${tag}-K${uid()}`,
+      simperCodeId,
+      description,
+      breakdown: true,
+      ...over,
+    });
+
+  const vacancy = (key: "mid" | "low") =>
+    addUnit({
+      code: `${tag}-V${key}${uid()}`,
+      simperCodeId: code[key],
+      description: desc[key],
+    });
+
+  async function spare(date: string, tap: string, held: string[]) {
+    const nik = newNik();
+    const id = await addEmployee({ nik });
+    if (held.length)
+      await db
+        .insert(schema.employeeSkills)
+        .values(held.map((simperCodeId) => ({ employeeId: id, simperCodeId })));
+    await roster(date, id, "D");
+    await tapAt(date, nik, tap);
+    return { id, nik };
+  }
+
+  test("a later tap holding a higher class takes the bigger unit (the 2026-11-04 case)", async () => {
+    const date = nextDate();
+    await ladder();
+    await classSource(code.top, desc.top);
+    const mid = await vacancy("mid");
+    const low = await vacancy("low");
+
+    const early = await spare(date, "05:06:34", [code.mid, code.low]);
+    const late = await spare(date, "05:12:11", [code.top, code.mid, code.low]);
+
+    const slots = await mine(date);
+    expect(slots.find((s) => s.unitId === mid)?.employeeId).toBe(late.id);
+    expect(slots.find((s) => s.unitId === low)?.employeeId).toBe(early.id);
+  });
+
+  test("of two spares in the same class, the earlier tap", async () => {
+    const date = nextDate();
+    await ladder();
+    await classSource(code.top, desc.top);
+    const mid = await vacancy("mid");
+
+    const early = await spare(date, "05:00:00", [code.top, code.mid]);
+    await spare(date, "05:10:00", [code.top, code.mid]);
+
+    const slot = (await mine(date)).find((s) => s.unitId === mid);
+    expect(slot?.employeeId).toBe(early.id);
+  });
+
+  test("a class held in another unit type does not count", async () => {
+    const date = nextDate();
+    await ladder();
+    await classSource(code.other, desc.other, { typeId: otherType });
+    const low = await vacancy("low");
+
+    const early = await spare(date, "05:00:00", [code.low]);
+    await spare(date, "05:10:00", [code.other, code.low]);
+
+    const slot = (await mine(date)).find((s) => s.unitId === low);
+    expect(slot?.employeeId).toBe(early.id);
+  });
+
+  test("a code found only on an inactive unit gives no class", async () => {
+    const date = nextDate();
+    await ladder();
+    await classSource(code.top, desc.top, { active: false });
+    const low = await vacancy("low");
+
+    const early = await spare(date, "05:00:00", [code.low]);
+    await spare(date, "05:10:00", [code.top, code.low]);
+
+    const slot = (await mine(date)).find((s) => s.unitId === low);
+    expect(slot?.employeeId).toBe(early.id);
+  });
+
+  test("a code found only on an unranked description gives no class", async () => {
+    const date = nextDate();
+    await ladder();
+    await classSource(code.top, `${tag} KELAS TANPA URUTAN`);
+    const low = await vacancy("low");
+
+    const early = await spare(date, "05:00:00", [code.low]);
+    await spare(date, "05:10:00", [code.top, code.low]);
+
+    const slot = (await mine(date)).find((s) => s.unitId === low);
+    expect(slot?.employeeId).toBe(early.id);
+  });
+
+  test("an unattached spare still goes before a standing holder of a higher class", async () => {
+    const date = nextDate();
+    await ladder();
+    await classSource(code.top, desc.top);
+    const low = await vacancy("low");
+
+    const standing = await spare(date, "04:48:00", [code.top, code.low]);
+    const broken = await addUnit({
+      code: `${tag}-KB${uid()}`,
+      breakdown: true,
+    });
+    await plan(broken, standing.id);
+    const unattached = await spare(date, "05:10:00", [code.low]);
+
+    const slot = (await mine(date)).find((s) => s.unitId === low);
+    expect(slot?.employeeId).toBe(unattached.id);
+  });
+
+  test("a spare holding a slip for the unit keeps it against a higher class", async () => {
+    const date = nextDate();
+    await ladder();
+    await classSource(code.top, desc.top);
+    const unitCode = `${tag}-VS${uid()}`;
+    const low = await addUnit({
+      code: unitCode,
+      simperCodeId: code.low,
+      description: desc.low,
+    });
+
+    await spare(date, "05:01:00", [code.top, code.low]);
+    const slip = await spare(date, "05:05:00", [code.low]);
+    await db.insert(schema.tickets).values({
+      nik: slip.nik,
+      date,
+      shift: "day",
+      ip: liveIp,
+      status: "printed",
+      contentHash: uid(),
+      preview: "x",
+      fields: { at: `${date} 05:05:00`, seat: { unit: unitCode } },
+    });
+    ticketNiks.push(slip.nik);
+
+    const slot = (await mine(date)).find((s) => s.unitId === low);
+    expect(slot?.employeeId).toBe(slip.id);
   });
 });
 

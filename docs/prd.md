@@ -395,8 +395,9 @@ fill the gap from the spare pool.
     unexpired, and a department-owned unit takes only its department.
   - **Priority** is the Prioritas Alokasi order (unranked last, then unit
     code): a spare who fits both EX6xx (rank 2) and EX5xx (rank 3) goes to
-    EX6xx. Spares are taken in NIK order, so the same day gives the same
-    answer.
+    EX6xx. Each unit takes the spare holding the **highest SIMPER class** in
+    its unit type, then the lower NIK, so the same day gives the same answer
+    (owner, 2026-11-05; _Spares are ranked by SIMPER class_).
   - **A unit already holding two operators** (say a Day operator on leave
     and a Night operator) gives up one to make room — a standby holder first,
     then one not working today, then one on the other shift. Reset brings
@@ -1089,6 +1090,57 @@ until someone pressed Sync at 07:07 — although they were on time.
   holders), and the number of filled seats did not change — 16 either way. The
   reordering cost no coverage.
 
+### Spares are ranked by SIMPER class — shipped
+
+- **Inside each tier, the spare holding the highest SIMPER class goes first;
+  the tap only breaks a tie** (owner, 2026-11-05). On the 2026-11-04 day board
+  EX4011 (40T) went to Maswal Ramadan, who tapped first (05:06) and holds
+  nothing above EXC 470, while Onesimus Balalembang (05:12, codes up to the
+  250T) and Vinsensius (05:15, up to the 120T) went to 20T units. The site
+  wants the bigger licence on the bigger machine.
+- **A class is the best Prioritas Alokasi rank among the active units whose
+  SIMPER code the person holds, counted in the vacancy's own unit type.** Per
+  type because the ranks run across types — excavators 1–8, then dump trucks,
+  rear dumps, dozers — and a dump-truck code ranked 9 says nothing about
+  driving a rear dump ranked 10. A code found only on inactive units or
+  unranked descriptions gives no class; such a spare waits behind everyone
+  who has one.
+- **The order of a vacancy's candidates:** unattached before standing (the
+  tier stays first), then class, then tap, then NIK. A late tap holding the
+  bigger licence outranks an early one holding a smaller — accepted
+  knowingly, as the price of the rule. A spare already holding a slip for a
+  vacancy still keeps it.
+- **The ripple is accepted.** Vacancies run biggest-first, so the best
+  licences go to the biggest open seats, and somebody may land above the
+  vacancy that raised the question — Onesimus onto a 200T, say — as long as
+  they hold its code (owner).
+- **PLAN Generate uses the same rule**, with NIK in place of the tap.
+- **Still a greedy fill, so the seat count is not guaranteed.** The loop
+  never goes back. A spare holding a high class _and_ the only licence for a
+  rarer unit further down the list can be taken by a bigger vacancy that an
+  earlier tap could have filled, leaving the rarer unit empty. The old tap
+  order carried the same risk, only at random; preferring the widest licence
+  makes it more likely. **Measured over 30 shifts** (2026-10-20 to 11-04,
+  every board with spares; the same people and vacancies replayed under both
+  orders, on today's PLAN and skills): the class order left **no** seat empty
+  that the tap order filled — 2,456 spare seats either way, 567 of them
+  moved. A perfect matching would have filled one more, once: WT1006 on
+  2026-10-24 night, whose only candidate took MH1003 earlier in the list
+  under either order. If it grows, the remedy is a repair pass after the fill
+  (move a seated spare to an empty unit when someone left over can take
+  their seat, never a `plan` seat or one a slip names), not a return to the
+  tap.
+- **Measured on the 2026-11-04 day board** (replayed with that morning's
+  standing seats and its 33 spares; the old rule reproduced the stored board
+  exactly): five excavator seats changed — EX7011 (200T) Winarto → Onesimus,
+  EX6002 (120T) Simon Bota → Winarto, EX4011 (40T) Maswal → Simon Bota,
+  EX2014 Onesimus → Vinsensius, EX2025 Vinsensius → Maswal — and the filled
+  seats stayed at 269 of 281. Vinsensius did not reach EX4011: Simon Bota
+  holds the same class and tapped first. Counted across types instead, six
+  rear dumps would have reshuffled on cross-type rank alone.
+- Code: `spare-class.ts` (`simperClasses`, `classIn`), used by `allocation.ts`
+  and `plan-generate.ts`.
+
 ### The board's audit table — shipped
 
 - **One line per operator the roster put on this shift, and what became of
@@ -1117,9 +1169,9 @@ until someone pressed Sync at 07:07 — although they were on time.
   wall — distinguishable to anyone who asks.
 - **The check-in column sorts** (owner, 2026-09-01): click for earliest first,
   again for latest, again to return to the formation order. Earliest-first is
-  the direction the engine itself works in — it offers vacancies to spares
-  first come first served by the tap — so the sorted table replays the order
-  the decisions were made in. Operators with no tap sit at the end whichever
+  the direction the engine itself works in — within a SIMPER class it offers
+  vacancies to spares first come first served by the tap — so the sorted
+  table replays the order the decisions were made in. Operators with no tap sit at the end whichever
   way the column points: a missing tap is neither early nor late, and putting
   it first on the reverse would parade the people who never arrived above
   everyone who did.
@@ -1175,7 +1227,9 @@ until someone pressed Sync at 07:07 — although they were on time.
   `standby` units are allocated since 2026-09-15), its planned operator kept if
   they pass, and every vacancy offered
   to the spare pool **first come first served by `first_in_at`**, subject to
-  the same SIMPER and department rules PLAN enforces.
+  the same SIMPER and department rules PLAN enforces. (Since refined: the
+  tier, then the SIMPER class, come before the tap — _Spares are offered in
+  two tiers_, _Spares are ranked by SIMPER class_.)
 - **The board is driven by `units`, not by `fleet_plan_slots`.** It was the
   other way round at first, and that hid the units most in need of showing: a
   unit the plan has no standing pairing for is idle by default, and it never
@@ -1192,7 +1246,7 @@ until someone pressed Sync at 07:07 — although they were on time.
   shift cannot say which board it is building, and a shift with no active
   `finger-in` stage has no deadline and therefore no pass rule. Both log and
   stop. A full screen of confident nonsense is worse than an empty one.
-- **Placement is deterministic** — `tapped_at` then NIK — so a regenerated
+- **Placement is deterministic** — tier, SIMPER class, `tapped_at`, then NIK — so a regenerated
   board is identical to the one people already read.
 - **The plan is standing, so it has no date**: every unit in `fleet_plan_slots`
   appears on every board. Correct for the yard, and the thing that makes shared
@@ -1631,8 +1685,9 @@ until someone pressed Sync at 07:07 — although they were on time.
 Both items once listed here have shipped: the engine is _The allocation
 engine_ and the screen is _The Actual tab_. The rule they shipped with differs
 from the one first sketched here — spares are ordered unattached-first, then by
-tap (_Spares are offered in two tiers_), and vacancies by _Allocation
-priority_ — so read those sections, not this one.
+SIMPER class, then by tap (_Spares are offered in two tiers_, _Spares are
+ranked by SIMPER class_), and vacancies by _Allocation priority_ — so read
+those sections, not this one.
 
 ## Notifications
 

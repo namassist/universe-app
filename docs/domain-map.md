@@ -15,6 +15,7 @@ the code disagree, the code and PRD win. Fix this file in the same change.
 | Support unit                     | A unit in no formation but crewed (`units.fleet_support`, set by the Fleet Setting import). Grouped as **Support**.                                                                                        |
 | No fleet                         | Active units in no formation and not support. Derived and never stored. **Not allocated**, only listed so they don't go unnoticed.                                                                         |
 | PLAN                             | Standing unit ↔ operator pairs, max 2 per unit, no date, no shift (`fleet_plan_slots`). **Generate** fills the shift's empty units from its spares, in the PLAN (`plan-generate.ts`).                      |
+| SIMPER class                     | A spare's best Prioritas Alokasi rank among active units whose SIMPER code they hold, per unit type (`spare-class.ts`). Orders spares within a tier, before the tap.                                       |
 | ACTUAL / board                   | One shift's generated allocation (`fleet_actual_slots`, `fleet_actual_fleets`), built by `spare-validate`.                                                                                                 |
 | Default plan                     | The saved whole-file PLAN (`fleet_plan_defaults`, set by the PLAN import, audit in `fleet_plan_default_imports`). Never read by the engine; **Reset** brings the live PLAN to it, skipping stale pairings. |
 | Standing operator / holder       | An operator with a PLAN slot.                                                                                                                                                                              |
@@ -129,8 +130,13 @@ a new query. Standby units **are** allocated (since
    `asc(code)` index. The rank is stored per `units.description` (matched
    exactly, as spelled; `allocation_priorities`), the text the PRD describes as
    a (unit class, SIMPER code) pair. Unranked descriptions sort last.
-5. Spares already holding a slip for a vacancy keep it. Then each vacancy takes
-   the first spare that is ready for that unit and eligible (`source: spare`).
+5. Spares already holding a slip for a vacancy keep it. Then each vacancy takes,
+   of the spares ready for that unit and eligible, the one first by **tier
+   (unattached first) → highest SIMPER class in the unit's type → tap → NIK**
+   (`source: spare`). A class is the best Prioritas Alokasi rank among the
+   active units whose SIMPER code the person holds, per unit type
+   (`spare-class.ts`, owner 2026-11-05); no ranked code sorts last. A late tap
+   with the bigger licence beats an early one with a smaller.
 
 Invariants:
 
@@ -145,14 +151,14 @@ Invariants:
   confirmation.
 - Failures notify with a reason from a **closed list** (never the error text).
 
-Code: `allocation.ts`, `readiness.ts`, `fleet-scope.ts`, `routes/fleet-allocation.ts`
+Code: `allocation.ts`, `readiness.ts`, `fleet-scope.ts`, `spare-class.ts` (SIMPER class), `routes/fleet-allocation.ts`
 (PLAN), `routes/fleet-actual.ts` (boards, audit, candidates, manual edit),
 `routes/allocation-priority.ts`, `routes/fleets*.ts` and
 `routes/fleet-allocation-import.ts` (the PLAN file parsed against the default; Reset lives in `routes/fleet-allocation.ts`),
-`plan-generate.ts` + `routes/fleet-allocation-generate.ts` (PLAN Generate: no FTW/finger, shift by noon, same eligibility and priority order as step 5).
+`plan-generate.ts` + `routes/fleet-allocation-generate.ts` (PLAN Generate: no FTW/finger, shift by noon, same eligibility, priority order and SIMPER class as step 5, NIK in place of the tap).
 Web: `components/menus/fleet-allocation/*`, `fleet-allocation.tsx`,
 `allocation-priority.tsx`, `fleet-setting*.tsx`, `plan-default-bar.tsx` (default line + Reset dialog), `plan-default.ts`, `plan-generate-dialog.tsx` + `plan-generate.ts` (Generate).
-Tests: `allocation.test.ts`, `readiness.test.ts`, `routes/fleet-allocation*.test.ts`,
+Tests: `allocation.test.ts`, `readiness.test.ts`, `spare-class.test.ts`, `routes/fleet-allocation*.test.ts`,
 `routes/fleet-actual.test.ts`, `routes/allocation-priority.test.ts`, `routes/fleet-allocation-default.test.ts` (default + Reset), `plan-generate.test.ts`, `routes/fleet-allocation-generate.test.ts`, `crew-rows.test.ts`, `plan-default.test.ts`, web `plan-generate.test.ts`.
 PRD: _Asset & Fleet_, from _Fleet composition_ through _The Actual tab_.
 

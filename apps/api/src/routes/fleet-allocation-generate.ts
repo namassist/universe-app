@@ -28,6 +28,7 @@ import {
   type GenerateUnit,
 } from "../plan-generate";
 import { rosterDayInForce } from "../roster-in-force";
+import { simperClasses } from "../spare-class";
 import { localDate } from "../scheduler";
 import {
   PLAN_DEFAULT_LOCK,
@@ -129,6 +130,7 @@ async function generateInput(
       departmentId: schema.units.departmentId,
       departmentName: schema.departments.name,
       priority: schema.allocationPriorities.rank,
+      typeId: schema.units.typeId,
     })
     .from(schema.units)
     .leftJoin(
@@ -246,7 +248,8 @@ async function generateInput(
   const slotIdOf = new Map(
     holderRows.map((h) => [`${h.unitId}|${h.employeeId}`, h.slotId])
   );
-  return { units, spares, slotIdOf };
+  const classes = await simperClasses(reader, spareIds);
+  return { units, spares, classes, slotIdOf };
 }
 
 async function outcomeOf(
@@ -261,7 +264,7 @@ async function outcomeOf(
 }> {
   const date = localDate(now);
   const shift = generateShiftAt(now);
-  const { units, spares, slotIdOf } = await generateInput(
+  const { units, spares, classes, slotIdOf } = await generateInput(
     reader,
     date,
     lockedIds
@@ -269,7 +272,7 @@ async function outcomeOf(
   return {
     date,
     shift,
-    outcome: planGenerate({ units, spares, shift, today: date }),
+    outcome: planGenerate({ units, spares, shift, today: date, classes }),
     slotIdOf,
   };
 }

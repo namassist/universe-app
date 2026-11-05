@@ -19,9 +19,10 @@
  *   3. everything else is a vacancy, and a vacancy is the thing the board
  *      exists to make visible
  *   4. spares — allocatable operators rostered to this shift with no seat —
- *      whose tap passed, unattached ones first and then by tap, fill
- *      vacancies in Prioritas Alokasi order, subject to the same SIMPER and
- *      department rules PLAN enforces
+ *      whose tap passed fill vacancies in Prioritas Alokasi order, subject to
+ *      the same SIMPER and department rules PLAN enforces. Each vacancy takes
+ *      an unattached spare before a standing one, then the highest SIMPER
+ *      class in the unit's type (`spare-class.ts`), then the earlier tap
  *
  * Reads only local tables. The readiness snapshots were pulled hours earlier
  * by the ingest stages; nothing here opens a socket to an external source.
@@ -42,6 +43,7 @@ import {
 } from "./routes/fleet-allocation";
 import { localDate } from "./scheduler";
 import { normalizeNik } from "./sources/nik";
+import { classIn, simperClasses } from "./spare-class";
 
 export type BoardSlot = {
   unitId: string;
@@ -282,6 +284,8 @@ export async function buildBoard(
        */
       priority: schema.allocationPriorities.rank,
       requiresFtw: schema.units.ftw,
+      /** Which ladder a spare's SIMPER class is read on for this unit. */
+      typeId: schema.units.typeId,
       /** Null for a unit the plan says nothing about. */
       employeeId: schema.fleetPlanSlots.employeeId,
       /*
@@ -368,6 +372,7 @@ export async function buildBoard(
 
   const pool = await candidates(date, shift, deadline, ftwDeadlineAt);
   const skills = await skillsByEmployee([...pool.keys()]);
+  const classes = await simperClasses(db, [...pool.keys()]);
   const ticketed = await ticketedSeats(date, shift);
   const today = localDate(new Date());
 
@@ -525,7 +530,7 @@ export async function buildBoard(
     }
   }
 
-  /* --- 2. the spares, first come first served ----------------------------- */
+  /* --- 2. the spares: tier, SIMPER class, then tap ------------------------ */
 
   /*
    * Who is already on a unit — `taken`, which at this point holds exactly the
@@ -657,15 +662,37 @@ export async function buildBoard(
     if (holder) sit(slot, holder, row.requiresFtw);
   }
 
+  /*
+   * Then each vacancy takes, of the spares who may drive it, the one holding
+   * the highest SIMPER class in its unit type (owner, 2026-11-05).
+   *
+   * `spares` is already in tier → tap → NIK order and the sort is stable, so
+   * sorting the fits by tier and class alone leaves the tap deciding only
+   * between equals. The tier stays first: a standing holder of a 200T code
+   * still waits behind an unattached spare, for the reason above. A late tap
+   * holding the bigger licence now outranks an early one holding a smaller —
+   * the 2026-11-04 board put the spare holding nothing above EXC 470 on
+   * EX4011 ahead of two holding codes up to the 200T and 250T diggers.
+   * Vacancies run biggest-first, so the best licences go to the biggest seats
+   * and the rest follow down the ladder; on that board the reorder filled the
+   * same number of seats. Not in general: the loop is still greedy, and a
+   * wide licence taken by a big seat can leave a rarer unit further down with
+   * nobody (docs/prd.md, _Spares are ranked by SIMPER class_).
+   */
+  const tier = (c: Candidate) => Number(standing.has(c.person.id));
   for (const slot of vacancies) {
     if (slot.employeeId) continue;
     const row = byUnit.get(slot.unitId)![0]!;
     const unit = unitOf(row);
-    const spare = spares.find((c) => {
-      if (taken.has(c.person.id)) return false;
-      if (!readyFor(row.requiresFtw, c).passed) return false;
-      return eligible(unit, c);
-    });
+    const classOf = (c: Candidate) => classIn(classes, c.person.id, row.typeId);
+    const [spare] = spares
+      .filter(
+        (c) =>
+          !taken.has(c.person.id) &&
+          readyFor(row.requiresFtw, c).passed &&
+          eligible(unit, c)
+      )
+      .sort((a, b) => tier(a) - tier(b) || classOf(a) - classOf(b));
     if (spare) sit(slot, spare, row.requiresFtw);
   }
 

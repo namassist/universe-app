@@ -15,7 +15,9 @@
  * - **Spare**: no PLAN slot anywhere and rostered to the shift. Eligibility
  *   is `pairingRefusal` without the planning flag, so `aktif` only.
  * - **Order**: Prioritas Alokasi rank, unranked last, ties in the given
- *   (register `asc(code)`) order — the engine's own. Spares by NIK.
+ *   (register `asc(code)`) order — the engine's own. Each unit takes the
+ *   spare with the highest SIMPER class in its unit type (`spare-class.ts`,
+ *   owner 2026-11-05), then the lower NIK.
  * - **Full unit** (two holders, neither on the shift): one holder is released
  *   to make room — standby first, then one not working today, then one on the
  *   other shift, then the lower NIK.
@@ -35,6 +37,7 @@ import {
   pairingRefusal,
   type AllocPerson,
 } from "./routes/fleet-allocation";
+import { classIn, type SimperClasses } from "./spare-class";
 
 /** The hour the night shift's Generate begins, site-local. */
 const NIGHT_FROM_HOUR = 12;
@@ -56,6 +59,8 @@ export type GenerateUnit = {
   departmentId: string | null;
   departmentName: string | null;
   priority: number | null;
+  /** The ladder a spare's SIMPER class is read on. */
+  typeId: string | null;
   holders: GenerateHolder[];
 };
 
@@ -142,8 +147,10 @@ export function planGenerate(input: {
   shift: ShiftKind;
   /** Site-local today, for the SIMPER expiry comparison. */
   today: string;
+  /** The spares' SIMPER classes, from `simperClasses`. */
+  classes: SimperClasses;
 }): GenerateOutcome {
-  const { shift, today } = input;
+  const { shift, today, classes } = input;
   const pool = input.spares
     .filter((s) => !!s.rosterCode && rosterShift(s.rosterCode) === shift)
     .sort((a, b) => a.nik.localeCompare(b.nik));
@@ -156,15 +163,20 @@ export function planGenerate(input: {
     (u) => !u.holders.some((h) => fillsSeat(h, shift))
   );
   for (const unit of vacancies) {
-    const spare = pool.find(
-      (s) =>
-        !taken.has(s.id) &&
-        pairingRefusal(unit, s, {
-          holdsCode:
-            !!unit.simperCodeId && s.simperCodeIds.has(unit.simperCodeId),
-          today,
-        }) === null
-    );
+    /* `pool` is in NIK order and the sort is stable, so NIK only breaks a
+       tie between equal classes — the board's rule, minus the tap. */
+    const classOf = (s: GenerateSpare) => classIn(classes, s.id, unit.typeId);
+    const [spare] = pool
+      .filter(
+        (s) =>
+          !taken.has(s.id) &&
+          pairingRefusal(unit, s, {
+            holdsCode:
+              !!unit.simperCodeId && s.simperCodeIds.has(unit.simperCodeId),
+            today,
+          }) === null
+      )
+      .sort((a, b) => classOf(a) - classOf(b));
     const facts = {
       unitId: unit.id,
       unit: unit.code,
