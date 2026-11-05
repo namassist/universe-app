@@ -81,6 +81,20 @@ export const CARD_LAYOUTS = ["overlay", "identity"] as const;
 export type CardLayout = (typeof CARD_LAYOUTS)[number];
 
 /**
+ * What a fleet wall is about (owner, 2026-11-05).
+ *
+ * `fleet` — formations, the wall every screen was before this setting, so the
+ * default. `unit` — units an admin picked one by one, from any formation or
+ * support, shown as one group headed by the screen's own name. A unit wall is
+ * an extra view, not a fourth group beside formation, Support and Spare: its
+ * operators still appear on their formation's wall too. Only units in Fleet
+ * Setting may be picked, and a unit wall is always a slideshow — a monitor
+ * lays several groups side by side, and a unit wall has one.
+ */
+export const DISPLAY_SUBJECTS = ["fleet", "unit"] as const;
+export type DisplaySubject = (typeof DISPLAY_SUBJECTS)[number];
+
+/**
  * How many formations one page of a wall shows, by layout.
  *
  * A page size, not a ceiling: a `monitor-2` given nine formations shows five

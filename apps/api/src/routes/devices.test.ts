@@ -24,6 +24,7 @@ import {
 } from "@universe/contracts";
 import { redis } from "../redis";
 import { devicesRoutes, effectiveRunTexts } from "./devices";
+import { deviceUnitScope } from "./fleet-actual";
 
 const app = new Elysia().use(devicesRoutes);
 const uid = () => crypto.randomUUID().slice(0, 8);
@@ -713,5 +714,391 @@ describe("the running text a wall receives", () => {
     const joined = shown.findIndex((t) => t.startsWith("Lokasi berbahaya:"));
     const notice = shown.findIndex((t) => t === `${runTag} pengumuman`);
     expect(joined).toBeLessThan(notice);
+  });
+});
+
+/*
+ * Owner, 2026-11-05: a fleet wall may show units picked one by one instead of
+ * formations — only units in Fleet Setting, at least one, always a slideshow.
+ */
+describe("a wall pointed at units", () => {
+  type Device = {
+    id: string;
+    subject: "fleet" | "unit";
+    unitIds: string[];
+    fleetIds: string[];
+    layout: string;
+    slideGrid: string;
+  };
+  /** Leaders of this suite's formations: in Fleet Setting by being one. */
+  let leaders: string[] = [];
+  let support = "";
+  let noFleet = "";
+  let inactive = "";
+
+  async function unit(values: { fleetSupport?: boolean; active?: boolean }) {
+    const of = (table: (typeof made.catalogues)[number]["table"]) =>
+      made.catalogues.find((c) => c.table === table)!.id;
+    const [row] = await db
+      .insert(schema.units)
+      .values({
+        code: `ZZU${uid().toUpperCase()}`,
+        classId: of("unitClasses"),
+        typeId: of("unitTypes"),
+        modelId: of("unitModels"),
+        brandId: of("unitBrands"),
+        workArea: `${tag} AREA`,
+        ...values,
+      })
+      .returning({ id: schema.units.id });
+    made.units.push(row!.id);
+    return row!.id;
+  }
+
+  beforeAll(async () => {
+    const rows = await db
+      .select({ id: schema.fleets.id, leader: schema.fleets.leaderUnitId })
+      .from(schema.fleets)
+      .where(inArray(schema.fleets.id, fixtureFleets));
+    leaders = fixtureFleets.map((f) => rows.find((r) => r.id === f)!.leader!);
+    support = await unit({ fleetSupport: true });
+    noFleet = await unit({});
+    inactive = await unit({ fleetSupport: true, active: false });
+  });
+
+  const create = (body: Record<string, unknown>) =>
+    send("POST", "/devices", admin.cookie, {
+      id: newId(),
+      name: `${tag} unit wall`,
+      kind: "fleet",
+      ...body,
+    });
+
+  test("a new wall is about formations unless told otherwise", async () => {
+    const res = await create({});
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ subject: "fleet", unitIds: [] });
+  });
+
+  test("keeps the picked units in the order given, from formations and support", async () => {
+    const res = await create({
+      subject: "unit",
+      unitIds: [support, leaders[2], leaders[0]],
+    });
+    expect(res.status).toBe(201);
+    const made = (await res.json()) as Device;
+    expect(made.subject).toBe("unit");
+    expect(made.unitIds).toEqual([support, leaders[2]!, leaders[0]!]);
+
+    const listed = (await (
+      await send("GET", "/devices?kind=fleet", admin.cookie)
+    ).json()) as Device[];
+    expect(listed.find((d) => d.id === made.id)?.unitIds).toEqual([
+      support,
+      leaders[2]!,
+      leaders[0]!,
+    ]);
+  });
+
+  test("needs at least one unit", async () => {
+    const res = await create({ subject: "unit", unitIds: [] });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: "units_required" });
+    expect((await create({ subject: "unit" })).status).toBe(422);
+  });
+
+  test("refuses a unit outside Fleet Setting, inactive, or unknown", async () => {
+    for (const stray of [noFleet, inactive, crypto.randomUUID()]) {
+      const res = await create({
+        subject: "unit",
+        unitIds: [leaders[0], stray],
+      });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({
+        code: "unit_not_in_fleet_setting",
+      });
+    }
+  });
+
+  test("a refused wall is not created", async () => {
+    const id = newId();
+    const res = await send("POST", "/devices", admin.cookie, {
+      id,
+      name: `${tag} unit wall`,
+      kind: "fleet",
+      subject: "unit",
+      unitIds: [noFleet],
+    });
+    expect(res.status).toBe(422);
+    const [row] = await db
+      .select({ id: schema.devices.id })
+      .from(schema.devices)
+      .where(eq(schema.devices.id, id));
+    expect(row).toBeUndefined();
+  });
+
+  test("fleets on a unit wall, or units on a fleet wall, are refused", async () => {
+    const mixed = await create({
+      subject: "unit",
+      unitIds: [leaders[0]],
+      fleetIds: [fixtureFleets[0]],
+    });
+    expect(mixed.status).toBe(422);
+    expect(await mixed.json()).toMatchObject({ code: "subject_mismatch" });
+
+    const units = await create({ unitIds: [leaders[0]] });
+    expect(units.status).toBe(422);
+    expect(await units.json()).toMatchObject({ code: "subject_mismatch" });
+  });
+
+  test("is always a slideshow", async () => {
+    const res = await create({
+      subject: "unit",
+      unitIds: [leaders[0]],
+      layout: "monitor-2",
+    });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({
+      code: "unit_wall_slideshow_only",
+    });
+
+    const wall = (await (
+      await create({ subject: "unit", unitIds: [leaders[0]] })
+    ).json()) as Device;
+    const patched = await send("PATCH", `/devices/${wall.id}`, admin.cookie, {
+      layout: "monitor-4",
+    });
+    expect(patched.status).toBe(422);
+    expect(await patched.json()).toMatchObject({
+      code: "unit_wall_slideshow_only",
+    });
+  });
+
+  test("may take three rows, which a formation wall may not", async () => {
+    const created = await create({
+      subject: "unit",
+      unitIds: [leaders[0]],
+      slideGrid: "6x3",
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ slideGrid: "6x3" });
+
+    const formation = await create({ slideGrid: "6x3" });
+    expect(formation.status).toBe(422);
+    expect(await formation.json()).toMatchObject({
+      code: "slide_grid_built_in_only",
+    });
+  });
+
+  test("switching what a wall is about clears the other picks", async () => {
+    const wall = (await (
+      await create({ fleetIds: [fixtureFleets[1], fixtureFleets[0]] })
+    ).json()) as Device;
+
+    const toUnits = await send("PATCH", `/devices/${wall.id}`, admin.cookie, {
+      subject: "unit",
+      unitIds: [leaders[3]],
+    });
+    expect(toUnits.status).toBe(200);
+    expect(await toUnits.json()).toMatchObject({
+      subject: "unit",
+      unitIds: [leaders[3]],
+      fleetIds: [],
+    });
+    const fleetRows = await db
+      .select()
+      .from(schema.deviceFleets)
+      .where(eq(schema.deviceFleets.deviceId, wall.id));
+    expect(fleetRows).toHaveLength(0);
+
+    const back = await send("PATCH", `/devices/${wall.id}`, admin.cookie, {
+      subject: "fleet",
+    });
+    expect(back.status).toBe(200);
+    expect(await back.json()).toMatchObject({
+      subject: "fleet",
+      unitIds: [],
+      fleetIds: [],
+    });
+  });
+
+  test("leaving the units out of an edit keeps them", async () => {
+    const wall = (await (
+      await create({ subject: "unit", unitIds: [leaders[1], support] })
+    ).json()) as Device;
+    const renamed = await send("PATCH", `/devices/${wall.id}`, admin.cookie, {
+      name: `${tag} renamed`,
+      rotateSeconds: 20,
+    });
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toMatchObject({
+      unitIds: [leaders[1], support],
+    });
+
+    const reordered = await send("PATCH", `/devices/${wall.id}`, admin.cookie, {
+      unitIds: [support, leaders[1]],
+    });
+    expect(await reordered.json()).toMatchObject({
+      unitIds: [support, leaders[1]],
+    });
+
+    const emptied = await send("PATCH", `/devices/${wall.id}`, admin.cookie, {
+      unitIds: [],
+    });
+    expect(emptied.status).toBe(422);
+    expect(await emptied.json()).toMatchObject({ code: "units_required" });
+  });
+
+  test("the built-in walls and other kinds cannot be pointed at units", async () => {
+    await send("GET", "/devices?kind=fleet", admin.cookie);
+    for (const id of [SUPPORT_DEVICE_ID, SPARE_DEVICE_ID]) {
+      const res = await send("PATCH", `/devices/${id}`, admin.cookie, {
+        subject: "unit",
+        unitIds: [leaders[0]],
+      });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({ code: "device_locked" });
+    }
+
+    const fitwork = await create({
+      kind: "fitwork",
+      subject: "unit",
+      unitIds: [leaders[0]],
+    });
+    expect(fitwork.status).toBe(422);
+    expect(await fitwork.json()).toMatchObject({ code: "validation_failed" });
+  });
+
+  test("a deleted unit leaves the wall's picks", async () => {
+    const gone = await unit({ fleetSupport: true });
+    const wall = (await (
+      await create({ subject: "unit", unitIds: [gone, leaders[4]] })
+    ).json()) as Device;
+    await db.delete(schema.units).where(eq(schema.units.id, gone));
+    const listed = (await (
+      await send("GET", "/devices?kind=fleet", admin.cookie)
+    ).json()) as Device[];
+    expect(listed.find((d) => d.id === wall.id)?.unitIds).toEqual([
+      leaders[4]!,
+    ]);
+  });
+
+  test("a pick that leaves Fleet Setting drops off the screen quietly", async () => {
+    const leaving = await unit({ fleetSupport: true });
+    const wall = (await (
+      await create({ subject: "unit", unitIds: [leaving, leaders[1]] })
+    ).json()) as Device;
+    expect(await deviceUnitScope(wall.id)).toEqual([leaving, leaders[1]!]);
+
+    await db
+      .update(schema.units)
+      .set({ fleetSupport: false })
+      .where(eq(schema.units.id, leaving));
+    expect(await deviceUnitScope(wall.id)).toEqual([leaders[1]!]);
+    /* The pick itself stays, so the admin page can flag it. */
+    const listed = (await (
+      await send("GET", "/devices?kind=fleet", admin.cookie)
+    ).json()) as Device[];
+    expect(listed.find((d) => d.id === wall.id)?.unitIds).toEqual([
+      leaving,
+      leaders[1]!,
+    ]);
+  });
+
+  test("a refused edit leaves the wall as it was", async () => {
+    /* Review, 2026-11-05: the subject switch used to be written before the
+       fleet picks were checked, so a 422 still turned the wall over. */
+    const wall = (await (
+      await create({ subject: "unit", unitIds: [leaders[2], support] })
+    ).json()) as Device;
+    const res = await send("PATCH", `/devices/${wall.id}`, admin.cookie, {
+      subject: "fleet",
+      fleetIds: [crypto.randomUUID()],
+    });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: "fleet_not_found" });
+    const listed = (await (
+      await send("GET", "/devices?kind=fleet", admin.cookie)
+    ).json()) as Device[];
+    expect(listed.find((d) => d.id === wall.id)).toMatchObject({
+      subject: "unit",
+      unitIds: [leaders[2], support],
+    });
+  });
+
+  test("a formation wall refused for its fleets is not created", async () => {
+    const id = newId();
+    const res = await send("POST", "/devices", admin.cookie, {
+      id,
+      name: `${tag} fleet wall`,
+      kind: "fleet",
+      fleetIds: [crypto.randomUUID()],
+    });
+    expect(res.status).toBe(422);
+    const [row] = await db
+      .select({ id: schema.devices.id })
+      .from(schema.devices)
+      .where(eq(schema.devices.id, id));
+    expect(row).toBeUndefined();
+  });
+
+  test("names every pick by its code, stale or not", async () => {
+    const [supportCodeRow] = await db
+      .select({ code: schema.units.code })
+      .from(schema.units)
+      .where(eq(schema.units.id, support));
+    const supportCode = supportCodeRow!.code;
+    const [noFleetCodeRow] = await db
+      .select({ code: schema.units.code })
+      .from(schema.units)
+      .where(eq(schema.units.id, noFleet));
+    const noFleetCode = noFleetCodeRow!.code;
+    const wall = (await (
+      await create({ subject: "unit", unitIds: [support] })
+    ).json()) as Device & { unitCodes: string[] };
+    expect(wall.unitCodes).toEqual([supportCode]);
+
+    /* A pick gone stale — written straight to the table, as Fleet Setting
+       changing under a saved wall would leave it — keeps its name. */
+    await db
+      .insert(schema.deviceUnits)
+      .values({ deviceId: wall.id, unitId: noFleet, sortOrder: 1 });
+    const listed = (await (
+      await send("GET", "/devices?kind=fleet", admin.cookie)
+    ).json()) as (Device & { unitCodes: string[] })[];
+    expect(listed.find((d) => d.id === wall.id)?.unitCodes).toEqual([
+      supportCode,
+      noFleetCode,
+    ]);
+  });
+
+  test("the picker offers what Fleet Setting holds, and nothing else", async () => {
+    const res = await send("GET", "/devices/fleet-units", admin.cookie);
+    expect(res.status).toBe(200);
+    const units = (await res.json()) as {
+      id: string;
+      code: string;
+      groupKind: "fleet" | "support";
+      leaderCode: string | null;
+      area: string | null;
+    }[];
+    const ids = new Set(units.map((u) => u.id));
+    for (const id of leaders) expect(ids.has(id)).toBe(true);
+    expect(ids.has(support)).toBe(true);
+    expect(ids.has(noFleet)).toBe(false);
+    expect(ids.has(inactive)).toBe(false);
+
+    expect(units.find((u) => u.id === support)).toMatchObject({
+      groupKind: "support",
+      leaderCode: null,
+      area: `${tag} AREA`,
+    });
+    const lead = units.find((u) => u.id === leaders[0])!;
+    expect(lead.groupKind).toBe("fleet");
+    expect(lead.leaderCode).toBe(lead.code);
+  });
+
+  test("the picker needs the display-fleet menu", async () => {
+    expect((await send("GET", "/devices/fleet-units")).status).toBe(401);
   });
 });

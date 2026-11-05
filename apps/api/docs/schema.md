@@ -91,6 +91,10 @@ the definition — when they disagree, the code wins. Change flow: edit
 
 - `run_texts`, `device_run_texts`, `sounds` — kiosk content (sound files on
   disk under `SOUND_DIR`).
+- `device_fleets`, `device_units` — what a fleet wall shows, by
+  `devices.subject`: formations, or units picked one by one (2026-11-05). Both
+  keep pick order in `sort_order`, unique per device, and cascade from both
+  sides.
 - `timeline_stages` — the editable timeline, acted on by the scheduler.
   **Two halves**, because FTW and fingerprint are required on both shifts: the
   day's (04:45 FTW deadline + ingest, 05:15 finger-in deadline + ingest, 05:25
@@ -169,8 +173,8 @@ the definition — when they disagree, the code wins. Change flow: edit
 ## Enums
 
 `access_mode`, `scope`, `roster_code`, `employee_status`, `blood_type`,
-`mcu_result`, `area_type`, `device_kind`, `timeline_action`, `unit_status`,
-`point_outcome` —
+`mcu_result`, `area_type`, `device_kind`, `display_subject`, `timeline_action`,
+`unit_status`, `point_outcome` —
 all Postgres enums in `schema.ts`, with values from `@universe/contracts`.
 
 ## Conventions

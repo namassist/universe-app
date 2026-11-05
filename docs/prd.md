@@ -1680,6 +1680,36 @@ until someone pressed Sync at 07:07 — although they were on time.
   first member — a rename would otherwise put an identity-first wall back on
   the overlay.
 
+### A fleet wall shows formations or picked units — shipped
+
+- **A fleet screen is about formations or about units** (`devices.subject`,
+  `fleet | unit`, owner 2026-11-05). "Tampilkan: Per fleet / Per unit" on the
+  Display Fleet form. `fleet` is every screen made before this and the
+  default. `unit` shows units the admin picks one by one (`device_units`, pick
+  order = card order) from any formation and from support.
+- **Only units in Fleet Setting may be picked**: active, and in a formation
+  (leader or member) or `fleet_support`. The picker reads
+  `GET /v1/devices/fleet-units`; the API refuses any other unit
+  (`unit_not_in_fleet_setting`) and a unit wall with none (`units_required`).
+- **One group, named after the screen.** The picked units stand together under
+  the device's name, paginated 12 a slide, or 18 with three rows: `6x3` is open
+  to unit walls as well as the built-in ones. Each card shows the unit's work
+  area, as on the Support wall, because a unit wall mixes pits. The header's
+  area and bus show only when every unit shares them.
+- **Always a slideshow** (`unit_wall_slideshow_only`): a monitor lays several
+  groups side by side and a unit wall has one. The layout select is hidden.
+- **An extra view, not a fourth group.** An operator on a unit wall still
+  appears on their formation's (or Support's) wall; "every rostered operator on
+  exactly one wall" counts formation, Support and Spare only.
+- **A unit that leaves Fleet Setting drops off the wall silently** (inactive,
+  removed from its formation, support flag cleared). The pick is kept, so the
+  form can mark it "Tidak lagi di Setting Fleet — dibuang saat disimpan" and
+  saving drops it. A deleted unit's pick goes with it (cascade).
+- **Switching what a wall is about starts its picks over:** fleet picks are
+  cleared on the way to `unit` and unit picks on the way back. A request
+  cannot carry both (`subject_mismatch`). The built-in Support and Spare walls
+  stay locked to their own group (`device_locked`).
+
 ### Formerly deferred: the Actual-tab engine — shipped
 
 Both items once listed here have shipped: the engine is _The allocation

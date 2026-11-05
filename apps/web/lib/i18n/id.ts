@@ -556,6 +556,30 @@ export const id = {
   dspRotate: "Durasi per fleet (detik)",
   dspRotateHelp:
     "Lama tiap fleet tampil sebelum berganti. Bar progres di layar mengikuti durasi ini.",
+  dspSubject: "Tampilkan",
+  dspSubjectFleet: "Per fleet",
+  dspSubjectUnit: "Per unit",
+  dspSubjectHelpFleet: "Layar berputar per formasi dari Setting Fleet.",
+  dspSubjectHelpUnit:
+    "Layar menampilkan unit yang dipilih sendiri, dalam satu grup berjudul nama layar. Hanya unit aktif di Setting Fleet yang bisa dipilih; selalu slideshow.",
+  dspUnits: "Unit",
+  dspUnitSearch: "Cari unit, model, fleet atau area…",
+  dspUnitLoading: "Memuat unit…",
+  dspUnitNoMatch: "Tidak ada unit yang cocok.",
+  dspUnitNone: "Belum ada unit aktif di Setting Fleet.",
+  dspUnitHelp:
+    "Urutan pilihan adalah urutan kartu di layar: 12 kartu per slide, 18 dengan 3 baris.",
+  dspUnitStale: "Tidak lagi di Setting Fleet — dibuang saat disimpan",
+  dspUnitSupport: "Support",
+  dspUnitCount: "{n} unit",
+  dspUnitRemove: "Hapus {code} dari layar",
+  dspUnitOrder: "Urutan unit di layar",
+  dspUnitUp: "Naikkan {code}",
+  dspUnitDown: "Turunkan {code}",
+  dspErrUnit: "Pilih minimal satu unit.",
+  dspRotateUnit: "Durasi per slide (detik)",
+  dspRotateHelpUnit:
+    "Lama tiap slide tampil sebelum berganti. Bar progres di layar mengikuti durasi ini.",
   dspErrFleet:
     "Minimal satu fleet wajib dipilih. Buat formasinya dulu di Setting Fleet.",
   dspDlgB:

@@ -23,9 +23,12 @@ import {
   FLEETS_PER_PAGE,
   isMonitorLayout,
   RUNTEXT_COLORS,
+  SLIDE_COLS,
+  SLIDE_ROWS_OF,
   type CardLayout,
   type DeviceKind,
   type DisplayLayout,
+  type DisplaySubject,
   type RunTextColor,
   type SlideGrid,
 } from "@universe/contracts";
@@ -37,6 +40,7 @@ import { openDisplay } from "@/lib/open-display";
 import {
   devicesKey,
   devicesQueryOptions,
+  fleetUnitOptionsQueryOptions,
   type DeviceRow,
 } from "@/lib/queries/devices";
 import { fleetsQueryOptions } from "@/lib/queries/fleets";
@@ -77,6 +81,9 @@ import {
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
+
+import { DisplayUnitPicker } from "./display-unit-picker";
+import { splitUnitPicks, unitWallName } from "./display-unit-picks";
 
 /** A device's own ticker line. Same shape the API exchanges. */
 type CustomRunText = { text: string; color: RunTextColor };
@@ -134,6 +141,16 @@ export function DisplayAdminMenu({
     () => new Map(fleets.map((f) => [f.id, f])),
     [fleets]
   );
+  /* What a unit wall may be given: Fleet Setting's active units. Their codes
+     also name a unit wall left unnamed. */
+  const unitOptionsQ = useQuery({
+    ...fleetUnitOptionsQueryOptions(),
+    enabled: kind === "fleet",
+  });
+  const unitCodeById = React.useMemo(
+    () => new Map((unitOptionsQ.data ?? []).map((u) => [u.id, u.code])),
+    [unitOptionsQ.data]
+  );
 
   const [q, setQ] = React.useState("");
   const [statusF, setStatusF] = React.useState("");
@@ -165,9 +182,17 @@ export function DisplayAdminMenu({
       cardLayout: CardLayout;
       slideGrid: SlideGrid;
       sound: boolean;
+      subject: DisplaySubject;
       fleetIds: string[];
+      unitIds: string[];
       runTexts: CustomRunText[];
     }) => {
+      /* Only the picks of what the wall is about: the API refuses fleets on a
+         unit wall and units on a fleet wall. */
+      const picks =
+        input.subject === "unit"
+          ? { subject: input.subject, unitIds: input.unitIds }
+          : { subject: input.subject, fleetIds: input.fleetIds };
       const result = input.existingId
         ? await api.v1.devices({ id: input.existingId }).patch({
             name: input.name,
@@ -177,7 +202,10 @@ export function DisplayAdminMenu({
             cardLayout: input.cardLayout,
             slideGrid: input.slideGrid,
             sound: input.sound,
-            fleetIds: input.fleetIds,
+            ...(kind === "fleet" &&
+            !BUILT_IN_FLEET_DEVICE_IDS.includes(input.existingId)
+              ? picks
+              : { fleetIds: input.fleetIds }),
           })
         : await api.v1.devices.post({
             id: input.id,
@@ -187,8 +215,9 @@ export function DisplayAdminMenu({
             rotateSeconds: input.rotateSeconds,
             layout: input.layout,
             cardLayout: input.cardLayout,
+            slideGrid: input.slideGrid,
             sound: input.sound,
-            fleetIds: input.fleetIds,
+            ...(kind === "fleet" ? picks : { fleetIds: input.fleetIds }),
           });
       if (result.error) throw result.error;
 
@@ -271,6 +300,10 @@ export function DisplayAdminMenu({
   const [fId, setFId] = React.useState("");
   const [fName, setFName] = React.useState("");
   const [fSel, setFSel] = React.useState<string[]>([]);
+  /* What a fleet wall is about, and a unit wall's picks in screen order. */
+  const [fSubject, setFSubject] = React.useState<DisplaySubject>("fleet");
+  const [fUnits, setFUnits] = React.useState<string[]>([]);
+  const [unitErr, setUnitErr] = React.useState(false);
   const [fRotate, setFRotate] = React.useState(DEFAULT_ROTATE);
   const [fLayout, setFLayout] = React.useState<DisplayLayout>("slideshow");
   const [fCardLayout, setFCardLayout] = React.useState<CardLayout>("overlay");
@@ -284,7 +317,8 @@ export function DisplayAdminMenu({
      rest, so it caps nothing — it changes what a pick's *position* means: on
      a slideshow the order is a queue, on a monitor it is the panel and the
      page the formation lands on. */
-  const monitor = kind === "fleet" && isMonitorLayout(fLayout);
+  const unitWall = kind === "fleet" && fSubject === "unit";
+  const monitor = kind === "fleet" && !unitWall && isMonitorLayout(fLayout);
   const perPage = FLEETS_PER_PAGE[fLayout];
   /* The support wall: fixed in every respect but its dwell. What it shows is
      decided by what it is, so there is nothing on this form to decide. */
@@ -313,17 +347,40 @@ export function DisplayAdminMenu({
   /* What one turn of the wall costs. A monitor turns a page of two or four,
      so nine formations on a Monitor 4 is three turns rather than nine — and the two numbers multiply,
      which nobody works out from a seconds field alone. */
-  const cycleTurns = monitor
-    ? monPages
-    : kind === "fleet" && fSel.length
-      ? fSel.length
-      : 1;
+  /* A unit wall turns a slide of 12 (or 18) cards at a time. */
+  const liveUnits = splitUnitPicks(fUnits, unitOptionsQ.data).live;
+  const unitSlides = Math.max(
+    1,
+    Math.ceil(liveUnits.length / (SLIDE_COLS * SLIDE_ROWS_OF[fSlideGrid]))
+  );
+  /* The saved wall's own names for its picks — the only ones a stale pick
+     still has, since Fleet Setting no longer offers it. */
+  const savedUnitCodes = React.useMemo(
+    () =>
+      new Map(
+        (editing?.unitIds ?? []).map((id, i) => [
+          id,
+          editing?.unitCodes[i] ?? "",
+        ])
+      ),
+    [editing]
+  );
+  const cycleTurns = unitWall
+    ? unitSlides
+    : monitor
+      ? monPages
+      : kind === "fleet" && fSel.length
+        ? fSel.length
+        : 1;
+  const rotateBase = unitWall
+    ? t.dspRotateHelpUnit
+    : monitor
+      ? t.dspMonRotateHelp
+      : t.dspRotateHelp;
   const rotateHelp =
     kind === "fleet" && cycleTurns > 1
-      ? `${monitor ? t.dspMonRotateHelp : t.dspRotateHelp} ${t.dspCycleA} ${cycleTurns * fRotate} ${t.dspCycleB} ${cycleTurns} ${monitor ? t.dspPagesWord : "fleet"}.`
-      : monitor
-        ? t.dspMonRotateHelp
-        : t.dspRotateHelp;
+      ? `${rotateBase} ${t.dspCycleA} ${cycleTurns * fRotate} ${t.dspCycleB} ${cycleTurns} ${monitor || unitWall ? t.dspPagesWord : "fleet"}.`
+      : rotateBase;
   const [fRuntexts, setFRuntexts] = React.useState<CustomRunText[]>([]);
   /* Empty is not "unset": a device with no texts of its own follows the master
      list, which is the behaviour this field is really editing (design D8). */
@@ -354,6 +411,9 @@ export function DisplayAdminMenu({
     setFId(nextId());
     setFName("");
     setFSel([]);
+    setFSubject("fleet");
+    setFUnits([]);
+    setUnitErr(false);
     setFRotate(DEFAULT_ROTATE);
     setFLayout("slideshow");
     setFCardLayout("overlay");
@@ -372,6 +432,9 @@ export function DisplayAdminMenu({
     // Loaded from the row rather than reset: a screen's picks are stored now,
     // so reopening it has to show what it is actually displaying.
     setFSel(d.fleetIds);
+    setFSubject(d.subject);
+    setFUnits(d.unitIds);
+    setUnitErr(false);
     setFRotate(d.rotateSeconds);
     setFLayout(d.layout);
     setFCardLayout(d.cardLayout);
@@ -414,30 +477,48 @@ export function DisplayAdminMenu({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!fName.trim() && !(kind === "fleet" && fSel.length)) {
+    /* Picks Fleet Setting no longer offers are dropped here, as the form
+       says they will be; the wall stopped showing them already. */
+    /* Not before the options load: without them no pick can be told stale,
+       and the save button waits for them (see below). */
+    if (unitWall && !unitOptionsQ.data) return;
+    const units = liveUnits;
+    if (unitWall && !units.length) {
+      setUnitErr(true);
+      return;
+    }
+    const unitName = unitWall ? unitWallName(units, unitCodeById) : null;
+    if (!fName.trim() && !unitName && !(kind === "fleet" && fSel.length)) {
       setNameErr(true);
       return;
     }
     const first = fSel.length ? fleetById.get(fSel[0]!)?.leaderCode : undefined;
-    const name =
-      kind === "fleet" && first && !fName.trim()
-        ? fSel.length === 1
-          ? `Fleet ${first}`
-          : `Fleet ${first} +${fSel.length - 1}`
-        : fName.trim();
+    const name = fName.trim()
+      ? fName.trim()
+      : unitWall
+        ? (unitName ?? "")
+        : kind === "fleet" && first
+          ? fSel.length === 1
+            ? `Fleet ${first}`
+            : `Fleet ${first} +${fSel.length - 1}`
+          : "";
     save.mutate({
       existingId: editing?.id ?? null,
       id: fId.trim(),
       name,
       active: fActive,
       rotateSeconds: fRotate,
-      layout: kind === "fleet" ? fLayout : "slideshow",
+      layout: kind === "fleet" && !unitWall ? fLayout : "slideshow",
       cardLayout: kind === "fleet" ? fCardLayout : "overlay",
-      slideGrid: fSlideGrid,
+      /* Three rows on the built-in walls and unit walls only; a formation
+         wall coming back from a unit wall returns to two. */
+      slideGrid: kind === "fleet" && !locked && !unitWall ? "6x2" : fSlideGrid,
       sound: fSound,
+      subject: unitWall ? "unit" : "fleet",
       // Fleet walls only. Sending [] on the other kinds is how a screen stays
       // unscoped, and the API refuses a non-empty pick on them anyway.
-      fleetIds: kind === "fleet" ? fSel : [],
+      fleetIds: kind === "fleet" && !unitWall ? fSel : [],
+      unitIds: unitWall ? units : [],
       runTexts: fRuntexts.filter((r) => r.text.trim().length > 0),
     });
   }
@@ -525,6 +606,11 @@ export function DisplayAdminMenu({
                       round. Empty means every fleet on both. */}
                   {kind === "fleet" ? (
                     <TableCell>
+                      {d.subject === "unit" ? (
+                        <>
+                          <Badge variant="info">{t.dspSubjectUnit}</Badge>{" "}
+                        </>
+                      ) : null}
                       <Badge
                         variant={isMonitorLayout(d.layout) ? "info" : "neutral"}
                       >
@@ -539,7 +625,8 @@ export function DisplayAdminMenu({
                           ? t.dspCardIdentity
                           : t.dspCardOverlay}
                       </Badge>
-                      {BUILT_IN_FLEET_DEVICE_IDS.includes(d.id) ? (
+                      {BUILT_IN_FLEET_DEVICE_IDS.includes(d.id) ||
+                      d.subject === "unit" ? (
                         <>
                           {" "}
                           <Badge variant="neutral">
@@ -550,12 +637,14 @@ export function DisplayAdminMenu({
                         </>
                       ) : null}
                       <div className="mt-1 font-mono text-xs text-(--text-tertiary)">
-                        {d.fleetIds.length
-                          ? d.fleetIds
-                              .map((id) => fleetById.get(id)?.leaderCode)
-                              .filter(Boolean)
-                              .join(" · ")
-                          : t.dspFleetAllNote}
+                        {d.subject === "unit"
+                          ? `${fmt(t.dspUnitCount, { n: d.unitIds.length })} · ${d.unitCodes.join(" · ")}`
+                          : d.fleetIds.length
+                            ? d.fleetIds
+                                .map((id) => fleetById.get(id)?.leaderCode)
+                                .filter(Boolean)
+                                .join(" · ")
+                            : t.dspFleetAllNote}
                       </div>
                     </TableCell>
                   ) : null}
@@ -710,10 +799,41 @@ export function DisplayAdminMenu({
               </p>
             ) : null}
 
+            {/* First, because it decides which of the fields below exist: a
+                unit wall has no layout to choose and no formations to pick.
+                Switching starts the other mode's picks over, as the API does. */}
+            {kind === "fleet" && !locked ? (
+              <Field
+                label={t.dspSubject}
+                htmlFor="dsp-subject"
+                helper={unitWall ? t.dspSubjectHelpUnit : t.dspSubjectHelpFleet}
+              >
+                <Select
+                  id="dsp-subject"
+                  value={fSubject}
+                  onChange={(e) => {
+                    const next = e.target.value as DisplaySubject;
+                    setFSubject(next);
+                    setUnitErr(false);
+                    if (next === "unit") {
+                      setFSel([]);
+                      setFLayout("slideshow");
+                    } else {
+                      setFUnits([]);
+                      setFSlideGrid("6x2");
+                    }
+                  }}
+                >
+                  <option value="fleet">{t.dspSubjectFleet}</option>
+                  <option value="unit">{t.dspSubjectUnit}</option>
+                </Select>
+              </Field>
+            ) : null}
+
             {/* Above the fleet picker because it changes what the picks mean:
                 on a monitor the order becomes a layout — which panel, which
                 page. Asked after the picks, that would be a surprise. */}
-            {kind === "fleet" && !locked ? (
+            {kind === "fleet" && !locked && !unitWall ? (
               <Field
                 label={t.dspLayout}
                 htmlFor="dsp-layout"
@@ -760,9 +880,9 @@ export function DisplayAdminMenu({
               </Field>
             ) : null}
 
-            {/* The built-in walls only: they are the two with no size limit.
+            {/* The built-in walls and unit walls: the ones with no size limit.
                 A formation never fills a third row, and the API refuses it. */}
-            {locked ? (
+            {locked || unitWall ? (
               <Field
                 label={t.dspSlideGrid}
                 htmlFor="dsp-slide-grid"
@@ -779,7 +899,22 @@ export function DisplayAdminMenu({
               </Field>
             ) : null}
 
-            {kind === "fleet" && !locked ? (
+            {unitWall ? (
+              <DisplayUnitPicker
+                key={editing?.id ?? "new"}
+                knownCodes={savedUnitCodes}
+                options={unitOptionsQ.data}
+                isPending={unitOptionsQ.isPending}
+                selected={fUnits}
+                onChange={(next) => {
+                  setFUnits(next);
+                  if (next.length) setUnitErr(false);
+                }}
+                error={unitErr}
+              />
+            ) : null}
+
+            {kind === "fleet" && !locked && !unitWall ? (
               <Field
                 label={
                   <span className="flex w-full items-center gap-2">
@@ -921,7 +1056,13 @@ export function DisplayAdminMenu({
             ) : null}
 
             <Field
-              label={monitor ? t.dspMonRotate : t.dspRotate}
+              label={
+                unitWall
+                  ? t.dspRotateUnit
+                  : monitor
+                    ? t.dspMonRotate
+                    : t.dspRotate
+              }
               htmlFor="dsp-rotate"
               helper={rotateHelp}
             >
@@ -1041,7 +1182,10 @@ export function DisplayAdminMenu({
             >
               {t.btnCancel}
             </Button>
-            <Button type="submit" disabled={save.isPending}>
+            <Button
+              type="submit"
+              disabled={save.isPending || (unitWall && !unitOptionsQ.data)}
+            >
               {editing ? t.udbSaveEdit : t.dspSaveAdd}
             </Button>
           </DialogActions>

@@ -221,21 +221,30 @@ Fleet wall rules:
 - Readiness badges: before a gate shuts, a missing reading is grey ("Belum…").
   After it shuts, red ("Tidak…"). Only screens ask the clock; `judge` does not.
 - Every rostered operator appears on **exactly one** wall: a formation, Support,
-  or Spare.
-- Per-device config: `device_fleets` (no rows means every fleet; pick order is
-  the screen order), `rotate_seconds`, `layout` (`slideshow | monitor-2 |
-monitor-4`), `card_layout` (`overlay | identity`), `sound`. Built-in
-  `fleet-support` and `fleet-spare` cannot be deleted. Only their dwell, card
-  layout and sound are editable.
+  or Spare. A unit wall is an extra view and does not count.
+- Per-device config: `subject` (`fleet | unit`), `device_fleets` (no rows means
+  every fleet; pick order is the screen order), `device_units` (a unit wall's
+  picks in card order), `rotate_seconds`, `layout` (`slideshow | monitor-2 |
+monitor-4`), `card_layout` (`overlay | identity`), `slide_grid` (`6x3` only on
+  the built-ins and unit walls), `sound`. Built-in `fleet-support` and
+  `fleet-spare` cannot be deleted. Only their dwell, card layout, rows and
+  sound are editable.
+- A unit wall (`subject = unit`) shows only active units in Fleet Setting, as
+  one group named after the screen, always a slideshow. A pick that leaves
+  Fleet Setting drops off silently (`deviceUnitScope`); the form flags it.
 - An endpoint never errors on an empty answer. It states "no board yet" or
   "timeline cannot decide", because a blank TV sends someone to check hardware.
 
 Code: `routes/fleet-actual.ts`, `routes/readiness-display.ts`,
 `routes/attendance-scans.ts`, `routes/devices.ts`, `current-shift.ts`,
 `sound-cue.ts`. Web: `app/display/**`, `lib/queries/{fleet-display,readiness-display,display}.ts`.
+Web admin: `components/menus/display-admin.tsx`, `display-unit-picker.tsx`,
+`display-unit-picks.ts`.
 Tests: `routes/readiness-display.test.ts`, `routes/display-cue.test.ts`,
-`routes/devices.test.ts`, `sound-cue.test.ts`, `scan-queue.test.ts`.
-PRD: _The support wall_ through _A fleet wall chooses its card layout_,
+`routes/devices.test.ts` ("a wall pointed at units"), `routes/fleet-actual.test.ts`
+("a screen pointed at units"), `sound-cue.test.ts`, `scan-queue.test.ts`,
+web `display-unit-picks.test.ts`.
+PRD: _The support wall_ through _A fleet wall shows formations or picked units_,
 _Kiosk access_, _The attendance wall shows the scan as a ticket_.
 
 ## Tickets (muster slips)

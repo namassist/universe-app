@@ -25,6 +25,7 @@ import {
   CARD_LAYOUTS,
   DEVICE_KINDS,
   DISPLAY_LAYOUTS,
+  DISPLAY_SUBJECTS,
   EMPLOYEE_STATUSES,
   MCU_RESULTS,
   NOTIFICATION_KINDS,
@@ -51,6 +52,7 @@ export const deviceKind = pgEnum("device_kind", DEVICE_KINDS);
 export const displayLayout = pgEnum("display_layout", DISPLAY_LAYOUTS);
 export const cardLayout = pgEnum("card_layout", CARD_LAYOUTS);
 export const slideGrid = pgEnum("slide_grid", SLIDE_GRIDS);
+export const displaySubject = pgEnum("display_subject", DISPLAY_SUBJECTS);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const notificationKind = pgEnum("notification_kind", NOTIFICATION_KINDS);
 export const notificationTone = pgEnum("notification_tone", NOTIFICATION_TONES);
@@ -204,6 +206,13 @@ export const devices = pgTable("devices", {
    */
   cardLayout: cardLayout("card_layout").notNull().default("overlay"),
   /**
+   * Whether a fleet wall shows formations or units picked one by one (owner,
+   * 2026-11-05). Default `fleet`, what every wall was before this column, so
+   * no existing screen changes. A `unit` wall reads `device_units` and never
+   * `device_fleets`; the API keeps only the picks of the mode in force.
+   */
+  subject: displaySubject("subject").notNull().default("fleet"),
+  /**
    * How many rows a slide holds (owner, 2026-10-06). Default `6x2`, the slide
    * every wall drew before this column. Only the built-in support and spare
    * walls may choose `6x3` — the API refuses it elsewhere, since a formation
@@ -325,6 +334,38 @@ export const deviceFleets = pgTable(
       table.deviceId,
       table.fleetId
     ),
+  ]
+);
+
+/**
+ * Which units a `unit` fleet wall shows (owner, 2026-11-05).
+ *
+ * Unlike `device_fleets`, an empty list means nothing — the API refuses a unit
+ * wall with no picks, because "every unit" is already the unscoped fleet wall.
+ * Only units in Fleet Setting may be picked; one that leaves it afterwards
+ * stays here but never reaches the screen, since the board holds only units in
+ * allocation. `cascade` on both sides: picks die with the screen, and a unit
+ * deleted from the register leaves the walls rather than blocking.
+ */
+export const deviceUnits = pgTable(
+  "device_units",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    deviceId: text("device_id")
+      .notNull()
+      .references(() => devices.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "cascade" }),
+    /** The order the admin picked them in, which is the screen's order. */
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("device_units_device_unit_idx").on(
+      table.deviceId,
+      table.unitId
+    ),
+    index("device_units_unit_id_idx").on(table.unitId),
   ]
 );
 

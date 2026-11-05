@@ -229,16 +229,22 @@ function fingerBadge(unit: FleetDisplayUnit, gates: Gates, t: Dict): Chip {
  */
 const PORTRAIT_CARD = "aspect-[3/4] w-[min(100cqw,75cqh)]";
 
-/** What a group is called on screen. Support has no leader to be named after. */
+/**
+ * What a group is called on screen. Support has no leader to be named after,
+ * and a unit wall's one group is named after the screen itself (2026-11-05).
+ */
 const fleetTitle = (
   fleet: { kind: string; leaderCode: string | null },
-  t: Dict
+  t: Dict,
+  screenName?: string | null
 ) =>
   fleet.kind === "support"
     ? SUPPORT_DEVICE_NAME
     : fleet.kind === "spare"
       ? SPARE_DEVICE_NAME
-      : fmt(t.cmFleetCode, { code: fleet.leaderCode ?? "—" });
+      : fleet.kind === "units"
+        ? (screenName ?? t.wlflTitle)
+        : fmt(t.cmFleetCode, { code: fleet.leaderCode ?? "—" });
 
 /**
  * One turn of the rotation.
@@ -971,7 +977,7 @@ export default function DisplayFleetPage() {
   const title = isMonitor
     ? (screenName ?? t.wlflTitle)
     : page
-      ? fleetTitle(page.fleet, t)
+      ? fleetTitle(page.fleet, t, screenName)
       : t.wlflTitle;
   /* Site-wide counts belong to a slideshow, whose header is about the one
      formation on the glass. A monitor's header would be about several, so it
@@ -1208,7 +1214,11 @@ export default function DisplayFleetPage() {
                   unit={u}
                   provisional={data?.provisional ?? false}
                   gates={gates}
-                  showArea={page.fleet.kind === "support"}
+                  /* A unit wall mixes pits, as support does, so each card says
+                  which one it is in. */
+                  showArea={
+                    page.fleet.kind === "support" || page.fleet.kind === "units"
+                  }
                   cardLayout={cardLayout}
                   /* Three rows: the monitor's tighter details, so the photo
                      above them keeps most of the card (owner, 2026-10-06). */

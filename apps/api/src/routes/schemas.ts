@@ -20,6 +20,7 @@ import {
   CARD_LAYOUTS,
   DEVICE_KINDS,
   DISPLAY_LAYOUTS,
+  DISPLAY_SUBJECTS,
   EMPLOYEE_STATUSES,
   MASTER_KINDS,
   MCU_RESULTS,
@@ -68,6 +69,12 @@ export const CardLayoutSchema = t.Union([
 export const SlideGridSchema = t.Union([
   t.Literal(SLIDE_GRIDS[0]),
   t.Literal(SLIDE_GRIDS[1]),
+]);
+/* Literals too: an omitted subject on a rename must not turn a unit wall back
+   into a formation wall. */
+export const DisplaySubjectSchema = t.Union([
+  t.Literal(DISPLAY_SUBJECTS[0]),
+  t.Literal(DISPLAY_SUBJECTS[1]),
 ]);
 export const MasterKindSchema = t.UnionEnum(MASTER_KINDS);
 export const RunTextColorSchema = t.UnionEnum(RUNTEXT_COLORS);
@@ -1453,9 +1460,10 @@ export const FleetDisplayFleetSchema = t.Object({
   /**
    * A formation, or the one group holding the units that belong to none.
    * `support` sorts last and carries no leader and no single area. `spare` is
-   * the spare wall's one group: people, not units (2026-09-15).
+   * the spare wall's one group: people, not units (2026-09-15). `units` is
+   * a unit wall's one group, the units its admin picked (2026-11-05).
    */
-  kind: t.UnionEnum(["fleet", "support", "spare"] as const),
+  kind: t.UnionEnum(["fleet", "support", "spare", "units"] as const),
   leaderCode: t.Nullable(t.String()),
   area: t.Nullable(t.String()),
   /** Set only when every unit in the group rides the same vehicle. */
@@ -1553,11 +1561,30 @@ export const DeviceSchema = t.Object({
    * Empty means every fleet.
    */
   fleetIds: t.Array(t.String()),
+  /** Fleet walls: formations (`fleet`), or units picked one by one (`unit`). */
+  subject: DisplaySubjectSchema,
+  /** Unit walls: the picked units in screen order. Empty on a formation wall. */
+  unitIds: t.Array(t.String()),
+  /** Each pick's unit code, in the same order — named even once stale. */
+  unitCodes: t.Array(t.String()),
   online: t.Boolean(),
   lastSeenAt: t.Nullable(t.String()),
   /** Human label derived from lastSeenAt — "baru saja", "6m lalu". */
   lastSeenLabel: t.String(),
   createdAt: t.String(),
+});
+
+/**
+ * A unit a unit wall may be given: active and in Fleet Setting, with the
+ * formation it belongs to (`leaderCode`) or none, for support.
+ */
+export const FleetUnitOptionSchema = t.Object({
+  id: t.String(),
+  code: t.String(),
+  modelName: t.String(),
+  groupKind: t.UnionEnum(["fleet", "support"] as const),
+  leaderCode: t.Nullable(t.String()),
+  area: t.Nullable(t.String()),
 });
 
 /** A ticket printer, as the master screen lists it. */

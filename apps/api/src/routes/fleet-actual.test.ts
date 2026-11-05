@@ -19,6 +19,7 @@ import { redis } from "../redis";
 import {
   fleetActualRoutes,
   groupIntoFleets,
+  groupIntoUnits,
   planSlots,
   spareCrewOf,
   type WallSlot,
@@ -976,6 +977,135 @@ describe("a screen scoped to its own formations", () => {
     // here would silently overrule every one of those choices.
     const groups = groupIntoFleets(rows(), ["f2", "f1"]);
     expect(groups.map((g) => g.leaderCode)).toEqual(["EX-70", "EX-22"]);
+  });
+});
+
+/*
+ * Owner, 2026-11-05: a fleet wall may show units an admin picked one by one,
+ * from any formation or support, as one group headed by the screen's name.
+ */
+describe("a screen pointed at units", () => {
+  const ex22 = slot({
+    unitCode: "EX-22",
+    fleetId: "f1",
+    leaderCode: "EX-22",
+    unitArea: "Pit 1",
+    busCode: "BUS-1",
+  });
+  const dt101 = slot({
+    unitCode: "DT-101",
+    fleetId: "f1",
+    leaderCode: "EX-22",
+    unitArea: "Pit 1",
+    busCode: "BUS-1",
+    employeeName: "Andi",
+    employeeNik: "1",
+    source: "spare",
+  });
+  const dz5 = slot({
+    unitCode: "DZ-5",
+    groupKind: "support",
+    unitArea: "Disposal",
+    busCode: "BUS-2",
+    employeeName: "Budi",
+    employeeNik: "2",
+    source: "plan",
+  });
+  const ex70 = slot({
+    unitCode: "EX-70",
+    fleetId: "f2",
+    leaderCode: "EX-70",
+    unitArea: "Pit 2",
+  });
+  const board = () => [ex22, dt101, dz5, ex70];
+
+  test("shows only the picked units, in the order picked, as one group", () => {
+    const groups = groupIntoUnits(
+      board(),
+      [ex70.unitId, dz5.unitId, dt101.unitId],
+      "DSP-U1"
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      id: "DSP-U1",
+      kind: "units",
+      leaderCode: null,
+    });
+    expect(groups[0]!.units.map((u) => u.unitCode)).toEqual([
+      "EX-70",
+      "DZ-5",
+      "DT-101",
+    ]);
+  });
+
+  test("counts only what it shows", () => {
+    const [group] = groupIntoUnits(
+      board(),
+      [ex70.unitId, dz5.unitId, dt101.unitId],
+      "DSP-U1"
+    );
+    expect(group).toMatchObject({
+      total: 3,
+      crewed: 2,
+      idle: 1,
+      substituted: 1,
+    });
+  });
+
+  test("a picked unit the board does not hold is simply absent", () => {
+    /* Left Fleet Setting, broken down: the board has no slot for it, and
+       the screen shows the rest rather than a card for nothing. */
+    const [group] = groupIntoUnits(
+      board(),
+      [crypto.randomUUID(), ex22.unitId],
+      "DSP-U1"
+    );
+    expect(group!.units.map((u) => u.unitCode)).toEqual(["EX-22"]);
+  });
+
+  test("a unit the board holds outside every formation is left out", () => {
+    /* A board generated before snapshots: a slot in no group. The unit wall
+       shows what allocation is about, and that slot is not. */
+    const stray = slot({ unitCode: "WT-01" });
+    const [group] = groupIntoUnits(
+      [...board(), stray],
+      [stray.unitId, ex22.unitId],
+      "DSP-U1"
+    );
+    expect(group!.units.map((u) => u.unitCode)).toEqual(["EX-22"]);
+  });
+
+  test("a formation unit's card carries its formation's area", () => {
+    const ex40 = slot({
+      unitCode: "EX-40",
+      fleetId: "f3",
+      leaderCode: "EX-40",
+      area: "Pit 3",
+    });
+    const [group] = groupIntoUnits([ex40], [ex40.unitId], "DSP-U1");
+    expect(group!.units[0]!.unitArea).toBe("Pit 3");
+  });
+
+  test("no picked unit on the board is no group, not an error", () => {
+    expect(groupIntoUnits(board(), [crypto.randomUUID()], "DSP-U1")).toEqual(
+      []
+    );
+  });
+
+  test("the area and ride head the group only when every unit shares them", () => {
+    const [same] = groupIntoUnits(
+      board(),
+      [ex22.unitId, dt101.unitId],
+      "DSP-U1"
+    );
+    expect(same).toMatchObject({ area: "Pit 1", busCode: "BUS-1" });
+
+    const [mixed] = groupIntoUnits(
+      board(),
+      [ex22.unitId, dz5.unitId],
+      "DSP-U1"
+    );
+    expect(mixed).toMatchObject({ area: null, busCode: null });
   });
 });
 

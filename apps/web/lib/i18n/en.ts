@@ -560,6 +560,31 @@ export const en: Dict = {
   dspRotate: "Seconds per fleet",
   dspRotateHelp:
     "How long each fleet stays on screen. The on-screen progress bar follows this duration.",
+  dspSubject: "Show",
+  dspSubjectFleet: "By fleet",
+  dspSubjectUnit: "By unit",
+  dspSubjectHelpFleet:
+    "The wall turns over formation by formation, from Fleet Setting.",
+  dspSubjectHelpUnit:
+    "The wall shows units picked by hand, as one group headed by the screen's name. Only active units in Fleet Setting can be picked; always a slideshow.",
+  dspUnits: "Units",
+  dspUnitSearch: "Search unit, model, fleet or area…",
+  dspUnitLoading: "Loading units…",
+  dspUnitNoMatch: "No unit matches.",
+  dspUnitNone: "No active unit is in Fleet Setting yet.",
+  dspUnitHelp:
+    "The pick order is the card order on screen: 12 cards a slide, 18 with 3 rows.",
+  dspUnitStale: "No longer in Fleet Setting — dropped on save",
+  dspUnitSupport: "Support",
+  dspUnitCount: "{n} units",
+  dspUnitRemove: "Remove {code} from the screen",
+  dspUnitOrder: "Unit order on screen",
+  dspUnitUp: "Move {code} up",
+  dspUnitDown: "Move {code} down",
+  dspErrUnit: "Pick at least one unit.",
+  dspRotateUnit: "Seconds per slide",
+  dspRotateHelpUnit:
+    "How long each slide stays on screen. The on-screen progress bar follows this duration.",
   dspErrFleet:
     "At least one fleet is required. Create the formation in Fleet Setting first.",
   dspDlgB: "Changes reach the TV within ±60 seconds via the next poll.",

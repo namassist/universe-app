@@ -17,3 +17,19 @@ export const devicesQueryOptions = (kind: DeviceKind) =>
 export type DeviceRow = Awaited<
   ReturnType<NonNullable<ReturnType<typeof devicesQueryOptions>["queryFn"]>>
 >[number];
+
+/**
+ * The units a per-unit fleet wall may be given: active and in Fleet Setting.
+ * Under `fleetsKey`'s root so a Fleet Setting import refreshes it too.
+ */
+export const fleetUnitOptionsQueryOptions = () =>
+  queryOptions({
+    queryKey: ["fleets", "unit-options"] as const,
+    queryFn: () => unwrap(api.v1.devices["fleet-units"].get()),
+  });
+
+export type FleetUnitOption = Awaited<
+  ReturnType<
+    NonNullable<ReturnType<typeof fleetUnitOptionsQueryOptions>["queryFn"]>
+  >
+>[number];

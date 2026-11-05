@@ -554,6 +554,29 @@ async function deviceFleetScope(deviceId: string): Promise<string[]> {
   return rows.map((r) => r.fleetId);
 }
 
+/**
+ * The units one unit wall was given, in pick order, that are still in Fleet
+ * Setting: active, and in a formation or support.
+ *
+ * A pick whose unit has since left Fleet Setting drops here without a word
+ * (owner, 2026-11-05) — the admin page flags it, and the wall shows the rest.
+ */
+export async function deviceUnitScope(deviceId: string): Promise<string[]> {
+  const rows = await db
+    .select({ unitId: schema.deviceUnits.unitId })
+    .from(schema.deviceUnits)
+    .innerJoin(schema.units, eq(schema.units.id, schema.deviceUnits.unitId))
+    .where(
+      and(
+        eq(schema.deviceUnits.deviceId, deviceId),
+        eq(schema.units.active, true),
+        takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
+      )
+    )
+    .orderBy(schema.deviceUnits.sortOrder);
+  return rows.map((r) => r.unitId);
+}
+
 /** A registered fleet wall, or nothing. Other kinds never answer here. */
 async function fleetScreen(deviceId: string) {
   const [row] = await db
@@ -564,6 +587,7 @@ async function fleetScreen(deviceId: string) {
       layout: schema.devices.layout,
       cardLayout: schema.devices.cardLayout,
       slideGrid: schema.devices.slideGrid,
+      subject: schema.devices.subject,
     })
     .from(schema.devices)
     .where(
@@ -617,7 +641,8 @@ export type WallSlot = {
 
 export type WallFleet = {
   id: string;
-  kind: "fleet" | "support" | "spare";
+  /** `units` is a unit wall's one group: units an admin picked by hand. */
+  kind: "fleet" | "support" | "spare" | "units";
   /** Null on the support group, which has no leader to be named after. */
   leaderCode: string | null;
   area: string | null;
@@ -736,20 +761,7 @@ export function groupIntoFleets(
     if (s.employeeName) group.crewed += 1;
     else group.idle += 1;
     if (s.source === "spare" || s.source === "manual") group.substituted += 1;
-    group.units.push({
-      unitId: s.unitId,
-      unitCode: s.unitCode,
-      modelName: s.modelName,
-      brandName: s.brandName,
-      unitArea: s.unitArea,
-      busCode: s.busCode,
-      employeeNik: s.employeeNik,
-      employeeName: s.employeeName,
-      employeePhotoFile: s.employeePhotoFile,
-      source: s.source,
-      tappedAt: s.tappedAt,
-      ftw: s.ftw,
-    });
+    group.units.push(cardOf(s, s.unitArea));
   }
 
   // The digger leads its own formation — a fleet is read as "EX-22 and what
@@ -786,6 +798,82 @@ export function groupIntoFleets(
       );
     return (a.leaderCode ?? "").localeCompare(b.leaderCode ?? "");
   });
+}
+
+/** A wall slot as the card shows it, without the group it was gathered by. */
+function cardOf(
+  s: WallSlot,
+  unitArea: string | null
+): WallFleet["units"][number] {
+  return {
+    unitId: s.unitId,
+    unitCode: s.unitCode,
+    modelName: s.modelName,
+    brandName: s.brandName,
+    unitArea,
+    busCode: s.busCode,
+    employeeNik: s.employeeNik,
+    employeeName: s.employeeName,
+    employeePhotoFile: s.employeePhotoFile,
+    source: s.source,
+    tappedAt: s.tappedAt,
+    ftw: s.ftw,
+  };
+}
+
+/**
+ * A unit wall's one group: the picked units, in the order they were picked
+ * (owner, 2026-11-05).
+ *
+ * The units may come from several formations and from support, so the group
+ * is named after the screen (`id` is the device's) and has no leader. Each
+ * card carries the unit's work area — its own, or its formation's — because a
+ * wall mixing pits has to say which pit each unit is in, as the support wall
+ * does. The header's area and ride are shown only when every unit shares them.
+ *
+ * A pick the board holds no slot for — the unit left Fleet Setting, or the
+ * board predates it — is simply not shown, and so is a slot in no group: the
+ * wall shows what allocation is about. No unit left means no group, which the
+ * wall reads as an empty shift rather than an error.
+ */
+export function groupIntoUnits(
+  slots: readonly WallSlot[],
+  unitIds: readonly string[],
+  deviceId: string
+): WallFleet[] {
+  const byUnit = new Map(
+    slots
+      .filter(
+        (s) =>
+          s.groupKind === "support" ||
+          (s.groupKind === "fleet" && !!s.fleetId && !!s.leaderCode)
+      )
+      .map((s) => [s.unitId, s])
+  );
+  const picked = unitIds
+    .map((id) => byUnit.get(id))
+    .filter((s): s is WallSlot => !!s);
+  if (!picked.length) return [];
+
+  const units = picked.map((s) => cardOf(s, s.unitArea ?? s.area));
+  const shared = (values: (string | null)[]) =>
+    new Set(values).size === 1 ? (values[0] ?? null) : null;
+  return [
+    {
+      id: deviceId,
+      kind: "units",
+      leaderCode: null,
+      area: shared(units.map((u) => u.unitArea)),
+      busCode: shared(units.map((u) => u.busCode)),
+      total: units.length,
+      crewed: units.filter((u) => u.employeeName).length,
+      idle: units.filter((u) => !u.employeeName).length,
+      substituted: units.filter(
+        (u) => u.source === "spare" || u.source === "manual"
+      ).length,
+      units,
+    },
+  ];
 }
 
 /**
@@ -958,15 +1046,19 @@ export const fleetActualRoutes = new Elysia({
       const supportOnly = screen?.id === SUPPORT_DEVICE_ID;
       /* The spare wall, likewise: its one group and nothing else. */
       const spareOnly = screen?.id === SPARE_DEVICE_ID;
+      /* A unit wall (owner, 2026-11-05): the units its admin picked, as one
+         group. The built-in walls are always about their own group. */
+      const unitWall = screen?.subject === "unit" && !supportOnly && !spareOnly;
+      const unitScope = unitWall ? await deviceUnitScope(screen.id) : null;
       const scope =
-        screen && !supportOnly && !spareOnly
+        screen && !supportOnly && !spareOnly && !unitWall
           ? await deviceFleetScope(screen.id)
           : null;
       const rotate = screen?.rotateSeconds ?? DEFAULT_ROTATE_SECONDS;
       /* A wall nobody registered — a person previewing the site-wide board —
          reads as a slideshow: it has no picks, so it has nothing to lay four
          of side by side. */
-      const layout = screen?.layout ?? "slideshow";
+      const layout = unitWall ? "slideshow" : (screen?.layout ?? "slideshow");
       const cardLayout = screen?.cardLayout ?? "overlay";
       const slideGrid = screen?.slideGrid ?? "6x2";
       /* The screen's own name, so a monitor can head itself with it. A browser
@@ -1069,6 +1161,36 @@ export const fleetActualRoutes = new Elysia({
         fingerInDeadline(now.shift),
       ]);
 
+      const wall = slots.map((s): WallSlot => {
+        const person = s.employeeId ? names.get(s.employeeId) : undefined;
+        const readiness =
+          person && readingFor
+            ? readingFor(normalizeNik(person.nik), s.requiresFtw)
+            : null;
+        return {
+          unitId: s.unitId,
+          unitCode: s.unitCode,
+          modelName: s.modelName,
+          brandName: s.brandName,
+          fleetId: s.fleetId,
+          groupKind: s.groupKind ?? "fleet",
+          sourceFleetId: s.sourceFleetId,
+          leaderCode: s.leaderCode,
+          area: s.area,
+          unitArea: s.unitArea,
+          busCode: s.busCode,
+          employeeNik: person?.nik ?? null,
+          employeeName: person?.name ?? null,
+          employeePhotoFile: person?.photoFile ?? null,
+          source: s.source,
+          /* The board's own record first: it is what the engine placed
+             them by. The live reading fills the provisional window, where
+             there is no board to have recorded anything. */
+          tappedAt: s.tappedAt ?? readiness?.tappedAt ?? null,
+          ftw: readiness?.ftw ?? null,
+        };
+      });
+
       return {
         servedAt: at.toISOString(),
         date: now.date,
@@ -1082,39 +1204,9 @@ export const fleetActualRoutes = new Elysia({
         cardLayout,
         slideGrid,
         deviceName,
-        fleets: groupIntoFleets(
-          slots.map((s) => {
-            const person = s.employeeId ? names.get(s.employeeId) : undefined;
-            const readiness =
-              person && readingFor
-                ? readingFor(normalizeNik(person.nik), s.requiresFtw)
-                : null;
-            return {
-              unitId: s.unitId,
-              unitCode: s.unitCode,
-              modelName: s.modelName,
-              brandName: s.brandName,
-              fleetId: s.fleetId,
-              groupKind: s.groupKind ?? "fleet",
-              sourceFleetId: s.sourceFleetId,
-              leaderCode: s.leaderCode,
-              area: s.area,
-              unitArea: s.unitArea,
-              busCode: s.busCode,
-              employeeNik: person?.nik ?? null,
-              employeeName: person?.name ?? null,
-              employeePhotoFile: person?.photoFile ?? null,
-              source: s.source,
-              /* The board's own record first: it is what the engine placed
-                 them by. The live reading fills the provisional window, where
-                 there is no board to have recorded anything. */
-              tappedAt: s.tappedAt ?? readiness?.tappedAt ?? null,
-              ftw: readiness?.ftw ?? null,
-            };
-          }),
-          scope,
-          supportOnly
-        ),
+        fleets: unitScope
+          ? groupIntoUnits(wall, unitScope, screen!.id)
+          : groupIntoFleets(wall, scope, supportOnly),
       };
     },
     {

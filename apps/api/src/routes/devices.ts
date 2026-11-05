@@ -1,4 +1,5 @@
-import { asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Elysia, t } from "elysia";
 import {
   BUILT_IN_FLEET_DEVICE_IDS,
@@ -9,6 +10,9 @@ import {
   SUPPORT_DEVICE_NAME,
   type AccessMode,
   type DeviceKind,
+  type DisplayLayout,
+  type DisplaySubject,
+  type SlideGrid,
   type EffectivePermissions,
   type MenuSlug,
   type RunTextColor,
@@ -22,8 +26,15 @@ import {
   createSession,
   DEVICE_COOKIE,
 } from "../auth/session";
-import { db, isUniqueViolation, schema, type DeviceRow } from "../db";
+import {
+  db,
+  isUniqueViolation,
+  schema,
+  type DeviceRow,
+  type Transaction,
+} from "../db";
 import { env } from "../env";
+import { takesPartInAllocation } from "../fleet-scope";
 import { redis } from "../redis";
 import { nextSoundCue } from "../sound-cue";
 import {
@@ -34,7 +45,9 @@ import {
   DeviceSchema,
   DisplayContentSchema,
   DisplayLayoutSchema,
+  DisplaySubjectSchema,
   ErrorSchema,
+  FleetUnitOptionSchema,
   OptionalDeviceKindSchema,
 } from "./schemas";
 
@@ -123,7 +136,11 @@ function lastSeenLabel(at: Date | null): string {
  * Online is derived from the heartbeat, never assumed: an anonymous URL cannot
  * produce it, which is the reason a TV has to identify itself at all.
  */
-function toDevice(row: DeviceRow, fleetIds: string[] = []) {
+function toDevice(
+  row: DeviceRow,
+  fleetIds: string[] = [],
+  units: UnitPick[] = []
+) {
   const online =
     row.active &&
     row.lastSeenAt !== null &&
@@ -140,6 +157,10 @@ function toDevice(row: DeviceRow, fleetIds: string[] = []) {
     sound: row.sound,
     /** Empty means every fleet — see `device_fleets`. */
     fleetIds,
+    subject: row.subject,
+    /** A unit wall's picks in screen order; empty on a formation wall. */
+    unitIds: units.map((u) => u.id),
+    unitCodes: units.map((u) => u.code),
     online,
     lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
     lastSeenLabel: lastSeenLabel(row.lastSeenAt),
@@ -215,10 +236,9 @@ async function fleetPicksOf(deviceIds: string[]) {
  * Refuses a pick on a screen that is not a fleet wall — storing rows nothing
  * will ever read is how a setting comes to look configured and do nothing.
  */
-async function replaceFleetPicks(
-  deviceId: string,
+async function fleetPickRefusal(
   kind: DeviceKind,
-  fleetIds: string[]
+  fleetIds: readonly string[]
 ): Promise<{ code: string; message: string } | null> {
   const wanted = [...new Set(fleetIds)];
   if (wanted.length && kind !== "fleet")
@@ -238,18 +258,169 @@ async function replaceFleetPicks(
         message: "Sebagian fleet yang dipilih sudah tidak ada",
       };
   }
+  return null;
+}
 
-  await db
+/**
+ * Write the picks `fleetPickRefusal` accepted, inside the caller's
+ * transaction: every check runs before the first write, so a refused request
+ * leaves the screen exactly as it was.
+ */
+async function writeFleetPicks(
+  tx: Transaction,
+  deviceId: string,
+  fleetIds: readonly string[]
+) {
+  const wanted = [...new Set(fleetIds)];
+  await tx
     .delete(schema.deviceFleets)
     .where(eq(schema.deviceFleets.deviceId, deviceId));
   if (wanted.length)
-    await db
+    await tx
       .insert(schema.deviceFleets)
       .values(
         wanted.map((fleetId, sortOrder) => ({ deviceId, fleetId, sortOrder }))
       );
+}
+
+type UnitPick = { id: string; code: string };
+
+/**
+ * The unit picks of many devices, in pick order — one query, as above. With
+ * each unit's code, so a pick Fleet Setting no longer offers can still be
+ * named on the form that flags it.
+ */
+async function unitPicksOf(deviceIds: string[]) {
+  const picks = new Map<string, UnitPick[]>();
+  if (!deviceIds.length) return picks;
+  const rows = await db
+    .select({
+      deviceId: schema.deviceUnits.deviceId,
+      id: schema.deviceUnits.unitId,
+      code: schema.units.code,
+    })
+    .from(schema.deviceUnits)
+    .innerJoin(schema.units, eq(schema.units.id, schema.deviceUnits.unitId))
+    .where(inArray(schema.deviceUnits.deviceId, deviceIds))
+    .orderBy(schema.deviceUnits.sortOrder);
+  for (const { deviceId, id, code } of rows) {
+    const list = picks.get(deviceId);
+    if (list) list.push({ id, code });
+    else picks.set(deviceId, [{ id, code }]);
+  }
+  return picks;
+}
+
+type Refusal = { code: string; message: string };
+
+/**
+ * What a fleet wall would be after this request, judged whole (owner,
+ * 2026-11-05). A unit wall is a slideshow of at least one unit and carries no
+ * formation picks; a formation wall carries no unit picks and, unless built
+ * in, two rows. Judged on the result rather than on the fields sent, so a
+ * request cannot reach a state no single field would be refused for.
+ */
+function wallRefusal(wall: {
+  kind: DeviceKind;
+  subject: DisplaySubject;
+  layout: DisplayLayout;
+  slideGrid: SlideGrid;
+  builtIn: boolean;
+  fleetIds: readonly string[] | undefined;
+  /** The unit picks the wall will hold: sent, or kept. */
+  unitCount: number;
+  unitIdsSent: boolean;
+}): Refusal | null {
+  if (wall.subject === "unit") {
+    if (wall.kind !== "fleet")
+      return {
+        code: "validation_failed",
+        message: "Hanya display fleet yang bisa menampilkan per unit",
+      };
+    if (wall.builtIn)
+      return {
+        code: "device_locked",
+        message: "Layar fleet bawaan selalu menampilkan grupnya sendiri",
+      };
+    if (wall.fleetIds?.length)
+      return {
+        code: "subject_mismatch",
+        message: "Layar per unit tidak memakai pilihan fleet",
+      };
+    if (wall.layout !== "slideshow")
+      return {
+        code: "unit_wall_slideshow_only",
+        message: "Layar per unit selalu tampil sebagai slideshow",
+      };
+    if (wall.unitCount === 0)
+      return {
+        code: "units_required",
+        message: "Pilih minimal satu unit untuk layar per unit",
+      };
+    return null;
+  }
+  if (wall.unitIdsSent && wall.unitCount > 0)
+    return {
+      code: "subject_mismatch",
+      message: "Pilihan unit hanya untuk layar per unit",
+    };
+  /*
+   * Three rows only where they can fill. A formation holds at most eleven
+   * units, so on its wall a third row is blank on every turn and only shrinks
+   * the cards above it; support, spare and a unit wall have no such limit.
+   */
+  if (!wall.builtIn && wall.slideGrid === "6x3")
+    return {
+      code: "slide_grid_built_in_only",
+      message:
+        "Tiga baris hanya tersedia untuk layar per unit, Fleet Support dan Fleet Spare",
+    };
   return null;
 }
+
+/**
+ * Refuses unit picks outside Fleet Setting: inactive, in no formation and not
+ * support, or not a unit at all. Only what allocation crews has a card to show.
+ */
+async function unitPickRefusal(unitIds: string[]): Promise<Refusal | null> {
+  if (!unitIds.length) return null;
+  const found = await db
+    .select({ id: schema.units.id })
+    .from(schema.units)
+    .where(
+      and(
+        inArray(schema.units.id, unitIds),
+        eq(schema.units.active, true),
+        takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
+      )
+    );
+  if (found.length === unitIds.length) return null;
+  return {
+    code: "unit_not_in_fleet_setting",
+    message:
+      "Sebagian unit yang dipilih tidak aktif atau tidak ada di Fleet Setting",
+  };
+}
+
+/** Replace a unit wall's picks wholesale, in the order given. */
+async function writeUnitPicks(
+  tx: Transaction,
+  deviceId: string,
+  unitIds: readonly string[]
+) {
+  await tx
+    .delete(schema.deviceUnits)
+    .where(eq(schema.deviceUnits.deviceId, deviceId));
+  if (unitIds.length)
+    await tx
+      .insert(schema.deviceUnits)
+      .values(
+        unitIds.map((unitId, sortOrder) => ({ deviceId, unitId, sortOrder }))
+      );
+}
+
+/** The units of the picker beside a formation's leader code, for the label. */
+const leaderUnit = alias(schema.units, "leader_unit");
 
 export const devicesRoutes = new Elysia({
   prefix: "/devices",
@@ -314,8 +485,14 @@ export const devicesRoutes = new Elysia({
         : await db.select().from(schema.devices);
       // A caller sees the kinds its own display grants cover, and no others.
       const visible = rows.filter((r) => mayTouch(permissions, r.kind, "view"));
-      const picks = await fleetPicksOf(visible.map((r) => r.id));
-      return visible.map((r) => toDevice(r, picks.get(r.id) ?? []));
+      const ids = visible.map((r) => r.id);
+      const [picks, units] = await Promise.all([
+        fleetPicksOf(ids),
+        unitPicksOf(ids),
+      ]);
+      return visible.map((r) =>
+        toDevice(r, picks.get(r.id) ?? [], units.get(r.id) ?? [])
+      );
     },
     {
       auth: { menu: DISPLAY_MENUS, mode: "view" },
@@ -326,6 +503,63 @@ export const devicesRoutes = new Elysia({
         403: ErrorSchema,
       },
       detail: { summary: "List display devices with their online state" },
+    }
+  )
+
+  /**
+   * The units a unit wall may be given: active and in Fleet Setting, with
+   * their formation's leader (or none, for support) and work area — what the
+   * admin needs to tell two units apart. Static, so it is matched before the
+   * `/:id` routes below.
+   */
+  .get(
+    "/fleet-units",
+    async () => {
+      const rows = await db
+        .select({
+          id: schema.units.id,
+          code: schema.units.code,
+          modelName: schema.unitModels.name,
+          area: schema.units.workArea,
+          leaderCode: leaderUnit.code,
+        })
+        .from(schema.units)
+        .innerJoin(
+          schema.unitModels,
+          eq(schema.unitModels.id, schema.units.modelId)
+        )
+        .leftJoin(
+          schema.fleetUnits,
+          eq(schema.fleetUnits.unitId, schema.units.id)
+        )
+        .leftJoin(
+          schema.fleets,
+          or(
+            eq(schema.fleets.leaderUnitId, schema.units.id),
+            eq(schema.fleets.id, schema.fleetUnits.fleetId)
+          )
+        )
+        .leftJoin(leaderUnit, eq(leaderUnit.id, schema.fleets.leaderUnitId))
+        .where(
+          and(
+            eq(schema.units.active, true),
+            takesPartInAllocation(schema.units.id, schema.units.fleetSupport)
+          )
+        )
+        .orderBy(asc(schema.units.code));
+      return rows.map((r) => ({
+        ...r,
+        groupKind: r.leaderCode ? ("fleet" as const) : ("support" as const),
+      }));
+    },
+    {
+      auth: { menu: "display-fleet", mode: "view" },
+      response: {
+        200: t.Array(FleetUnitOptionSchema),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Units a per-unit fleet wall may show" },
     }
   )
 
@@ -342,34 +576,63 @@ export const devicesRoutes = new Elysia({
           code: "forbidden",
           message: "Tidak punya akses ke layar tersebut",
         });
+      const subject = body.subject ?? "fleet";
+      const unitIds = [...new Set(body.unitIds ?? [])];
+      const refusal =
+        wallRefusal({
+          kind: body.kind,
+          subject,
+          layout: body.layout ?? "slideshow",
+          slideGrid: body.slideGrid ?? "6x2",
+          builtIn: false,
+          fleetIds: body.fleetIds,
+          unitCount: unitIds.length,
+          unitIdsSent: body.unitIds !== undefined,
+        }) ??
+        (subject === "unit"
+          ? await unitPickRefusal(unitIds)
+          : await fleetPickRefusal(body.kind, body.fleetIds ?? []));
+      if (refusal) return status(422, refusal);
       try {
-        const [row] = await db
-          .insert(schema.devices)
-          .values({
-            id: body.id.trim(),
-            name: body.name.trim(),
-            kind: body.kind,
-            // Registered inactive-until-paired would strand a TV nobody can
-            // pair, so it is active and revocable instead — the pairing link is
-            // the gate, and deactivation ends the session on the next request.
-            active: body.active ?? true,
-            ...(body.rotateSeconds !== undefined
-              ? { rotateSeconds: body.rotateSeconds }
-              : {}),
-            ...(body.layout !== undefined ? { layout: body.layout } : {}),
-            ...(body.cardLayout !== undefined
-              ? { cardLayout: body.cardLayout }
-              : {}),
-            ...(body.sound !== undefined ? { sound: body.sound } : {}),
-          })
-          .returning();
-        const refused = await replaceFleetPicks(
-          row!.id,
-          row!.kind,
-          body.fleetIds ?? []
+        const row = await db.transaction(async (tx) => {
+          const [inserted] = await tx
+            .insert(schema.devices)
+            .values({
+              id: body.id.trim(),
+              name: body.name.trim(),
+              kind: body.kind,
+              // Registered inactive-until-paired would strand a TV nobody can
+              // pair, so it is active and revocable instead — the pairing link is
+              // the gate, and deactivation ends the session on the next request.
+              active: body.active ?? true,
+              ...(body.rotateSeconds !== undefined
+                ? { rotateSeconds: body.rotateSeconds }
+                : {}),
+              ...(body.layout !== undefined ? { layout: body.layout } : {}),
+              ...(body.cardLayout !== undefined
+                ? { cardLayout: body.cardLayout }
+                : {}),
+              ...(body.slideGrid !== undefined
+                ? { slideGrid: body.slideGrid }
+                : {}),
+              ...(body.sound !== undefined ? { sound: body.sound } : {}),
+              subject,
+            })
+            .returning();
+          if (subject === "unit")
+            await writeUnitPicks(tx, inserted!.id, unitIds);
+          else await writeFleetPicks(tx, inserted!.id, body.fleetIds ?? []);
+          return inserted!;
+        });
+        const units = await unitPicksOf([row.id]);
+        return status(
+          201,
+          toDevice(
+            row,
+            subject === "unit" ? [] : [...new Set(body.fleetIds ?? [])],
+            units.get(row.id) ?? []
+          )
         );
-        if (refused) return status(422, refused);
-        return status(201, toDevice(row!, body.fleetIds ?? []));
       } catch (error) {
         if (isUniqueViolation(error))
           return status(409, {
@@ -394,9 +657,14 @@ export const devicesRoutes = new Elysia({
         ),
         layout: t.Optional(DisplayLayoutSchema),
         cardLayout: t.Optional(CardLayoutSchema),
+        slideGrid: t.Optional(SlideGridSchema),
         sound: t.Optional(t.Boolean()),
         /** Fleet walls only; empty or absent means every fleet. */
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
+        /** Absent means `fleet`. */
+        subject: t.Optional(DisplaySubjectSchema),
+        /** Unit walls only: at least one unit in Fleet Setting, in order. */
+        unitIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
       response: {
         201: DeviceSchema,
@@ -466,6 +734,9 @@ export const devicesRoutes = new Elysia({
         ...(body.sound !== undefined && body.sound !== current.sound
           ? { sound: body.sound }
           : {}),
+        ...(body.subject !== undefined && body.subject !== current.subject
+          ? { subject: body.subject }
+          : {}),
       };
 
       /*
@@ -481,7 +752,9 @@ export const devicesRoutes = new Elysia({
         locked &&
         (patch.name !== undefined ||
           patch.layout !== undefined ||
-          body.fleetIds?.length)
+          patch.subject !== undefined ||
+          body.fleetIds?.length ||
+          body.unitIds?.length)
       )
         return status(422, {
           code: "device_locked",
@@ -489,27 +762,65 @@ export const devicesRoutes = new Elysia({
             "Layar fleet bawaan hanya bisa diubah durasi slide-nya — isinya mengikuti setting fleet",
         });
 
-      /*
-       * Three rows only where they can fill. A formation holds at most eleven
-       * units, so on its wall a third row is blank on every turn and only
-       * shrinks the cards above it; support and spare have no such limit.
-       */
-      if (!locked && patch.slideGrid === "6x3")
-        return status(422, {
-          code: "slide_grid_built_in_only",
-          message:
-            "Tiga baris hanya tersedia untuk layar Fleet Support dan Fleet Spare",
-        });
+      /* What the wall becomes, judged whole. Switching what it is about
+         starts its picks over; staying keeps them unless new ones are sent. */
+      const subject = patch.subject ?? current.subject;
+      const switched = patch.subject !== undefined;
+      const unitIds =
+        body.unitIds !== undefined ? [...new Set(body.unitIds)] : undefined;
+      const keptUnits =
+        unitIds ??
+        (switched
+          ? []
+          : ((await unitPicksOf([current.id])).get(current.id) ?? []));
+      const sendsFleets =
+        !locked && subject === "fleet" && body.fleetIds !== undefined;
+      const refusal =
+        wallRefusal({
+          kind: current.kind,
+          subject,
+          layout: patch.layout ?? current.layout,
+          slideGrid: patch.slideGrid ?? current.slideGrid,
+          builtIn: locked,
+          fleetIds: body.fleetIds,
+          unitCount: keptUnits.length,
+          unitIdsSent: unitIds !== undefined,
+        }) ??
+        (subject === "unit" && unitIds
+          ? await unitPickRefusal(unitIds)
+          : sendsFleets
+            ? await fleetPickRefusal(current.kind, body.fleetIds!)
+            : null);
+      if (refusal) return status(422, refusal);
 
-      // A request that changes only the fleet picks touches no device column,
-      // and `set({})` is an error rather than a no-op.
-      const [row] = Object.keys(patch).length
-        ? await db
-            .update(schema.devices)
-            .set(patch)
-            .where(eq(schema.devices.id, params.id))
-            .returning()
-        : [current];
+      /* Every check is behind us, so the writes go together or not at all.
+         The row lock serialises two edits of one screen, whose delete-then-
+         insert of picks would otherwise collide on the unique index. */
+      const row = await db.transaction(async (tx) => {
+        await tx
+          .select({ id: schema.devices.id })
+          .from(schema.devices)
+          .where(eq(schema.devices.id, params.id))
+          .for("update");
+        // A request that changes only the picks touches no device column,
+        // and `set({})` is an error rather than a no-op.
+        const [updated] = Object.keys(patch).length
+          ? await tx
+              .update(schema.devices)
+              .set(patch)
+              .where(eq(schema.devices.id, params.id))
+              .returning()
+          : [current];
+        if (!updated) return null;
+        if (subject === "unit") {
+          if (switched) await writeFleetPicks(tx, updated.id, []);
+          if (unitIds) await writeUnitPicks(tx, updated.id, unitIds);
+        } else if (switched) await writeUnitPicks(tx, updated.id, []);
+        // Absent leaves the picks alone; an empty array is how a screen is
+        // handed back to every fleet. The two are deliberately different.
+        if (sendsFleets) await writeFleetPicks(tx, updated.id, body.fleetIds!);
+        return updated;
+      });
       // The update targeted a row that was read a moment ago, so it exists —
       // the branch above is the only one the compiler cannot see that through.
       if (!row)
@@ -517,21 +828,14 @@ export const devicesRoutes = new Elysia({
           code: "device_not_found",
           message: "Perangkat tidak ditemukan",
         });
-      // Absent leaves the picks alone; an empty array is how a screen is
-      // handed back to every fleet. The two are deliberately different.
-      if (!locked && body.fleetIds !== undefined) {
-        const refused = await replaceFleetPicks(
-          row.id,
-          row.kind,
-          body.fleetIds
-        );
-        if (refused) return status(422, refused);
-      }
       // Revocation is one toggle: the cached principal drops and the next
       // request from the TV is refused.
       await invalidateDevice(params.id);
-      const picks = await fleetPicksOf([row.id]);
-      return toDevice(row, picks.get(row.id) ?? []);
+      const [picks, units] = await Promise.all([
+        fleetPicksOf([row.id]),
+        unitPicksOf([row.id]),
+      ]);
+      return toDevice(row, picks.get(row.id) ?? [], units.get(row.id) ?? []);
     },
     {
       auth: { menu: DISPLAY_MENUS, mode: "manage" },
@@ -550,6 +854,9 @@ export const devicesRoutes = new Elysia({
         slideGrid: t.Optional(SlideGridSchema),
         sound: t.Optional(t.Boolean()),
         fleetIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
+        subject: t.Optional(DisplaySubjectSchema),
+        /** Absent keeps a unit wall's picks; present replaces them. */
+        unitIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
       }),
       response: {
         200: DeviceSchema,
