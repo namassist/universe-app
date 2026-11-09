@@ -808,6 +808,8 @@
                         "refusal",
                         "planUnit",
                         "seat",
+                        "boardAt",
+                        "withdrawn",
                         "ftw",
                         "checkInAt",
                         "gates"
@@ -843,7 +845,14 @@
                         },
                         "seat": {
                           "type": "object",
-                          "required": ["unit", "area", "bus", "fleet"],
+                          "required": [
+                            "unit",
+                            "area",
+                            "bus",
+                            "fleet",
+                            "source",
+                            "placedAt"
+                          ],
                           "properties": {
                             "unit": {
                               "type": "string"
@@ -858,6 +867,58 @@
                             },
                             "fleet": {
                               "type": "string",
+                              "nullable": true
+                            },
+                            "source": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "placedAt": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "nullable": true
+                        },
+                        "boardAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "withdrawn": {
+                          "type": "object",
+                          "required": [
+                            "unit",
+                            "at",
+                            "cause",
+                            "slipPrintedAt",
+                            "unitStatus"
+                          ],
+                          "properties": {
+                            "unit": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string"
+                            },
+                            "cause": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "slipPrintedAt": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "unitStatus": {
+                              "type": "object",
+                              "required": ["status", "at"],
+                              "properties": {
+                                "status": {
+                                  "type": "string"
+                                },
+                                "at": {
+                                  "type": "string"
+                                }
+                              },
                               "nullable": true
                             }
                           },
@@ -994,6 +1055,106 @@
           }
         },
         "operationId": "getV1MeShift"
+      }
+    },
+    "/v1/me/profile": {
+      "get": {
+        "tags": ["me"],
+        "summary": "Who I am in the register: department, position, company. No menu needed",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "nik",
+                    "name",
+                    "department",
+                    "position",
+                    "company"
+                  ],
+                  "properties": {
+                    "nik": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "department": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "string"
+                    },
+                    "company": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1MeProfile"
       }
     },
     "/v1/me/seats": {
@@ -4102,6 +4263,25 @@
           },
           "404": {
             "description": "Response for status 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response for status 409",
             "content": {
               "application/json": {
                 "schema": {

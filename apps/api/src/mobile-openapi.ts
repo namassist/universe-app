@@ -47,6 +47,7 @@ export const MOBILE_OPERATIONS = [
   "POST /v1/auth/change-password",
   "GET /v1/mobile/version",
   "GET /v1/me/shift",
+  "GET /v1/me/profile",
   "GET /v1/me/seats",
   "GET /v1/me/notifications",
   "POST /v1/me/notifications/{id}/read",

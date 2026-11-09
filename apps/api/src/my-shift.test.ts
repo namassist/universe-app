@@ -15,6 +15,7 @@ import {
 } from "./my-shift";
 
 const seat = { unit: "DT101", area: "PIT A", bus: "BUS 1", fleet: "EX01" };
+const BUILT = "1998-03-02T21:20:00.000Z";
 
 const plan = (over: Partial<NonNullable<PlanFacts>> = {}): PlanFacts => ({
   unit: "DT101",
@@ -44,7 +45,7 @@ describe("before the board: the plan, provisional", () => {
       reason: null,
       refusal: null,
       planUnit: "DT101",
-      seat,
+      seat: { ...seat, source: null, placedAt: null },
     });
   });
 
@@ -114,19 +115,33 @@ describe("whoever the shift is not about", () => {
 
 describe("after the board: what the slip would say", () => {
   const after = (over: Partial<StandingInput>) =>
-    before({ board: { seat: null }, ...over });
+    before({ board: { generatedAt: BUILT, seat: null }, ...over });
 
   test("a holder the board kept shows the board's seat", () => {
     const boardSeat = { ...seat, area: "PIT B" };
     expect(
-      standing(after({ board: { seat: { ...boardSeat, source: "plan" } } }))
+      standing(
+        after({
+          board: {
+            generatedAt: BUILT,
+            seat: { ...boardSeat, source: "plan", placedAt: null },
+          },
+        })
+      )
     ).toMatchObject({ phase: "board", status: "holder", seat: boardSeat });
   });
 
   test("a spare's seat is held until the second finger, as the slip is", () => {
     const spareSeat = { ...seat, unit: "DT202" };
     expect(
-      standing(after({ board: { seat: { ...spareSeat, source: "spare" } } }))
+      standing(
+        after({
+          board: {
+            generatedAt: BUILT,
+            seat: { ...spareSeat, source: "spare", placedAt: null },
+          },
+        })
+      )
     ).toMatchObject({
       status: "spare",
       reason: "awaiting-second-finger",
@@ -135,7 +150,10 @@ describe("after the board: what the slip would say", () => {
     expect(
       standing(
         after({
-          board: { seat: { ...spareSeat, source: "spare" } },
+          board: {
+            generatedAt: BUILT,
+            seat: { ...spareSeat, source: "spare", placedAt: null },
+          },
           secondFingerOpen: true,
         })
       )
@@ -145,7 +163,12 @@ describe("after the board: what the slip would say", () => {
   test("a hand placement waits for the second finger too", () => {
     expect(
       standing(
-        after({ board: { seat: { ...seat, unit: "DT303", source: "manual" } } })
+        after({
+          board: {
+            generatedAt: BUILT,
+            seat: { ...seat, unit: "DT303", source: "manual", placedAt: null },
+          },
+        })
       )
     ).toMatchObject({ reason: "awaiting-second-finger", seat: null });
   });
@@ -154,7 +177,10 @@ describe("after the board: what the slip would say", () => {
     expect(
       standing(
         after({
-          board: { seat: { ...seat, source: "manual" } },
+          board: {
+            generatedAt: BUILT,
+            seat: { ...seat, source: "manual", placedAt: null },
+          },
           secondFingerOpen: true,
         })
       )
@@ -174,6 +200,39 @@ describe("after the board: what the slip would say", () => {
     });
   });
 
+  test("a seat shown says how it was given, and a hand placement when", () => {
+    expect(
+      standing(
+        after({
+          board: {
+            generatedAt: BUILT,
+            seat: { ...seat, source: "plan", placedAt: null },
+          },
+        })
+      ).seat
+    ).toEqual({ ...seat, source: "plan", placedAt: null });
+    const placedAt = "1998-03-02T21:41:00.000Z";
+    expect(
+      standing(
+        after({
+          board: {
+            generatedAt: BUILT,
+            seat: { ...seat, unit: "DT303", source: "manual", placedAt },
+          },
+          secondFingerOpen: true,
+        })
+      ).seat
+    ).toEqual({ ...seat, unit: "DT303", source: "manual", placedAt });
+  });
+
+  test("the plan's seat is nobody's placement yet", () => {
+    expect(standing(before()).seat).toEqual({
+      ...seat,
+      source: null,
+      placedAt: null,
+    });
+  });
+
   test("the plan no longer speaks once the board exists", () => {
     // A broken-down plan unit is the board's business now: the answer is
     // the board's, not the plan's reason.
@@ -181,7 +240,10 @@ describe("after the board: what the slip would say", () => {
       standing(
         after({
           plan: plan({ breakdown: true }),
-          board: { seat: { ...seat, unit: "DT202", source: "spare" } },
+          board: {
+            generatedAt: BUILT,
+            seat: { ...seat, unit: "DT202", source: "spare", placedAt: null },
+          },
           secondFingerOpen: true,
         })
       )
@@ -238,7 +300,10 @@ describe("a seat on the board outranks the roster", () => {
       standing(
         before({
           rostered: false,
-          board: { seat: { ...seat, unit: "DT404", source: "manual" } },
+          board: {
+            generatedAt: BUILT,
+            seat: { ...seat, unit: "DT404", source: "manual", placedAt: null },
+          },
           secondFingerOpen: true,
         })
       )
@@ -247,7 +312,9 @@ describe("a seat on the board outranks the roster", () => {
 
   test("not rostered and not on the board is still off", () => {
     expect(
-      standing(before({ rostered: false, board: { seat: null } }))
+      standing(
+        before({ rostered: false, board: { generatedAt: BUILT, seat: null } })
+      )
     ).toMatchObject({ status: "off", seat: null });
   });
 });

@@ -163,7 +163,7 @@ export async function announceBoard(
           kind: "seat-removed",
           date,
           shift,
-          params: { unit: row.unit },
+          params: { unit: row.unit, cause: "regenerated" },
           dedupeKey: `${row.employeeId}|${date}|${shift}|removed|${row.unit}|${stamp}`,
           availableAt: now,
         })
@@ -308,7 +308,7 @@ export async function announcePlacement(input: {
           kind: "seat-removed",
           date,
           shift,
-          params: { unit: seat.unit },
+          params: { unit: seat.unit, cause: "manual" },
           dedupeKey: `${input.displaced}|${date}|${shift}|removed|${seat.unit}|${stamp}`,
           availableAt: now,
         })

@@ -12,13 +12,17 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { boardFacts, planFacts, standing } from "./my-shift";
+import { boardFacts, planFacts, standing, withdrawnFacts } from "./my-shift";
 import { personByNik } from "./routes/fleet-allocation";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
 const tag = `ZZ Uji MyShift ${uid()}`;
 const DAY = "1998-03-02";
 const BOARD_DAY = "1998-03-03";
+/** A board with a hand placement, and a seat taken back. */
+const MANUAL_DAY = "1998-03-04";
+const GENERATED = new Date("1998-03-04T05:20:00Z");
+const at = (hhmm: string) => new Date(`${MANUAL_DAY}T${hhmm}:00Z`);
 const TODAY = "1998-03-02";
 
 /** NIKs in a range no real register uses. */
@@ -44,8 +48,13 @@ const made = {
   fleet: "",
   rosterDoc: "",
   boardDoc: "",
+  manualDoc: "",
 };
 let leaderCode = "";
+let okCode = "";
+let brokenCode = "";
+let looseCode = "";
+const ids: Record<string, string> = {};
 
 beforeAll(async () => {
   const [company] = await db
@@ -83,6 +92,7 @@ beforeAll(async () => {
     .returning({ id: schema.employees.id, nik: schema.employees.nik });
   made.employees.push(...employees.map((e) => e.id));
   const idOf = (nik: string) => employees.find((e) => e.nik === nik)!.id;
+  for (const nik of NIKS) ids[nik] = idOf(nik);
 
   const master = async (
     table: "unitClasses" | "unitTypes" | "unitModels" | "unitBrands"
@@ -134,6 +144,9 @@ beforeAll(async () => {
   const broken = await unit("BRK", { breakdown: true });
   const loose = await unit("LOOSE");
   made.units.push(ok.id, ok2.id, broken.id, loose.id);
+  okCode = ok.code;
+  brokenCode = broken.code;
+  looseCode = loose.code;
   await db
     .insert(schema.fleetUnits)
     .values(
@@ -184,9 +197,138 @@ beforeAll(async () => {
     source: "spare",
     workArea: `${tag} Pit 2`,
   });
+
+  /* MANUAL_DAY: NO_SKILL placed on `ok` by hand twice over, the second
+     placement the one that stands. */
+  const [manualDoc] = await db
+    .insert(schema.fleetActualDocuments)
+    .values({ date: MANUAL_DAY, shift: "day", generatedAt: GENERATED })
+    .returning({ id: schema.fleetActualDocuments.id });
+  made.manualDoc = manualDoc!.id;
+  await db.insert(schema.fleetActualSlots).values({
+    documentId: made.manualDoc,
+    unitId: ok.id,
+    employeeId: idOf(NO_SKILL),
+    source: "manual",
+  });
+  await db.insert(schema.fleetPlacements).values([
+    {
+      documentId: made.manualDoc,
+      unitId: ok.id,
+      employeeId: idOf(NO_SKILL),
+      placedByName: tag,
+      placedAt: at("05:38"),
+    },
+    {
+      documentId: made.manualDoc,
+      unitId: ok.id,
+      employeeId: null,
+      placedByName: tag,
+      placedAt: at("05:39"),
+    },
+    {
+      documentId: made.manualDoc,
+      unitId: ok.id,
+      employeeId: idOf(NO_SKILL),
+      placedByName: tag,
+      placedAt: at("05:41"),
+    },
+  ]);
+
+  /* BROKEN held `broken`, printed a slip for it, then lost it to a rebuilt
+     board after the unit broke down. */
+  await db.insert(schema.personNotifications).values([
+    {
+      employeeId: idOf(BROKEN),
+      kind: "seat-assigned",
+      date: MANUAL_DAY,
+      shift: "day",
+      params: { unit: broken.code },
+      dedupeKey: `${tag}|broken|assigned`,
+      availableAt: at("05:00"),
+    },
+    {
+      employeeId: idOf(BROKEN),
+      kind: "seat-removed",
+      date: MANUAL_DAY,
+      shift: "day",
+      params: { unit: broken.code, cause: "regenerated" },
+      dedupeKey: `${tag}|broken|removed`,
+      availableAt: at("05:35"),
+    },
+  ]);
+  await db.insert(schema.tickets).values({
+    nik: BROKEN,
+    date: MANUAL_DAY,
+    shift: "day",
+    ip: "127.0.0.1",
+    status: "printed",
+    contentHash: `${tag}-slip`,
+    preview: "",
+    fields: { seat: { unit: broken.code } },
+    printedAt: at("05:06"),
+  });
+  await db.insert(schema.unitStatusHistory).values([
+    /* More than a day before: not what this shift is about. */
+    {
+      unitId: broken.id,
+      status: "standby",
+      reason: tag,
+      createdAt: new Date(at("05:33").getTime() - 2 * 24 * 60 * 60 * 1000),
+    },
+    {
+      unitId: broken.id,
+      status: "breakdown",
+      reason: tag,
+      createdAt: at("05:33"),
+    },
+    /* After the seat went: not why it went. */
+    { unitId: broken.id, status: "ready", reason: tag, createdAt: at("05:50") },
+  ]);
+
+  /* LOOSE lost `loose` by hand and is given it back at 05:45. An older
+     removal, written before the cause was recorded, is for `ok`. */
+  await db.insert(schema.personNotifications).values([
+    {
+      employeeId: idOf(LOOSE),
+      kind: "seat-removed",
+      date: MANUAL_DAY,
+      shift: "day",
+      params: { unit: okCode },
+      dedupeKey: `${tag}|loose|removed-old`,
+      availableAt: at("05:30"),
+    },
+    {
+      employeeId: idOf(LOOSE),
+      kind: "seat-removed",
+      date: MANUAL_DAY,
+      shift: "day",
+      params: { unit: loose.code, cause: "manual" },
+      dedupeKey: `${tag}|loose|removed`,
+      availableAt: at("05:36"),
+    },
+    {
+      employeeId: idOf(LOOSE),
+      kind: "seat-assigned",
+      date: MANUAL_DAY,
+      shift: "day",
+      params: { unit: loose.code },
+      dedupeKey: `${tag}|loose|back`,
+      availableAt: at("05:45"),
+    },
+  ]);
 });
 
 afterAll(async () => {
+  await db.delete(schema.tickets).where(inArray(schema.tickets.nik, NIKS));
+  if (made.units.length)
+    await db
+      .delete(schema.unitStatusHistory)
+      .where(inArray(schema.unitStatusHistory.unitId, made.units));
+  if (made.manualDoc)
+    await db
+      .delete(schema.fleetActualDocuments)
+      .where(eq(schema.fleetActualDocuments.id, made.manualDoc));
   if (made.boardDoc)
     await db
       .delete(schema.fleetActualDocuments)
@@ -280,13 +422,84 @@ describe("the board's facts", () => {
     expect(
       await boardFacts(HOLDER, { date: BOARD_DAY, shift: "night" })
     ).toEqual({
-      seat: expect.objectContaining({ area: `${tag} Pit 2`, source: "spare" }),
+      generatedAt: expect.any(String),
+      seat: expect.objectContaining({
+        area: `${tag} Pit 2`,
+        source: "spare",
+        placedAt: null,
+      }),
     });
   });
 
   test("somebody the board did not seat has no seat on it", async () => {
     expect(
       await boardFacts(PARTNER, { date: BOARD_DAY, shift: "night" })
-    ).toEqual({ seat: null });
+    ).toEqual({ generatedAt: expect.any(String), seat: null });
+  });
+
+  test("when the board was built, and when a hand placement put the person there", async () => {
+    expect(
+      await boardFacts(NO_SKILL, { date: MANUAL_DAY, shift: "day" })
+    ).toEqual({
+      generatedAt: GENERATED.toISOString(),
+      seat: expect.objectContaining({
+        unit: okCode,
+        source: "manual",
+        /* The placement that stands, not the first or the clearing. */
+        placedAt: at("05:41").toISOString(),
+      }),
+    });
+  });
+});
+
+describe("a seat taken back", () => {
+  const target = { date: MANUAL_DAY, shift: "day" as const };
+
+  test("names the unit, why and when it went, the slip and what the unit did", async () => {
+    expect(
+      await withdrawnFacts(ids[BROKEN]!, BROKEN, target, at("06:00"))
+    ).toEqual({
+      unit: brokenCode,
+      at: at("05:35").toISOString(),
+      cause: "regenerated",
+      slipPrintedAt: at("05:06").toISOString(),
+      unitStatus: { status: "breakdown", at: at("05:33").toISOString() },
+    });
+  });
+
+  test("nothing before the person was told, as the notice is not out yet", async () => {
+    expect(
+      await withdrawnFacts(ids[BROKEN]!, BROKEN, target, at("05:34"))
+    ).toBeNull();
+  });
+
+  test("a seat given back is no longer withdrawn, once that is said", async () => {
+    /* Before 05:45 the return is not out yet, so the phone still says the
+       seat went: it never runs ahead of the slip. */
+    expect(
+      await withdrawnFacts(ids[LOOSE]!, LOOSE, target, at("05:40"))
+    ).toEqual(
+      expect.objectContaining({
+        unit: looseCode,
+        cause: "manual",
+        slipPrintedAt: null,
+      })
+    );
+    /* After it, the older removal (no cause recorded) is what is left. */
+    expect(
+      await withdrawnFacts(ids[LOOSE]!, LOOSE, target, at("05:50"))
+    ).toEqual({
+      unit: okCode,
+      at: at("05:30").toISOString(),
+      cause: null,
+      slipPrintedAt: null,
+      unitStatus: null,
+    });
+  });
+
+  test("somebody never told of a seat has none taken back", async () => {
+    expect(
+      await withdrawnFacts(ids[HOLDER]!, HOLDER, target, at("06:00"))
+    ).toBeNull();
   });
 });

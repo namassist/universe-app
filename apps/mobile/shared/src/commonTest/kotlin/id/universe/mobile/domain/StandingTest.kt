@@ -23,7 +23,14 @@ private val seededGates = MyShiftGates(
 )
 
 private fun seat(unit: String = "DT4084") =
-    MyShiftSeat(unit = unit, area = "PIT 3 SELATAN", bus = "BUS 07", fleet = "EX1203")
+    MyShiftSeat(
+        unit = unit,
+        area = "PIT 3 SELATAN",
+        bus = "BUS 07",
+        fleet = "EX1203",
+        source = null,
+        placedAt = null,
+    )
 
 private fun shift(
     status: String = "holder",
@@ -49,6 +56,8 @@ private fun shift(
     ftw = ftw,
     checkInAt = checkInAt,
     gates = gates,
+    boardAt = null,
+    withdrawn = null,
 )
 
 class StandingTest {

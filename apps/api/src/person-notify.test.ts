@@ -374,7 +374,7 @@ describe("a hand placement", () => {
       (r) => r.kind === "seat-removed"
     );
     expect(removed).toHaveLength(1);
-    expect(removed[0]!.params).toMatchObject({ unit: unit(0).code });
+    expect(removed[0]!.params).toEqual({ unit: unit(0).code, cause: "manual" });
   });
 
   test("a displaced person not yet told is simply never told", async () => {
@@ -597,5 +597,11 @@ describe("delivery holds up under real conditions", () => {
       "seat-assigned",
       "seat-removed",
     ]);
+    /* Why it went, so the phone can say "papan dibuat ulang" rather than
+       guess from the times. */
+    expect(holder.find((r) => r.kind === "seat-removed")!.params).toEqual({
+      unit: expect.any(String),
+      cause: "regenerated",
+    });
   });
 });

@@ -36,17 +36,24 @@ const made = {
   unit: "",
   docs: [] as string[],
   users: [] as string[],
+  roles: [] as string[],
   devices: [] as string[],
 };
 let unitCode = "";
 let myAccount = "";
 
-async function account(over: { nik?: string | null; mustChange?: boolean }) {
-  const [role] = await db
-    .select({ id: schema.roles.id })
-    .from(schema.roles)
-    .where(eq(schema.roles.slug, "user"))
-    .limit(1);
+async function account(over: {
+  nik?: string | null;
+  mustChange?: boolean;
+  roleId?: string;
+}) {
+  const [role] = over.roleId
+    ? [{ id: over.roleId }]
+    : await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.slug, "user"))
+        .limit(1);
   const [user] = await db
     .insert(schema.users)
     .values({
@@ -195,6 +202,8 @@ afterAll(async () => {
       .where(inArray(schema.fleetActualDocuments.id, made.docs));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
+  if (made.roles.length)
+    await db.delete(schema.roles).where(inArray(schema.roles.id, made.roles));
   if (made.devices.length)
     await db
       .delete(schema.devices)
@@ -222,6 +231,58 @@ afterAll(async () => {
 });
 
 const SEATS = "/me/seats?from=1998-04-01&to=1998-04-05";
+
+describe("my profile", () => {
+  test("names my own department, position and company, whatever my grants", async () => {
+    /* A role with no grants at all, as the Pengawas Lapangan has no
+       `employees` grant: nobody needs one to read who they are themselves. */
+    const [bare] = await db
+      .insert(schema.roles)
+      .values({ slug: `zz-me-${uid()}`, name: `${tag} Role`, scope: "all" })
+      .returning({ id: schema.roles.id });
+    made.roles.push(bare!.id);
+    const theirs = await account({ nik: OTHER, roleId: bare!.id });
+    const res = await get("/me/profile", { cookie: await cookieFor(theirs) });
+    /* OTHER's account is made again further down. */
+    await db.delete(schema.users).where(eq(schema.users.id, theirs));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      nik: OTHER,
+      name: `${tag} ${OTHER}`,
+      department: `${tag} Dept`,
+      position: `${tag} Operator`,
+      company: `${tag} PT`,
+    });
+  });
+
+  test("never anybody else's, and nothing without a person behind the account", async () => {
+    expect((await get("/me/profile")).status).toBe(401);
+    expect(
+      (await get(`/me/profile?nik=${OTHER}`, { cookie: mine })).status
+    ).toBe(200);
+    expect(
+      (
+        (await (
+          await get(`/me/profile?nik=${OTHER}`, { cookie: mine })
+        ).json()) as {
+          nik: string;
+        }
+      ).nik
+    ).toBe(ME);
+    const noNik = await get("/me/profile", {
+      cookie: await cookieFor(await account({ nik: null })),
+    });
+    expect(noNik.status).toBe(404);
+    expect(((await noNik.json()) as { code: string }).code).toBe("no_employee");
+  });
+
+  test("an account still on the issued password changes it first", async () => {
+    const cookie = await cookieFor(
+      await account({ nik: null, mustChange: true })
+    );
+    expect((await get("/me/profile", { cookie })).status).toBe(403);
+  });
+});
 
 describe("who may ask", () => {
   test("no session gets 401", async () => {
@@ -294,6 +355,17 @@ describe("the coming shift", () => {
       secondFinger: await at("finger-second"),
       busDepart: await at("bus-depart"),
     });
+  });
+
+  test("says when the board was built and which seat was taken back, in the published shape", async () => {
+    const res = await get("/me/shift", { cookie: mine });
+    const body = (await res.json()) as {
+      shift: Record<string, unknown> | null;
+    };
+    expect(body.shift).not.toBeNull();
+    /* Nobody seated or told anything here: both present, both null. */
+    expect(body.shift).toHaveProperty("boardAt");
+    expect(body.shift!.withdrawn).toBeNull();
   });
 });
 

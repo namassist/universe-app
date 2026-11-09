@@ -14,7 +14,9 @@ import { Elysia, t } from "elysia";
 import {
   PERSON_NOTIFICATION_KINDS,
   PUSH_PLATFORMS,
+  SEAT_REMOVED_CAUSES,
   SHIFT_KINDS,
+  UNIT_STATUSES,
 } from "@universe/contracts";
 
 import { requireSelf } from "../auth/macro";
@@ -71,7 +73,41 @@ const MyShiftSchema = t.Object({
   ),
   refusal: t.Nullable(t.String()),
   planUnit: t.Nullable(t.String()),
-  seat: t.Nullable(SeatSchema),
+  seat: t.Nullable(
+    t.Composite([
+      SeatSchema,
+      t.Object({
+        /** Null for the plan's seat, which nobody has placed yet. */
+        source: t.Nullable(t.UnionEnum(["plan", "spare", "manual"])),
+        /** ISO instant of the hand placement that stands, for `manual`. */
+        placedAt: t.Nullable(t.String()),
+      }),
+    ])
+  ),
+  /** ISO instant the board was last built, null before there is one. */
+  boardAt: t.Nullable(t.String()),
+  /**
+   * The seat the person was told of and has since lost, once they have been
+   * told. Null for none.
+   */
+  withdrawn: t.Nullable(
+    t.Object({
+      unit: t.String(),
+      /** ISO instant the seat went. */
+      at: t.String(),
+      /** Null for a notice written before the cause was recorded. */
+      cause: t.Nullable(t.UnionEnum(SEAT_REMOVED_CAUSES)),
+      /** ISO instant the last slip naming the unit printed. */
+      slipPrintedAt: t.Nullable(t.String()),
+      /**
+       * The unit's last status change in the day before the seat went. It
+       * explains the loss only when `cause` is `regenerated`.
+       */
+      unitStatus: t.Nullable(
+        t.Object({ status: t.UnionEnum(UNIT_STATUSES), at: t.String() })
+      ),
+    })
+  ),
   ftw: t.Nullable(
     t.Object({
       verdict: t.Nullable(
@@ -167,6 +203,58 @@ export const meRoutes = new Elysia({ prefix: "/me", tags: ["me"] })
       },
       detail: {
         summary: "My coming shift: holder or spare, why, and my FTW and tap",
+      },
+    }
+  )
+
+  .get(
+    "/profile",
+    async ({ principal, status }) => {
+      if (principal.kind !== "user" || !principal.nik)
+        return status(404, noEmployee);
+      const [person] = await db
+        .select({
+          nik: schema.employees.nik,
+          name: schema.employees.name,
+          department: schema.departments.name,
+          position: schema.positions.name,
+          company: schema.companies.name,
+        })
+        .from(schema.employees)
+        .innerJoin(
+          schema.departments,
+          eq(schema.departments.id, schema.employees.departmentId)
+        )
+        .innerJoin(
+          schema.positions,
+          eq(schema.positions.id, schema.employees.positionId)
+        )
+        .innerJoin(
+          schema.companies,
+          eq(schema.companies.id, schema.employees.companyId)
+        )
+        .where(eq(schema.employees.nik, principal.nik))
+        .limit(1);
+      if (!person) return status(404, noEmployee);
+      return person;
+    },
+    {
+      self: true,
+      response: {
+        200: t.Object({
+          nik: t.String(),
+          name: t.String(),
+          department: t.String(),
+          position: t.String(),
+          company: t.String(),
+        }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+      },
+      detail: {
+        summary:
+          "Who I am in the register: department, position, company. No menu needed",
       },
     }
   )

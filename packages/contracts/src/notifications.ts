@@ -76,9 +76,14 @@ export type DeviceReportMoment = (typeof DEVICE_REPORT_MOMENTS)[number];
  *
  * - `seat-assigned` — `{ unit, area, bus, fleet }` for the shift. A holder is
  *   told when the board is built, a spare at `finger-second`, as the slip is.
- * - `seat-removed` — `{ unit }`: a hand placement gave that unit to somebody
- *   else, so the seat the app was showing no longer holds.
+ * - `seat-removed` — `{ unit, cause }`: the seat the app was showing no
+ *   longer holds, because the board was built again (`regenerated`) or a hand
+ *   placement gave the unit to somebody else or cleared it (`manual`). Rows
+ *   written before `cause` existed carry `{ unit }` alone.
  */
+export const SEAT_REMOVED_CAUSES = ["regenerated", "manual"] as const;
+export type SeatRemovedCause = (typeof SEAT_REMOVED_CAUSES)[number];
+
 export const PERSON_NOTIFICATION_KINDS = [
   "seat-assigned",
   "seat-removed",

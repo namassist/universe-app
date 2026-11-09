@@ -516,7 +516,9 @@ describe("correcting a board", () => {
             eq(schema.personNotifications.kind, "seat-removed")
           )
         );
-      expect(removed).toEqual([{ params: { unit: unit!.code } }]);
+      expect(removed).toEqual([
+        { params: { unit: unit!.code, cause: "manual" } },
+      ]);
     } finally {
       await db
         .delete(schema.personNotifications)
