@@ -275,7 +275,9 @@ listened to, because listening sends `enableDevice`.
   once and everybody else's, hand placements included, only from
   `finger-second`. No `finger-second` stage means no spare is announced, as
   no spare slip prints. Before the board, `/v1/me/shift` reads the plan with
-  the same rules the booth judges it by (`my-shift.ts`).
+  the same rules the booth judges it by (`my-shift.ts`). A seat taken back
+  (`withdrawn`, with the cause each `seat-removed` notice records) is read
+  only from notices that have come due, so its return is not said early either.
 - A repeat tap reprints **only if the slip's content changed**. Arrival time
   and booth don't count, because machine clocks disagree.
 - A printer failure is retried ~60 s, then queued for manual reprint. Nothing

@@ -287,6 +287,20 @@ with the TV or the ops console:
 - **`/me/shift` carries its gates** (`ftwDeadline`, `fingerIn`, `board`,
   `secondFinger`, `busDepart`, "HH:MM" or null), so the app words "Batas
   05:25" from the timeline and never from a constant.
+- **`/me/shift` says how a seat came and went** (screen audit, 2026-11-09):
+  `boardAt` (when the board was last built), `seat.source` and
+  `seat.placedAt` (the hand placement that stands, from `fleet_placements`),
+  and `withdrawn`, the seat the person was told of and has lost: its unit,
+  when and why (`cause`, now written into each `seat-removed` notice as
+  `regenerated` or `manual`), the slip that named it, and the unit's last
+  status change in the day before. `withdrawn` is read from the person's
+  own notices that have come due, so a seat given back to a spare stays
+  withdrawn until the second finger, as the slip would; it never runs ahead.
+- **`/me/profile`** (screen audit, 2026-11-09): the caller's own name, NIK,
+  department, position and company, under `self` like the rest of `/me`.
+  The staff Profil needs it because `/employees/:nik` asks for the
+  `employees` menu, which the Pengawas Lapangan does not hold; granting it
+  with scope `all` would open the whole register to read one line.
 
 The client is generated from `apps/mobile/openapi.json`, written by
 `bun run openapi:mobile` (`mobile-openapi.ts`) from only the routes the app
@@ -296,6 +310,16 @@ published **without `enum` and `default`**: a build stays installed for weeks,
 and a generated enum would fail to read a whole answer the day the API adds a
 value. A test fails when the committed copy drifts. Counts and minutes are
 `t.Integer`, so they arrive as `Int` rather than `Double`.
+
+## D15 — Nobody resets, switches off or deletes their own account
+
+`POST /users/:id/reset-password`, `PATCH /users/:id` with `active: false`
+and `DELETE /users/:id` answer 409 `own_account` when `:id` is the caller
+(screen audit, 2026-11-09). Each locks the caller out, possibly mid-shift
+with no other administrator on hand. The phone's Akun screen hid the
+buttons; the rule now holds for the web and any other client. Renaming
+your own account still works, and your own password is changed through
+`/auth/change-password`. The last-roles-admin check stays as it was.
 
 ## Known debt
 

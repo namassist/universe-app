@@ -2893,7 +2893,9 @@ sees every formation (owner, 2026-10-17) and changes nothing.
 - **Papan PLAN**: read and write, through the PLAN routes and
   `pairingRefusal`.
 - **Laporan**, **dashboard charts**, **Scan ID card**.
-- **Akun**: reset password, deactivate an account.
+- **Akun**: reset password, deactivate an account. Never one's own: the
+  API refuses to reset, deactivate or delete the caller's own account
+  (409 `own_account`), on the web too, so nobody locks themselves out.
 - **Timeline: monitor only** (owner, 2026-10-17). It shows that the muster is
   running: each stage, whether it ran, `ok` or refused, and the scheduler's
   heartbeat, read from the Operations Center's stage log. Editing stays on the
@@ -2954,6 +2956,21 @@ D14):
   adds it to an installation without touching the roles there.
 - **Push** goes out through FCM once `FCM_SERVICE_ACCOUNT_FILE` names the
   Firebase service account key. Until then the notices are only in the app.
+- **Added after the screen audit (2026-11-09)**, for designed states the API
+  could not yet feed:
+  - `/v1/me/shift` also says **how the seat came and went**: `boardAt`
+    (when the board was last built), `seat.source` (`plan`, `spare`,
+    `manual`) with `seat.placedAt` for a hand placement ("Final · manual
+    05:41"), and `withdrawn` for a seat the person was told of and has
+    lost: the unit, when, why (`regenerated` or `manual`, now recorded on
+    each `seat-removed` notice), the time of the slip that named it, and
+    the unit's last status change in the day before ("DT4023 dilaporkan
+    breakdown 05:33"). It moves only when the notice comes due, so a seat
+    given back to a spare is not said before the second finger.
+  - **`GET /v1/me/profile`**: the caller's own department, position and
+    company, needing no menu. The staff Profil reads it, since the
+    Pengawas Lapangan has no `employees` grant and should not get one for
+    this.
 
 ### The app — operator screens built (stage 3, 2026-10-18)
 
