@@ -196,6 +196,9 @@
                         "report": {
                           "type": "string"
                         },
+                        "leaderboard": {
+                          "type": "string"
+                        },
                         "database-unit": {
                           "type": "string"
                         },
@@ -490,6 +493,9 @@
                           "type": "string"
                         },
                         "report": {
+                          "type": "string"
+                        },
+                        "leaderboard": {
                           "type": "string"
                         },
                         "database-unit": {
@@ -4579,7 +4585,7 @@
     "/v1/reports/{kind}": {
       "get": {
         "tags": ["report"],
-        "summary": "One report for a date and shift",
+        "summary": "One report for a date and shift, or for today as a whole",
         "parameters": [
           {
             "name": "kind",
@@ -4593,14 +4599,15 @@
                 "operator-no-equipment",
                 "operator-no-ftw",
                 "operator-no-finger",
-                "final-validation"
+                "final-validation",
+                "induction-operators"
               ]
             }
           },
           {
             "name": "date",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
               "type": "string"
@@ -4609,9 +4616,8 @@
           {
             "name": "shift",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "default": "day",
               "type": "string",
               "enum": ["day", "night"]
             }
@@ -4660,7 +4666,8 @@
                       "type": "string"
                     },
                     "shift": {
-                      "type": "string"
+                      "type": "string",
+                      "nullable": true
                     },
                     "department": {
                       "type": "object",
@@ -4720,6 +4727,12 @@
                             "type": "string"
                           },
                           "jamIn": {
+                            "type": "string"
+                          },
+                          "sleepStatus": {
+                            "type": "string"
+                          },
+                          "remarks": {
                             "type": "string"
                           }
                         }
