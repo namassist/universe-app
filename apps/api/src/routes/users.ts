@@ -23,6 +23,21 @@ import {
 
 const ROLES_MENU: MenuSlug = "roles";
 
+/**
+ * Resetting, switching off or deleting the account you are signed in with
+ * locks you out, possibly mid-shift with nobody else on hand to let you back
+ * in. The phone's Akun screen hides the buttons (docs/prd.md, Mobile app →
+ * Superadmin); this is the same rule for every client. Your own password is
+ * changed from your profile (`/auth/change-password`).
+ */
+const ownAccount = (action: string) => ({
+  code: "own_account",
+  message: `Akun yang sedang dipakai tidak bisa ${action}. Minta admin lain, atau ganti password dari Profil.`,
+});
+/** A uuid in capitals is still the same row to Postgres, so to this too. */
+const isOwn = (principal: { kind: string; id: string }, id: string) =>
+  principal.kind === "user" && principal.id.toLowerCase() === id.toLowerCase();
+
 const userColumns = {
   id: schema.users.id,
   email: schema.users.email,
@@ -497,7 +512,9 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
 
   .patch(
     "/:id",
-    async ({ params, body, status }) => {
+    async ({ params, body, status, principal }) => {
+      if (body.active === false && isOwn(principal, params.id))
+        return status(409, ownAccount("dinonaktifkan"));
       const [current] = await baseQuery()
         .where(eq(schema.users.id, params.id))
         .limit(1);
@@ -600,7 +617,9 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
 
   .delete(
     "/:id",
-    async ({ params, status }) => {
+    async ({ params, status, principal }) => {
+      if (isOwn(principal, params.id))
+        return status(409, ownAccount("dihapus"));
       const [row] = await db
         .select({ id: schema.users.id })
         .from(schema.users)
@@ -638,7 +657,9 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
 
   .post(
     "/:id/reset-password",
-    async ({ params, status }) => {
+    async ({ params, status, principal }) => {
+      if (isOwn(principal, params.id))
+        return status(409, ownAccount("direset"));
       const [row] = await db
         .select({ id: schema.users.id })
         .from(schema.users)
@@ -670,6 +691,7 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         401: ErrorSchema,
         403: ErrorSchema,
         404: ErrorSchema,
+        409: ErrorSchema,
       },
       detail: {
         summary: "Reset an account to the configured default password",
