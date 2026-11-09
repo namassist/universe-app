@@ -16,6 +16,12 @@ import { Elysia } from "elysia";
 import { API_VERSION } from "@universe/contracts";
 
 import { as30, sortedResponses } from "./openapi-30";
+import {
+  documentResponses,
+  ENGLISH,
+  type Operation,
+  type Refusals,
+} from "./openapi-responses";
 import { authRoutes } from "./routes/auth";
 import { dashboardRoutes } from "./routes/dashboard";
 import { employeesRoutes } from "./routes/employees";
@@ -81,6 +87,100 @@ export const MOBILE_OPERATIONS = [
 ] as const;
 
 type Json = Record<string, unknown>;
+
+/**
+ * The `code` values each operation's own route sends, per status
+ * (`openapi-responses.ts` adds `validation_failed` and `internal_error`).
+ * Read from the handlers; a status listed here that the route does not
+ * declare fails the build of this document.
+ */
+const NO_EMPLOYEE: Refusals = { "404": ["no_employee"] };
+const REFUSALS: Partial<Record<(typeof MOBILE_OPERATIONS)[number], Refusals>> =
+  {
+    "POST /v1/auth/login": {
+      "401": ["invalid_credentials"],
+      "403": ["first_login_on_site"],
+      "429": ["too_many_attempts"],
+    },
+    "POST /v1/auth/change-password": {
+      "401": ["invalid_credentials"],
+      "403": ["forbidden"],
+      "422": ["password_too_short", "password_is_default"],
+    },
+    "GET /v1/me/shift": NO_EMPLOYEE,
+    "GET /v1/me/profile": NO_EMPLOYEE,
+    "GET /v1/me/seats": { ...NO_EMPLOYEE, "422": ["invalid_range"] },
+    "GET /v1/me/notifications": NO_EMPLOYEE,
+    "POST /v1/me/notifications/{id}/read": {
+      "404": ["no_employee", "not_found"],
+    },
+    "POST /v1/me/notifications/read-all": NO_EMPLOYEE,
+    "POST /v1/me/push-devices": NO_EMPLOYEE,
+    "DELETE /v1/me/push-devices": NO_EMPLOYEE,
+    "GET /v1/roster/{id}/days": { "404": ["roster_document_not_found"] },
+    "GET /v1/employees/{nik}": { "404": ["employee_not_found"] },
+    "GET /v1/fit-to-work/": { "422": ["invalid_range"] },
+    "GET /v1/attendance/": { "422": ["invalid_range"] },
+    "GET /v1/fleet-allocation/actual/display": {
+      "404": ["device_not_found"],
+    },
+    "GET /v1/fleet-allocation/actual/{date}/{shift}/candidates/{unitId}": {
+      "404": ["board_not_found", "unit_not_found"],
+    },
+    "PATCH /v1/fleet-allocation/actual/{date}/{shift}/{unitId}": {
+      "404": ["board_not_found", "slot_not_found"],
+      "409": ["already_placed"],
+      "422": ["ftw_acknowledgement_required"],
+    },
+    "GET /v1/unit-status/{code}/history": { "404": ["unit_not_found"] },
+    "GET /v1/id-card/{nik}": { "404": ["employee_not_found"] },
+    "PATCH /v1/users/{id}": {
+      "404": ["user_not_found"],
+      "409": ["own_account", "last_roles_admin", "email_taken", "nik_taken"],
+      "422": [
+        "identifier_required",
+        "nik_not_registered",
+        "role_not_found",
+        "scope_requires_nik",
+      ],
+    },
+    "POST /v1/users/{id}/reset-password": {
+      "404": ["user_not_found"],
+      "409": ["own_account"],
+    },
+    "GET /v1/reports/{kind}": {
+      "422": [
+        "department_not_found",
+        "today_only",
+        "missing_date",
+        "missing_shift",
+        "no_deadline",
+      ],
+    },
+  };
+
+/** No session asked for: the app reaches these before it has one. */
+const PUBLIC = new Set(["POST /v1/auth/login", "GET /v1/mobile/version"]);
+/**
+ * The `session` macro (`routes/auth.ts`): a session, and nothing more, so an
+ * account still on the issued password can log out and change it.
+ */
+const SESSION_ONLY = new Set([
+  "POST /v1/auth/logout",
+  "GET /v1/auth/session",
+  "POST /v1/auth/change-password",
+]);
+
+/** What the gate in front of an operation answers before its route runs. */
+function gateOf(name: string): Refusals {
+  if (PUBLIC.has(name)) return {};
+  if (SESSION_ONLY.has(name)) return { "401": ["unauthenticated"] };
+  /* `auth` (a menu) and `self` (`/me`) alike (`auth/macro.ts`). */
+  return {
+    "401": ["unauthenticated"],
+    "403": ["forbidden", "password_change_required"],
+  };
+}
 
 /**
  * A response as an installed build must read it, now and after the API grows:
@@ -197,7 +297,13 @@ export async function buildMobileSpec(): Promise<Json> {
               ? asPersonSession(structuredClone(raw))
               : raw;
           /* Opened after the 3.0 rewrite, which turns a literal into an enum. */
-          const in30 = as30(operation) as typeof operation;
+          const name = `${method.toUpperCase()} ${path}`;
+          const in30 = documentResponses(
+            as30(operation) as Operation,
+            ENGLISH,
+            REFUSALS[name as keyof typeof REFUSALS],
+            gateOf(name)
+          );
           return [
             method,
             {

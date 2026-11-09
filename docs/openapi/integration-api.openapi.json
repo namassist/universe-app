@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Universe Integration API",
-    "description": "API ini dipakai layanan lain di jaringan site untuk membaca data karyawan\nUniverse: NIK, nama, perusahaan, departemen, posisi, status, tanggal masuk,\nkode SIMPER, dan foto. Semua endpoint hanya untuk membaca.\n\n**Token.** Setiap permintaan wajib membawa header\n`Authorization: Bearer <token>`. Token dibuat oleh admin Universe di menu\nIntegrasi API dan hanya ditampilkan sekali, jadi simpan baik-baik. Token\nberlaku dari tanggal mulai sampai tanggal akhir yang ditentukan admin\n(waktu site, WITA).\n\n**Batas pemakaian.** Satu token boleh mengirim 120 permintaan per menit.\nKalau lebih, server membalas 429. Tunggu sesuai header `Retry-After`,\nlalu coba lagi.\n\n**Error.** Isi balasan error selalu `{ \"code\": \"...\", \"message\": \"...\" }`.\nLihat bagian respons tiap endpoint untuk arti setiap `code`.",
+    "description": "API ini dipakai layanan lain di jaringan site untuk membaca data karyawan\nUniverse: NIK, nama, perusahaan, departemen, posisi, status, tanggal masuk,\nkode SIMPER, dan foto. Semua endpoint hanya untuk membaca.\n\n**Token.** Setiap permintaan wajib membawa header\n`Authorization: Bearer <token>`. Token dibuat oleh admin Universe di menu\nIntegrasi API dan hanya ditampilkan sekali, jadi simpan baik-baik. Token\nberlaku dari tanggal mulai sampai tanggal akhir yang ditentukan admin\n(waktu site, WITA).\n\n**Batas pemakaian.** Satu token boleh mengirim 120 permintaan per menit.\nKalau lebih, server membalas 429. Tunggu sesuai header `Retry-After`,\nlalu coba lagi.\n\n**Error.** Isi balasan error selalu `{ \"code\": \"...\", \"message\": \"...\" }`.\nLihat bagian respons tiap endpoint untuk arti setiap `code`. Parameter yang\ntidak sesuai aturan dibalas 422 `validation_failed`, dengan `issues` yang\nmenyebut setiap parameter yang salah. Kesalahan di server dibalas 500\n`internal_error`; coba lagi nanti.",
     "version": "1.0.0"
   },
   "servers": [
@@ -232,6 +232,40 @@
               }
             }
           },
+          "422": {
+            "description": "Parameter tidak sesuai aturan (misalnya `limit` lebih dari 500). `issues` menyebut setiap parameter yang salah. Kode: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "429": {
             "description": "Batas 120 permintaan per menit sudah terlewati.",
             "content": {
@@ -255,6 +289,25 @@
                 "description": "Berapa detik lagi boleh mencoba kembali.",
                 "schema": {
                   "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Terjadi kesalahan di server. Detailnya dicatat di server, tidak dikirim. Coba lagi nanti. Kode: `internal_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -408,7 +461,7 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Data tidak ditemukan. Kode: `not_found`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -420,6 +473,40 @@
                     },
                     "message": {
                       "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Parameter tidak sesuai aturan (misalnya `limit` lebih dari 500). `issues` menyebut setiap parameter yang salah. Kode: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -449,6 +536,25 @@
                 "description": "Berapa detik lagi boleh mencoba kembali.",
                 "schema": {
                   "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Terjadi kesalahan di server. Detailnya dicatat di server, tidak dikirim. Coba lagi nanti. Kode: `internal_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -581,6 +687,40 @@
               }
             }
           },
+          "422": {
+            "description": "Parameter tidak sesuai aturan (misalnya `limit` lebih dari 500). `issues` menyebut setiap parameter yang salah. Kode: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "429": {
             "description": "Batas 120 permintaan per menit sudah terlewati.",
             "content": {
@@ -604,6 +744,25 @@
                 "description": "Berapa detik lagi boleh mencoba kembali.",
                 "schema": {
                   "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Terjadi kesalahan di server. Detailnya dicatat di server, tidak dikirim. Coba lagi nanti. Kode: `internal_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }

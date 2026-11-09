@@ -87,7 +87,7 @@
         },
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Log in with an email or a NIK.",
             "content": {
               "application/json": {
                 "schema": {
@@ -276,7 +276,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `invalid_credentials`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -295,7 +295,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `first_login_on_site`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -313,8 +313,61 @@
               }
             }
           },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "429": {
-            "description": "Response for status 429",
+            "description": "Too many attempts. Wait for `Retry-After` seconds. Codes: `too_many_attempts`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -342,7 +395,7 @@
         "summary": "End the current session",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: End the current session.",
             "content": {
               "application/json": {
                 "schema": {
@@ -358,7 +411,26 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -386,7 +458,7 @@
         "summary": "The caller's principal and effective permissions",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: The caller's principal and effective permissions.",
             "content": {
               "application/json": {
                 "schema": {
@@ -572,7 +644,26 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -653,7 +744,7 @@
         },
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Set a new password for the current account.",
             "content": {
               "application/json": {
                 "schema": {
@@ -669,7 +760,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`, `invalid_credentials`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -688,7 +779,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -707,7 +798,41 @@
             }
           },
           "422": {
-            "description": "Response for status 422",
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `password_too_short`, `password_is_default`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -747,7 +872,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Whether this app build is still supported.",
             "content": {
               "application/json": {
                 "schema": {
@@ -778,6 +903,59 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "operationId": "getV1MobileVersion"
@@ -789,7 +967,7 @@
         "summary": "My coming shift: holder or spare, why, and my FTW and tap",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: My coming shift: holder or spare, why, and my FTW and tap.",
             "content": {
               "application/json": {
                 "schema": {
@@ -997,7 +1175,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1016,7 +1194,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1035,7 +1213,26 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1063,7 +1260,7 @@
         "summary": "Who I am in the register: department, position, company. No menu needed",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Who I am in the register: department, position, company. No menu needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1097,7 +1294,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1116,7 +1313,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1135,7 +1332,26 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1183,7 +1399,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: The units I held on past boards.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1237,7 +1453,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1256,7 +1472,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1275,7 +1491,7 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1294,7 +1510,41 @@
             }
           },
           "422": {
-            "description": "Response for status 422",
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `invalid_range`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1322,7 +1572,7 @@
         "summary": "My own notifications that have come due",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: My own notifications that have come due.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1378,7 +1628,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1397,7 +1647,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1416,7 +1666,26 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1455,7 +1724,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Mark one of my notifications read.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1471,7 +1740,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1490,7 +1759,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1509,7 +1778,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`, `not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1537,7 +1859,7 @@
         "summary": "Mark all my due notifications read",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Mark all my due notifications read.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1553,7 +1875,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1572,7 +1894,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1591,7 +1913,26 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1678,7 +2019,7 @@
         },
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Receive pushes on this phone.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1694,7 +2035,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1713,7 +2054,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1732,7 +2073,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1802,7 +2196,7 @@
         },
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Stop pushes to this phone.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1818,7 +2212,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1837,7 +2231,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1856,7 +2250,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1919,7 +2366,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: List roster documents, newest month first.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1986,7 +2433,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2005,7 +2452,60 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2089,7 +2589,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: A page of a roster document's grid.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2205,7 +2705,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2224,7 +2724,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2243,7 +2743,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `roster_document_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2282,7 +2835,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: One employee by NIK.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2438,7 +2991,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2457,7 +3010,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2476,7 +3029,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `employee_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2524,7 +3130,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: FTW verdict snapshots for a date range.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2630,7 +3236,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2649,7 +3255,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2668,7 +3274,41 @@
             }
           },
           "422": {
-            "description": "Response for status 422",
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `invalid_range`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2716,7 +3356,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Fingerprint tap snapshots for a date range.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2796,7 +3436,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2815,7 +3455,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2834,7 +3474,41 @@
             }
           },
           "422": {
-            "description": "Response for status 422",
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `invalid_range`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2873,7 +3547,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: The running shift's board, for the fleet TV.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3056,7 +3730,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3075,7 +3749,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3094,7 +3768,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `device_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3152,7 +3879,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Who could take this unit, and what stands in the way.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3212,7 +3939,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3231,7 +3958,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3250,7 +3977,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `board_not_found`, `unit_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3361,7 +4141,7 @@
         },
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Put someone on a unit, or take them off.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3377,7 +4157,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3396,7 +4176,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3415,7 +4195,7 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `board_not_found`, `slot_not_found`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3434,7 +4214,7 @@
             }
           },
           "409": {
-            "description": "Response for status 409",
+            "description": "Refused: it conflicts with the current state. Codes: `already_placed`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3453,7 +4233,41 @@
             }
           },
           "422": {
-            "description": "Response for status 422",
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `ftw_acknowledgement_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3481,7 +4295,7 @@
         "summary": "List active units with their operational status",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: List active units with their operational status.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3528,7 +4342,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3547,7 +4361,26 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3586,7 +4419,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: A unit's status changes, newest first.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3614,7 +4447,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3633,7 +4466,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3652,7 +4485,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `unit_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3691,7 +4577,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: The person a scanned ID card names.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3765,7 +4651,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3784,7 +4670,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3803,7 +4689,60 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `employee_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3831,7 +4770,7 @@
         "summary": "List accounts",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: List accounts.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3890,7 +4829,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3909,7 +4848,26 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4037,7 +4995,7 @@
         },
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Edit an account.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4093,7 +5051,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4112,7 +5070,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4131,7 +5089,7 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `user_not_found`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4150,7 +5108,7 @@
             }
           },
           "409": {
-            "description": "Response for status 409",
+            "description": "Refused: it conflicts with the current state. Codes: `own_account`, `last_roles_admin`, `email_taken`, `nik_taken`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4169,7 +5127,41 @@
             }
           },
           "422": {
-            "description": "Response for status 422",
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `identifier_required`, `nik_not_registered`, `role_not_found`, `scope_requires_nik`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4208,7 +5200,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: Reset an account to the configured default password.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4224,7 +5216,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4243,7 +5235,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4262,7 +5254,7 @@
             }
           },
           "404": {
-            "description": "Response for status 404",
+            "description": "Not found. Codes: `user_not_found`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4281,7 +5273,60 @@
             }
           },
           "409": {
-            "description": "Response for status 409",
+            "description": "Refused: it conflicts with the current state. Codes: `own_account`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4309,7 +5354,7 @@
         "summary": "The running muster's stages and the scheduler's heartbeat",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: The running muster's stages and the scheduler's heartbeat.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4403,7 +5448,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4422,7 +5467,26 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4450,7 +5514,7 @@
         "summary": "The dashboard's counts, gated by grant and scope",
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: The dashboard's counts, gated by grant and scope.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4721,7 +5785,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4740,7 +5804,26 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4824,7 +5907,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Response for status 200",
+            "description": "OK: One report for a date and shift, or for today as a whole.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4930,7 +6013,7 @@
             }
           },
           "401": {
-            "description": "Response for status 401",
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4949,7 +6032,7 @@
             }
           },
           "403": {
-            "description": "Response for status 403",
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4968,7 +6051,41 @@
             }
           },
           "422": {
-            "description": "Response for status 422",
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `department_not_found`, `today_only`, `missing_date`, `missing_shift`, `no_deadline`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
             "content": {
               "application/json": {
                 "schema": {

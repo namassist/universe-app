@@ -311,6 +311,15 @@ and a generated enum would fail to read a whole answer the day the API adds a
 value. A test fails when the committed copy drifts. Counts and minutes are
 `t.Integer`, so they arrive as `Int` rather than `Double`.
 
+Both committed documents describe every answer (`openapi-responses.ts`,
+2026-11-09): each operation's success; its route's refusals with the `code`
+values it can send (named in the description, never an `enum`); the session
+gate's `unauthenticated` / `forbidden` / `password_change_required`; and the
+two the app adds around every route in `onError`, 422 `validation_failed`
+(with `issues`) wherever the operation takes input and 500 `internal_error`
+everywhere. A test fails on a placeholder description, a missing 422 or 500,
+or a documented code on a status the route does not declare.
+
 ## D15 — Nobody resets, switches off or deletes their own account
 
 `POST /users/:id/reset-password`, `PATCH /users/:id` with `active: false`

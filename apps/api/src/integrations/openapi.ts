@@ -17,6 +17,7 @@ import { Elysia } from "elysia";
 import { API_VERSION } from "@universe/contracts";
 
 import { as30, sortedResponses } from "../openapi-30";
+import { documentResponses, INDONESIAN } from "../openapi-responses";
 import { integrationRoutes } from "../routes/integrations";
 
 /** Repo-relative, where the generated document is committed. */
@@ -39,7 +40,10 @@ const DESCRIPTION = [
   "lalu coba lagi.",
   "",
   '**Error.** Isi balasan error selalu `{ "code": "...", "message": "..." }`.',
-  "Lihat bagian respons tiap endpoint untuk arti setiap `code`.",
+  "Lihat bagian respons tiap endpoint untuk arti setiap `code`. Parameter yang",
+  "tidak sesuai aturan dibalas 422 `validation_failed`, dengan `issues` yang",
+  "menyebut setiap parameter yang salah. Kesalahan di server dibalas 500",
+  "`internal_error`; coba lagi nanti.",
 ].join("\n");
 
 type Json = Record<string, unknown>;
@@ -211,10 +215,28 @@ export async function buildIntegrationSpec(): Promise<Json> {
     paths: Record<string, Record<string, Operation>>;
   };
 
-  for (const [path, methods] of Object.entries(spec.paths))
-    for (const operation of Object.values(methods)) {
-      complete(path, operation);
-      operation.responses = sortedResponses(operation.responses);
-    }
-  return { ...spec, paths: as30(spec.paths) };
+  const paths = Object.fromEntries(
+    Object.entries(spec.paths).map(([path, methods]) => [
+      path,
+      Object.fromEntries(
+        Object.entries(methods).map(([method, operation]) => {
+          complete(path, operation);
+          /* After `complete`, whose own words stand; this fills the rest. */
+          const documented = documentResponses(
+            as30(operation) as Operation & Json,
+            INDONESIAN,
+            path.includes("{nik}") ? { "404": ["not_found"] } : {}
+          );
+          return [
+            method,
+            {
+              ...documented,
+              responses: sortedResponses(documented.responses),
+            },
+          ];
+        })
+      ),
+    ])
+  );
+  return { ...spec, paths };
 }
