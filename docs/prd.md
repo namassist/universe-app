@@ -2804,3 +2804,336 @@ is its own business; Universe provides the read.
   silently drop changes from a sync. Until then a service re-reads the pages
   and re-fetches photos only when `version` moves. Consumer guide:
   `docs/integration-api.md`.
+
+## Mobile app — operator screens built, staff screens planned
+
+**Goal:** the people a muster is about can see where they stand without
+walking to a wall, and the people who run it can watch it from the pit
+(owner, 2026-10-17). Three audiences: the operator (role **User**), the
+**Pengawas Lapangan**, and **Superadmin**.
+
+- **One client, driven by permissions, not by role names.** The app signs in
+  with `Authorization: Bearer` against the same session store as the web, and
+  shows a screen when the session holds its menu slug, the same rows the
+  Roles screen edits. "User / Pengawas Lapangan / Superadmin" are three sets of
+  grants, not three apps, so another role given a slug gets its screen without
+  a release.
+- **The app judges nothing.** Readiness, eligibility, the board and the slip
+  come from the API exactly as the walls and the booth printer get them.
+  A phone that worked a seat out for itself would one day disagree with the
+  paper in the same hand.
+- **Configuration stays on the web.** Imports, master data, Fleet Setting and
+  timeline edits are not on the phone. A spreadsheet upload or a retimed gate
+  at 05:20 is the wrong thing to do one-handed in the pit.
+
+### User (operator) — read only, scope `self`
+
+Operators may not carry a phone while working, so the app is read **before
+the shift** and **afterwards as history**. During the muster the phone is
+already handed in, and that is accepted.
+
+- **Unit saya hari ini.** The question it answers is _am I a holder or a
+  spare, and why_, so nobody has to guess (owner, 2026-10-17).
+  - **Before `spare-validate`** it shows the plan, labelled as provisional
+    ("Rencana, belum final"), the same wording a wall uses for its line-up:
+    - _Pegangan unit X_: holds a PLAN seat on a unit the board is about, and is
+      rostered to this shift.
+    - _Pegangan unit X, tapi unit **breakdown**: kamu SPARE_.
+    - _Pegangan unit X, tapi unit **tidak masuk alokasi fleet**: kamu
+      SPARE_: inactive, or in no formation and not support.
+    - _Pegangan unit X, tapi **SIMPER** tidak berlaku untuk unit ini: kamu
+      SPARE_.
+    - _Pegangan unit X, **partner juga dijadwalkan shift ini**_: one of the
+      two is seated when the board is built, the other becomes a spare. A
+      warning, not a verdict.
+    - _SPARE_: no PLAN seat.
+    - _Tidak dijadwalkan_: the roster code for this shift is not `D`/`N`.
+    - Nothing at all for a person allocation is not about (not `aktif`, or a
+      position without `fleetAllocation`), exactly as the ID card holds
+      nothing rather than SPARE.
+
+    The reasons are the rules the board and the slip already apply
+    (_Spares are offered in two tiers_, _Who gets a ticket_), surfaced rather
+    than restated. The answer extends `seatOf` / `cardSeat` behind its own
+    `self` route, so the app, the scanned card and the slip cannot disagree,
+    and no operator needs `scan-id` to read their own seat.
+
+  - **After `spare-validate`** it follows the ticket. A holder's seat shows as
+    the board has it. A spare's seat is held until `finger-second`, as the
+    slip is, and shows "SPARE, menunggu finger kedua" until then. A person
+    with no seat on the board reads what their slip reads.
+- **Status FTW hari ini**, plus history: verdict, category and upload time,
+  judged by `readiness.ts`. Late reads `late`, not `fail`.
+- **Jadwal roster saya**: the month's codes from the document in force.
+- **Riwayat kehadiran**: first IN per shift, and whether it beat `finger-in`.
+- **Riwayat unit**: past seats from stored boards and slips.
+- **Notifikasi** and **Profil**: department, position, SIMPER codes with expiry.
+
+### Pengawas Lapangan — read only, scope `all`
+
+A new role, seeded as rows like the other six. It needs no new menu. It
+sees every formation (owner, 2026-10-17) and changes nothing.
+
+- **Papan ACTUAL**: who holds which unit, per formation and Support and Spare,
+  as configured in Fleet Setting and as the board decided. Read only.
+- **Lihat status unit**: active, breakdown, standby, with history. Not
+  editable (owner, 2026-10-17).
+- **Dashboard charts**, **Laporan**, **Scan ID card** (camera, QR).
+- **Notifikasi**: "papan sudah dibuat, X unit kosong". The success
+  notification `spare-validate` already writes carries that count.
+- Grants: `view` on `fleet-allocation`, `unit-status`, `dashboard`, `report`,
+  `scan-id`, `notifications`.
+
+### Superadmin
+
+- **Papan ACTUAL**: read, plus **manual placement only**, through the same
+  endpoint and the same confirmation over a failed or missing FTW as the
+  Actual tab. **No regenerate button**: regenerating replaces the board and
+  loses every manual placement.
+- **Papan PLAN**: read and write, through the PLAN routes and
+  `pairingRefusal`.
+- **Laporan**, **dashboard charts**, **Scan ID card**.
+- **Akun**: reset password, deactivate an account.
+- **Timeline: monitor only** (owner, 2026-10-17). It shows that the muster is
+  running: each stage, whether it ran, `ok` or refused, and the scheduler's
+  heartbeat, read from the Operations Center's stage log. Editing stays on the
+  web.
+
+### Notifications on the phone
+
+- **Pengawas Lapangan and Superadmin keep the shared notification** that
+  `spare-validate` writes today ("papan X butuh alokasi X"). Nothing new.
+- **The operator gets a personal one: which unit they take** (owner,
+  2026-10-17), e.g. "Shift D: unit X, area Y, bus Z". It is per person, so
+  it is a new table beside the shared one, with delivery state and device
+  tokens. The shared table stays as it is (_Notifications_).
+- **It never runs ahead of the slip** (owner, 2026-10-17):
+  - a **holder** is told when `spare-validate` builds the board;
+  - a **spare** is told at `finger-second`, when the slip would print. A push
+    at 05:26 would name the unit two minutes before the paper does.
+- **A manual placement after the board tells the person placed** (owner,
+  2026-10-17), or the app goes on showing a seat that is no longer true.
+- **Delivery is push**, FCM on Android and APNs on iOS, sent by the API. The
+  in-app list is the same rows, so a push that never arrives is still read
+  the next time the app opens.
+
+### What the API serves — built (stage 2, 2026-10-17)
+
+The app's server side, before the app itself (`apps/api/docs/design.md` D13,
+D14):
+
+- **`GET /v1/me/shift`**: the coming shift for the caller's own NIK. That is
+  the running shift if they are rostered to it, else the next one, so the
+  evening before a day shift it is tomorrow's. It returns the phase (`plan`
+  or `board`), the status (`holder`, `spare`, `off`, `not-allocated`), the
+  reason (`breakdown`, `not-in-fleet`, `ineligible` with the board's own
+  sentence, `partner-rostered`, `no-plan-seat`, `awaiting-second-finger`,
+  `not-seated`), the standing unit, the seat, today's FTW verdict and the
+  first tap. Null when the timeline cannot say which shift is running.
+- **`GET /v1/me/seats?from&to`**: past board seats, two months at most,
+  only for shifts before the running one. The running shift and anything
+  after it are `/me/shift`'s, held as the slip is.
+- **FTW and attendance history** are `GET /v1/fit-to-work` and
+  `/v1/attendance`. **Found while building this:** both answered every
+  caller for everyone, whatever their scope. The `user` role could read the
+  whole site's sleep and taps, and the `dept` roles every department's. Both
+  are now scoped, with their exports. Admin and Manajer see their own
+  department there, as they already did everywhere else.
+- **Profile** is `GET /v1/employees/:nik`, already self-scoped.
+- **`GET /v1/me/notifications`**, `POST …/:id/read`, `POST …/read-all`:
+  the person's own notices that have come due.
+- **`POST` / `DELETE /v1/me/push-devices`**: a phone's FCM token, five per
+  account at most. Logout removes the phone it registered. A deactivated
+  account, or one reset to the issued password, is not pushed to.
+- **A regenerated board takes back what it no longer says**: a seat still
+  waiting for the second finger is withdrawn unseen, and one already shown
+  gets a `seat-removed` notice.
+- **`GET /v1/mobile/version?platform=android`**, no session: minimum build,
+  latest build, download link, from configuration.
+- **Pengawas Lapangan** is seeded with its six view grants. `db:bootstrap`
+  adds it to an installation without touching the roles there.
+- **Push** goes out through FCM once `FCM_SERVICE_ACCOUNT_FILE` names the
+  Firebase service account key. Until then the notices are only in the app.
+
+### The app — operator screens built (stage 3, 2026-10-18)
+
+`apps/mobile`, translated screen for screen from the approved prototype and
+`apps/mobile/DESIGN.md` (`apps/mobile/README.md`). This round was the API
+additions, the foundation and the operator; the rest follows.
+
+- **Built:**
+  - **Sign-in**: NIK and password, `transport: "bearer"`. The session id is
+    kept in the app's private storage, out of backups and device transfer.
+    The API's own sentence is shown for a refusal (wrong password,
+    `first_login_on_site`, `too_many_attempts`). An account still on the
+    issued password can go nowhere but the password change, or log out.
+    A saved session the API no longer knows asks for login again; one that
+    could not be checked offers a retry, not a login.
+  - **Version gate** on every launch, before any session is read; a check
+    that gets no answer blocks nobody.
+  - **Screens from grants**: the bottom bar and the home are chosen from
+    the menus the session holds (`domain/Access.kt`).
+  - **Operator**: Beranda (the unit, SPARE or the roster code at display
+    size, with its status line), Unit saya (badge, reason, the two
+    requirements, the timeline's gates as a rail), Jadwal (the month from
+    the active roster documents), Kartu (the QR holds the NIK, the screen
+    goes to full brightness), Riwayat (unit, FTW and taps over 30 days),
+    Notifikasi (read one, read all), Profil (today's readiness, password,
+    version, Keluar). Every time named on screen is the timeline's, sent by
+    `/v1/me/shift` as `gates`.
+- **API additions for it** (`apps/api/docs/design.md` D14):
+  `GET /v1/timeline/runs` for the Superadmin's monitor; the fleet wall's
+  `GET /v1/fleet-allocation/actual/display` now also opens to the
+  `fleet-allocation` menu, so Papan ACTUAL on the phone is the wall itself.
+  That payload is the whole running shift with names and readiness, not
+  scoped to a department, as the allocation screens are not: allocation is
+  scoped to formations, and a person viewing a wall never is.
+- **Pengawas Lapangan, built (S5, 2026-10-19):** Beranda (crewed of total
+  units, the empty ones, how many came from the spare pool, breakdowns from
+  unit status), Papan ACTUAL with Semua / Kosong / Spare / Manual (the pool
+  of spares as its own group, never counted as seats), Cari, Status unit with
+  each unit's trail, and Scan ID: the camera reads the QR on the phone itself
+  (ML Kit's bundled model, so a gate with no signal still reads a card), with
+  the NIK typed by hand as the way that always works. A scan is read with the
+  web scanner's own rules and looks, records nothing. The Superadmin gets
+  Papan (read only) and Scan ID with it. The board and the units are re-read
+  when the app comes back and every minute while it is in front.
+- **Superadmin, built (S6, 2026-10-19):** Beranda (the next stage's time at
+  display size, the heartbeat, "Perlu tindakan" for empty units; its top
+  button is the profile, since the Superadmin's bar has none), **Isi** on an
+  empty unit of Papan ACTUAL (the Actual tab's candidates and endpoint; an
+  FTW that did not pass must be ticked as confirmed before the button opens,
+  and the API records it by name; no regenerate button), **Akun** (search,
+  reset password, deactivate) and the **timeline monitor** (each stage ran,
+  was refused or is next; "scheduler mungkin berhenti" past two minutes
+  without a heartbeat). The stages' notes are the scheduler's own sentences.
+- **Dashboard and Laporan, built (S7, 2026-10-21):** for the Pengawas
+  Lapangan and the Superadmin, each on Beranda only when the account holds
+  its menu (`dashboard`, `report`). The **Dashboard** reads `/v1/dashboard`:
+  fact cards (Sudah finger, FTW lolos, Unit terisi, Unit aktif), "Perlu
+  perhatian" (empty units, FTW not filed, SIMPER expired or due) and the
+  per-category operator counts, **no charts** (they stay on the web
+  console). A section the API withholds for a missing grant is left out,
+  never shown as zero, and a figure opens only a screen that lists exactly it
+  (Unit terisi → Papan, Unit aktif → Status unit, empty units → Equipment No
+  Operator). **Laporan** reads `/v1/reports/{kind}`: the five reports for a
+  date and shift (opening on the running board's), each with its row count,
+  each opening a searchable, view-only list; a report made from the board
+  says "Papan belum dibuat" instead of a zero. The workbook download stays on
+  the web.
+- **Next:** push once the Firebase project exists, and iOS.
+- **Decided while building:**
+  - The NIK field takes digits only, as the prototype has it. An account
+    that signs in with an email cannot use the app until the staff screens
+    revisit it.
+  - "Notifikasi HP" in Profil says push is not active yet rather than
+    offering a switch that does nothing.
+  - Android builds against SDK 37 (what Compose Multiplatform 1.12 needs) and
+    targets 36.
+
+### Client stack and distribution
+
+- **Kotlin Multiplatform with Compose Multiplatform**, one codebase for
+  Android and iOS (owner, 2026-10-17). It lives in `apps/mobile` and builds
+  with Gradle, outside `bun run build` and turbo, so it is verified
+  separately.
+- **The API client is generated from `/openapi`**, which the `auth` macro
+  keeps accurate for this purpose. `@universe/contracts` and the Eden types
+  are TypeScript and do not reach Kotlin. The constants the app needs
+  (menu slugs, roster codes) are mirrored or served by the API, decided in
+  the plan.
+- **Old builds stay in use.** Everything is under `/v1` so a build that is
+  weeks old keeps working. A sideloaded app does not update itself, so it
+  asks the API each time it opens (owner, 2026-10-17) and gets three
+  answers back, all set in server configuration so a release needs no code
+  change:
+  - **minimum build**: below it, the app is blocked with "Versi ini sudah
+    tidak didukung" and a download button;
+  - **latest build**: above the minimum but older than this, a dismissable
+    "Versi baru tersedia";
+  - **download link** for the APK on the installation's domain.
+- **First release ships as build files, without store accounts** (owner,
+  2026-10-17):
+  - **Android**: a signed APK, downloaded from the installation's domain.
+    No Play Console account is needed. FCM needs a Firebase project, which
+    takes an ordinary Google account. **The signing key must be kept**: an
+    APK signed with a new key cannot update the installed one, and every
+    user would have to uninstall first.
+  - **iOS**: there is no way to hand out an iOS build without the Apple
+    Developer Program. A free Apple ID only installs from Xcode onto a
+    connected device, the install expires after 7 days, and a free team
+    cannot use push at all. So iOS starts on a few test devices from the
+    Mac, without push. Rolling iOS out to users, and push on iOS, waits for
+    the paid account (USD 99 a year; then TestFlight or ad hoc).
+
+### Network: reaching the API from a phone
+
+- **Cloudflare Tunnel to a domain** (owner, 2026-10-17). The on-premise
+  server opens an outbound connection, so no port is opened on the site and
+  the server's address is not published. Cloudflare terminates TLS, which
+  also gives the web's Scan ID camera the secure origin it lacks today
+  (`docs/deploy.md`). The alternatives are worse here: a forwarded public
+  port publishes the server, and a VPN would mean a VPN app on every
+  operator's phone.
+- **The same egress carries push.** A server that can reach Cloudflare can
+  reach FCM and APNs.
+- **The client address must survive the tunnel.** Behind cloudflared, Caddy
+  sees every request coming from cloudflared, and `X-Forwarded-For`'s last
+  entry (`ops/client-ip.ts`) would be that one address. The Operations
+  Center lockout would then lock everyone out at once, and the integration
+  allow-list would admit everyone. So Caddy has two listeners, each writing
+  `X-Forwarded-For` itself: the site one writes the peer, and the tunnel
+  one, reachable only from cloudflared inside the compose network, writes
+  `CF-Connecting-IP` and refuses a request without it (`deploy/Caddyfile`).
+- **Everything is public: web, API, Operations Center** (owner, 2026-10-17).
+  The reason is monitoring from outside the office, on leave included,
+  without joining the site network. Integration API and display pairing are
+  reachable too. Both already stand on their own: a token, plus an optional
+  address allow-list, for the first; a single-use link for the second.
+  No Cloudflare Access in front, because the app cannot get through it.
+- **The domain is the only origin, on site as well.** The web bundle is built
+  against `PUBLIC_ORIGIN`, and `COOKIE_SECURE` covers person and TV cookies
+  alike. Once the origin is `https://` and the flag is on, `http://<LAN IP>`
+  can no longer sign in, and a TV can no longer pair. If the domain only
+  resolved through Cloudflare, walls and the web on site would depend on the
+  site's internet uplink, and an outage at 05:20 would leave the walls dark
+  through the muster. So:
+  - **Split DNS:** on the site network the domain resolves to the server's LAN
+    address. Off site it resolves to Cloudflare.
+  - **Caddy serves HTTPS itself** for that name, with a Let's Encrypt
+    certificate obtained over the DNS challenge. That needs no inbound port.
+  - On site, traffic never leaves the LAN. Off site, it comes through the
+    tunnel. The origin is the same in both cases, so cookies work in both.
+- **Before the tunnel is switched on**, these must hold, because until now
+  the application was only reachable from inside the site (stage 1,
+  2026-10-17; `apps/api/docs/design.md` D11):
+  - **Login is throttled.** Before this, only the Operations Center's login
+    had a lockout. The person login now allows 10 failures per address and
+    10 per account from outside the site, each per 15 minutes, answered
+    429 `too_many_attempts` with `Retry-After`. A successful login costs
+    nothing, so phones behind one carrier address all get in. An account
+    worn out from outside still logs in on site. Cloudflare rate limiting
+    sits in front. **Accepted:** whoever knows an operator's NIK can keep
+    that operator's phone login refused from outside, 15 minutes at a time.
+    On site it always works.
+  - **First login only from the site network.** Login provisions any
+    employed NIK presented with the shared `DEFAULT_USER_PASSWORD` (D10), and
+    NIKs are printed on every ID card. From the internet that would open
+    every account not yet claimed, all ~2000 of the register. From outside
+    `SITE_NETWORKS` (default: private ranges and loopback), provisioning and
+    any account with `mustChangePassword` are refused with 403
+    `first_login_on_site`, said only after the right password. That
+    includes an account an administrator has just reset: its owner logs in
+    on site.
+  - **The client address is the real one** (above). Lockouts and the
+    allow-list are keyed on it.
+  - **The Operations Center password and the superadmin password are
+    strong**, not the ones set for a closed LAN.
+- **When the site's internet is down**, people off site cannot reach
+  anything. Walls, booths, the scheduler and everyone on the site network
+  carry on unaffected.
+
+### Open questions
+
+- None open. The route that answers the version check, the login throttle's
+  limits, and the split-DNS setup are settled in the plan.

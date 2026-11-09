@@ -96,6 +96,45 @@ Consequences, all deliberate:
   until someone decides otherwise.
 - Administrators are still made by hand. Raising a role is the only account
   work left in the Users screen.
+- **From outside the site, D10 does not apply** (D11): login provisions
+  nothing there, and an account still on the issued password is refused.
+
+## D11 — The login is reachable from the internet, so its budget is spent first
+
+Owner, 2026-10-17: the installation is opened through a Cloudflare Tunnel
+(`docs/deploy.md`, _Opening the installation to the internet_). Until then the
+person login had no throttle and D10's issued password was only as exposed as
+the LAN. Three rules now hold:
+
+- **Two guess budgets** (`auth/login-throttle.ts`): 10 failures per address,
+  everywhere, and 10 per account from outside the site, each per 15 minutes.
+  An attempt is reserved in Redis **before** the account is read or the
+  password verified, as the Operations Center's is. Success clears the
+  account budget and refunds its own attempt to the address, so a carrier's
+  CGNAT or an office never runs out on correct logins. It does not clear the
+  address's earlier failures, or a guesser holding one real account would
+  reset his own every ninth try. The account budget is not spent or checked
+  on site, so an outsider can exhaust it but cannot lock its owner out at the
+  muster. The price, accepted: whoever knows a NIK can keep that person's
+  off-site login refused.
+- **A first login happens on site** (`auth/site-network.ts`): provisioning, or
+  an account with `mustChangePassword`, from an address outside
+  `SITE_NETWORKS` (default: private ranges and loopback) is a 403
+  `first_login_on_site`. It is only said after the right password, so a wrong
+  one still reads as `invalid_credentials`. A missing or unreadable address
+  is outside.
+- **At most four argon2 verifications at once** (`auth/password.ts`), shared by
+  the person and Operations Center logins. A finishing call hands its slot to
+  the next waiter directly, so a newcomer cannot slip in between.
+
+The address is `clientIp`'s. Behind the proxy, a request with no
+`X-Forwarded-For` has none, rather than its socket's, which would be another
+container's private address and read as the site. The address is only the
+client's own because Caddy writes
+`X-Forwarded-For` itself on both listeners: the peer on the LAN one, Cloudflare's
+`CF-Connecting-IP` on the tunnel one (`deploy/Caddyfile`). Behind cloudflared
+without that, every request would carry cloudflared's address, and one
+person's typos would lock out everyone at once.
 
 ## D11 — The PLAN import saves a default; Reset applies it
 
@@ -165,6 +204,98 @@ writes, and is mounted beside the PLAN routes under `/fleet-allocation`.
   first, like the assign route: its history insert needs a key-share lock on
   the unit, and taking the slot first could deadlock with a commit holding
   every unit.
+
+## D13 — `/v1/me` answers only about the caller, so it needs no menu
+
+The mobile app's operator screens (owner, 2026-10-17) are about one person:
+their coming shift (`/me/shift`), past seats (`/me/seats`) and notifications.
+The NIK is the account's, never the request's, so no grant could widen what
+they return, and an operator whose role was trimmed still sees their own
+seat. The `self` macro (`requireSelf`) keeps the rest of the gate: a person
+and not a screen, and not before the issued password is changed.
+
+FTW and attendance history are the existing lists, which now answer a
+`self` caller with their own rows: they ignored scope entirely until
+2026-10-17 (`nikInScope`), and a second route for the same rows would be a
+second place to get scope wrong.
+
+`/me/shift` is about the shift that matters to the person, not the running
+one: opened at 21:00 the evening before a day shift, the running shift is
+tonight's. Before the board it is the plan, with the reason a holder would
+not keep the unit (breakdown, out of the fleet, the board's own
+`pairingRefusal`, a partner rostered alongside). After it, the board's seat,
+held back as the slip is.
+
+## D14 — A person's seat is pushed no earlier than the slip prints
+
+`person_notifications` rows are written at the event and wait for
+`available_at`: a holder's at once, a spare's and any hand placement's at
+`finger-second`. `deliverDue` pushes what has come due, after a board is
+stored, after a placement, and at the `finger-second` stage. Delivery never
+fails the work that caused it, and with no `FCM_SERVICE_ACCOUNT_FILE` it
+sends and marks nothing: the in-app list is the record, the push a nudge.
+
+FCM is spoken directly (HTTP v1, a WebCrypto-signed JWT), not through an SDK:
+two requests do not justify a dependency. Only `UNREGISTERED` drops a token.
+
+Hardened after review (2026-10-17):
+
+- **Claimed, then sent.** `deliverDue` claims rows with `UPDATE … WHERE
+pushed_at IS NULL RETURNING` before sending, so the `finger-second` stage
+  and a placement delivering at once send each row once. A row none of whose
+  phones took it is released again and retried inside the 12-hour window.
+- **Only an account that may still be told**: active, past its password
+  change, and only Android tokens until APNs exists. A deactivated or reset
+  account's phone may be in somebody else's hand.
+- **A regenerated board reconciles.** What each person was last told about
+  each unit is compared with the new board: a seat still waiting for the
+  second finger is taken back, one already shown is retracted with
+  `seat-removed`, one already known is not announced twice. A board for a
+  muster already over announces nothing.
+- **At most five phones per account**, the oldest dropped.
+- **`/me/seats` returns only shifts strictly before the running one**, or
+  before today when the timeline cannot say which is running: a board built
+  early for a coming shift would otherwise name a spare's unit before the
+  slip.
+
+## D14 — The phone reads what the walls and the Operations Center read
+
+The mobile app (stage 3, 2026-10-18) gets no screen-shaped routes of its
+own where one already answers the question, so the phone cannot disagree
+with the TV or the ops console:
+
+- **Papan ACTUAL is the fleet wall.** `GET /v1/fleet-allocation/actual/display`
+  accepts the `fleet-allocation` menu as well as `display-fleet`. Its photo
+  route stays the wall's own.
+- **The timeline monitor is the Operations Center's reading.**
+  `GET /v1/timeline/runs` (menu `timeline`, view) returns the running shift,
+  each stage with its claim and last logged run, and the heartbeat, from
+  `ops/muster-stages.ts`, which `/v1/ops/overview` now uses too. Nothing else
+  of the Operations Center leaves through it.
+- **The Pengawas Lapangan reads what the web reads** (S5): unit status and
+  its trail (`/unit-status`), and a scanned card (`/id-card/:nik`, scoped as
+  every read of the register). The spec publishes those GETs only; a status
+  change, a card's photo and the wall's photo feed stay out (test-asserted).
+- **The Superadmin acts through the web's own routes** (S6): the Actual
+  tab's candidates and hand placement (with its FTW acknowledgement), account
+  reset and deactivation, and `/timeline/runs`. The spec leaves out deleting
+  an account, the account import, timeline edits and regenerating a board.
+- **Dashboard and Laporan are the web's** (S7): `GET /v1/dashboard/`, whose
+  sections arrive only for the grants the caller holds, and
+  `GET /v1/reports/{kind}`, one report for a date and shift, scoped as on the
+  web. The workbook export and the departments list stay out (test-asserted).
+- **`/me/shift` carries its gates** (`ftwDeadline`, `fingerIn`, `board`,
+  `secondFinger`, `busDepart`, "HH:MM" or null), so the app words "Batas
+  05:25" from the timeline and never from a constant.
+
+The client is generated from `apps/mobile/openapi.json`, written by
+`bun run openapi:mobile` (`mobile-openapi.ts`) from only the routes the app
+calls, converted to OpenAPI 3.0 (`openapi-30.ts`, shared with the integration
+document) because the Kotlin generator does not read 3.1. Response schemas are
+published **without `enum` and `default`**: a build stays installed for weeks,
+and a generated enum would fail to read a whole answer the day the API adds a
+value. A test fails when the committed copy drifts. Counts and minutes are
+`t.Integer`, so they arrive as `Int` rather than `Double`.
 
 ## Known debt
 

@@ -170,11 +170,24 @@ the definition — when they disagree, the code wins. Change flow: edit
   leaderboard places such rows at read time. Employee cascade, department set
   null, unit type restrict.
 
+**The phone** (docs/prd.md, Mobile app)
+
+- `person_notifications` — one row per person per seat event
+  (`seat-assigned`, `seat-removed`), facts in `params`, never a sentence.
+  `available_at` holds a spare's seat until `finger-second`; `dedupe_key` is
+  unique, so re-running a hook never announces a seat twice; `pushed_at` and
+  `read_at` are this person's delivery state. Cascades from `employees`.
+  Swept after 90 days, as `notifications` is.
+- `push_devices` — a phone's FCM/APNs `token` (**unique**: the same phone
+  signing in as somebody else moves to them), its `platform`, and the
+  sha256 of the session that registered it, so logging out removes it.
+  Cascades from `users`.
+
 ## Enums
 
 `access_mode`, `scope`, `roster_code`, `employee_status`, `blood_type`,
 `mcu_result`, `area_type`, `device_kind`, `display_subject`, `timeline_action`,
-`unit_status`, `point_outcome` —
+`unit_status`, `point_outcome`, `person_notification_kind`, `push_platform` —
 all Postgres enums in `schema.ts`, with values from `@universe/contracts`.
 
 ## Conventions

@@ -85,7 +85,7 @@ FTW is pulled from savera.
 
 ### Roles
 
-Access is server-enforced. Roles are database rows, seeded with the six below
+Access is server-enforced. Roles are database rows, seeded with the seven below
 and editable at runtime through the Roles screen; permissions are rows of
 (role, menu slug, mode) where mode is `view` or `manage`, and the absence of a
 row means no access. `MENU_SLUGS` stays static in `@universe/contracts` — a
@@ -136,7 +136,7 @@ route re-checks session, permission, and scope independently. Accounts are
 provisioned in bulk by uploading a spreadsheet; initial and reset passwords
 come from configuration and cannot survive first login.
 
-The six seeded roles, each scoped to how much of the workforce it can see:
+The seven seeded roles, each scoped to how much of the workforce it can see:
 
 - **Superadmin** — workforce across every division; read/write on all menus.
 - **Admin** — own division only. Writes Employees, Roster Data, Roster Revision,
@@ -151,7 +151,11 @@ The six seeded roles, each scoped to how much of the workforce it can see:
 - **Medic** — workforce across every division. Writes Fit To Work; reads the
   dashboards, Fit To Work Display, and Employees.
 - **User** — themselves only. Writes their own Fit To Work; reads Dashboard,
-  Employees, Roster Data, Roster Revision, Attendance.
+  Employees, Roster Data, Roster Revision, Attendance. On the mobile app, also
+  their own coming shift, past seats and notifications (`/v1/me`, no menu).
+- **Pengawas Lapangan** — every formation, read only, on the mobile app: Fleet
+  Allocation, Unit Status, the dashboards, Reports, Scan ID Card and
+  Notifications.
 
 ### Scalable, secure, fast — non-negotiables
 
@@ -419,15 +423,16 @@ types from Eden and OpenAPI instead.
 
 ## Not done yet
 
-- **TLS, and the deployment target it depends on.** On-site LAN or cloud is
-  still open, and TLS with it. This is what `COOKIE_SECURE` is waiting on: the
-  flag is explicit configuration rather than a derivation of `NODE_ENV`,
-  because a browser silently discards a `Secure` cookie over plain HTTP, so
-  tying it to the environment would break login in exactly the setup that
-  needs it most. Until TLS terminates in front of the API, passwords cross the
-  network in the clear at login and a session cookie can be copied and
-  replayed by anyone on the same network. An internal CA is sufficient on a
-  closed network; this should land before real accounts exist.
+- **TLS is built but not yet switched on.** The target is decided: on site,
+  opened to the internet through a Cloudflare Tunnel, with the same domain
+  served HTTPS on the LAN through split DNS (`docs/deploy.md`, _Opening the
+  installation to the internet_). Until an installation makes that switch,
+  passwords cross the network in the clear at login, and a session cookie can
+  be copied and replayed by anyone on the same network. `COOKIE_SECURE` is
+  turned on with the switch and not before: it is explicit configuration
+  rather than a derivation of `NODE_ENV`, because a browser silently discards
+  a `Secure` cookie over plain HTTP, so tying it to the environment would
+  break login in exactly the setup that needs it most.
 - **Uploads need directories that survive a redeploy.** `SOUND_DIR` and
   `PHOTO_DIR` are explicit configuration for the same reason `COOKIE_SECURE`
   is: the right path depends on how the API is deployed, not on which
@@ -443,9 +448,10 @@ types from Eden and OpenAPI instead.
   ACL, so the db index in `REDIS_URL` is a convention between projects, not a
   boundary — anything on this machine can read or flush our keys. Fine for dev,
   never for production.
-- **Mobile** — if React Native/Expo, it goes in `apps/mobile` and uses Eden like
-  web does. If Flutter/native, it lives outside this repo and consumes the
-  OpenAPI spec instead.
+- **Mobile** — `apps/mobile`, Kotlin with Compose Multiplatform, built with
+  Gradle outside `bun run build`. It consumes the OpenAPI spec, not Eden
+  (`apps/mobile/README.md`). The operator's screens are built; the Pengawas
+  Lapangan and Superadmin screens, push and iOS are not yet.
 
 ## Deploy server on-site
 

@@ -25,11 +25,13 @@ import {
 import { requireAuth } from "../auth/macro";
 import { db, schema, type TimelineStageRow } from "../db";
 import { currentShift } from "../current-shift";
+import { readMusterStages } from "../ops/muster-stages";
 import { rearmShift } from "../scheduler";
 import { shiftGates } from "../stage-time";
 import { editRefused, type RunningMuster } from "../timeline-edit";
 import {
   ErrorSchema,
+  MusterStageSchema,
   OptionalShiftKindSchema,
   ShiftKindSchema,
   OptionalTimelineActionSchema,
@@ -234,6 +236,38 @@ export const timelineRoutes = new Elysia({
         403: ErrorSchema,
       },
       detail: { summary: "List the allocation schedule" },
+    }
+  )
+
+  /**
+   * The running muster, read only: each stage, whether it ran and how, and
+   * the scheduler's heartbeat (docs/prd.md, Mobile app → Superadmin). The
+   * Operations Center's own reading, for a person who holds `timeline` but
+   * not the ops password; nothing beyond the muster leaves here.
+   */
+  .get(
+    "/runs",
+    async () => {
+      const { runningShift, schedulerLastTick, stages } =
+        await readMusterStages();
+      return { runningShift, schedulerLastTick, stages };
+    },
+    {
+      auth: { menu: "timeline", mode: "view" },
+      response: {
+        200: t.Object({
+          runningShift: t.Nullable(
+            t.Object({ date: t.String(), shift: ShiftKindSchema })
+          ),
+          schedulerLastTick: t.Nullable(t.String()),
+          stages: t.Array(MusterStageSchema),
+        }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: {
+        summary: "The running muster's stages and the scheduler's heartbeat",
+      },
     }
   )
 

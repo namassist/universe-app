@@ -30,6 +30,8 @@ import {
   MCU_RESULTS,
   NOTIFICATION_KINDS,
   NOTIFICATION_TONES,
+  PERSON_NOTIFICATION_KINDS,
+  PUSH_PLATFORMS,
   PLAN_HISTORY_ACTIONS,
   PLAN_HISTORY_SOURCES,
   POINT_OUTCOMES,
@@ -56,6 +58,11 @@ export const displaySubject = pgEnum("display_subject", DISPLAY_SUBJECTS);
 export const timelineAction = pgEnum("timeline_action", TIMELINE_ACTIONS);
 export const notificationKind = pgEnum("notification_kind", NOTIFICATION_KINDS);
 export const notificationTone = pgEnum("notification_tone", NOTIFICATION_TONES);
+export const personNotificationKind = pgEnum(
+  "person_notification_kind",
+  PERSON_NOTIFICATION_KINDS
+);
+export const pushPlatform = pgEnum("push_platform", PUSH_PLATFORMS);
 export const shiftKind = pgEnum("shift_kind", SHIFT_KINDS);
 export const runTextKind = pgEnum("run_text_kind", RUNTEXT_KINDS);
 export const pointOutcome = pgEnum("point_outcome", POINT_OUTCOMES);
@@ -2027,6 +2034,85 @@ export const notificationReads = pgTable(
   (table) => [
     primaryKey({ columns: [table.notificationId, table.userId] }),
     index("notification_reads_user_id_idx").on(table.userId),
+  ]
+);
+
+/**
+ * Notifications to one person about their own seat (docs/prd.md, Mobile app
+ * → Notifications on the phone).
+ *
+ * Not the shared table above. That one is one row per event read by whoever
+ * runs the muster; this one is one row per person per event, delivered to
+ * their phone, and so carries what the shared one deliberately does not:
+ * delivery state.
+ *
+ * `available_at` is when the row may be seen and pushed. A holder's seat is
+ * available when the board is built; a spare's, and a hand placement made
+ * before it, at `finger-second`, because the app must never name a unit
+ * before the slip does. Rows are written at the event and simply wait.
+ *
+ * `dedupe_key` is person, shift and seat, so the same seat is never announced
+ * twice however often the hooks run. Facts in `params`, never a sentence,
+ * like the shared table: the push text is composed at send time, the app's
+ * list from the kind.
+ */
+export const personNotifications = pgTable(
+  "person_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    kind: personNotificationKind("kind").notNull(),
+    date: date("date").notNull(),
+    shift: shiftKind("shift").notNull(),
+    params: jsonb("params").notNull().default({}),
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull(),
+    /** When a push was attempted, whether or not a phone was there to take it. */
+    pushedAt: timestamp("pushed_at", { withTimezone: true }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("person_notifications_employee_idx").on(
+      table.employeeId,
+      table.availableAt
+    ),
+    index("person_notifications_unpushed_idx")
+      .on(table.availableAt)
+      .where(sql`${table.pushedAt} is null`),
+  ]
+);
+
+/**
+ * A phone that has asked for pushes, by its FCM/APNs token.
+ *
+ * Tied to the session that registered it, so logging out takes the phone off
+ * the list: a device handed to the next shift's operator must not keep
+ * receiving the last one's seat. A token is unique across accounts: the same
+ * phone signing in as somebody else moves to them.
+ */
+export const pushDevices = pgTable(
+  "push_devices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    platform: pushPlatform("platform").notNull(),
+    /** Hashed, as the token itself is a credential for pushing to this phone. */
+    sessionHash: text("session_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("push_devices_user_idx").on(table.userId),
+    index("push_devices_session_idx").on(table.sessionHash),
   ]
 );
 

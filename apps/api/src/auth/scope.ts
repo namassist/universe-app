@@ -6,7 +6,7 @@
  * after the rows have already been fetched.
  */
 
-import { eq, sql, type SQL } from "drizzle-orm";
+import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { SessionPrincipal } from "@universe/contracts";
 
@@ -67,6 +67,35 @@ export async function scopeWhere(
       return eq(columns.dept, departemenId);
     }
   }
+}
+
+/**
+ * Scope for a table that names a person only by NIK.
+ *
+ * FTW and finger readings carry the NIK their source spelled and nothing of
+ * the register's: their `department` is savera's own text, not a department
+ * id. So the question is put to the register instead — this NIK belongs to
+ * somebody the caller may see — with the same `scopeWhere` every other read
+ * uses. A NIK the register does not hold is outside every scope but `all`,
+ * which is the fail-closed answer (security review, 2026-10-17: the FTW and
+ * attendance lists answered every caller for everyone).
+ */
+export async function nikInScope(
+  principal: SessionPrincipal,
+  nik: AnyPgColumn
+): Promise<SQL> {
+  if (principal.kind === "user" && principal.scope === "all") return EVERYTHING;
+  const allowed = await scopeWhere(principal, {
+    dept: schema.employees.departmentId,
+    self: schema.employees.nik,
+  });
+  return inArray(
+    nik,
+    db
+      .select({ nik: schema.employees.nik })
+      .from(schema.employees)
+      .where(allowed)
+  );
 }
 
 /**

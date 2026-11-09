@@ -16,6 +16,7 @@ import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { API_VERSION } from "@universe/contracts";
 
+import { as30, sortedResponses } from "../openapi-30";
 import { integrationRoutes } from "../routes/integrations";
 
 /** Repo-relative, where the generated document is committed. */
@@ -168,53 +169,6 @@ function complete(path: string, operation: Operation & Json): void {
     description: "NIK tidak ditemukan, atau karyawan ini belum punya foto.",
   };
 }
-
-/**
- * The document says 3.0.3, but TypeBox writes two 3.1 forms into it: a
- * schema's `examples: [x]` (3.0 has `example: x`) and a nullable value as
- * `anyOf: [X, { type: "null" }]` (3.0 has `nullable: true` on X). Validators
- * and client generators reading 3.0 refuse both, so both are rewritten —
- * into a new tree, the generated one untouched.
- *
- * `additionalProperties` is dropped too. Elysia writes `false` into a route's
- * schemas when it first compiles their validators, so its presence depends on
- * whether the route has served a request yet; and a published "no extra
- * fields" would turn every field added later into a breaking change for a
- * strictly generated client.
- */
-function as30(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(as30);
-  if (!node || typeof node !== "object") return node;
-
-  const { anyOf, examples, nullable, ...rest } = node as Json & {
-    anyOf?: Json[];
-    examples?: unknown;
-    nullable?: boolean;
-  };
-  const out: Json = Object.fromEntries(
-    Object.entries(rest)
-      .filter(([key]) => key !== "additionalProperties")
-      .map(([key, value]) => [key, as30(value)])
-  );
-
-  if (Array.isArray(examples) && examples.length) out.example = examples[0];
-  else if (examples !== undefined) out.examples = as30(examples);
-
-  if (Array.isArray(anyOf)) {
-    const real = anyOf.filter((branch) => branch.type !== "null");
-    if (real.length === 1 && real.length < anyOf.length)
-      return { ...out, ...(as30(real[0]) as Json), nullable: true };
-    out.anyOf = as30(anyOf);
-  }
-  if (nullable !== undefined) out.nullable = nullable;
-  return out;
-}
-
-/** Responses in status order, so the committed file reads top to bottom. */
-const sortedResponses = (responses: Record<string, Json>) =>
-  Object.fromEntries(
-    Object.entries(responses).sort(([a], [b]) => a.localeCompare(b))
-  );
 
 export async function buildIntegrationSpec(): Promise<Json> {
   const app = new Elysia()

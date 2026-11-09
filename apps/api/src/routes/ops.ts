@@ -28,7 +28,12 @@ import {
   opsLogout,
   opsSessionValid,
 } from "../ops/session";
-import { DeviceKindSchema, ErrorSchema, TimelineActionSchema } from "./schemas";
+import {
+  DeviceKindSchema,
+  ErrorSchema,
+  MusterStageSchema,
+  TimelineActionSchema,
+} from "./schemas";
 
 export { OPS_COOKIE };
 
@@ -85,24 +90,7 @@ const OpsOverviewSchema = t.Object({
     proberLastCheck: t.Nullable(t.String()),
   }),
   muster: t.Object({
-    stages: t.Array(
-      t.Object({
-        id: t.String(),
-        name: t.String(),
-        action: TimelineActionSchema,
-        shift: t.Nullable(ShiftSchema),
-        at: t.String(),
-        /** The muster this stage belongs to — yesterday's for a night under way. */
-        date: t.String(),
-        /** Its time on that date has arrived. */
-        due: t.Boolean(),
-        active: t.Boolean(),
-        fired: t.Boolean(),
-        lastRun: t.Nullable(
-          t.Object({ at: t.String(), ok: t.Boolean(), note: t.String() })
-        ),
-      })
-    ),
+    stages: t.Array(MusterStageSchema),
     boards: t.Array(
       t.Object({
         date: t.String(),

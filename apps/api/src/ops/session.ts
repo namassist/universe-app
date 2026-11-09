@@ -16,6 +16,7 @@
 
 import { createHash } from "node:crypto";
 
+import { verifyPassword } from "../auth/password";
 import { env, opsPasswordHash } from "../env";
 import { redis } from "../redis";
 import { opsKey } from "./keys";
@@ -46,27 +47,6 @@ local n = redis.call('INCR', KEYS[1])
 if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
 return n
 `;
-
-/**
- * At most this many argon2 verifications at once. Each one takes ~64 MB and
- * tens of milliseconds by design; a burst against the login must queue rather
- * than take the API's memory with it.
- */
-const MAX_CONCURRENT_VERIFIES = 4;
-let verifying = 0;
-const waiting: (() => void)[] = [];
-
-async function verifyBounded(password: string, hash: string): Promise<boolean> {
-  if (verifying >= MAX_CONCURRENT_VERIFIES)
-    await new Promise<void>((resolve) => waiting.push(resolve));
-  verifying++;
-  try {
-    return await Bun.password.verify(password, hash);
-  } finally {
-    verifying--;
-    waiting.shift()?.();
-  }
-}
 
 /**
  * Which password a session was opened with: a short digest of the hash in
@@ -106,7 +86,8 @@ export async function opsLogin(
 
   let valid = false;
   try {
-    valid = await verifyBounded(password, hash);
+    // Shares the person login's verification queue (`auth/password`).
+    valid = await verifyPassword(password, hash);
   } catch {
     // A malformed hash in the environment is a configuration error, not a
     // reason to open the page. Logged without the value.

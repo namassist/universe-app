@@ -11,7 +11,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
@@ -53,6 +53,7 @@ const made = {
 let admin: { cookie: string };
 let viewer: { cookie: string };
 let wall: { cookie: string };
+let outsider: { cookie: string };
 let unitA: string, unitB: string;
 let opOne: string, opTwo: string;
 let nikOne: string, nikTwo: string;
@@ -71,7 +72,8 @@ const send = (method: string, path: string, cookie?: string, body?: unknown) =>
 
 async function makeUser(
   mode: "view" | "manage",
-  menuSlug: "fleet-allocation" | "display-fleet" = "fleet-allocation"
+  menuSlug:
+    "fleet-allocation" | "display-fleet" | "unit-status" = "fleet-allocation"
 ) {
   const [role] = await db
     .insert(schema.roles)
@@ -101,6 +103,7 @@ beforeAll(async () => {
   admin = await makeUser("manage");
   viewer = await makeUser("view");
   wall = await makeUser("view", "display-fleet");
+  outsider = await makeUser("view", "unit-status");
 
   const [co] = await db
     .insert(schema.companies)
@@ -443,6 +446,83 @@ describe("correcting a board", () => {
     const slot = board.slots.find((s) => s.unitId === unitB)!;
     expect(slot.employeeId).toBeNull();
     expect(slot.source).toBeNull();
+  });
+
+  test("somebody taken off a unit they were told about is told it no longer holds", async () => {
+    // docs/prd.md, Mobile app → Notifications on the phone.
+    const [person] = await db
+      .select({ nik: schema.employees.nik })
+      .from(schema.employees)
+      .where(eq(schema.employees.id, opTwo))
+      .limit(1);
+    const [unit] = await db
+      .select({ code: schema.units.code })
+      .from(schema.units)
+      .where(eq(schema.units.id, unitB))
+      .limit(1);
+    const [role] = await db
+      .select({ id: schema.roles.id })
+      .from(schema.roles)
+      .where(eq(schema.roles.slug, "user"))
+      .limit(1);
+    const [account] = await db
+      .insert(schema.users)
+      .values({
+        nik: person!.nik,
+        name: "ZZ Uji notif",
+        passwordHash: "x",
+        roleId: role!.id,
+        mustChangePassword: false,
+      })
+      .returning({ id: schema.users.id });
+    try {
+      expect(
+        (
+          await send(
+            "PATCH",
+            `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+            admin.cookie,
+            { employeeId: opTwo }
+          )
+        ).status
+      ).toBe(200);
+      // As if the seat had already been shown to them.
+      await db.insert(schema.personNotifications).values({
+        employeeId: opTwo,
+        kind: "seat-assigned",
+        date: DATE,
+        shift: "day",
+        params: { unit: unit!.code },
+        dedupeKey: `zz-test|${opTwo}|${DATE}`,
+        availableAt: new Date(Date.now() - 60_000),
+      });
+
+      expect(
+        (
+          await send(
+            "PATCH",
+            `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+            admin.cookie,
+            { employeeId: null }
+          )
+        ).status
+      ).toBe(200);
+      const removed = await db
+        .select({ params: schema.personNotifications.params })
+        .from(schema.personNotifications)
+        .where(
+          and(
+            eq(schema.personNotifications.employeeId, opTwo),
+            eq(schema.personNotifications.kind, "seat-removed")
+          )
+        );
+      expect(removed).toEqual([{ params: { unit: unit!.code } }]);
+    } finally {
+      await db
+        .delete(schema.personNotifications)
+        .where(eq(schema.personNotifications.employeeId, opTwo));
+      await db.delete(schema.users).where(eq(schema.users.id, account!.id));
+    }
   });
 
   test("404s for a unit that is not on this board", async () => {
@@ -1452,10 +1532,31 @@ describe("previewing one screen from a browser", () => {
 });
 
 describe("the fleet wall endpoint", () => {
-  test("refuses a caller who holds only the allocation menu", async () => {
+  test("answers a holder of the allocation menu too, as the phone reads it", async () => {
+    /* The mobile app's Papan ACTUAL is this wall, read by a Pengawas Lapangan
+       or a Superadmin (docs/prd.md, Mobile app): the phone and the TV must
+       never disagree about the board. */
     const res = await send(
       "GET",
       "/fleet-allocation/actual/display",
+      viewer.cookie
+    );
+    expect(res.status).toBe(200);
+  });
+
+  test("refuses a caller who holds neither menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      outsider.cookie
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("keeps the operator's photo to the wall's own menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display/photo/99120000",
       viewer.cookie
     );
     expect(res.status).toBe(403);

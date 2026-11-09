@@ -146,6 +146,46 @@ export const requireSession = new Elysia({ name: "auth/session" }).macro({
 });
 
 /**
+ * A person asking about themselves (`/me`, the mobile app).
+ *
+ * No menu: these routes answer only about the caller's own NIK, so there is
+ * no grant that could widen them, and an operator whose role an administrator
+ * trimmed still sees their own seat. Everything else the permission gate
+ * holds still holds: a person, not a screen, and not before the issued
+ * password has been changed.
+ */
+export const requireSelf = new Elysia({ name: "auth/self" }).macro({
+  self(enabled: boolean) {
+    return {
+      async resolve({ cookie, headers, status }) {
+        if (!enabled) return status(401, unauthorized);
+        const ids = presentedIds({ cookie, headers } as SessionSource);
+
+        if (ids.user) {
+          const record = await resolveSession(ids.user);
+          if (record?.kind === "user") {
+            const user = await loadUser(record.subjectId);
+            if (!user || !user.active) return status(401, unauthorized);
+            if (user.mustChangePassword)
+              return status(403, {
+                code: PASSWORD_CHANGE_REQUIRED,
+                message: "Ganti password sebelum melanjutkan",
+              });
+            return { sessionId: ids.user, principal: toPrincipal(user) };
+          }
+        }
+
+        // A paired screen has a session but no self to ask about.
+        if (ids.device && (await resolveSession(ids.device))?.kind === "device")
+          return status(403, forbidden);
+
+        return status(401, unauthorized);
+      },
+    };
+  },
+});
+
+/**
  * The permission gate. 401 without a session, 403 without the grant — never the
  * other way round, so an unauthenticated caller is told to log in rather than
  * that it lacks a permission it might well hold.

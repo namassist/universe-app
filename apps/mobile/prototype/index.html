@@ -1,0 +1,2358 @@
+<!doctype html>
+<html lang="id" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Universe Mobile — Prototipe</title>
+    <link
+      rel="preload"
+      href="fonts/figtree-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <style>
+      /* Figtree, self-hosted (SIL OFL, fonts/OFL.txt): the phone at site is often offline. */
+      @font-face {
+        font-family: "Figtree";
+        font-style: normal;
+        font-weight: 400 800;
+        font-display: swap;
+        src: url(fonts/figtree-latin-ext.woff2) format("woff2");
+        unicode-range:
+          U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+          U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+          U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: "Figtree";
+        font-style: normal;
+        font-weight: 400 800;
+        font-display: swap;
+        src: url(fonts/figtree-latin.woff2) format("woff2");
+        unicode-range:
+          U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+          U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+          U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      :root {
+        --bg: #f2f4f7;
+        --surface: #ffffff;
+        --surface-2: #edf0f4;
+        --line: #dce2ea;
+        --text: #0b1220;
+        --text-2: #46536a;
+        --text-3: #5f6b80;
+        --action: #0057d9;
+        --action-ink: #ffffff;
+        --action-soft: #e3edff;
+        --hero: #0a2a63;
+        --hero-2: #0f3a86;
+        --hero-text: #ffffff;
+        --hero-text-2: #c9d6f0;
+        --brand: #00c0ff;
+        --ok: #157a3e;
+        --ok-soft: #e1f4e8;
+        --warn: #9a5b00;
+        --warn-soft: #fdf0d9;
+        --bad: #b42323;
+        --bad-soft: #fbe4e4;
+        --shadow:
+          0 6px 18px rgba(11, 18, 32, 0.08), 0 1px 3px rgba(11, 18, 32, 0.06);
+        --r-sheet: 22px;
+        --r-tile: 14px;
+        --r-pill: 999px;
+        --stage: #dde3ec;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #111214;
+          --surface: #1b1c1f;
+          --surface-2: #26282c;
+          --line: #34373c;
+          --text: #eef2f8;
+          --text-2: #a9b4c8;
+          --text-3: #8e9ab0;
+          --action: #00c8ff;
+          --action-ink: #031020;
+          --action-soft: #0d2a45;
+          --hero: #0a2257;
+          --hero-2: #0e2f72;
+          --hero-text-2: #b7c6e6;
+          --ok: #4ade80;
+          --ok-soft: #0e2a1b;
+          --warn: #fbbf24;
+          --warn-soft: #2e2208;
+          --bad: #f87171;
+          --bad-soft: #321212;
+          --shadow:
+            0 8px 22px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.4);
+          --stage: #03060d;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #111214;
+        --surface: #1b1c1f;
+        --surface-2: #26282c;
+        --line: #34373c;
+        --text: #eef2f8;
+        --text-2: #a9b4c8;
+        --text-3: #8e9ab0;
+        --action: #00c8ff;
+        --action-ink: #031020;
+        --action-soft: #0d2a45;
+        --hero: #0a2257;
+        --hero-2: #0e2f72;
+        --hero-text-2: #b7c6e6;
+        --ok: #4ade80;
+        --ok-soft: #0e2a1b;
+        --warn: #fbbf24;
+        --warn-soft: #2e2208;
+        --bad: #f87171;
+        --bad-soft: #321212;
+        --shadow: 0 8px 22px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.4);
+        --stage: #03060d;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        background: var(--stage);
+        font-family: "Figtree", system-ui, sans-serif;
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection {
+        background: var(--action);
+        color: var(--action-ink);
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      :focus-visible {
+        outline: 3px solid var(--action);
+        outline-offset: 2px;
+        border-radius: 8px;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+      }
+
+      /* stage: the phone beside the prototype controls */
+      .stage {
+        min-height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 40px;
+        padding: 32px 16px;
+      }
+      .phone {
+        width: 390px;
+        height: 844px;
+        border-radius: 44px;
+        overflow: hidden;
+        position: relative;
+        background: var(--bg);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+        border: 10px solid #0a0d14;
+      }
+      .screen {
+        position: absolute;
+        inset: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-width: none;
+        padding-bottom: 104px;
+      }
+      .screen.no-nav {
+        padding-bottom: 24px;
+      }
+      .screen::-webkit-scrollbar {
+        display: none;
+      }
+      .controls {
+        width: 280px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .controls h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .controls p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-2);
+        line-height: 1.45;
+      }
+      .ctl-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .ctl-label {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-2);
+      }
+      .seg {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .seg button {
+        border: 1px solid var(--line);
+        background: var(--surface-2);
+        border-radius: var(--r-pill);
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        min-height: 36px;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--action);
+        border-color: var(--action);
+        color: var(--action-ink);
+      }
+      .sample {
+        align-self: flex-start;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 9px;
+        border-radius: var(--r-pill);
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .fab-controls {
+        display: none;
+      }
+      /* At phone width the controls become a band above the phone, so they never sit over app content. */
+      @media (max-width: 760px) {
+        .stage {
+          padding: 36px 0 0;
+          display: block;
+        }
+        .phone {
+          width: 100%;
+          height: calc(100dvh - 36px);
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
+        }
+        .controls {
+          display: none;
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          top: 44px;
+          width: auto;
+          z-index: 50;
+          border: 0;
+          box-shadow: var(--shadow);
+        }
+        .controls.open {
+          display: flex;
+        }
+        .fab-controls {
+          display: flex;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 36px;
+          z-index: 40;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          border: 0;
+          border-radius: 0;
+          padding: 0 12px;
+          font-size: 13px;
+          font-weight: 700;
+          background: var(--warn-soft);
+          color: var(--warn);
+        }
+        .fab-controls[aria-expanded="true"] svg {
+          transform: rotate(180deg);
+        }
+      }
+
+      /* hero */
+      .hero {
+        background: linear-gradient(180deg, var(--hero) 0%, var(--hero-2) 100%);
+        color: var(--hero-text);
+        padding: 20px 18px 56px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .hero-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 800;
+        font-size: 17px;
+        letter-spacing: 0.08em;
+      }
+      .brand img {
+        width: 26px;
+        height: 26px;
+      }
+      .chip {
+        font-size: 13px;
+        font-weight: 600;
+        padding: 7px 12px;
+        border-radius: var(--r-pill);
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        white-space: nowrap;
+      }
+      .icon-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 22px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.1);
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .hero-main {
+        display: flex;
+        gap: 14px;
+        align-items: stretch;
+      }
+      .hero-fact {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .unit-code {
+        font-size: 48px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        animation: reveal 520ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .unit-code.small {
+        font-size: 40px;
+      }
+      .status-line {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--hero-text-2);
+        text-wrap: balance;
+      }
+      .status-line.warn {
+        color: #ffd38a;
+      }
+      .status-line.ok {
+        color: #8cf0b4;
+      }
+      .hero-link {
+        margin-top: 4px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--hero-text);
+        background: none;
+        border: 0;
+        padding: 6px 0;
+        text-align: left;
+      }
+      .quick {
+        width: 104px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .quick button {
+        flex: 1;
+        min-height: 74px;
+        border-radius: 18px;
+        border: 1px solid rgba(0, 192, 255, 0.5);
+        background: rgba(3, 10, 30, 0.28);
+        color: var(--hero-text);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .pills {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        margin: 0 -18px;
+        padding: 0 18px;
+      }
+      .pills::-webkit-scrollbar {
+        display: none;
+      }
+      .pill {
+        flex-shrink: 0;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        border-radius: var(--r-pill);
+        background: rgba(3, 10, 30, 0.32);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        color: var(--hero-text);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 5px;
+        background: #9fb0cc;
+        flex-shrink: 0;
+      }
+      .dot.ok {
+        background: #34d17a;
+      }
+      .dot.warn {
+        background: #f5b33c;
+      }
+      .dot.bad {
+        background: #ff6a6a;
+      }
+
+      /* sheet over the hero */
+      .sheet {
+        margin-top: -34px;
+        background: var(--bg);
+        border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+        padding: 16px 16px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        position: relative;
+      }
+      .menu {
+        background: var(--surface);
+        border-radius: var(--r-sheet);
+        padding: 16px 6px 12px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        row-gap: 14px;
+        box-shadow: var(--shadow);
+      }
+      .menu button {
+        background: none;
+        border: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+        padding: 2px;
+        text-align: center;
+        line-height: 1.25;
+      }
+      .tile {
+        width: 54px;
+        height: 54px;
+        border-radius: var(--r-tile);
+        background: var(--action-soft);
+        color: var(--action);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .section {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .section h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 800;
+      }
+      .section .lead {
+        margin: -4px 0 0;
+        font-size: 13px;
+        color: var(--text-2);
+      }
+      .duo {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .fact {
+        background: var(--surface);
+        border-radius: 18px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        box-shadow: var(--shadow);
+      }
+      .fact .t {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--action);
+      }
+      .fact .h {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .fact .s {
+        font-size: 13px;
+        color: var(--text-2);
+      }
+
+      /* inner screens */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 16px 10px;
+      }
+      .topbar h1 {
+        margin: 0;
+        font-size: 21px;
+        font-weight: 800;
+        flex: 1;
+      }
+      .back {
+        width: 44px;
+        height: 44px;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .body {
+        padding: 4px 16px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .group {
+        background: var(--surface);
+        border-radius: var(--r-sheet);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .row {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 16px;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        min-height: 64px;
+      }
+      .group > .row:last-child,
+      .group > :last-child .row {
+        border-bottom: 0;
+      }
+      .row .ico {
+        width: 38px;
+        height: 38px;
+        border-radius: 19px;
+        background: var(--surface-2);
+        color: var(--action);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .row .txt {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .row .a {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .row .b {
+        font-size: 13px;
+        color: var(--text-2);
+      }
+      .row .end {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .code {
+        font-size: 16px;
+        font-weight: 800;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 9px;
+        border-radius: var(--r-pill);
+        background: var(--surface-2);
+        color: var(--text-2);
+        white-space: nowrap;
+      }
+      .badge.ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .badge.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .badge.bad {
+        background: var(--bad-soft);
+        color: var(--bad);
+      }
+      .badge.info {
+        background: var(--action-soft);
+        color: var(--action);
+      }
+      .tabs {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        gap: 4px;
+        padding: 4px;
+        border-radius: 14px;
+        background: var(--surface-2);
+      }
+      .tabs button {
+        min-height: 42px;
+        border: 0;
+        border-radius: 11px;
+        background: none;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-2);
+      }
+      .tabs button[aria-selected="true"] {
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: var(--shadow);
+      }
+      .btn {
+        min-height: 52px;
+        border-radius: 14px;
+        border: 0;
+        font-size: 16px;
+        font-weight: 800;
+        padding: 0 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .btn.primary {
+        background: var(--action);
+        color: var(--action-ink);
+      }
+      .btn.ghost {
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      .btn.danger {
+        background: none;
+        color: var(--bad);
+        border: 1px solid var(--bad);
+      }
+      .btn:disabled {
+        background: var(--surface-2);
+        color: var(--text-3);
+        cursor: not-allowed;
+      }
+      .note {
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text-2);
+        margin: 0;
+      }
+      .callout {
+        border-radius: 16px;
+        padding: 14px;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+      .callout.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .callout.info {
+        background: var(--action-soft);
+        color: var(--text);
+      }
+      .callout.bad {
+        background: var(--bad-soft);
+        color: var(--bad);
+      }
+      .callout svg {
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .steps {
+        display: flex;
+        flex-direction: column;
+      }
+      .step {
+        display: flex;
+        gap: 14px;
+      }
+      .rail {
+        width: 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .rail .knot {
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        border: 3px solid var(--line);
+        background: var(--surface);
+        margin-top: 3px;
+      }
+      .rail .knot.done {
+        background: var(--ok);
+        border-color: var(--ok);
+      }
+      .rail .knot.now {
+        border-color: var(--action);
+        background: var(--action);
+        box-shadow: 0 0 0 5px var(--action-soft);
+      }
+      .rail .wire {
+        flex: 1;
+        width: 2px;
+        background: var(--line);
+        margin: 4px 0;
+      }
+      .step .c {
+        flex: 1;
+        padding-bottom: 16px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .step .c .a {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .step .c .b {
+        font-size: 13px;
+        color: var(--text-2);
+        margin-top: 2px;
+      }
+      .cal {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .cal .wd {
+        text-align: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-3);
+      }
+      .cal .d {
+        min-height: 56px;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        background: var(--surface);
+        font-size: 12px;
+        color: var(--text-2);
+      }
+      .cal .d b {
+        font-size: 13px;
+        color: var(--text);
+      }
+      .cal .d.D {
+        background: var(--action-soft);
+      }
+      .cal .d.N {
+        background: var(--hero);
+        color: var(--hero-text-2);
+      }
+      .cal .d.N b {
+        color: #ffffff;
+      }
+      .cal .d.today {
+        outline: 2px solid var(--action);
+        outline-offset: 1px;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        font-size: 12px;
+        color: var(--text-2);
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .legend i {
+        width: 12px;
+        height: 12px;
+        border-radius: 4px;
+        display: inline-block;
+      }
+      .idcard {
+        background: var(--surface);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .idcard .top {
+        background: linear-gradient(180deg, var(--hero), var(--hero-2));
+        color: var(--hero-text);
+        padding: 18px;
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+      .avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.14);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        font-weight: 800;
+        flex-shrink: 0;
+        color: var(--hero-text);
+      }
+      .avatar.plain {
+        background: var(--action-soft);
+        color: var(--action);
+      }
+      .qr {
+        width: 216px;
+        height: 216px;
+        margin: 22px auto 10px;
+        border-radius: 18px;
+        background: #ffffff;
+        padding: 14px;
+      }
+      .qr div {
+        width: 100%;
+        height: 100%;
+        border: 2px dashed #8792a6;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 700;
+        color: #3a4458;
+        padding: 10px;
+      }
+      .progress {
+        height: 10px;
+        border-radius: 5px;
+        background: var(--surface-2);
+        overflow: hidden;
+      }
+      .progress i {
+        display: block;
+        height: 100%;
+        border-radius: 5px;
+        background: var(--action);
+      }
+      .strip {
+        width: 100%;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        background: var(--action);
+        color: var(--action-ink);
+        border: 0;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .viewfinder {
+        height: 330px;
+        border-radius: 24px;
+        background: #05080f;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #c9d3e6;
+        font-size: 14px;
+        overflow: hidden;
+      }
+      .viewfinder .frame {
+        width: 210px;
+        height: 210px;
+        position: relative;
+      }
+      .viewfinder .frame i {
+        position: absolute;
+        width: 36px;
+        height: 36px;
+        border: 4px solid var(--brand);
+      }
+      .viewfinder .frame i:nth-child(1) {
+        top: 0;
+        left: 0;
+        border-right: 0;
+        border-bottom: 0;
+        border-radius: 12px 0 0 0;
+      }
+      .viewfinder .frame i:nth-child(2) {
+        top: 0;
+        right: 0;
+        border-left: 0;
+        border-bottom: 0;
+        border-radius: 0 12px 0 0;
+      }
+      .viewfinder .frame i:nth-child(3) {
+        bottom: 0;
+        left: 0;
+        border-right: 0;
+        border-top: 0;
+        border-radius: 0 0 0 12px;
+      }
+      .viewfinder .frame i:nth-child(4) {
+        bottom: 0;
+        right: 0;
+        border-left: 0;
+        border-top: 0;
+        border-radius: 0 0 12px 0;
+      }
+      .viewfinder .scanline {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        height: 2px;
+        background: var(--brand);
+        top: 50%;
+        animation: scan 2.2s ease-in-out infinite alternate;
+      }
+      .viewfinder .hint {
+        position: absolute;
+        bottom: 18px;
+        left: 0;
+        right: 0;
+        text-align: center;
+      }
+      .search {
+        width: 100%;
+        height: 50px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        padding: 0 16px 0 44px;
+        font-size: 15px;
+      }
+      .search-wrap {
+        position: relative;
+      }
+      .search-wrap svg {
+        position: absolute;
+        left: 14px;
+        top: 15px;
+        color: var(--text-3);
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .field label {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .field input {
+        height: 54px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        padding: 0 16px;
+        font-size: 17px;
+      }
+      .check {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+      .check input {
+        width: 22px;
+        height: 22px;
+        margin: 1px 0 0;
+        accent-color: var(--warn);
+        flex-shrink: 0;
+      }
+      .cand {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: var(--surface);
+        border: 2px solid transparent;
+        text-align: left;
+        box-shadow: var(--shadow);
+        min-height: 64px;
+      }
+      .cand[aria-pressed="true"] {
+        border-color: var(--action);
+      }
+
+      /* bottom navigation */
+      .nav {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 88px;
+        background: var(--surface);
+        border-top: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        align-items: start;
+        padding: 8px 4px 0;
+        z-index: 20;
+      }
+      .nav button {
+        background: none;
+        border: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-3);
+        min-height: 56px;
+      }
+      .nav button .halo {
+        width: 56px;
+        height: 32px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .nav button[aria-current="page"] {
+        color: var(--text);
+        font-weight: 800;
+      }
+      .nav button[aria-current="page"] .halo {
+        background: var(--action-soft);
+        color: var(--action);
+      }
+      .nav .center .disc {
+        width: 62px;
+        height: 62px;
+        margin-top: -34px;
+        border-radius: 31px;
+        background: var(--action);
+        color: var(--action-ink);
+        border: 5px solid var(--surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 14px rgba(3, 6, 14, 0.28);
+      }
+
+      /* bottom sheet */
+      .scrim {
+        position: absolute;
+        inset: 0;
+        background: rgba(3, 6, 14, 0.55);
+        z-index: 30;
+        display: flex;
+        align-items: flex-end;
+        animation: fade 220ms ease-out;
+      }
+      .bsheet {
+        width: 100%;
+        max-height: 86%;
+        overflow-y: auto;
+        background: var(--bg);
+        border-radius: 26px 26px 0 0;
+        padding: 10px 16px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        animation: rise 360ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .grab {
+        width: 40px;
+        height: 5px;
+        border-radius: 3px;
+        background: var(--line);
+        align-self: center;
+        margin-bottom: 4px;
+      }
+      .bsheet h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .toast {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: 104px;
+        z-index: 40;
+        background: var(--text);
+        color: var(--bg);
+        border-radius: 14px;
+        padding: 14px 16px;
+        font-size: 14px;
+        font-weight: 600;
+        animation: rise 300ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes reveal {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+          filter: blur(4px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+          filter: none;
+        }
+      }
+      @keyframes rise {
+        from {
+          transform: translateY(24px);
+          opacity: 0.4;
+        }
+        to {
+          transform: none;
+          opacity: 1;
+        }
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes scan {
+        from {
+          top: 22%;
+        }
+        to {
+          top: 78%;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="phone" id="phone" aria-live="polite"></div>
+      <aside class="controls" id="controls" aria-label="Kontrol prototipe">
+        <h2>Kontrol prototipe</h2>
+        <span class="sample">Semua data di sini adalah contoh</span>
+        <div class="ctl-group">
+          <span class="ctl-label">Role</span>
+          <div class="seg" id="ctl-role"></div>
+        </div>
+        <div class="ctl-group" id="ctl-state-wrap">
+          <span class="ctl-label">Status operator hari ini</span>
+          <div class="seg" id="ctl-state"></div>
+        </div>
+        <div class="ctl-group">
+          <span class="ctl-label">Tema</span>
+          <div class="seg" id="ctl-theme"></div>
+        </div>
+        <p>
+          Navigasi bawah, menu, dan tombol di layar bisa ditekan. Tema "Ikut HP"
+          mengikuti pengaturan perangkat.
+        </p>
+      </aside>
+    </div>
+    <button
+      class="fab-controls"
+      id="fab"
+      type="button"
+      aria-expanded="false"
+      aria-controls="controls"
+    >
+      Prototipe · data contoh · kontrol
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </button>
+
+    <script>
+      const I = {
+        home: '<path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+        cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+        receipt:
+          '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+        user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+        qr: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/>',
+        scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/>',
+        id: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/>',
+        truck:
+          '<path d="M3 16V8h10v8M13 11h4l3 3v2h-7"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+        board:
+          '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>',
+        bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/>',
+        help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
+        clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        heart:
+          '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+        finger:
+          '<path d="M8 11a4 4 0 0 1 8 0v2M6 13a6 6 0 0 1 12 0v1M10 21v-9a2 2 0 0 1 4 0v4M12 7a6 6 0 0 0-6 6"/>',
+        card: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/>',
+        chev: '<path d="m9 18 6-6-6-6"/>',
+        back: '<path d="m15 18-6-6 6-6"/>',
+        lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+        info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+        warn: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+        check: '<path d="M20 6 9 17l-5-5"/>',
+        chart: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+        doc: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 13h7M9 17h5"/>',
+        timeline:
+          '<path d="M6 4v16M6 8h8M6 14h12"/><circle cx="6" cy="8" r="1.5"/><circle cx="6" cy="14" r="1.5"/>',
+        people:
+          '<circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M16 4.5a3.5 3.5 0 0 1 0 7M18 20a6 6 0 0 0-3-5.2"/>',
+        plan: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+        search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+        arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+      };
+      const ic = (n, s = 22, w = 2) =>
+        `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+
+      const S = {
+        role: "operator",
+        state: "holder",
+        theme: "auto",
+        screen: "home",
+        tab: "unit",
+        filter: "all",
+        q: "",
+        pick: null,
+        ack: false,
+        sheet: null,
+        toast: null,
+        scanned: false,
+      };
+      const NAV = {
+        operator: [
+          ["home", "Beranda", "home"],
+          ["jadwal", "Jadwal", "cal"],
+          ["kartu", "Kartu", "qr", true],
+          ["riwayat", "Riwayat", "receipt"],
+          ["profil", "Profil", "user"],
+        ],
+        pengawas: [
+          ["home", "Beranda", "home"],
+          ["papan", "Papan", "board"],
+          ["scan", "Scan ID", "scan", true],
+          ["unit-status", "Unit", "truck"],
+          ["profil", "Profil", "user"],
+        ],
+        admin: [
+          ["home", "Beranda", "home"],
+          ["papan", "Papan", "board"],
+          ["scan", "Scan ID", "scan", true],
+          ["timeline", "Timeline", "timeline"],
+          ["akun", "Akun", "people"],
+        ],
+      };
+      const ME = {
+        name: "Rudi Hartono",
+        nik: "10234567",
+        initials: "RH",
+        dept: "MINING OPERATION",
+        pos: "Operator Dump Truck",
+      };
+      const OP = {
+        holder: {
+          code: "DT4084",
+          line: "Pegangan · rencana s.d. 05:26",
+          tone: "warn",
+          where: "EX1203 · PIT 3 SELATAN",
+          finger: ["Finger sebelum 05:25", ""],
+          bus: "BUS 07",
+        },
+        spare: {
+          code: "SPARE",
+          line: "DT4084 breakdown · unit 05:28",
+          tone: "warn",
+          where: "Tunggu di PARKIRAN SPARE",
+          finger: ["Finger 05:03", "ok"],
+          bus: "BUS 12",
+        },
+        final: {
+          code: "DT5102",
+          line: "Final · dari pool spare",
+          tone: "ok",
+          where: "EX1207 · PIT 1 UTARA",
+          finger: ["Finger 05:03 tepat", "ok"],
+          bus: "BUS 03",
+        },
+      };
+      const BOARD = [
+        {
+          leader: "EX1203",
+          area: "PIT 3 SELATAN",
+          rows: [
+            ["EX1203", "Agus Prasetyo", "plan"],
+            ["DT4084", "Dedi Kurniawan", "spare"],
+            ["DT4091", "Bayu Saputra", "plan"],
+            ["DT4102", "", "empty"],
+          ],
+        },
+        {
+          leader: "EX1207",
+          area: "PIT 1 UTARA",
+          rows: [
+            ["EX1207", "Hendra Saputra", "plan"],
+            ["DT5102", "Rudi Hartono", "spare"],
+            ["DT5110", "Bambang Wijaya", "manual"],
+            ["DT5131", "", "empty"],
+          ],
+        },
+        {
+          leader: "EX1211",
+          area: "PIT 2 TIMUR",
+          rows: [
+            ["EX1211", "Joko Susilo", "plan"],
+            ["DT4130", "", "empty"],
+            ["DT4133", "", "empty"],
+            ["DT4140", "Wahyu Hidayat", "plan"],
+          ],
+        },
+      ];
+      /* The sample shows 124/128 filled: these four empty rows must stay the only ones. */
+      const EMPTY = BOARD.flatMap((g) =>
+        g.rows
+          .filter((r) => r[2] === "empty")
+          .map((r) => [r[0], `${g.leader} · ${g.area}`])
+      );
+      const SRC = {
+        plan: ["Plan", "info"],
+        spare: ["Spare", "warn"],
+        manual: ["Manual", "warn"],
+        empty: ["Kosong", "bad"],
+      };
+      const CANDS = [
+        ["Fajar Nugroho", "10239911", "05:04", false],
+        ["Eko Wahyudi", "10241276", "05:10", true],
+        ["Rizki Maulana", "10233054", "05:19", true],
+      ];
+      const STAGES = [
+        [
+          "04:00",
+          "Pergantian shift",
+          "Layar TV berganti ke shift siang",
+          "done",
+        ],
+        [
+          "04:30",
+          "Dengar mesin finger",
+          "25 mesin aktif · tes cetak terkirim",
+          "done",
+        ],
+        [
+          "05:22",
+          "Batas upload FTW",
+          "Upload sesudah ini terhitung terlambat",
+          "done",
+        ],
+        ["05:25", "Batas finger pertama", "", "done"],
+        ["05:26", "Papan alokasi dibuat", "124 dari 128 unit terisi", "done"],
+        ["05:28", "Finger kedua", "Kursi spare dibuka ke aplikasi", "now"],
+        ["05:30", "Bus berangkat", "Jendela dengar ditutup", "wait"],
+      ];
+
+      const go = (screen, extra = {}) => {
+        Object.assign(S, { screen, sheet: null, toast: null }, extra);
+        render();
+        document.querySelector(".screen")?.scrollTo(0, 0);
+      };
+      const say = (t) => {
+        S.toast = t;
+        render();
+        setTimeout(() => {
+          if (S.toast === t) {
+            S.toast = null;
+            render();
+          }
+        }, 2600);
+      };
+
+      function hero({
+        chip,
+        code,
+        small,
+        line,
+        tone,
+        link,
+        linkTo,
+        quick,
+        pills,
+        topIcon = "help",
+        topLabel = "Bantuan",
+      }) {
+        return `<section class="hero">
+    <div class="hero-top"><span class="brand"><img src="logo.svg" alt="">UNIVERSE</span><span class="chip">${chip}</span>
+      <button class="icon-btn" type="button" aria-label="${topLabel}" data-go="${topIcon === "bell" && S.role === "operator" ? "notif" : "soon"}">${ic(topIcon, 20)}</button></div>
+    <div class="hero-main"><div class="hero-fact">
+      <span class="unit-code num ${small ? "small" : ""}">${code}</span>
+      <span class="status-line ${tone}">${line}</span>
+      <button class="hero-link" type="button" data-go="${linkTo}">${link} ${ic("chev", 15, 2.4)}</button></div>
+      <div class="quick">${quick.map(([l, n, t]) => `<button type="button" data-go="${t}">${ic(n)}${l}</button>`).join("")}</div>
+    </div>
+    <div class="pills">${pills.map(([t, d, to]) => `<button class="pill" type="button" data-go="${to}"><span class="dot ${d}"></span>${t}</button>`).join("")}</div>
+  </section>`;
+      }
+      const menu = (items) =>
+        `<div class="menu">${items.map(([l, n, to]) => `<button type="button" data-go="${to}"><span class="tile">${ic(n, 24, 1.9)}</span>${l}</button>`).join("")}</div>`;
+      const topbar = (title, back = "home") =>
+        `<header class="topbar"><button class="back" type="button" aria-label="Kembali" data-go="${back}">${ic("back", 18)}</button><h1>${title}</h1></header>`;
+      const badge = (t, k = "") => `<span class="badge ${k}">${t}</span>`;
+
+      const V = {
+        "operator:home"() {
+          const o = OP[S.state];
+          return (
+            hero({
+              chip: "Shift Siang · Roster D",
+              code: o.code,
+              small: o.code === "SPARE",
+              line: o.line,
+              tone: o.tone,
+              link: o.where,
+              linkTo: "unit",
+              quick: [
+                ["Syarat unit", "check", "unit"],
+                ["Tiket", "receipt", "soon"],
+              ],
+              pills: [
+                ["FTW lolos · 04:18", "ok", "unit"],
+                [o.finger[0], o.finger[1], "unit"],
+                [o.bus, "", "unit"],
+              ],
+            }) +
+            `<div class="sheet">${menu([
+              ["Unit saya", "truck", "unit"],
+              ["Jadwal", "cal", "jadwal"],
+              ["Riwayat FTW", "heart", "riwayat-ftw"],
+              ["Kehadiran", "finger", "riwayat-hadir"],
+              ["Riwayat unit", "receipt", "riwayat"],
+              ["Notifikasi", "bell", "notif"],
+              ["SIMPER", "card", "kartu"],
+              ["Bantuan", "help", "profil"],
+            ])}
+      <div class="section"><h3>Pagi ini</h3><div class="duo">
+        <button class="fact" type="button" data-go="unit" style="border:0;text-align:left">${{ holder: '<span class="t num">05:26</span><span class="h">Papan dibuat</span><span class="s">Unit final ditetapkan</span>', spare: '<span class="t num">05:28</span><span class="h">Finger kedua</span><span class="s">Unit spare dibuka</span>', final: '<span class="t num">05:26</span><span class="h">Papan dibuat</span><span class="s">DT5102 ditetapkan</span>' }[S.state]}</button>
+        <button class="fact" type="button" data-go="unit" style="border:0;text-align:left"><span class="t num">05:30</span><span class="h">Bus berangkat</span><span class="s">${o.bus} · Pos 2</span></button>
+      </div></div></div>`
+          );
+        },
+        "operator:unit"() {
+          const o = OP[S.state];
+          const reason = {
+            holder: `<div class="callout info">${ic("info", 20)}<span>Kamu pegangan <b>DT4084</b>. Unit final ditetapkan pukul 05:26 setelah FTW dan finger divalidasi. Partner kamu tidak dijadwalkan di shift ini.</span></div>`,
+            spare: `<div class="callout warn">${ic("warn", 20)}<span>Unit pegangan <b>DT4084</b> sedang <b>breakdown</b>, jadi hari ini kamu spare. Unit dari pool spare tampil di sini pukul 05:28, bersamaan dengan tiket finger kedua.</span></div>`,
+            final: `<div class="callout info">${ic("check", 20)}<span>Papan dibuat pukul 05:26. Kamu mendapat <b>DT5102</b> dari pool spare karena DT4084 breakdown.</span></div>`,
+          }[S.state];
+          return (
+            topbar("Unit saya") +
+            `<div class="body">
+      <div class="group" style="padding:18px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">${badge(S.state === "final" ? "Final · papan 05:26" : "Rencana · belum final", S.state === "final" ? "ok" : "warn")}<span class="note num">Sab 18 Okt · Siang</span></div>
+        <span class="num" style="font-size:52px;font-weight:800;line-height:1;letter-spacing:-0.02em">${o.code}</span>
+        <div class="duo" style="gap:8px"><div><div class="note">Lokasi</div><b>${o.where}</b></div><div><div class="note">Bus</div><b class="num">${o.bus}</b></div></div>
+      </div>${reason}
+      <div class="section"><h3>Syarat masuk unit</h3><div class="group">
+        <div class="row"><span class="ico">${ic("heart", 20)}</span><span class="txt"><span class="a">Fit To Work</span><span class="b num">Tidur 6 j 12 m · diunggah 04:18</span></span>${badge("Lolos", "ok")}</div>
+        <div class="row"><span class="ico">${ic("finger", 20)}</span><span class="txt"><span class="a">Finger pertama</span><span class="b num">Batas 05:25</span></span>${S.state === "holder" ? badge("Belum tap") : badge("05:03", "ok")}</div>
+      </div></div>
+      <div class="section"><h3>Timeline pagi ini</h3><div class="group" style="padding:16px 16px 0">${steps(
+        STAGES.filter((s) => s[0] >= "05:22"),
+        S.state === "final" ? 5 : 0
+      )}</div></div></div>`
+          );
+        },
+        "operator:jadwal"() {
+          const pat =
+            "D D D D D D OFF N N N N N N OFF D D D D D D CR D D D D D D OFF OFF D D".split(
+              " "
+            );
+          const cells = ["", "", ""]
+            .concat(pat)
+            .map((c, i) =>
+              c
+                ? `<div class="d ${c === "D" || c === "N" ? c : ""} ${i - 2 === 18 ? "today" : ""}"><span class="num">${i - 2}</span><b>${c}</b></div>`
+                : "<div></div>"
+            )
+            .join("");
+          return (
+            topbar("Jadwal roster") +
+            `<div class="body">
+      <div style="display:flex;align-items:center;justify-content:space-between"><button class="back" type="button" aria-label="Bulan sebelumnya">${ic("back", 18)}</button><b style="font-size:17px">Oktober 2026</b><button class="back" type="button" aria-label="Bulan berikutnya">${ic("chev", 18)}</button></div>
+      <div class="cal">${["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((d) => `<span class="wd">${d}</span>`).join("")}${cells}</div>
+      <div class="legend"><span><i style="background:var(--action-soft)"></i>D · siang</span><span><i style="background:var(--hero)"></i>N · malam</span><span><i style="background:var(--surface);border:1px solid var(--line)"></i>OFF / CR · libur</span></div>
+      <div class="group"><div class="row"><span class="ico">${ic("cal", 20)}</span><span class="txt"><span class="a">Bulan ini</span><span class="b">18 hari siang · 6 hari malam · 7 hari libur</span></span></div></div></div>`
+          );
+        },
+        "operator:kartu"() {
+          return (
+            topbar("Kartu ID saya") +
+            `<div class="body"><div class="idcard">
+      <div class="top"><span class="avatar">${ME.initials}</span><div style="display:flex;flex-direction:column;gap:3px"><b style="font-size:20px">${ME.name}</b><span class="num" style="color:var(--hero-text-2)">NIK ${ME.nik}</span><span style="font-size:13px;color:var(--hero-text-2)">${ME.dept} · ${ME.pos}</span></div></div>
+      <div class="qr"><div>QR berisi NIK<br>(digambar oleh aplikasi)</div></div>
+      <p class="note" style="text-align:center;padding:0 22px 16px">Tunjukkan ke petugas di gerbang. Layar otomatis paling terang saat halaman ini dibuka.</p>
+      <div style="border-top:1px solid var(--line);padding:14px 18px;display:flex;flex-wrap:wrap;gap:6px">${["A2B", "HD785", "PC2000", "D375"].map((c) => badge(c, "info")).join("")}</div></div>
+      <button class="strip" type="button" style="border-radius:16px" data-go="profil">SIMPER berlaku s.d. 12 Mar 2027 ${ic("chev", 16, 2.4)}</button></div>`
+          );
+        },
+        "operator:riwayat"() {
+          const D = {
+            unit: [
+              ["Jum 17 Okt", "Siang", "DT4084", "Pegangan", "info"],
+              ["Kam 16 Okt", "Siang", "DT4084", "Pegangan", "info"],
+              ["Rab 15 Okt", "Siang", "DT5110", "Spare", "warn"],
+              ["Sel 14 Okt", "Siang", "DT4084", "Pegangan", "info"],
+              ["Min 12 Okt", "Malam", "DT3321", "Manual", "warn"],
+            ],
+            ftw: [
+              ["Jum 17 Okt", "Diunggah 04:12", "6 j 40 m", "Lolos", "ok"],
+              ["Kam 16 Okt", "Diunggah 04:20", "6 j 05 m", "Lolos", "ok"],
+              ["Rab 15 Okt", "Diunggah 05:24", "6 j 30 m", "Terlambat", "warn"],
+              [
+                "Sel 14 Okt",
+                "Diunggah 04:31",
+                "4 j 50 m",
+                "Tidak lolos",
+                "bad",
+              ],
+              ["Sen 13 Okt", "Diunggah 16:05", "7 j 10 m", "Lolos", "ok"],
+            ],
+            hadir: [
+              ["Jum 17 Okt", "Siang", "05:01", "Tepat waktu", "ok"],
+              ["Kam 16 Okt", "Siang", "05:07", "Tepat waktu", "ok"],
+              ["Sel 14 Okt", "Siang", "05:27", "Terlambat", "warn"],
+              ["Min 12 Okt", "Malam", "17:26", "Terlambat", "warn"],
+              ["Sab 11 Okt", "Malam", "17:09", "Tepat waktu", "ok"],
+            ],
+          };
+          const tabs = [
+            ["unit", "Unit"],
+            ["ftw", "FTW"],
+            ["hadir", "Kehadiran"],
+          ];
+          return (
+            topbar("Riwayat") +
+            `<div class="body"><div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${S.tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
+      <div class="group">${D[S.tab].map(([d, s, m, c, k]) => `<div class="row"><span class="txt"><span class="a">${d}</span><span class="b">${s}</span></span><span class="end"><span class="code num">${m}</span>${badge(c, k)}</span></div>`).join("")}</div>
+      <p class="note">30 hari terakhir. Data FTW dari savera, finger dari mesin di site.</p></div>`
+          );
+        },
+        "operator:notif"() {
+          const N = [
+            [
+              "Unit kamu: DT5102",
+              "Shift siang 18 Okt · Area PIT 1 UTARA · Bus BUS 03",
+              "05:28",
+              true,
+              "truck",
+            ],
+            [
+              "Penempatan berubah",
+              "Kamu tidak lagi di DT3321 untuk shift malam 17 Okt.",
+              "Kemarin",
+              true,
+              "warn",
+            ],
+            [
+              "Unit kamu: DT4084",
+              "Shift siang 17 Okt · Area PIT 3 SELATAN · Bus BUS 07",
+              "17 Okt",
+              false,
+              "truck",
+            ],
+          ];
+          return (
+            topbar("Notifikasi") +
+            `<div class="body"><div class="group">${N.map(([a, b, t, u, n]) => `<div class="row" style="${u ? "background:var(--action-soft)" : ""}"><span class="ico">${ic(n, 20)}</span><span class="txt"><span class="a">${a}</span><span class="b">${b}</span></span><span class="end"><span class="b num" style="font-size:12px;color:var(--text-3)">${t}</span>${u ? badge("Baru", "info") : ""}</span></div>`).join("")}</div>
+      <button class="btn ghost" type="button" data-say="Semua notifikasi ditandai dibaca">Tandai semua dibaca</button></div>`
+          );
+        },
+        "operator:profil"() {
+          return profil(true);
+        },
+
+        "pengawas:home"() {
+          return (
+            hero({
+              chip: "Pengawas · Shift Siang",
+              code: "124/128",
+              line: "unit terisi · papan final 05:26",
+              tone: "ok",
+              link: "Lihat papan ACTUAL",
+              linkTo: "papan",
+              topIcon: "bell",
+              topLabel: "Notifikasi",
+              quick: [
+                ["Cari", "search", "cari"],
+                ["Unit kosong", "truck", "papan-kosong"],
+              ],
+              pills: [
+                ["4 unit kosong", "bad", "papan-kosong"],
+                ["18 dari spare", "warn", "papan"],
+                ["6 breakdown", "", "unit-status"],
+              ],
+            }) +
+            `<div class="sheet">${menu([
+              ["Papan", "board", "papan"],
+              ["Status unit", "truck", "unit-status"],
+              ["Dashboard", "chart", "dashboard"],
+              ["Laporan", "doc", "laporan"],
+            ])}
+      <div class="section"><h3>Unit kosong</h3><div class="group">${EMPTY.map(([u, w]) => `<button class="row" type="button" data-go="papan-kosong"><span class="txt"><span class="code num">${u}</span><span class="b">${w}</span></span>${badge("Kosong", "bad")}${ic("chev", 16)}</button>`).join("")}</div></div></div>`
+          );
+        },
+        "pengawas:papan"() {
+          return papan(false);
+        },
+        "pengawas:unit-status"() {
+          const U = {
+            breakdown: [
+              ["DT4084", "Dump truck · sejak 03:40 hari ini"],
+              ["DT3317", "Dump truck · sejak kemarin 22:15"],
+              ["EX1199", "Excavator · sejak 16 Okt"],
+            ],
+            standby: [["DT4120", "Dump truck · sejak 02:00 hari ini"]],
+            aktif: [
+              ["DT4091", "Di formasi EX1203"],
+              ["DT5102", "Di formasi EX1207"],
+            ],
+          };
+          const k = ["breakdown", "standby", "aktif"].includes(S.tab)
+            ? S.tab
+            : "breakdown";
+          const tone = { breakdown: "bad", standby: "warn", aktif: "ok" };
+          return (
+            topbar("Status unit") +
+            `<div class="body"><div class="search-wrap">${ic("search", 18)}<input class="search" placeholder="Cari kode unit, mis. DT4084" aria-label="Cari unit"></div>
+      <div class="tabs" role="tablist">${Object.keys(U)
+        .map(
+          (t) =>
+            `<button type="button" role="tab" aria-selected="${k === t}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)} ${U[t].length}</button>`
+        )
+        .join("")}</div>
+      <div class="group">${U[k].map(([c, d]) => `<div class="row"><span class="txt"><span class="code num">${c}</span><span class="b">${d}</span></span>${badge(k[0].toUpperCase() + k.slice(1), tone[k])}</div>`).join("")}</div>
+      <p class="note">Hanya lihat. Status unit diubah admin dari console web.</p></div>`
+          );
+        },
+        "pengawas:cari"() {
+          return (
+            topbar("Cari unit atau operator") +
+            `<div class="body"><div class="search-wrap">${ic("search", 18)}<input class="search" data-find="1" value="${esc(S.q)}" placeholder="Kode unit atau nama, mis. DT5102" aria-label="Cari unit atau operator" autocomplete="off"></div>
+      <div id="find-results">${findResults(S.q)}</div></div>`
+          );
+        },
+        "pengawas:scan"() {
+          return scan();
+        },
+        "pengawas:profil"() {
+          return profil(false);
+        },
+
+        "admin:home"() {
+          return (
+            hero({
+              chip: "Superadmin · Shift Siang",
+              code: "05:28",
+              line: "Berikutnya: finger kedua · scheduler berjalan",
+              tone: "ok",
+              link: "Lihat timeline",
+              linkTo: "timeline",
+              topIcon: "bell",
+              topLabel: "Notifikasi",
+              quick: [
+                ["Papan", "board", "papan"],
+                ["Akun", "people", "akun"],
+              ],
+              pills: [
+                ["124/128 terisi", "ok", "papan"],
+                ["4 unit kosong", "bad", "papan-kosong"],
+                ["Detak 05:27:01", "ok", "timeline"],
+              ],
+            }) +
+            `<div class="sheet">${menu([
+              ["Papan", "board", "papan"],
+              ["PLAN", "plan", "papan"],
+              ["Timeline", "timeline", "timeline"],
+              ["Akun", "people", "akun"],
+              ["Status unit", "truck", "unit-status"],
+              ["Laporan", "doc", "laporan"],
+              ["Dashboard", "chart", "dashboard"],
+              ["Notifikasi", "bell", "soon"],
+            ])}
+      <div class="section"><h3>Perlu tindakan</h3><div class="group"><button class="row" type="button" data-go="papan-kosong"><span class="ico">${ic("warn", 20)}</span><span class="txt"><span class="a">4 unit belum ada operator</span><span class="b">Isi dari kandidat yang memegang SIMPER-nya</span></span>${ic("chev", 16)}</button></div></div></div>`
+          );
+        },
+        "admin:papan"() {
+          return papan(true);
+        },
+        "admin:timeline"() {
+          return (
+            topbar("Monitor timeline") +
+            `<div class="body"><div class="callout info">${ic("check", 20)}<span><b>Scheduler berjalan.</b> Detak terakhir 05:27:01. Edit jadwal tetap dari console web.</span></div>
+      <div class="group" style="padding:16px 16px 0">${steps(STAGES, 5)}</div></div>`
+          );
+        },
+        "admin:akun"() {
+          const A = [
+            ["Rudi Hartono", "10234567", "User"],
+            ["Fajar Nugroho", "10239911", "User"],
+            ["Siti Rahmawati", "10220098", "Pengawas Lapangan"],
+            ["Andi Wijaya", "10218840", "Admin"],
+          ];
+          return (
+            topbar("Akun") +
+            `<div class="body"><div class="search-wrap">${ic("search", 18)}<input class="search" placeholder="Cari nama atau NIK" aria-label="Cari akun"></div>
+      <div class="group">${A.map(
+        ([n, k, r]) =>
+          `<button class="row" type="button" data-acct="${n}|${k}"><span class="avatar plain" style="width:42px;height:42px;border-radius:21px;font-size:15px">${n
+            .split(" ")
+            .map((w) => w[0])
+            .join(
+              ""
+            )}</span><span class="txt"><span class="a">${n}</span><span class="b num">NIK ${k} · ${r}</span></span>${ic("chev", 16)}</button>`
+      ).join("")}</div></div>`
+          );
+        },
+        "admin:scan"() {
+          return scan();
+        },
+        "admin:unit-status"() {
+          return V["pengawas:unit-status"]();
+        },
+        "pengawas:dashboard"() {
+          const card = (t, h, s, pct, to) => {
+            /* A number with no report that lists exactly it is information, not a link. */
+            const inner = `<span class="t num">${t}</span><span class="h">${h}</span><span class="s">${s}</span>${pct != null ? `<div class="progress" style="margin-top:8px" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${h}"><i style="width:${pct}%"></i></div>` : ""}`;
+            return to
+              ? `<button class="fact" type="button" data-go="${to}" style="border:0;text-align:left">${inner}</button>`
+              : `<div class="fact">${inner}</div>`;
+          };
+          const row = (n, a, b, k, to) => {
+            const inner = `<span class="ico">${ic(n, 20)}</span><span class="txt"><span class="a">${a}</span><span class="b">${b}</span></span>${k ? badge(k[0], k[1]) : ""}`;
+            return to
+              ? `<button class="row" type="button" data-go="${to}">${inner}${ic("chev", 16)}</button>`
+              : `<div class="row">${inner}</div>`;
+          };
+          return (
+            topbar("Dashboard") +
+            `<div class="body">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span class="note num">Sen 19 Okt · Shift Siang</span>${badge("Data 05:42", "info")}</div>
+      <div class="duo">${card("289/332", "Sudah finger", "43 belum finger", 87, "laporan-nofinger")}${card("248/332", "FTW lolos", "84 belum lapor · 12 perlu tindak lanjut", 75)}</div>
+      <div class="duo">${card("124/128", "Unit terisi", "Papan final 05:26", 97, "papan")}${card("394", "Unit aktif", "20 breakdown · 0 standby", null, "unit-status")}</div>
+      <div class="section"><h3>Perlu perhatian</h3><div class="group">
+        ${row("truck", "4 unit belum ada operator", "Equipment No Operator", ["Kosong", "bad"], "laporan-eno")}
+        ${row("heart", "84 operator belum lapor FTW", "Batas upload 05:22 sudah lewat", ["FTW", "warn"])}
+        ${row("card", "3 SIMPER kedaluwarsa", "8 lagi habis dalam 30 hari", ["SIMPER", "bad"])}
+      </div></div>
+      <div class="section"><h3>Per jabatan</h3><div class="group">${[
+        ["Operator DT", "212 siap · 6 belum finger · 9 belum FTW"],
+        ["Operator Digger", "38 siap · 1 belum finger · 2 belum FTW"],
+        ["Operator OHT", "31 siap · 0 belum finger · 4 belum FTW"],
+      ]
+        .map(
+          ([a, b]) =>
+            `<div class="row"><span class="txt"><span class="a">${a}</span><span class="b num">${b}</span></span></div>`
+        )
+        .join("")}</div></div>
+      <p class="note">Shift yang dipantau: siang sebelum jam 12:00, malam sesudahnya, seperti dashboard web. Grafik tetap di console web.</p></div>`
+          );
+        },
+        "pengawas:laporan"() {
+          const R = [
+            [
+              "eno",
+              "Equipment No Operator",
+              "Unit di papan tanpa operator",
+              4,
+              "bad",
+            ],
+            [
+              "one",
+              "Operator No Equipment",
+              "Dijadwalkan, tidak dapat unit",
+              9,
+              "warn",
+            ],
+            [
+              "noftw",
+              "Operator No FTW",
+              "Sudah finger, FTW belum lolos",
+              6,
+              "warn",
+            ],
+            [
+              "nofinger",
+              "Operator No Finger",
+              "Belum finger, atau terlambat",
+              43,
+              "warn",
+            ],
+            [
+              "final",
+              "Final Validation",
+              "Setiap operator dan unit akhirnya",
+              289,
+              "info",
+            ],
+          ];
+          return (
+            topbar("Laporan") +
+            `<div class="body">
+      <div style="display:flex;align-items:center;justify-content:space-between"><button class="back" type="button" aria-label="Hari sebelumnya">${ic("back", 18)}</button><b class="num" style="font-size:17px">Sen 19 Okt</b><button class="back" type="button" aria-label="Hari berikutnya">${ic("chev", 18)}</button></div>
+      <div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="true">Siang</button><button type="button" role="tab" aria-selected="false">Malam</button></div>
+      <div class="group">${R.map(([k, a, b, n, tone]) => `<button class="row" type="button" data-go="laporan-${k}"><span class="ico">${ic("doc", 20)}</span><span class="txt"><span class="a">${a}</span><span class="b">${b}</span></span>${badge(String(n), tone)}${ic("chev", 16)}</button>`).join("")}</div>
+      <p class="note">Hanya lihat, sesuai departemen hak akses kamu. Unduh workbook dari console web.</p></div>`
+          );
+        },
+        "pengawas:laporan-detail"() {
+          const D = {
+            eno: [
+              "Equipment No Operator",
+              EMPTY.map(([u, w]) => [u, w, "Kosong", "bad"]),
+            ],
+            one: [
+              "Operator No Equipment",
+              [
+                [
+                  "Fajar Nugroho",
+                  "NIK 10239911 · Operator DT · A2B, HD785",
+                  "Tanpa unit",
+                  "warn",
+                ],
+                [
+                  "Wahyu Saputra",
+                  "NIK 10240337 · Operator DT · A2B",
+                  "Belum siap",
+                  "warn",
+                ],
+              ],
+            ],
+            noftw: [
+              "Operator No FTW",
+              [
+                [
+                  "Eko Wahyudi",
+                  "NIK 10241276 · tap 05:10",
+                  "Belum FTW",
+                  "warn",
+                ],
+                [
+                  "Rizki Maulana",
+                  "NIK 10233054 · tap 05:19",
+                  "Terlambat FTW (05:31)",
+                  "warn",
+                ],
+              ],
+            ],
+            nofinger: [
+              "Operator No Finger",
+              [
+                [
+                  "Agus Salim",
+                  "NIK 10230011 · Operator DT",
+                  "No Finger",
+                  "bad",
+                ],
+                ["Bayu Saputra", "NIK 10231122 · Operator DT", "05:31", "warn"],
+              ],
+            ],
+            final: [
+              "Final Validation",
+              [
+                [
+                  "Agus Prasetyo",
+                  "NIK 10229001 · EX1203 · PIT 3 SELATAN",
+                  "EX1203",
+                  "info",
+                ],
+                ["Dedi Kurniawan", "NIK 10229002 · tap 05:03", "SPARE", "warn"],
+              ],
+            ],
+          };
+          const [title, rows] = D[S.tab] || D.eno;
+          return (
+            topbar(title, "laporan") +
+            `<div class="body"><div class="search-wrap">${ic("search", 18)}<input class="search" placeholder="Cari nama, NIK atau unit" aria-label="Cari di laporan"></div>
+      <span class="note num">Sen 19 Okt · Shift Siang · ${rows.length} baris</span>
+      <div class="group">${rows.map(([a, b, c, k]) => `<div class="row"><span class="txt"><span class="a">${a}</span><span class="b num">${b}</span></span>${badge(c, k)}</div>`).join("")}</div>
+      <p class="note">Data contoh. Kolom lengkap ada di workbook console web.</p></div>`
+          );
+        },
+        "admin:dashboard"() {
+          return V["pengawas:dashboard"]();
+        },
+        "admin:laporan"() {
+          return V["pengawas:laporan"]();
+        },
+        "admin:laporan-detail"() {
+          return V["pengawas:laporan-detail"]();
+        },
+        "any:soon"() {
+          return (
+            topbar("Belum dirancang") +
+            `<div class="body"><div class="callout info">${ic("info", 20)}<span>Layar ini belum dirancang di prototipe. Isinya menyusul setelah arah desain disetujui.</span></div>
+      <button class="btn ghost" type="button" data-go="home">Kembali ke beranda</button></div>`
+          );
+        },
+        "admin:profil"() {
+          return profil(false);
+        },
+        "any:login"() {
+          return `<div class="body" style="padding-top:64px;gap:28px"><div style="display:flex;flex-direction:column;gap:12px"><img src="logo.svg" alt="" style="width:56px;height:56px"><b style="font-size:30px;letter-spacing:0.06em">UNIVERSE</b><span class="note" style="font-size:15px">Unit, jadwal, dan status FTW kamu sebelum berangkat.</span></div>
+      <div class="field"><label for="nik">NIK</label><input id="nik" inputmode="numeric" class="num" value="10234567"></div>
+      <div class="field"><label for="pw">Password</label><input id="pw" type="password" value="rahasia123"></div>
+      <button class="btn primary" type="button" data-login="1">Masuk</button>
+      <div class="callout info">${ic("info", 20)}<span>Login pertama, atau setelah password direset admin, harus dari jaringan site.</span></div>
+      <span class="note" style="text-align:center">Versi 1.0 · build 1</span></div>`;
+        },
+      };
+
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c]
+        );
+      function findResults(q) {
+        const t = q.trim().toLowerCase();
+        if (!t)
+          return '<p class="note">Ketik kode unit atau nama operator. Hasilnya dari papan ACTUAL shift ini.</p>';
+        const hits = BOARD.flatMap((g) =>
+          g.rows.map(([u, n, s]) => ({
+            u,
+            n,
+            s,
+            where: `${g.leader} · ${g.area}`,
+          }))
+        ).filter(
+          (r) => r.u.toLowerCase().includes(t) || r.n.toLowerCase().includes(t)
+        );
+        if (!hits.length)
+          return `<div class="callout info">${ic("info", 20)}<span>Tidak ada unit atau operator yang cocok dengan “${esc(q.trim())}”. Coba kode unit lengkap, mis. DT4084, atau sebagian nama.</span></div>`;
+        return `<div class="group">${hits.map(({ u, n, s, where }) => `<div class="row"><span class="code num" style="width:70px">${u}</span><span class="txt"><span class="a" style="${n ? "" : "color:var(--bad)"}">${n || "Belum ada operator"}</span><span class="b num">${where}</span></span>${badge(SRC[s][0], SRC[s][1])}</div>`).join("")}</div>`;
+      }
+      function steps(list, nowIdx) {
+        return `<div class="steps">${list
+          .map(([t, a, b, st], i) => {
+            const k =
+              nowIdx && i < nowIdx
+                ? "done"
+                : nowIdx && i === nowIdx
+                  ? "now"
+                  : st === "done" && nowIdx
+                    ? "done"
+                    : "";
+            return `<div class="step"><div class="rail"><span class="knot ${k}"></span>${i < list.length - 1 ? '<span class="wire"></span>' : ""}</div><div class="c"><div><div class="a">${a}</div>${b ? `<div class="b">${b}</div>` : ""}</div><span class="num" style="font-weight:800;color:var(--action)">${t}</span></div></div>`;
+          })
+          .join("")}</div>`;
+      }
+      function papan(canPlace) {
+        const f = S.filter;
+        const groups = BOARD.map((g) => ({
+          ...g,
+          rows: g.rows.filter((r) => f === "all" || r[2] === f),
+        })).filter((g) => g.rows.length);
+        return (
+          topbar("Papan ACTUAL") +
+          `<div class="body"><div style="display:flex;justify-content:space-between;align-items:center"><span class="note num">Sab 18 Okt · Shift Siang</span>${badge("Final 05:26", "ok")}</div>
+    <div class="tabs" role="tablist">${[
+      ["all", "Semua"],
+      ["empty", "Kosong"],
+      ["spare", "Spare"],
+      ["manual", "Manual"],
+    ]
+      .map(
+        ([k, l]) =>
+          `<button type="button" role="tab" aria-selected="${f === k}" data-filter="${k}">${l}</button>`
+      )
+      .join("")}</div>
+    ${groups.map((g) => `<div class="section"><h3 class="num" style="font-size:16px">${g.leader} <span style="font-weight:600;color:var(--text-2)">· ${g.area}</span></h3><div class="group">${g.rows.map(([u, n, s]) => `<div class="row"><span class="code num" style="width:70px">${u}</span><span class="txt"><span class="a" style="${n ? "" : "color:var(--bad)"}">${n || "Belum ada operator"}</span></span>${s === "empty" && canPlace ? `<button class="btn primary" type="button" style="min-height:40px;font-size:14px;padding:0 14px" data-place="${u}">Isi</button>` : badge(SRC[s][0], SRC[s][1])}</div>`).join("")}</div></div>`).join("")}
+    ${canPlace ? "" : '<p class="note">Hanya lihat. Penempatan manual dilakukan Superadmin.</p>'}</div>`
+        );
+      }
+      function scan() {
+        if (!S.scanned)
+          return (
+            topbar("Scan ID card") +
+            `<div class="body"><div class="viewfinder"><div class="frame"><i></i><i></i><i></i><i></i></div><span class="scanline"></span><span class="hint">Arahkan kamera ke QR di ID card</span></div>
+    <button class="btn primary" type="button" data-scan="1">Simulasikan hasil scan</button><button class="btn ghost" type="button" data-say="Masukkan NIK manual">Ketik NIK manual</button></div>`
+          );
+        return (
+          topbar("Hasil scan") +
+          `<div class="body"><div class="idcard"><div class="top"><span class="avatar">${ME.initials}</span><div style="display:flex;flex-direction:column;gap:3px"><b style="font-size:20px">${ME.name}</b><span class="num" style="color:var(--hero-text-2)">NIK ${ME.nik}</span><span style="font-size:13px;color:var(--hero-text-2)">${ME.dept}</span></div></div>
+    <div class="group" style="box-shadow:none;border-radius:0">${[
+      ["Roster", "D · Shift siang"],
+      ["Unit", "DT5102 · EX1207"],
+      ["Area", "PIT 1 UTARA"],
+      ["Bus", "BUS 03"],
+      ["Check-in", "05:03:41"],
+    ]
+      .map(
+        ([a, b]) =>
+          `<div class="row" style="min-height:52px"><span class="txt"><span class="b">${a}</span></span><b class="num">${b}</b></div>`
+      )
+      .join("")}</div></div>
+    <button class="btn ghost" type="button" data-rescan="1">Scan lagi</button></div>`
+        );
+      }
+      function profil(op) {
+        const rows = op
+          ? [
+              [
+                "lock",
+                "Ganti password",
+                "Wajib setelah login pertama atau reset",
+              ],
+              ["bell", "Notifikasi HP", "Aktif · kabar unit saat papan dibuat"],
+              ["help", "Bantuan", "Hubungi admin departemen"],
+              ["info", "Versi aplikasi", "1.0 · build 1 · terbaru"],
+            ]
+          : [
+              ["lock", "Ganti password", "Ubah password akun kamu"],
+              ["bell", "Notifikasi HP", "Aktif · papan dibuat, unit kosong"],
+              ["info", "Versi aplikasi", "1.0 · build 1 · terbaru"],
+            ];
+        const who =
+          S.role === "pengawas"
+            ? [
+                "Siti Rahmawati",
+                "10220098",
+                "SR",
+                "Pengawas Lapangan · semua formasi",
+              ]
+            : S.role === "admin"
+              ? [
+                  "Admin Universe",
+                  "superadmin",
+                  "AU",
+                  "Superadmin · semua divisi",
+                ]
+              : [ME.name, ME.nik, ME.initials, `${ME.dept} · ${ME.pos}`];
+        return (
+          topbar("Profil & akun") +
+          `<div class="body"><div class="group"><div class="row" style="border:0;min-height:88px"><span class="avatar plain">${who[2]}</span><span class="txt"><span class="a" style="font-size:19px">${who[0]}</span><span class="b num">NIK ${who[1]}</span><span class="b">${who[3]}</span></span></div>
+    ${op ? `<button class="strip" type="button" data-go="kartu">SIMPER berlaku s.d. 12 Mar 2027 ${ic("chev", 16, 2.4)}</button>` : ""}</div>
+    ${
+      op
+        ? `<div class="group" style="padding:16px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between"><b style="font-size:17px">Kesiapan hari ini</b><span class="note">Shift Siang</span></div>
+      <span><b>${S.state === "holder" ? "1 dari 2" : "2 dari 2"}</b> syarat terpenuhi</span><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="2" aria-valuenow="${S.state === "holder" ? 1 : 2}" aria-label="Syarat masuk unit"><i style="width:${S.state === "holder" ? 50 : 100}%"></i></div>
+      <p class="note">${S.state === "holder" ? "FTW sudah lolos. Tinggal finger pertama sebelum 05:25." : "FTW lolos dan finger tercatat 05:03."}</p>
+      <button class="btn ghost" type="button" data-go="unit" style="justify-content:space-between">Lihat syarat masuk unit ${ic("arrow", 18)}</button></div>`
+        : ""
+    }
+    <div class="group">${rows.map(([n, a, b]) => `<button class="row" type="button" data-say="${a}"><span class="ico">${ic(n, 20)}</span><span class="txt"><span class="a">${a}</span><span class="b">${b}</span></span>${ic("chev", 16)}</button>`).join("")}</div>
+    <button class="btn danger" type="button" data-go="login">Keluar</button></div>`
+        );
+      }
+      function sheetHtml() {
+        if (!S.sheet) return "";
+        if (S.sheet.type === "place") {
+          const chosen = CANDS.find((c) => c[1] === S.pick);
+          const needAck = chosen && !chosen[3];
+          const blocked = !chosen || (needAck && !S.ack);
+          return `<div class="scrim" data-close="1"><div class="bsheet" role="dialog" aria-modal="true" aria-label="Isi unit ${S.sheet.unit}"><span class="grab"></span><h2>Isi unit <span class="num">${S.sheet.unit}</span></h2>
+      <p class="note">Kandidat yang memegang SIMPER unit ini, urut jam tap.</p>
+      ${CANDS.map(([n, k, t, ok]) => `<button class="cand" type="button" aria-pressed="${S.pick === k}" data-cand="${k}"><span class="txt" style="flex:1;display:flex;flex-direction:column;gap:2px"><b>${n}</b><span class="note num">NIK ${k} · tap ${t}</span></span>${ok ? badge("FTW lolos", "ok") : badge("FTW tidak lolos", "bad")}</button>`).join("")}
+      ${needAck ? `<label class="check callout warn"><input type="checkbox" ${S.ack ? "checked" : ""} data-ack="1"><span>Operator ini tidak lolos FTW untuk unit yang mensyaratkannya. Saya tetap menempatkan, dan konfirmasi ini dicatat atas nama saya.</span></label>` : ""}
+      <button class="btn primary" type="button" ${blocked ? "disabled" : ""} data-confirm="1">${chosen ? "Tempatkan " + chosen[0] : "Pilih kandidat"}</button></div></div>`;
+        }
+        if (S.sheet.type === "acct") {
+          return `<div class="scrim" data-close="1"><div class="bsheet" role="dialog" aria-modal="true" aria-label="Akun ${S.sheet.name}"><span class="grab"></span><h2>${S.sheet.name}</h2><p class="note num">NIK ${S.sheet.nik}</p>
+      <button class="btn ghost" type="button" data-say="Password ${S.sheet.name} direset. Login berikutnya harus dari jaringan site.">Reset password</button>
+      <p class="note">Password kembali ke password awal. Login berikutnya harus dari jaringan site.</p>
+      <button class="btn danger" type="button" data-say="Akun ${S.sheet.name} dinonaktifkan">Nonaktifkan akun</button></div></div>`;
+        }
+        return "";
+      }
+      function render() {
+        document.documentElement.dataset.theme = S.theme;
+        const key =
+          S.screen === "login" || S.screen === "soon"
+            ? `any:${S.screen}`
+            : `${S.role}:${S.screen}`;
+        const view =
+          V[key] ||
+          (S.screen.startsWith("riwayat")
+            ? V["operator:riwayat"]
+            : V["any:soon"]);
+        const nav = NAV[S.role];
+        const active =
+          {
+            "riwayat-ftw": "riwayat",
+            "riwayat-hadir": "riwayat",
+            unit: S.role === "operator" ? "home" : "unit-status",
+            notif: "home",
+            cari: "home",
+          }[S.screen] || S.screen;
+        const showNav = S.screen !== "login";
+        document.getElementById("phone").innerHTML =
+          `<div class="screen ${showNav ? "" : "no-nav"}">${view()}</div>
+    ${showNav ? `<nav class="nav" aria-label="Navigasi utama">${nav.map(([k, l, n, c]) => (c ? `<button class="center" type="button" data-go="${k}" ${active === k ? 'aria-current="page"' : ""}><span class="disc">${ic(n, 26, 2.2)}</span>${l}</button>` : `<button type="button" data-go="${k}" ${active === k ? 'aria-current="page"' : ""}><span class="halo">${ic(n, 21)}</span>${l}</button>`)).join("")}</nav>` : ""}
+    ${sheetHtml()}${S.toast ? `<div class="toast" role="status">${S.toast}</div>` : ""}`;
+        const seg = (id, items, cur, fn) => {
+          document.getElementById(id).innerHTML = items
+            .map(
+              ([k, l]) =>
+                `<button type="button" aria-pressed="${cur === k}" data-${fn}="${k}">${l}</button>`
+            )
+            .join("");
+        };
+        seg(
+          "ctl-role",
+          [
+            ["operator", "Operator"],
+            ["pengawas", "Pengawas"],
+            ["admin", "Superadmin"],
+          ],
+          S.role,
+          "role"
+        );
+        seg(
+          "ctl-state",
+          [
+            ["holder", "Pegangan (rencana)"],
+            ["spare", "Spare · breakdown"],
+            ["final", "Final setelah 05:26"],
+          ],
+          S.state,
+          "state"
+        );
+        seg(
+          "ctl-theme",
+          [
+            ["auto", "Ikut HP"],
+            ["light", "Terang"],
+            ["dark", "Gelap"],
+          ],
+          S.theme,
+          "theme"
+        );
+        document.getElementById("ctl-state-wrap").style.display =
+          S.role === "operator" ? "" : "none";
+      }
+      document.addEventListener("click", (e) => {
+        const t = e.target.closest("button, .scrim, input");
+        if (!t) return;
+        const d = t.dataset;
+        if (d.close && e.target === t) {
+          S.sheet = null;
+          render();
+          return;
+        }
+        if (d.go) {
+          const map = {
+            "riwayat-ftw": ["riwayat", "ftw"],
+            "riwayat-hadir": ["riwayat", "hadir"],
+            riwayat: ["riwayat", "unit"],
+            "laporan-eno": ["laporan-detail", "eno"],
+            "laporan-one": ["laporan-detail", "one"],
+            "laporan-noftw": ["laporan-detail", "noftw"],
+            "laporan-nofinger": ["laporan-detail", "nofinger"],
+            "laporan-final": ["laporan-detail", "final"],
+          };
+          if (map[d.go]) return go(map[d.go][0], { tab: map[d.go][1] });
+          if (d.go === "papan-kosong") return go("papan", { filter: "empty" });
+          return go(d.go, {
+            tab: d.go === "unit-status" ? "breakdown" : S.tab,
+            scanned: d.go === "scan" ? false : S.scanned,
+            filter: d.go === "papan" ? "all" : S.filter,
+          });
+        }
+        if (d.tab) {
+          S.tab = d.tab;
+          render();
+        }
+        if (d.filter) {
+          S.filter = d.filter;
+          render();
+        }
+        if (d.role) return go("home", { role: d.role, filter: "all" });
+        if (d.state) {
+          S.state = d.state;
+          render();
+        }
+        if (d.theme) {
+          S.theme = d.theme;
+          render();
+        }
+        if (d.place) {
+          S.sheet = { type: "place", unit: d.place };
+          S.pick = null;
+          S.ack = false;
+          render();
+        }
+        if (d.cand) {
+          S.pick = d.cand;
+          S.ack = false;
+          render();
+        }
+        if (d.ack) {
+          S.ack = t.checked;
+          render();
+        }
+        if (d.confirm) {
+          const c = CANDS.find((x) => x[1] === S.pick);
+          const unit = S.sheet.unit;
+          S.sheet = null;
+          say(`${c[0]} ditempatkan di ${unit}`);
+        }
+        if (d.acct) {
+          const [name, nik] = d.acct.split("|");
+          S.sheet = { type: "acct", name, nik };
+          render();
+        }
+        if (d.say) {
+          S.sheet = null;
+          say(d.say);
+        }
+        if (d.scan) {
+          S.scanned = true;
+          render();
+        }
+        if (d.rescan) {
+          S.scanned = false;
+          render();
+        }
+        if (d.login) go("home");
+      });
+      /* Typing in Cari refreshes only the results, so the field keeps focus. */
+      document.addEventListener("input", (e) => {
+        if (!e.target.dataset.find) return;
+        S.q = e.target.value;
+        document.getElementById("find-results").innerHTML = findResults(S.q);
+      });
+      document.getElementById("fab").addEventListener("click", (e) => {
+        const open = document
+          .getElementById("controls")
+          .classList.toggle("open");
+        e.currentTarget.setAttribute("aria-expanded", String(open));
+      });
+      /* A link can open the prototype on one case: ?role=pengawas&screen=papan&theme=dark. */
+      const q = new URLSearchParams(location.search);
+      for (const k of [
+        "role",
+        "state",
+        "theme",
+        "screen",
+        "tab",
+        "filter",
+        "q",
+      ])
+        if (q.get(k)) S[k] = q.get(k);
+      render();
+    </script>
+  </body>
+</html>
