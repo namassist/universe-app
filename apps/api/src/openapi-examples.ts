@@ -122,6 +122,7 @@ export const FIELDS: Record<string, FieldDoc> = {
   },
   "skills.id": { example: UUID.generic },
   "skills.name": { example: "OHT 100T" },
+  "skills.description": { example: "Dump truck, Water truck" },
   skills: { example: "OHT 100T" },
 
   /* Organisation */

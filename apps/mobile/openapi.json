@@ -2231,10 +2231,10 @@
     "/v1/me/profile": {
       "get": {
         "tags": ["me"],
-        "summary": "Who I am in the register: department, position, company. No menu needed",
+        "summary": "Who I am in the register: department, position, company, SIMPER card and codes. No menu needed",
         "responses": {
           "200": {
-            "description": "OK: Who I am in the register: department, position, company. No menu needed.",
+            "description": "OK: Who I am in the register: department, position, company, SIMPER card and codes. No menu needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2244,7 +2244,11 @@
                     "name",
                     "department",
                     "position",
-                    "company"
+                    "company",
+                    "simperNo",
+                    "simperTypeName",
+                    "simperExp",
+                    "skills"
                   ],
                   "properties": {
                     "nik": {
@@ -2266,6 +2270,44 @@
                     "company": {
                       "type": "string",
                       "example": "PT Universe Mining"
+                    },
+                    "simperNo": {
+                      "type": "string",
+                      "nullable": true,
+                      "example": "SMP-2024-00871"
+                    },
+                    "simperTypeName": {
+                      "type": "string",
+                      "nullable": true,
+                      "example": "SIMPER Permanen"
+                    },
+                    "simperExp": {
+                      "description": "The SIMPER card's expiry, `YYYY-MM-DD`. One date for the whole card: every code in `skills` lapses with it.",
+                      "type": "string",
+                      "nullable": true,
+                      "example": "2027-03-31"
+                    },
+                    "skills": {
+                      "description": "The SIMPER codes held, sorted by name: the units this person may be paired with. `description` is the catalogue's own, \"\" when it has none.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["id", "name", "description"],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "example": "3f2a8c1e-4b5d-4e6f-9a0b-1c2d3e4f5a6b"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "OHT 100T"
+                          },
+                          "description": {
+                            "type": "string",
+                            "example": "Dump truck, Water truck"
+                          }
+                        }
+                      }
                     }
                   }
                 }

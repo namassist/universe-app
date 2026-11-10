@@ -301,6 +301,12 @@ with the TV or the ops console:
   The staff Profil needs it because `/employees/:nik` asks for the
   `employees` menu, which the Pengawas Lapangan does not hold; granting it
   with scope `all` would open the whole register to read one line.
+  Since 2026-11-10 it also gives the SIMPER card (`simperNo`,
+  `simperTypeName`, `simperExp`) and the codes held (`skills`, each with the
+  catalogue's `description`, sorted by name) for the Profil "SIMPER" list.
+  The register keeps one expiry per person, not per code, and eligibility
+  reads it that way, so the card's date is given once. Empty card fields
+  are null, never `""`.
 
 The client is generated from `apps/mobile/openapi.json`, written by
 `bun run openapi:mobile` (`mobile-openapi.ts`) from only the routes the app

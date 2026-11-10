@@ -2971,6 +2971,11 @@ D14):
     company, needing no menu. The staff Profil reads it, since the
     Pengawas Lapangan has no `employees` grant and should not get one for
     this.
+    It also carries the SIMPER card (`simperNo`, `simperTypeName`,
+    `simperExp`) and the codes held (`skills`: name and the catalogue's
+    description), sorted by name: the unit versatility the Profil "SIMPER"
+    list shows (2026-11-10). One expiry for the card, as the register keeps
+    it; the design's per-code dates all read that one date.
 
 ### The app — operator screens built (stage 3, 2026-10-18)
 

@@ -38,6 +38,8 @@ const made = {
   users: [] as string[],
   roles: [] as string[],
   devices: [] as string[],
+  simperType: "",
+  simperCodes: [] as string[],
 };
 let unitCode = "";
 let myAccount = "";
@@ -108,6 +110,19 @@ beforeAll(async () => {
     })
     .returning({ id: schema.positions.id });
   made.position = position!.id;
+  const [simperType] = await db
+    .insert(schema.simperTypes)
+    .values({ name: `${tag} Permanen` })
+    .returning({ id: schema.simperTypes.id });
+  made.simperType = simperType!.id;
+  const codes = await db
+    .insert(schema.simperCodes)
+    .values([
+      { name: `${tag} OHT 777`, description: "" },
+      { name: `${tag} HD 465`, description: "Dump truck, Water truck" },
+    ])
+    .returning({ id: schema.simperCodes.id, name: schema.simperCodes.name });
+  made.simperCodes.push(...codes.map((c) => c.id));
   const employees = await db
     .insert(schema.employees)
     .values(
@@ -118,11 +133,22 @@ beforeAll(async () => {
         departmentId: made.department,
         positionId: made.position,
         status: "aktif" as const,
+        /* Only ME carries a SIMPER card; OTHER has none at all. */
+        ...(nik === ME
+          ? {
+              simperTypeId: made.simperType,
+              simperNo: "SMP-2024-00871",
+              simperExp: "2026-12-15",
+            }
+          : {}),
       }))
     )
     .returning({ id: schema.employees.id, nik: schema.employees.nik });
   made.employees.push(...employees.map((e) => e.id));
   const idOf = (nik: string) => employees.find((e) => e.nik === nik)!.id;
+  await db
+    .insert(schema.employeeSkills)
+    .values(codes.map((c) => ({ employeeId: idOf(ME), simperCodeId: c.id })));
 
   const master = async (
     table: "unitClasses" | "unitTypes" | "unitModels" | "unitBrands"
@@ -212,6 +238,14 @@ afterAll(async () => {
     await db
       .delete(schema.employees)
       .where(inArray(schema.employees.id, made.employees));
+  if (made.simperCodes.length)
+    await db
+      .delete(schema.simperCodes)
+      .where(inArray(schema.simperCodes.id, made.simperCodes));
+  if (made.simperType)
+    await db
+      .delete(schema.simperTypes)
+      .where(eq(schema.simperTypes.id, made.simperType));
   if (made.unit)
     await db.delete(schema.units).where(eq(schema.units.id, made.unit));
   for (const { table, id } of made.masters)
@@ -252,7 +286,35 @@ describe("my profile", () => {
       department: `${tag} Dept`,
       position: `${tag} Operator`,
       company: `${tag} PT`,
+      /* No SIMPER card and no codes: said as null and [], never "". */
+      simperNo: null,
+      simperTypeName: null,
+      simperExp: null,
+      skills: [],
     });
+  });
+
+  test("lists the SIMPER codes I hold, by name, under the one card expiry", async () => {
+    const res = await get("/me/profile", { cookie: mine });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect({
+      simperNo: body.simperNo,
+      simperTypeName: body.simperTypeName,
+      simperExp: body.simperExp,
+    }).toEqual({
+      simperNo: "SMP-2024-00871",
+      simperTypeName: `${tag} Permanen`,
+      simperExp: "2026-12-15",
+    });
+    expect(body.skills).toEqual([
+      {
+        id: made.simperCodes[1],
+        name: `${tag} HD 465`,
+        description: "Dump truck, Water truck",
+      },
+      { id: made.simperCodes[0], name: `${tag} OHT 777`, description: "" },
+    ]);
   });
 
   test("never anybody else's, and nothing without a person behind the account", async () => {

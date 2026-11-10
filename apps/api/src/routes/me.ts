@@ -9,7 +9,7 @@
  * get the scope wrong.
  */
 
-import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import {
   PERSON_NOTIFICATION_KINDS,
@@ -181,6 +181,98 @@ const PastSeatSchema = t.Object({
   source: t.UnionEnum(["plan", "spare", "manual"]),
 });
 
+/**
+ * Who the caller is in the register, for the Profil screen: their place in
+ * the company, and their SIMPER — the card, and the codes on it that say
+ * which units they may be paired with (their unit versatility).
+ *
+ * One expiry for the whole card: the register keeps `simper_exp` per person,
+ * not per code, and eligibility reads it that way ("holds the unit's SIMPER
+ * code, unexpired"). Empty card fields are null rather than "", so the app
+ * tests one thing.
+ */
+export const MyProfileSchema = t.Object({
+  nik: t.String(),
+  name: t.String(),
+  department: t.String(),
+  position: t.String(),
+  company: t.String(),
+  simperNo: t.Nullable(t.String()),
+  simperTypeName: t.Nullable(t.String()),
+  simperExp: t.Nullable(
+    t.String({
+      description:
+        "The SIMPER card's expiry, `YYYY-MM-DD`. One date for the whole card: every code in `skills` lapses with it.",
+    })
+  ),
+  skills: t.Array(
+    t.Object({ id: t.String(), name: t.String(), description: t.String() }),
+    {
+      description:
+        'The SIMPER codes held, sorted by name: the units this person may be paired with. `description` is the catalogue\'s own, "" when it has none.',
+    }
+  ),
+});
+
+async function myProfile(nik: string) {
+  const [person] = await db
+    .select({
+      id: schema.employees.id,
+      nik: schema.employees.nik,
+      name: schema.employees.name,
+      department: schema.departments.name,
+      position: schema.positions.name,
+      company: schema.companies.name,
+      simperNo: schema.employees.simperNo,
+      simperTypeName: schema.simperTypes.name,
+      simperExp: schema.employees.simperExp,
+    })
+    .from(schema.employees)
+    .innerJoin(
+      schema.departments,
+      eq(schema.departments.id, schema.employees.departmentId)
+    )
+    .innerJoin(
+      schema.positions,
+      eq(schema.positions.id, schema.employees.positionId)
+    )
+    .innerJoin(
+      schema.companies,
+      eq(schema.companies.id, schema.employees.companyId)
+    )
+    .leftJoin(
+      schema.simperTypes,
+      eq(schema.simperTypes.id, schema.employees.simperTypeId)
+    )
+    .where(eq(schema.employees.nik, nik))
+    .limit(1);
+  if (!person) return null;
+  const skills = await db
+    .select({
+      id: schema.simperCodes.id,
+      name: schema.simperCodes.name,
+      description: schema.simperCodes.description,
+    })
+    .from(schema.employeeSkills)
+    .innerJoin(
+      schema.simperCodes,
+      eq(schema.simperCodes.id, schema.employeeSkills.simperCodeId)
+    )
+    .where(eq(schema.employeeSkills.employeeId, person.id))
+    .orderBy(asc(schema.simperCodes.name));
+  return {
+    nik: person.nik,
+    name: person.name,
+    department: person.department,
+    position: person.position,
+    company: person.company,
+    simperNo: person.simperNo || null,
+    simperTypeName: person.simperTypeName,
+    simperExp: person.simperExp,
+    skills,
+  };
+}
+
 export const meRoutes = new Elysia({ prefix: "/me", tags: ["me"] })
   .use(requireSelf)
 
@@ -212,49 +304,20 @@ export const meRoutes = new Elysia({ prefix: "/me", tags: ["me"] })
     async ({ principal, status }) => {
       if (principal.kind !== "user" || !principal.nik)
         return status(404, noEmployee);
-      const [person] = await db
-        .select({
-          nik: schema.employees.nik,
-          name: schema.employees.name,
-          department: schema.departments.name,
-          position: schema.positions.name,
-          company: schema.companies.name,
-        })
-        .from(schema.employees)
-        .innerJoin(
-          schema.departments,
-          eq(schema.departments.id, schema.employees.departmentId)
-        )
-        .innerJoin(
-          schema.positions,
-          eq(schema.positions.id, schema.employees.positionId)
-        )
-        .innerJoin(
-          schema.companies,
-          eq(schema.companies.id, schema.employees.companyId)
-        )
-        .where(eq(schema.employees.nik, principal.nik))
-        .limit(1);
-      if (!person) return status(404, noEmployee);
-      return person;
+      const profile = await myProfile(principal.nik);
+      return profile ?? status(404, noEmployee);
     },
     {
       self: true,
       response: {
-        200: t.Object({
-          nik: t.String(),
-          name: t.String(),
-          department: t.String(),
-          position: t.String(),
-          company: t.String(),
-        }),
+        200: MyProfileSchema,
         401: ErrorSchema,
         403: ErrorSchema,
         404: ErrorSchema,
       },
       detail: {
         summary:
-          "Who I am in the register: department, position, company. No menu needed",
+          "Who I am in the register: department, position, company, SIMPER card and codes. No menu needed",
       },
     }
   )
