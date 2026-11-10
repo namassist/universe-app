@@ -17,6 +17,7 @@ import { Elysia } from "elysia";
 import { API_VERSION } from "@universe/contracts";
 
 import { as30, sortedResponses } from "../openapi-30";
+import { withExamples } from "../openapi-examples";
 import { documentResponses, INDONESIAN } from "../openapi-responses";
 import { integrationRoutes } from "../routes/integrations";
 
@@ -174,6 +175,32 @@ function complete(path: string, operation: Operation & Json): void {
   };
 }
 
+/** Every field of a JSON success with a real value (`openapi-examples.ts`). */
+function withSuccessExamples(
+  responses: Record<string, Json>
+): Record<string, Json> {
+  return Object.fromEntries(
+    Object.entries(responses).map(([status, response]) => {
+      const content = response.content as Record<string, Json> | undefined;
+      const media = content?.["application/json"];
+      if (!status.startsWith("2") || !media) return [status, response];
+      return [
+        status,
+        {
+          ...response,
+          content: {
+            ...content,
+            "application/json": {
+              ...media,
+              schema: withExamples(media.schema),
+            },
+          },
+        },
+      ];
+    })
+  );
+}
+
 export async function buildIntegrationSpec(): Promise<Json> {
   const app = new Elysia()
     .use(
@@ -231,7 +258,9 @@ export async function buildIntegrationSpec(): Promise<Json> {
             method,
             {
               ...documented,
-              responses: sortedResponses(documented.responses),
+              responses: sortedResponses(
+                withSuccessExamples(documented.responses)
+              ),
             },
           ];
         })

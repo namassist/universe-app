@@ -54,7 +54,7 @@ const SeatSchema = t.Object({
   fleet: t.Nullable(t.String()),
 });
 
-const MyShiftSchema = t.Object({
+export const MyShiftSchema = t.Object({
   date: t.String(),
   shift: t.UnionEnum(SHIFT_KINDS),
   roster: t.Nullable(t.String()),

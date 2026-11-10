@@ -22,7 +22,9 @@ replace it (new token, the old one stops at once).
 
 Base URL on site: `http://192.168.151.23:8081/v1/integrations`. The full
 schema is `docs/openapi/integration-api.openapi.json` (OpenAPI 3.0.3, the integration
-routes only) — import it into Postman, Insomnia or a client generator. Do not
+routes only, with an example value on every field and the values of every
+closed set listed in its description) — import it into Postman, Insomnia or a
+client generator. Do not
 hand out `/openapi`: it describes the whole internal API.
 
 ## Employees

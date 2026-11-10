@@ -39,7 +39,60 @@ export type ResponseWords = {
   internal: string;
   /** The success, from the operation's summary when it has one. */
   success: (summary: string | undefined) => string;
+  /** The code an error example shows when the operation names none. */
+  fallbackCode: Record<string, string>;
+  /** The API's own message per code, for the error examples. */
+  messages: Record<string, string>;
+  /** One field at fault, as a validation failure here would name it. */
+  validationIssue: { field: string; message: string };
 };
+
+/**
+ * The API's own sentence per code, with its placeholders filled in as a
+ * real answer would have them.
+ */
+const MESSAGES: Record<string, string> = {
+  unauthenticated: "Sesi tidak valid",
+  forbidden: "Akses ditolak",
+  password_change_required: "Ganti password sebelum melanjutkan",
+  validation_failed: "Request failed validation",
+  internal_error: "Something went wrong",
+  invalid_credentials: "Identifier atau password salah",
+  first_login_on_site:
+    "Login pertama harus dari jaringan site. Setelah password diganti, akun bisa dipakai dari mana saja.",
+  too_many_attempts: "Terlalu banyak percobaan — coba lagi dalam 15 menit",
+  password_too_short: "Password minimal 8 karakter",
+  password_is_default: "Password baru tidak boleh sama dengan password awal",
+  no_employee: "Akun ini tidak terhubung ke data karyawan",
+  invalid_range: "Rentang tanggal terbalik atau lebih dari 62 hari",
+  not_found: "Notifikasi tidak ditemukan",
+  roster_document_not_found: "Dokumen roster tidak ditemukan",
+  employee_not_found: "Kartu tidak dikenali",
+  device_not_found: "Display fleet tersebut tidak ditemukan",
+  board_not_found: "Papan untuk tanggal dan shift itu belum dibuat",
+  unit_not_found: "Unit tidak ditemukan",
+  slot_not_found: "Pasangan unit-operator tidak ditemukan",
+  already_placed: "Operator itu sudah dipasang di unit DT4023",
+  ftw_acknowledgement_required:
+    "Operator ini tidak lolos fit-to-work untuk unit yang mensyaratkannya. Konfirmasi dulu kalau tetap mau ditempatkan.",
+  user_not_found: "Akun tidak ditemukan",
+  own_account:
+    "Akun yang sedang dipakai tidak bisa direset. Minta admin lain, atau ganti password dari Profil.",
+  last_roles_admin:
+    "Akun ini satu-satunya yang masih bisa mengelola role — tidak bisa dinonaktifkan",
+  identifier_required: "Akun harus punya email atau NIK",
+  department_not_found: "Departemen tidak ditemukan",
+  today_only: "Laporan ini hanya untuk hari ini",
+  missing_date: "Tanggal wajib diisi",
+  missing_shift: "Shift wajib diisi",
+};
+
+/** What a validation failure looks like, for its example. */
+const validationExample = (words: ResponseWords) => ({
+  code: "validation_failed",
+  message: "Request failed validation",
+  issues: [words.validationIssue],
+});
 
 const PLACEHOLDER = /^Response for status \d{3}$/;
 
@@ -70,8 +123,6 @@ const VALIDATION_SCHEMA = {
   },
 };
 
-const json = (schema: Json) => ({ "application/json": { schema } });
-
 /**
  * The operation with every answer described. A `Refusals` entry for a status
  * the operation does not declare throws: a code documented on an answer that
@@ -94,6 +145,26 @@ export function documentResponses(
         `documented ${status} that the operation does not declare`
       );
 
+  /* The operation's own refusal is the more telling example; the gate's
+     comes first only where the route adds none. */
+  const exampleOf = (status: string) => {
+    const code =
+      refusals[status]?.[0] ?? gate[status]?.[0] ?? words.fallbackCode[status];
+    return code
+      ? { code, message: words.messages[code] ?? MESSAGES[code] ?? code }
+      : undefined;
+  };
+  const withExample = (response: Json, example: unknown) => {
+    const content = response.content as Record<string, Json> | undefined;
+    const media = content?.["application/json"];
+    return media && example !== undefined
+      ? {
+          ...response,
+          content: { ...content, "application/json": { ...media, example } },
+        }
+      : response;
+  };
+
   const responses: Record<string, Json> = {};
   for (const [status, response] of Object.entries(operation.responses)) {
     const placeholder = PLACEHOLDER.test(String(response.description ?? ""));
@@ -101,7 +172,7 @@ export function documentResponses(
       ? words.success(operation.summary as string | undefined)
       : (words.status[status] ?? "");
     const codes = named(status);
-    responses[status] = {
+    const described = {
       ...response,
       description: placeholder
         ? [meaning, codes.length ? words.codes(codes) : ""]
@@ -109,6 +180,9 @@ export function documentResponses(
             .join(" ")
         : response.description,
     };
+    responses[status] = status.startsWith("2")
+      ? described
+      : withExample(described, exampleOf(status));
   }
 
   if (operation.parameters?.length || operation.requestBody) {
@@ -118,7 +192,12 @@ export function documentResponses(
         words.validation,
         words.codes(["validation_failed", ...own]),
       ].join(" "),
-      content: json(VALIDATION_SCHEMA),
+      content: {
+        "application/json": {
+          schema: VALIDATION_SCHEMA,
+          example: own.length ? exampleOf("422") : validationExample(words),
+        },
+      },
     };
   } else if (refusals["422"]?.length) {
     throw new Error("documented 422 on an operation that takes no input");
@@ -126,7 +205,15 @@ export function documentResponses(
 
   responses["500"] = {
     description: [words.internal, words.codes(["internal_error"])].join(" "),
-    content: json(ERROR_SCHEMA),
+    content: {
+      "application/json": {
+        schema: ERROR_SCHEMA,
+        example: {
+          code: "internal_error",
+          message: words.messages.internal_error ?? MESSAGES.internal_error,
+        },
+      },
+    },
   };
 
   return { ...operation, responses };
@@ -150,6 +237,12 @@ export const ENGLISH: ResponseWords = {
   internal:
     "Something failed on the server. The detail is logged, not sent; try again later.",
   success: (summary) => (summary ? `OK: ${summary}.` : "OK."),
+  fallbackCode: {},
+  messages: {},
+  validationIssue: {
+    field: "to",
+    message: "Expected string to match '^\\d{4}-\\d{2}-\\d{2}$'",
+  },
 };
 
 /** For the integration document, handed to other services' teams. */
@@ -167,4 +260,22 @@ export const INDONESIAN: ResponseWords = {
   internal:
     "Terjadi kesalahan di server. Detailnya dicatat di server, tidak dikirim. Coba lagi nanti.",
   success: (summary) => (summary ? `Berhasil: ${summary}.` : "Berhasil."),
+  fallbackCode: {
+    "401": "unauthenticated",
+    "403": "forbidden",
+    "404": "not_found",
+    "429": "rate_limited",
+  },
+  messages: {
+    unauthenticated: "Token integrasi tidak valid",
+    forbidden: "Token ini tidak diberi akses ke data ini",
+    not_found: "Karyawan tidak ditemukan",
+    rate_limited: "Terlalu banyak permintaan — coba lagi sebentar",
+    validation_failed: "Request failed validation",
+    internal_error: "Something went wrong",
+  },
+  validationIssue: {
+    field: "limit",
+    message: "Expected number to be less or equal to 500",
+  },
 };

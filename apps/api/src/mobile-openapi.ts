@@ -16,6 +16,8 @@ import { Elysia } from "elysia";
 import { API_VERSION } from "@universe/contracts";
 
 import { as30, sortedResponses } from "./openapi-30";
+import { withExamples } from "./openapi-examples";
+import { SHIFT_EXAMPLES } from "./mobile-openapi-examples";
 import {
   documentResponses,
   ENGLISH,
@@ -158,6 +160,39 @@ const REFUSALS: Partial<Record<(typeof MOBILE_OPERATIONS)[number], Refusals>> =
       ],
     },
   };
+
+/**
+ * Every success with a real value in each field (`openapi-examples.ts`), and
+ * `/me/shift` with one named example per Beranda state.
+ */
+function successExamples(
+  name: string,
+  responses: Record<string, Json>
+): Record<string, Json> {
+  return Object.fromEntries(
+    Object.entries(responses).map(([status, response]) => {
+      const media = (response.content as Record<string, Json> | undefined)?.[
+        "application/json"
+      ];
+      if (!status.startsWith("2") || !media) return [status, response];
+      return [
+        status,
+        {
+          ...response,
+          content: {
+            "application/json": {
+              ...media,
+              schema: withExamples(media.schema),
+              ...(name === "GET /v1/me/shift"
+                ? { examples: SHIFT_EXAMPLES }
+                : {}),
+            },
+          },
+        },
+      ];
+    })
+  );
+}
 
 /** No session asked for: the app reaches these before it has one. */
 const PUBLIC = new Set(["POST /v1/auth/login", "GET /v1/mobile/version"]);
@@ -308,7 +343,9 @@ export async function buildMobileSpec(): Promise<Json> {
             method,
             {
               ...in30,
-              responses: asOpenResponse(sortedResponses(in30.responses)),
+              responses: asOpenResponse(
+                sortedResponses(successExamples(name, in30.responses))
+              ),
             },
           ];
         })

@@ -134,7 +134,7 @@
                             "example": "OPERATOR HD"
                           },
                           "status": {
-                            "description": "Status karyawan: aktif, standby, atau nonaktif.",
+                            "description": "Status karyawan: aktif, standby, atau nonaktif. Values: `aktif`, `standby`, `nonaktif`.",
                             "type": "string",
                             "example": "aktif"
                           },
@@ -149,7 +149,8 @@
                             "description": "Kode SIMPER yang dimiliki, yaitu jenis unit yang boleh dioperasikan. Diurutkan sesuai abjad.",
                             "type": "array",
                             "items": {
-                              "type": "string"
+                              "type": "string",
+                              "example": "OHT 100T"
                             },
                             "example": ["EXC 2600", "OHT 777"]
                           },
@@ -209,6 +210,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "unauthenticated",
+                  "message": "Token integrasi tidak valid"
                 }
               }
             }
@@ -228,6 +233,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "forbidden",
+                  "message": "Token ini tidak diberi akses ke data ini"
                 }
               }
             }
@@ -262,6 +271,16 @@
                       }
                     }
                   }
+                },
+                "example": {
+                  "code": "validation_failed",
+                  "message": "Request failed validation",
+                  "issues": [
+                    {
+                      "field": "limit",
+                      "message": "Expected number to be less or equal to 500"
+                    }
+                  ]
                 }
               }
             }
@@ -281,6 +300,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "rate_limited",
+                  "message": "Terlalu banyak permintaan — coba lagi sebentar"
                 }
               }
             },
@@ -308,6 +331,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "internal_error",
+                  "message": "Something went wrong"
                 }
               }
             }
@@ -380,7 +407,7 @@
                       "example": "OPERATOR HD"
                     },
                     "status": {
-                      "description": "Status karyawan: aktif, standby, atau nonaktif.",
+                      "description": "Status karyawan: aktif, standby, atau nonaktif. Values: `aktif`, `standby`, `nonaktif`.",
                       "type": "string",
                       "example": "aktif"
                     },
@@ -395,7 +422,8 @@
                       "description": "Kode SIMPER yang dimiliki, yaitu jenis unit yang boleh dioperasikan. Diurutkan sesuai abjad.",
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "OHT 100T"
                       },
                       "example": ["EXC 2600", "OHT 777"]
                     },
@@ -437,6 +465,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "unauthenticated",
+                  "message": "Token integrasi tidak valid"
                 }
               }
             }
@@ -456,6 +488,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "forbidden",
+                  "message": "Token ini tidak diberi akses ke data ini"
                 }
               }
             }
@@ -475,6 +511,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "not_found",
+                  "message": "Karyawan tidak ditemukan"
                 }
               }
             }
@@ -509,6 +549,16 @@
                       }
                     }
                   }
+                },
+                "example": {
+                  "code": "validation_failed",
+                  "message": "Request failed validation",
+                  "issues": [
+                    {
+                      "field": "limit",
+                      "message": "Expected number to be less or equal to 500"
+                    }
+                  ]
                 }
               }
             }
@@ -528,6 +578,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "rate_limited",
+                  "message": "Terlalu banyak permintaan — coba lagi sebentar"
                 }
               }
             },
@@ -555,6 +609,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "internal_error",
+                  "message": "Something went wrong"
                 }
               }
             }
@@ -645,6 +703,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "unauthenticated",
+                  "message": "Token integrasi tidak valid"
                 }
               }
             }
@@ -664,6 +726,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "forbidden",
+                  "message": "Token ini tidak diberi akses ke data ini"
                 }
               }
             }
@@ -683,6 +749,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "not_found",
+                  "message": "Karyawan tidak ditemukan"
                 }
               }
             }
@@ -717,6 +787,16 @@
                       }
                     }
                   }
+                },
+                "example": {
+                  "code": "validation_failed",
+                  "message": "Request failed validation",
+                  "issues": [
+                    {
+                      "field": "limit",
+                      "message": "Expected number to be less or equal to 500"
+                    }
+                  ]
                 }
               }
             }
@@ -736,6 +816,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "rate_limited",
+                  "message": "Terlalu banyak permintaan — coba lagi sebentar"
                 }
               }
             },
@@ -763,6 +847,10 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "code": "internal_error",
+                  "message": "Something went wrong"
                 }
               }
             }

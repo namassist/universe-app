@@ -38,12 +38,12 @@ export const FTW_PASS_DECISION = "ftw aman";
 export const FTW_PASS_CATEGORY = "dapat bekerja";
 
 /** Every value observed in the source. A value outside these is unreadable. */
-const KNOWN_DECISIONS = new Set([
+export const KNOWN_DECISIONS: ReadonlySet<string> = new Set([
   FTW_PASS_DECISION,
   "belum mengisi ftw",
   "ftw perlu tindak lanjut",
 ]);
-const KNOWN_CATEGORIES = new Set([
+export const KNOWN_CATEGORIES: ReadonlySet<string> = new Set([
   FTW_PASS_CATEGORY,
   "tidak boleh bekerja",
   "istirahat minimal 1 jam",

@@ -320,6 +320,21 @@ two the app adds around every route in `onError`, 422 `validation_failed`
 everywhere. A test fails on a placeholder description, a missing 422 or 500,
 or a documented code on a status the route does not declare.
 
+Every answer also carries a real example (`openapi-examples.ts`, 2026-11-09),
+because a viewer otherwise shows each field as `""`. Each success field gets
+a value from `FIELDS`, curated per `parent.name` (a NIK, a unit code, an ISO
+time…). Every closed set is listed in the field's description as
+"Values: …", whether it is an enum (`status`, `reason`, `seat.source`) or a
+free string with known values (`ftw.category`, `ftwDecision`, the report's
+savera cells, the `refusal` sentences). The mobile document drops `enum`, so
+the description is the only place the app's developers can read the set.
+Every error example shows its route's first refusal code with the API's own
+message. `GET /v1/me/shift` adds one named example per Beranda state
+(`mobile-openapi-examples.ts`). `openapi-examples.test.ts` fails on a field
+left without an example, an error without a code, an example the route's
+schema would reject, or an FTW category list that no longer matches
+`readiness.ts`.
+
 ## D15 — Nobody resets, switches off or deletes their own account
 
 `POST /users/:id/reset-password`, `PATCH /users/:id` with `active: false`
