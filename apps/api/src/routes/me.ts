@@ -27,7 +27,7 @@ import { myNotifications } from "../person-notify";
 import { registerDevice, unregisterDevice } from "../push/devices";
 import { localDate } from "../scheduler";
 import { shiftGates } from "../stage-time";
-import { ErrorSchema } from "./schemas";
+import { ErrorSchema, ShiftGatesSchema } from "./schemas";
 
 const noEmployee = {
   code: "no_employee",
@@ -127,13 +127,7 @@ export const MyShiftSchema = t.Object({
   ),
   checkInAt: t.Nullable(t.String()),
   /** "HH:MM" per gate of that shift, null where the timeline has none. */
-  gates: t.Object({
-    ftwDeadline: t.Nullable(t.String()),
-    fingerIn: t.Nullable(t.String()),
-    board: t.Nullable(t.String()),
-    secondFinger: t.Nullable(t.String()),
-    busDepart: t.Nullable(t.String()),
-  }),
+  gates: ShiftGatesSchema,
 });
 
 const PersonNotificationSchema = t.Object({

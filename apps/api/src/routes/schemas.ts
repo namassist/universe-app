@@ -1405,12 +1405,33 @@ export const ActualCandidateSchema = t.Object({
   onAnotherUnit: t.Boolean(),
 });
 
+/**
+ * A shift's gates, "HH:MM" each, or null where the timeline has no active
+ * stage: `roster-ingest`, `shift-start`, `ftw-deadline`, `finger-in`,
+ * `spare-validate` (`board`), `finger-second`, `bus-depart`. One shape for
+ * `/me/shift` and the fleet wall, so the phone reads both alike.
+ */
+export const ShiftGatesSchema = t.Object({
+  rosterIngest: t.Nullable(t.String()),
+  shiftStart: t.Nullable(t.String()),
+  ftwDeadline: t.Nullable(t.String()),
+  fingerIn: t.Nullable(t.String()),
+  board: t.Nullable(t.String()),
+  secondFinger: t.Nullable(t.String()),
+  busDepart: t.Nullable(t.String()),
+});
+
 /* ------------------------------------------------- the fleet wall (kiosk) */
 
 /** One unit on the wall, cut down to what is legible from across a yard. */
 export const FleetDisplayUnitSchema = t.Object({
   unitId: t.String(),
   unitCode: t.String(),
+  /**
+   * The unit's class (`REARDUMP100T`, `BIGDIGGER`), what a supervisor counts
+   * empty seats by. Empty on the spare wall, whose cards are people.
+   */
+  className: t.String(),
   modelName: t.String(),
   brandName: t.String(),
   /**
@@ -1531,16 +1552,17 @@ export const FleetDisplaySchema = t.Object({
   ftwClosed: t.Boolean(),
   fingerClosed: t.Boolean(),
   /**
-   * When the timeline schedules this shift's board, "HH:MM": the
-   * `spare-validate` stage, the same time `/me/shift` sends as `gates.board`.
-   * Lets a screen word a provisional line-up as "final after 05:26" for anyone
-   * reading it, seated or not.
+   * The running shift's gates, "HH:MM" each — the same seven `/me/shift`
+   * sends, so a supervisor with no seat of their own can draw the shift's
+   * timeline and word a provisional line-up as "final after 05:26"
+   * (`gates.board`, the `spare-validate` stage).
    *
    * A schedule, not a promise — a manual regenerate can build the board
-   * sooner, and `provisional` still true past it is the alarm that nobody did.
-   * Null when no shift is running or the timeline has no active stage for it.
+   * sooner, and `provisional` still true past `board` is the alarm that nobody
+   * did. All null when no shift is running; one null where the timeline has
+   * no active stage for that gate.
    */
-  boardDue: t.Nullable(t.String()),
+  gates: ShiftGatesSchema,
   /** Seconds one formation stays on screen — the screen's own setting. */
   rotateSeconds: t.Integer(),
   /**

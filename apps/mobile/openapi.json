@@ -1444,6 +1444,8 @@
                         "gates": {
                           "type": "object",
                           "required": [
+                            "rosterIngest",
+                            "shiftStart",
                             "ftwDeadline",
                             "fingerIn",
                             "board",
@@ -1451,6 +1453,16 @@
                             "busDepart"
                           ],
                           "properties": {
+                            "rosterIngest": {
+                              "type": "string",
+                              "nullable": true,
+                              "example": "03:00"
+                            },
+                            "shiftStart": {
+                              "type": "string",
+                              "nullable": true,
+                              "example": "04:00"
+                            },
                             "ftwDeadline": {
                               "type": "string",
                               "nullable": true,
@@ -1514,6 +1526,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1553,6 +1567,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1585,6 +1601,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1617,6 +1635,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1649,6 +1669,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1681,6 +1703,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1720,6 +1744,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1759,6 +1785,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1798,6 +1826,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1837,6 +1867,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1864,6 +1896,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1891,6 +1925,8 @@
                         "boardAt": null,
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1930,6 +1966,8 @@
                         "boardAt": "2026-11-09T05:26:00.000Z",
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -1962,6 +2000,8 @@
                         "boardAt": "2026-11-09T05:26:00.000Z",
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -2001,6 +2041,8 @@
                         "boardAt": "2026-11-09T05:26:00.000Z",
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -2033,6 +2075,8 @@
                         "boardAt": "2026-11-09T05:26:00.000Z",
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -2072,6 +2116,8 @@
                         "boardAt": "2026-11-09T05:26:00.000Z",
                         "withdrawn": null,
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -2113,6 +2159,8 @@
                           }
                         },
                         "gates": {
+                          "rosterIngest": "03:00",
+                          "shiftStart": "04:00",
                           "ftwDeadline": "05:00",
                           "fingerIn": "05:25",
                           "board": "05:26",
@@ -4962,7 +5010,7 @@
                     "provisional",
                     "ftwClosed",
                     "fingerClosed",
-                    "boardDue",
+                    "gates",
                     "rotateSeconds",
                     "layout",
                     "cardLayout",
@@ -5003,10 +5051,54 @@
                       "type": "boolean",
                       "example": true
                     },
-                    "boardDue": {
-                      "type": "string",
-                      "nullable": true,
-                      "example": "05:26"
+                    "gates": {
+                      "type": "object",
+                      "required": [
+                        "rosterIngest",
+                        "shiftStart",
+                        "ftwDeadline",
+                        "fingerIn",
+                        "board",
+                        "secondFinger",
+                        "busDepart"
+                      ],
+                      "properties": {
+                        "rosterIngest": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "03:00"
+                        },
+                        "shiftStart": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "04:00"
+                        },
+                        "ftwDeadline": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "05:00"
+                        },
+                        "fingerIn": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "05:25"
+                        },
+                        "board": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "05:26"
+                        },
+                        "secondFinger": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "05:28"
+                        },
+                        "busDepart": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "05:30"
+                        }
+                      }
                     },
                     "rotateSeconds": {
                       "type": "integer",
@@ -5096,6 +5188,7 @@
                               "required": [
                                 "unitId",
                                 "unitCode",
+                                "className",
                                 "modelName",
                                 "brandName",
                                 "busCode",
@@ -5115,6 +5208,11 @@
                                 "unitCode": {
                                   "type": "string",
                                   "example": "DT4023"
+                                },
+                                "className": {
+                                  "type": "string",
+                                  "description": "A unit class from master data; empty on the spare wall.",
+                                  "example": "REARDUMP100T"
                                 },
                                 "modelName": {
                                   "type": "string",

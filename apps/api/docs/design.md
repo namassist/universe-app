@@ -268,12 +268,16 @@ with the TV or the ops console:
   accepts the `fleet-allocation` menu as well as `display-fleet`. Its photo
   route stays the wall's own. Called with no `?device=`, it is the site:
   every formation, then the support group (`groupIntoFleets`' `site`), so the
-  phone's empty count is the board's (2026-11-13). It carries `boardDue` (2026-11-13): the
-  shift's `spare-validate` time, "HH:MM" (null with no running shift or no
-  active stage), the same value as
-  `/me/shift`'s `gates.board`, so a supervisor with no seat is told when the
-  line-up is due to be final. Not named `boardAt`: on `/me/shift` that is
-  the ISO moment a board _was_ built, and one name must not mean both.
+  phone's empty count is the board's (2026-11-13). It carries `gates` (2026-11-13):
+  the shift's seven gate times, "HH:MM" (`rosterIngest`, `shiftStart`,
+  `ftwDeadline`, `fingerIn`, `board` = `spare-validate`, `secondFinger`,
+  `busDepart`), built by `shiftGateTimes` in `stage-time.ts` and shared with
+  `/me/shift` through `ShiftGatesSchema`, so the two never name a gate
+  differently. All null with no running shift; null per gate with no active
+  stage. A supervisor with no seat, and without the `timeline` menu, can draw
+  the shift's timeline and is told when the line-up is due to be final. Each
+  card also carries `className` (the unit's `unit_classes` name, empty on the
+  spare wall) for the Beranda's empty-units-per-class list.
 - **The timeline monitor is the Operations Center's reading.**
   `GET /v1/timeline/runs` (menu `timeline`, view) returns the running shift,
   each stage with its claim and last logged run, and the heartbeat, from
@@ -291,9 +295,10 @@ with the TV or the ops console:
   sections arrive only for the grants the caller holds, and
   `GET /v1/reports/{kind}`, one report for a date and shift, scoped as on the
   web. The workbook export and the departments list stay out (test-asserted).
-- **`/me/shift` carries its gates** (`ftwDeadline`, `fingerIn`, `board`,
-  `secondFinger`, `busDepart`, "HH:MM" or null), so the app words "Batas
-  05:25" from the timeline and never from a constant.
+- **`/me/shift` carries its gates** (`rosterIngest`, `shiftStart`,
+  `ftwDeadline`, `fingerIn`, `board`, `secondFinger`, `busDepart`, "HH:MM" or
+  null; the first two since 2026-11-13, shared with the fleet wall), so the
+  app words "Batas 05:25" from the timeline and never from a constant.
 - **`/me/shift` says how a seat came and went** (screen audit, 2026-11-09):
   `boardAt` (when the board was last built), `seat.source` and
   `seat.placedAt` (the hand placement that stands, from `fleet_placements`),

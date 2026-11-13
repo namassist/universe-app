@@ -411,6 +411,8 @@ describe("the coming shift", () => {
     const at = async (action: TimelineAction) =>
       (await stageTimeOf(action, shift))?.slice(0, 5) ?? null;
     expect(body.shift!.gates).toEqual({
+      rosterIngest: await at("roster-ingest"),
+      shiftStart: await at("shift-start"),
       ftwDeadline: await at("ftw-deadline"),
       fingerIn: await at("finger-in"),
       board: await at("spare-validate"),

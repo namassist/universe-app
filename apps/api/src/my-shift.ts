@@ -30,7 +30,6 @@ import {
   SEAT_REMOVED_CAUSES,
   type SeatRemovedCause,
   type ShiftKind,
-  type TimelineAction,
   type UnitStatus,
 } from "@universe/contracts";
 
@@ -45,7 +44,12 @@ import {
   unitByCode,
 } from "./routes/fleet-allocation";
 import { localDate } from "./scheduler";
-import { shiftGates, stageClock, stageTimeOf } from "./stage-time";
+import {
+  shiftGates,
+  shiftGateTimes,
+  stageTimeOf,
+  type ShiftGateTimes,
+} from "./stage-time";
 import { firstTapOf } from "./ticket-issue";
 import type { Seat } from "./ticket-rules";
 
@@ -237,27 +241,6 @@ export type MyShift = Standing & {
   gates: ShiftGateTimes;
 };
 
-export type ShiftGateTimes = {
-  ftwDeadline: string | null;
-  fingerIn: string | null;
-  board: string | null;
-  secondFinger: string | null;
-  busDepart: string | null;
-};
-
-async function gateTimes(shift: ShiftKind): Promise<ShiftGateTimes> {
-  const at = (action: TimelineAction) => stageClock(action, shift);
-  const [ftwDeadline, fingerIn, board, secondFinger, busDepart] =
-    await Promise.all([
-      at("ftw-deadline"),
-      at("finger-in"),
-      at("spare-validate"),
-      at("finger-second"),
-      at("bus-depart"),
-    ]);
-  return { ftwDeadline, fingerIn, board, secondFinger, busDepart };
-}
-
 /**
  * The answer for one NIK, now. Null when the timeline cannot say which shift
  * is running: the walls refuse to guess in the same case, and so does this.
@@ -297,7 +280,7 @@ export async function myShift(nik: string, now: Date): Promise<MyShift | null> {
         .limit(1)
         .then((rows) => rows[0] ?? null),
       firstTapOf(nik, target.date, target.shift),
-      gateTimes(target.shift),
+      shiftGateTimes(target.shift),
       person ? withdrawnFacts(person.id, nik, target, now) : null,
     ]);
 

@@ -39,7 +39,7 @@ import {
   shiftIn,
   type FtwVerdict,
 } from "../readiness";
-import { shiftGates, stageClock } from "../stage-time";
+import { shiftGates, shiftGateTimes, type ShiftGateTimes } from "../stage-time";
 import { photoMimeType, photoPath } from "../storage";
 import { pairingRefusal } from "./fleet-allocation";
 import { localDate } from "../scheduler";
@@ -96,6 +96,7 @@ async function boardSlots(documentId: string) {
         unitId: schema.fleetActualSlots.unitId,
         unitCode: schema.units.code,
         requiresFtw: schema.units.ftw,
+        className: schema.unitClasses.name,
         simperCodeName: schema.simperCodes.name,
         departmentName: schema.departments.name,
         modelName: schema.unitModels.name,
@@ -121,6 +122,10 @@ async function boardSlots(documentId: string) {
       .innerJoin(
         schema.unitModels,
         eq(schema.unitModels.id, schema.units.modelId)
+      )
+      .innerJoin(
+        schema.unitClasses,
+        eq(schema.unitClasses.id, schema.units.classId)
       )
       .innerJoin(
         schema.unitBrands,
@@ -168,6 +173,7 @@ export async function planSlots(date: string, shift: ShiftKind) {
       unitId: schema.units.id,
       unitCode: schema.units.code,
       requiresFtw: schema.units.ftw,
+      className: schema.unitClasses.name,
       modelName: schema.unitModels.name,
       brandName: schema.unitBrands.name,
       fleetId: schema.fleets.id,
@@ -187,6 +193,10 @@ export async function planSlots(date: string, shift: ShiftKind) {
     .innerJoin(
       schema.unitModels,
       eq(schema.unitModels.id, schema.units.modelId)
+    )
+    .innerJoin(
+      schema.unitClasses,
+      eq(schema.unitClasses.id, schema.units.classId)
     )
     .innerJoin(
       schema.unitBrands,
@@ -259,18 +269,6 @@ export async function planSlots(date: string, shift: ShiftKind) {
       "fleet" | "support",
     employeeId: r.rosterId ? r.employeeId : null,
   }));
-}
-
-/**
- * When the timeline schedules a shift's board, "HH:MM" — `spare-validate`, as
- * `/me/shift` sends it in `gates.board`, so the phone words both alike.
- *
- * A schedule, not a promise: a manual regenerate can build the board sooner,
- * and a missed run leaves the line-up provisional past it. Null when the
- * timeline has no active `spare-validate` for that shift.
- */
-async function boardDueAt(shift: ShiftKind): Promise<string | null> {
-  return stageClock("spare-validate", shift);
 }
 
 async function documentOf(date: string, shift: ShiftKind) {
@@ -499,6 +497,7 @@ async function spareGroup(date: string, shift: ShiftKind): Promise<WallFleet> {
     units: crew.map((c) => ({
       unitId: `spare-${c.nik}`,
       unitCode: "SPARE",
+      className: "",
       modelName: "",
       brandName: "",
       unitArea: ride?.area ?? null,
@@ -610,10 +609,23 @@ async function fleetScreen(deviceId: string) {
   return row;
 }
 
+/** The gates of no shift: what the blank payload carries. */
+const NO_GATES: ShiftGateTimes = {
+  rosterIngest: null,
+  shiftStart: null,
+  ftwDeadline: null,
+  fingerIn: null,
+  board: null,
+  secondFinger: null,
+  busDepart: null,
+};
+
 /** One unit as the wall reads it — the board row, already named. */
 export type WallSlot = {
   unitId: string;
   unitCode: string;
+  /** The unit's class (`REARDUMP100T`) — what a supervisor counts empties by. */
+  className: string;
   modelName: string;
   brandName: string;
   /**
@@ -836,6 +848,7 @@ function cardOf(
   return {
     unitId: s.unitId,
     unitCode: s.unitCode,
+    className: s.className,
     modelName: s.modelName,
     brandName: s.brandName,
     unitArea,
@@ -1101,7 +1114,7 @@ export const fleetActualRoutes = new Elysia({
         provisional: false,
         ftwClosed: false,
         fingerClosed: false,
-        boardDue: null as string | null,
+        gates: { ...NO_GATES },
         rotateSeconds: rotate,
         layout,
         cardLayout,
@@ -1117,9 +1130,9 @@ export const fleetActualRoutes = new Elysia({
       const now = currentShift(new Date(), await shiftGates());
       if (!now) return blank;
 
-      const [doc, boardDue] = await Promise.all([
+      const [doc, gates] = await Promise.all([
         documentOf(now.date, now.shift),
-        boardDueAt(now.shift),
+        shiftGateTimes(now.shift),
       ]);
 
       if (spareOnly) {
@@ -1140,7 +1153,7 @@ export const fleetActualRoutes = new Elysia({
           provisional: false,
           ftwClosed: deadlinePassed(ftwGate, now.date, at),
           fingerClosed: deadlinePassed(fingerGate, now.date, at),
-          boardDue,
+          gates,
           fleets: [group],
         };
       }
@@ -1203,6 +1216,7 @@ export const fleetActualRoutes = new Elysia({
         return {
           unitId: s.unitId,
           unitCode: s.unitCode,
+          className: s.className,
           modelName: s.modelName,
           brandName: s.brandName,
           fleetId: s.fleetId,
@@ -1232,7 +1246,7 @@ export const fleetActualRoutes = new Elysia({
         provisional,
         ftwClosed: deadlinePassed(ftwGate, now.date, at),
         fingerClosed: deadlinePassed(fingerGate, now.date, at),
-        boardDue,
+        gates,
         rotateSeconds: rotate,
         layout,
         cardLayout,

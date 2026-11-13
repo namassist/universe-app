@@ -9,6 +9,8 @@
  */
 
 const GATES = {
+  rosterIngest: "03:00",
+  shiftStart: "04:00",
   ftwDeadline: "05:00",
   fingerIn: "05:25",
   board: "05:26",

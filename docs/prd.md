@@ -1383,14 +1383,22 @@ until someone pressed Sync at 07:07 — although they were on time.
   screen there is the least useful thing the wall could do. The provisional
   state persisting past `spare-validate` is also the standing alarm that
   nobody generated the board.
-- **The wall says when its board is due** (2026-11-13). The display payload
-  carries `boardDue`, the shift's `spare-validate` time as "HH:MM" (the same
-  time `/v1/me/shift` sends as `gates.board`), in every state including the
-  spare wall, null when no shift is running or the timeline schedules none. A provisional line-up
-  can then be worded "final after 05:26" for any supervisor reading it, not
-  only one with a seat of their own. It is the schedule, not a promise: a
-  manual regenerate builds the board sooner, and a missed run leaves it
-  provisional past that time.
+- **The wall carries the shift's gates** (2026-11-13). The display payload
+  carries `gates`, the running shift's timeline as "HH:MM" each: Ambil roster
+  (`rosterIngest`), Awal shift (`shiftStart`), Batas unggah FTW
+  (`ftwDeadline`), Batas finger pertama (`fingerIn`), Validasi spare
+  (`board`, the `spare-validate` stage), Finger kedua (`secondFinger`) and Bus
+  berangkat (`busDepart`). It is the same object `/v1/me/shift` sends, in
+  every state including the spare wall, all null when no shift is running and
+  one null where the timeline has no active stage. The Pengawas Beranda draws
+  its "Timeline shift" from it and words a provisional line-up "final after
+  05:26" from `gates.board`, without needing a seat of their own or the
+  `timeline` menu. `board` is the schedule, not a promise: a manual
+  regenerate builds the board sooner, and a missed run leaves it provisional
+  past that time. The labels are the app's; the API sends only times.
+- **Every card names its unit class** (2026-11-13): `className`, from
+  `unit_classes` (`REARDUMP100T`, `BIGDIGGER`), so the Beranda can list empty
+  units per class. Empty on the spare wall, whose cards are people.
 - **The provisional line-up takes its shift from the roster, not the plan.**
   `fleet_plan_slots` holds no shift: a unit may carry two standing operators,
   and which is today's is settled by each one's `roster_days` code for the
@@ -3024,8 +3032,10 @@ additions, the foundation and the operator; the rest follows.
   That payload is the whole running shift with names and readiness, not
   scoped to a department, as the allocation screens are not: allocation is
   scoped to formations, and a person viewing a wall never is. It carries
-  `boardDue` ("HH:MM", the `spare-validate` time) so Papan ACTUAL can say
-  when a provisional line-up is due to become final.
+  `gates` (the shift's seven gate times, as `/v1/me/shift` sends them) so
+  the Beranda can draw the shift's timeline and say when a provisional
+  line-up is due to become final, and each unit's `className` so it can
+  count empty units per class.
 - **Pengawas Lapangan, built (S5, 2026-10-19):** Beranda (crewed of total
   units, the empty ones, how many came from the spare pool, breakdowns from
   unit status), Papan ACTUAL with Semua / Kosong / Spare / Manual (the pool

@@ -728,6 +728,7 @@ describe("candidates for a unit", () => {
 const slot = (over: Partial<WallSlot> = {}): WallSlot => ({
   unitId: crypto.randomUUID(),
   unitCode: "DT-100",
+  className: "K",
   modelName: "M",
   brandName: "B",
   fleetId: null,
@@ -1624,37 +1625,90 @@ describe("the fleet wall endpoint", () => {
       expect(fleet.total).toBe(fleet.units.length);
   });
 
-  /* When the line-up is due to be final, from the timeline (2026-11-13), so a
-     supervisor with no seat of their own can be told it too. Which shift is
-     running is this database's timeline's answer, as in `me.test.ts`. */
-  const boardDueFor = async (shift: ShiftKind | null) =>
-    shift
-      ? ((await stageTimeOf("spare-validate", shift))?.slice(0, 5) ?? null)
-      : null;
+  /* The shift's gates, from the timeline (2026-11-13): when the line-up is
+     due to be final and the rest of the Beranda's timeline, so a supervisor
+     with no seat of their own can be told them too. Which shift is running is
+     this database's timeline's answer, as in `me.test.ts`. */
+  const GATE_ACTIONS = {
+    rosterIngest: "roster-ingest",
+    shiftStart: "shift-start",
+    ftwDeadline: "ftw-deadline",
+    fingerIn: "finger-in",
+    board: "spare-validate",
+    secondFinger: "finger-second",
+    busDepart: "bus-depart",
+  } as const;
+  const gatesFor = async (shift: ShiftKind | null) =>
+    Object.fromEntries(
+      await Promise.all(
+        Object.entries(GATE_ACTIONS).map(
+          async ([key, action]) =>
+            [
+              key,
+              shift
+                ? ((await stageTimeOf(action, shift))?.slice(0, 5) ?? null)
+                : null,
+            ] as const
+        )
+      )
+    );
   const display = async (path = "/fleet-allocation/actual/display") => {
     const res = await send("GET", path, wall.cookie);
     expect(res.status).toBe(200);
     return (await res.json()) as {
       shift: ShiftKind | null;
-      boardDue?: string | null;
+      gates?: Record<string, string | null>;
+      boardDue?: unknown;
+      fleets: {
+        kind: string;
+        units: { unitCode: string; className?: string }[];
+      }[];
     };
   };
 
-  test("says when the board is due, as the timeline schedules spare-validate", async () => {
+  test("carries the shift's gates, as the timeline schedules them", async () => {
     const body = await display();
     // Without a running shift every branch but the blank one goes untested.
     expect(body.shift).not.toBeNull();
-    expect("boardDue" in body).toBe(true);
-    expect(body.boardDue).toBe(await boardDueFor(body.shift));
-    if (body.boardDue) expect(body.boardDue).toMatch(/^\d{2}:\d{2}$/);
+    expect(body.gates).toEqual(await gatesFor(body.shift));
+    for (const at of Object.values(body.gates!))
+      if (at) expect(at).toMatch(/^\d{2}:\d{2}$/);
+    // One field for one time: `gates.board` replaced it.
+    expect("boardDue" in body).toBe(false);
   });
 
-  test("the spare wall says when the board is due too", async () => {
+  test("the spare wall carries the gates too", async () => {
     const body = await display(
       `/fleet-allocation/actual/display?device=${SPARE_DEVICE_ID}`
     );
-    expect("boardDue" in body).toBe(true);
-    expect(body.boardDue).toBe(await boardDueFor(body.shift));
+    expect(body.gates).toEqual(await gatesFor(body.shift));
+  });
+
+  test("names each unit's class, so the phone can count empty seats by it", async () => {
+    const body = await display();
+    const ours = body.fleets
+      .flatMap((f) => f.units)
+      .filter((u) => u.unitCode.startsWith(`${tag}-`));
+    // This file's units, whichever board — plan or generated — is up.
+    expect(ours.length).toBeGreaterThanOrEqual(2);
+    const classOf = new Map(
+      (
+        await db
+          .select({ code: schema.units.code, name: schema.unitClasses.name })
+          .from(schema.units)
+          .innerJoin(
+            schema.unitClasses,
+            eq(schema.unitClasses.id, schema.units.classId)
+          )
+          .where(
+            inArray(
+              schema.units.code,
+              ours.map((u) => u.unitCode)
+            )
+          )
+      ).map((r) => [r.code, r.name])
+    );
+    for (const u of ours) expect(u.className).toBe(classOf.get(u.unitCode)!);
   });
 
   test("names no device, and the support group comes too, as on the support wall", async () => {
@@ -1682,21 +1736,20 @@ describe("the fleet wall endpoint", () => {
     expect(site.fleets.at(-1)!.kind).toBe("support");
   });
 
-  test("the support wall says when the board is due too", async () => {
+  test("the support wall carries the gates too", async () => {
     /* No branch of its own — it shares the formation walls' path and only
        groups differently — so this pins that it keeps the field. */
     const body = await display(
       `/fleet-allocation/actual/display?device=${SUPPORT_DEVICE_ID}`
     );
     expect(body.shift).not.toBeNull();
-    expect("boardDue" in body).toBe(true);
-    expect(body.boardDue).toBe(await boardDueFor(body.shift));
+    expect(body.gates).toEqual(await gatesFor(body.shift));
   });
 
   /* Switches the site's own `spare-validate` rows off for one request and
      back on in `finally`, as `stage-time.test.ts` suspends its stages: bun
      runs test files one after another, so no other file reads them meanwhile. */
-  test("says null when the timeline schedules no board", async () => {
+  test("says null for a gate the timeline does not schedule", async () => {
     const rows = await db
       .select({ id: schema.timelineStages.id })
       .from(schema.timelineStages)
@@ -1717,8 +1770,12 @@ describe("the fleet wall endpoint", () => {
       // A running shift, so the null is the missing stage's and not the
       // blank payload's.
       expect(body.shift).not.toBeNull();
-      expect("boardDue" in body).toBe(true);
-      expect(body.boardDue).toBeNull();
+      expect(body.gates!.board).toBeNull();
+      // Only the missing stage: the rest of the shift still has its times.
+      expect(body.gates).toEqual({
+        ...(await gatesFor(body.shift)),
+        board: null,
+      });
     } finally {
       if (ids.length)
         await db
