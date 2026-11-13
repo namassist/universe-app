@@ -266,7 +266,9 @@ with the TV or the ops console:
 
 - **Papan ACTUAL is the fleet wall.** `GET /v1/fleet-allocation/actual/display`
   accepts the `fleet-allocation` menu as well as `display-fleet`. Its photo
-  route stays the wall's own. It carries `boardDue` (2026-11-13): the
+  route stays the wall's own. Called with no `?device=`, it is the site:
+  every formation, then the support group (`groupIntoFleets`' `site`), so the
+  phone's empty count is the board's (2026-11-13). It carries `boardDue` (2026-11-13): the
   shift's `spare-validate` time, "HH:MM" (null with no running shift or no
   active stage), the same value as
   `/me/shift`'s `gates.board`, so a supervisor with no seat is told when the

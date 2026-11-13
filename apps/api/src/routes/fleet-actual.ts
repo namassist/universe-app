@@ -675,10 +675,10 @@ export type WallFleet = {
 /**
  * The board, arranged into the formations a wall rotates through.
  *
- * **Units belonging to no fleet are dropped** (owner, 2026-08-29). The wall
- * answers one question — how each formation is crewed — and a unit that is in
- * no formation has no answer to contribute. They remain on the Actual board,
- * where a supervisor sees and fills them; it is only the TV that is scoped.
+ * **A pit's wall shows no support units** (owner, 2026-08-29; support wall
+ * 2026-09-04). It answers one question — how each formation is crewed — and
+ * the support group has a screen of its own. The site-wide answer, for a
+ * person naming no screen, carries them last (`WallGroups`).
  *
  * Counts are per formation for the same reason: someone standing in front of
  * the Pit 3 screen acts on Pit 3, and a site-wide number there would be read
@@ -699,6 +699,20 @@ export type WallFleet = {
  */
 const PLAN_SUPPORT_GROUP = "plan-support";
 
+/**
+ * Which groups a wall is about.
+ *
+ * - `formations` — a pit's TV: the formations, never the support units, so a
+ *   panel does not cycle through dozers working somewhere else.
+ * - `support` — the support wall: that one group and nothing else.
+ * - `site` — a person naming no screen (the phone's Papan ACTUAL, a browser
+ *   previewing the site): every formation, then the support group. They are
+ *   looking at the site, and a site without its support units undercounted
+ *   the empty seats by every idle dozer and water truck (2026-11-13: 243
+ *   shown, 281 on the board).
+ */
+export type WallGroups = "formations" | "support" | "site";
+
 export function groupIntoFleets(
   slots: WallSlot[],
   /**
@@ -714,13 +728,12 @@ export function groupIntoFleets(
    */
   scope: readonly string[] | null = null,
   /**
-   * The support wall: show that group and nothing else.
+   * Which groups the wall is about — see `WallGroups`.
    *
    * Separate from `scope` because it is a different question. A scope names
-   * formations an admin picked; this names the one group nobody picks, on the
-   * one screen whose subject is what it is.
+   * formations an admin picked; this is about the one group nobody picks.
    */
-  supportOnly = false
+  which: WallGroups = "formations"
 ): WallFleet[] {
   const wanted = scope && scope.length ? new Set(scope) : null;
   const groups = new Map<string, WallFleet>();
@@ -751,7 +764,9 @@ export function groupIntoFleets(
        needs nothing, which is why the two are told apart by `kind` rather than
        by whether a code happens to be there. */
     if (s.groupKind === "fleet" && !s.leaderCode) continue;
-    if (supportOnly !== (s.groupKind === "support")) continue;
+    const isSupport = s.groupKind === "support";
+    if (which === "formations" && isSupport) continue;
+    if (which === "support" && !isSupport) continue;
     if (wanted && !(s.sourceFleetId && wanted.has(s.sourceFleetId))) continue;
     let group = groups.get(groupId);
     if (!group) {
@@ -1225,7 +1240,17 @@ export const fleetActualRoutes = new Elysia({
         deviceName,
         fleets: unitScope
           ? groupIntoUnits(wall, unitScope, screen!.id)
-          : groupIntoFleets(wall, scope, supportOnly),
+          : groupIntoFleets(
+              wall,
+              scope,
+              /* Only a person naming no screen is looking at the site; a
+                 device always answers as a wall, even one whose row is gone. */
+              supportOnly
+                ? "support"
+                : principal.kind === "user" && !screen
+                  ? "site"
+                  : "formations"
+            ),
       };
     },
     {

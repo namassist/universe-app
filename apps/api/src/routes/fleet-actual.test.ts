@@ -13,7 +13,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
 import { and, eq, inArray } from "drizzle-orm";
 
-import { SPARE_DEVICE_ID, type ShiftKind } from "@universe/contracts";
+import {
+  SPARE_DEVICE_ID,
+  SUPPORT_DEVICE_ID,
+  type ShiftKind,
+} from "@universe/contracts";
 
 import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
@@ -889,7 +893,7 @@ describe("the support wall, before and after the board", () => {
         }),
       ],
       null,
-      true
+      "support"
     );
 
     expect(groups).toHaveLength(1);
@@ -928,7 +932,7 @@ describe("the support wall, before and after the board", () => {
         }),
       ],
       null,
-      true
+      "support"
     );
 
     expect(groups).toHaveLength(1);
@@ -952,6 +956,30 @@ describe("the support wall, before and after the board", () => {
       slot({ unitCode: "EX-22", fleetId: "f1", leaderCode: "EX-22" }),
     ]);
     expect(groups.map((g) => g.kind)).toEqual(["fleet"]);
+  });
+
+  test("the site-wide board keeps the support units, after the formations", () => {
+    /* The bug this closes (2026-11-13). A person naming no screen — the
+       phone's Papan ACTUAL, a browser previewing the site — got the formation
+       walls' rule, so the 38 empty support units fell off: the phone said 243
+       empty where the Actual board said 281. */
+    const groups = groupIntoFleets(
+      [
+        slot({ unitCode: "DZ-01", groupKind: "support" }),
+        slot({ unitCode: "EX-22", fleetId: "f1", leaderCode: "EX-22" }),
+        slot({
+          unitCode: "WT-01",
+          groupKind: "support",
+          employeeName: "Andi",
+          source: "plan",
+        }),
+      ],
+      null,
+      "site"
+    );
+    expect(groups.map((g) => g.kind)).toEqual(["fleet", "support"]);
+    expect(groups[1]).toMatchObject({ total: 2, crewed: 1, idle: 1 });
+    expect(groups.reduce((n, g) => n + g.idle, 0)).toBe(2);
   });
 });
 
@@ -1625,6 +1653,42 @@ describe("the fleet wall endpoint", () => {
     const body = await display(
       `/fleet-allocation/actual/display?device=${SPARE_DEVICE_ID}`
     );
+    expect("boardDue" in body).toBe(true);
+    expect(body.boardDue).toBe(await boardDueFor(body.shift));
+  });
+
+  test("names no device, and the support group comes too, as on the support wall", async () => {
+    type Wall = {
+      fleets: { kind: string; total: number; idle: number; units: unknown[] }[];
+    };
+    const read = async (path: string) => {
+      const res = await send("GET", path, wall.cookie);
+      expect(res.status).toBe(200);
+      return (await res.json()) as Wall;
+    };
+    const site = await read("/fleet-allocation/actual/display");
+    const support = await read(
+      `/fleet-allocation/actual/display?device=${SUPPORT_DEVICE_ID}`
+    );
+    // The fixture's two units are support units, so there is a group to miss.
+    expect(support.fleets).toHaveLength(1);
+    const ours = site.fleets.filter((f) => f.kind === "support");
+    expect(ours).toHaveLength(1);
+    expect(ours[0]).toMatchObject({
+      total: support.fleets[0]!.total,
+      idle: support.fleets[0]!.idle,
+    });
+    // Last, as the support wall's leftovers always sort.
+    expect(site.fleets.at(-1)!.kind).toBe("support");
+  });
+
+  test("the support wall says when the board is due too", async () => {
+    /* No branch of its own — it shares the formation walls' path and only
+       groups differently — so this pins that it keeps the field. */
+    const body = await display(
+      `/fleet-allocation/actual/display?device=${SUPPORT_DEVICE_ID}`
+    );
+    expect(body.shift).not.toBeNull();
     expect("boardDue" in body).toBe(true);
     expect(body.boardDue).toBe(await boardDueFor(body.shift));
   });

@@ -1312,6 +1312,12 @@ until someone pressed Sync at 07:07 — although they were on time.
   an operator rostered on, and the wall showed none of them until the board.
   Plan support slots now gather under one fixed key; a slot with no id that is
   not support still drops out, as before.
+- **Off the pit walls, not off the site** (fixed 2026-11-13). A formation TV
+  never shows the support units, but a person naming no screen — the phone's
+  Papan ACTUAL, a browser previewing the whole board — gets every formation
+  and then the support group, last. Before the fix that answer took the pit
+  walls' rule too, so the phone counted 243 empty units where the Actual board
+  had 281: the 38 missing were the empty support units.
 - **Fixed in every respect but its dwell.** Name, layout and contents are
   decided by what it is; `rotateSeconds` is the one honest question, because
   how long a slide should hold depends on the room. Changes to the rest are
