@@ -13,9 +13,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
 import { and, eq, inArray } from "drizzle-orm";
 
+import { SPARE_DEVICE_ID, type ShiftKind } from "@universe/contracts";
+
 import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
+import { stageTimeOf } from "../stage-time";
 import {
   fleetActualRoutes,
   groupIntoFleets,
@@ -1591,6 +1594,74 @@ describe("the fleet wall endpoint", () => {
     // Each formation's count is its own units, not the board's.
     for (const fleet of body.fleets)
       expect(fleet.total).toBe(fleet.units.length);
+  });
+
+  /* When the line-up is due to be final, from the timeline (2026-11-13), so a
+     supervisor with no seat of their own can be told it too. Which shift is
+     running is this database's timeline's answer, as in `me.test.ts`. */
+  const boardDueFor = async (shift: ShiftKind | null) =>
+    shift
+      ? ((await stageTimeOf("spare-validate", shift))?.slice(0, 5) ?? null)
+      : null;
+  const display = async (path = "/fleet-allocation/actual/display") => {
+    const res = await send("GET", path, wall.cookie);
+    expect(res.status).toBe(200);
+    return (await res.json()) as {
+      shift: ShiftKind | null;
+      boardDue?: string | null;
+    };
+  };
+
+  test("says when the board is due, as the timeline schedules spare-validate", async () => {
+    const body = await display();
+    // Without a running shift every branch but the blank one goes untested.
+    expect(body.shift).not.toBeNull();
+    expect("boardDue" in body).toBe(true);
+    expect(body.boardDue).toBe(await boardDueFor(body.shift));
+    if (body.boardDue) expect(body.boardDue).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  test("the spare wall says when the board is due too", async () => {
+    const body = await display(
+      `/fleet-allocation/actual/display?device=${SPARE_DEVICE_ID}`
+    );
+    expect("boardDue" in body).toBe(true);
+    expect(body.boardDue).toBe(await boardDueFor(body.shift));
+  });
+
+  /* Switches the site's own `spare-validate` rows off for one request and
+     back on in `finally`, as `stage-time.test.ts` suspends its stages: bun
+     runs test files one after another, so no other file reads them meanwhile. */
+  test("says null when the timeline schedules no board", async () => {
+    const rows = await db
+      .select({ id: schema.timelineStages.id })
+      .from(schema.timelineStages)
+      .where(
+        and(
+          eq(schema.timelineStages.action, "spare-validate"),
+          eq(schema.timelineStages.active, true)
+        )
+      );
+    const ids = rows.map((r) => r.id);
+    if (ids.length)
+      await db
+        .update(schema.timelineStages)
+        .set({ active: false })
+        .where(inArray(schema.timelineStages.id, ids));
+    try {
+      const body = await display();
+      // A running shift, so the null is the missing stage's and not the
+      // blank payload's.
+      expect(body.shift).not.toBeNull();
+      expect("boardDue" in body).toBe(true);
+      expect(body.boardDue).toBeNull();
+    } finally {
+      if (ids.length)
+        await db
+          .update(schema.timelineStages)
+          .set({ active: true })
+          .where(inArray(schema.timelineStages.id, ids));
+    }
   });
 });
 

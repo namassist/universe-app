@@ -39,7 +39,7 @@ import {
   shiftIn,
   type FtwVerdict,
 } from "../readiness";
-import { shiftGates } from "../stage-time";
+import { shiftGates, stageClock } from "../stage-time";
 import { photoMimeType, photoPath } from "../storage";
 import { pairingRefusal } from "./fleet-allocation";
 import { localDate } from "../scheduler";
@@ -259,6 +259,18 @@ export async function planSlots(date: string, shift: ShiftKind) {
       "fleet" | "support",
     employeeId: r.rosterId ? r.employeeId : null,
   }));
+}
+
+/**
+ * When the timeline schedules a shift's board, "HH:MM" — `spare-validate`, as
+ * `/me/shift` sends it in `gates.board`, so the phone words both alike.
+ *
+ * A schedule, not a promise: a manual regenerate can build the board sooner,
+ * and a missed run leaves the line-up provisional past it. Null when the
+ * timeline has no active `spare-validate` for that shift.
+ */
+async function boardDueAt(shift: ShiftKind): Promise<string | null> {
+  return stageClock("spare-validate", shift);
 }
 
 async function documentOf(date: string, shift: ShiftKind) {
@@ -1074,6 +1086,7 @@ export const fleetActualRoutes = new Elysia({
         provisional: false,
         ftwClosed: false,
         fingerClosed: false,
+        boardDue: null as string | null,
         rotateSeconds: rotate,
         layout,
         cardLayout,
@@ -1089,7 +1102,10 @@ export const fleetActualRoutes = new Elysia({
       const now = currentShift(new Date(), await shiftGates());
       if (!now) return blank;
 
-      const doc = await documentOf(now.date, now.shift);
+      const [doc, boardDue] = await Promise.all([
+        documentOf(now.date, now.shift),
+        boardDueAt(now.shift),
+      ]);
 
       if (spareOnly) {
         const at = new Date();
@@ -1109,6 +1125,7 @@ export const fleetActualRoutes = new Elysia({
           provisional: false,
           ftwClosed: deadlinePassed(ftwGate, now.date, at),
           fingerClosed: deadlinePassed(fingerGate, now.date, at),
+          boardDue,
           fleets: [group],
         };
       }
@@ -1200,6 +1217,7 @@ export const fleetActualRoutes = new Elysia({
         provisional,
         ftwClosed: deadlinePassed(ftwGate, now.date, at),
         fingerClosed: deadlinePassed(fingerGate, now.date, at),
+        boardDue,
         rotateSeconds: rotate,
         layout,
         cardLayout,

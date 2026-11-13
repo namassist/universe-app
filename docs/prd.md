@@ -1377,6 +1377,14 @@ until someone pressed Sync at 07:07 — although they were on time.
   screen there is the least useful thing the wall could do. The provisional
   state persisting past `spare-validate` is also the standing alarm that
   nobody generated the board.
+- **The wall says when its board is due** (2026-11-13). The display payload
+  carries `boardDue`, the shift's `spare-validate` time as "HH:MM" (the same
+  time `/v1/me/shift` sends as `gates.board`), in every state including the
+  spare wall, null when no shift is running or the timeline schedules none. A provisional line-up
+  can then be worded "final after 05:26" for any supervisor reading it, not
+  only one with a seat of their own. It is the schedule, not a promise: a
+  manual regenerate builds the board sooner, and a missed run leaves it
+  provisional past that time.
 - **The provisional line-up takes its shift from the roster, not the plan.**
   `fleet_plan_slots` holds no shift: a unit may carry two standing operators,
   and which is today's is settled by each one's `roster_days` code for the
@@ -3009,7 +3017,9 @@ additions, the foundation and the operator; the rest follows.
   `fleet-allocation` menu, so Papan ACTUAL on the phone is the wall itself.
   That payload is the whole running shift with names and readiness, not
   scoped to a department, as the allocation screens are not: allocation is
-  scoped to formations, and a person viewing a wall never is.
+  scoped to formations, and a person viewing a wall never is. It carries
+  `boardDue` ("HH:MM", the `spare-validate` time) so Papan ACTUAL can say
+  when a provisional line-up is due to become final.
 - **Pengawas Lapangan, built (S5, 2026-10-19):** Beranda (crewed of total
   units, the empty ones, how many came from the spare pool, breakdowns from
   unit status), Papan ACTUAL with Semua / Kosong / Spare / Manual (the pool

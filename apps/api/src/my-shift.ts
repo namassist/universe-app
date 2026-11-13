@@ -45,7 +45,7 @@ import {
   unitByCode,
 } from "./routes/fleet-allocation";
 import { localDate } from "./scheduler";
-import { shiftGates, stageTimeOf } from "./stage-time";
+import { shiftGates, stageClock, stageTimeOf } from "./stage-time";
 import { firstTapOf } from "./ticket-issue";
 import type { Seat } from "./ticket-rules";
 
@@ -246,8 +246,7 @@ export type ShiftGateTimes = {
 };
 
 async function gateTimes(shift: ShiftKind): Promise<ShiftGateTimes> {
-  const at = async (action: TimelineAction) =>
-    (await stageTimeOf(action, shift))?.slice(0, 5) ?? null;
+  const at = (action: TimelineAction) => stageClock(action, shift);
   const [ftwDeadline, fingerIn, board, secondFinger, busDepart] =
     await Promise.all([
       at("ftw-deadline"),

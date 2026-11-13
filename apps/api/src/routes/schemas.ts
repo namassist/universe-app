@@ -1530,6 +1530,17 @@ export const FleetDisplaySchema = t.Object({
    */
   ftwClosed: t.Boolean(),
   fingerClosed: t.Boolean(),
+  /**
+   * When the timeline schedules this shift's board, "HH:MM": the
+   * `spare-validate` stage, the same time `/me/shift` sends as `gates.board`.
+   * Lets a screen word a provisional line-up as "final after 05:26" for anyone
+   * reading it, seated or not.
+   *
+   * A schedule, not a promise — a manual regenerate can build the board
+   * sooner, and `provisional` still true past it is the alarm that nobody did.
+   * Null when no shift is running or the timeline has no active stage for it.
+   */
+  boardDue: t.Nullable(t.String()),
   /** Seconds one formation stays on screen — the screen's own setting. */
   rotateSeconds: t.Integer(),
   /**

@@ -35,6 +35,18 @@ export async function stageTimeOf(
 }
 
 /**
+ * A stage's time as a screen names it, "HH:MM" — the one trim every gate the
+ * phone and the walls show goes through, so `/me/shift`'s `gates` and the
+ * fleet wall's `boardDue` cannot drift apart.
+ */
+export async function stageClock(
+  action: TimelineAction,
+  shift: ShiftKind
+): Promise<string | null> {
+  return (await stageTimeOf(action, shift))?.slice(0, 5) ?? null;
+}
+
+/**
  * The gate each pull runs until.
  *
  * A pull window is not a duration somebody chose; it is the span between a

@@ -4962,6 +4962,7 @@
                     "provisional",
                     "ftwClosed",
                     "fingerClosed",
+                    "boardDue",
                     "rotateSeconds",
                     "layout",
                     "cardLayout",
@@ -5001,6 +5002,11 @@
                     "fingerClosed": {
                       "type": "boolean",
                       "example": true
+                    },
+                    "boardDue": {
+                      "type": "string",
+                      "nullable": true,
+                      "example": "05:26"
                     },
                     "rotateSeconds": {
                       "type": "integer",

@@ -266,7 +266,12 @@ with the TV or the ops console:
 
 - **Papan ACTUAL is the fleet wall.** `GET /v1/fleet-allocation/actual/display`
   accepts the `fleet-allocation` menu as well as `display-fleet`. Its photo
-  route stays the wall's own.
+  route stays the wall's own. It carries `boardDue` (2026-11-13): the
+  shift's `spare-validate` time, "HH:MM" (null with no running shift or no
+  active stage), the same value as
+  `/me/shift`'s `gates.board`, so a supervisor with no seat is told when the
+  line-up is due to be final. Not named `boardAt`: on `/me/shift` that is
+  the ISO moment a board _was_ built, and one name must not mean both.
 - **The timeline monitor is the Operations Center's reading.**
   `GET /v1/timeline/runs` (menu `timeline`, view) returns the running shift,
   each stage with its claim and last logged run, and the heartbeat, from

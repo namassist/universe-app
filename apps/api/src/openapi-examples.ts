@@ -239,6 +239,8 @@ export const FIELDS: Record<string, FieldDoc> = {
   "gates.ftwDeadline": { example: "05:00" },
   "gates.fingerIn": { example: "05:25" },
   "gates.board": { example: "05:26" },
+  /* The fleet wall: when the timeline schedules the board, as gates.board. */
+  boardDue: { example: "05:26" },
   "gates.secondFinger": { example: "05:28" },
   "gates.busDepart": { example: "05:30" },
   remarks: { example: "Unit breakdown 05:33" },
