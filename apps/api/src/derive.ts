@@ -17,9 +17,12 @@
  * the two side by side has said whether they agree.
  */
 
-import { and, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { rosterShift, type ShiftKind } from "@universe/contracts";
 
+import { arrivalWindows, outIsArrival } from "./arrival-window";
 import { db, schema } from "./db";
+import { rosterDayInForce } from "./roster-in-force";
 
 /** One tap, as much of it as the reduction needs. */
 export type ReducibleTap = {
@@ -65,13 +68,21 @@ const clockOf = (at: string) => at.slice(11, 19);
  * the roster is what stops it being read as a night arrival.
  *
  * Noon belongs to the afternoon, matching `shiftIn`'s own boundary.
+ *
+ * `outArrives` says which OUT taps are arrivals after all — the machine left
+ * on *Pulang* at the muster (`arrival-window.ts`). The rule needs the
+ * timeline and the roster, so it is decided by the caller; this only files
+ * such a tap in the IN column it belongs to.
  */
-export function reduceTaps(taps: ReducibleTap[]): Reading {
+export function reduceTaps(
+  taps: ReducibleTap[],
+  outArrives: (tap: ReducibleTap) => boolean = () => false
+): Reading {
   const reading: Reading = { ...EMPTY };
   /* Earliest wins in each column, so the order taps arrive in cannot matter —
      a replayed pull and a fresh one must reduce alike. */
   for (const tap of [...taps].sort((a, b) => a.at.localeCompare(b.at))) {
-    if (tap.direction === "out") {
+    if (tap.direction === "out" && !outArrives(tap)) {
       if (!reading.firstOutAt) {
         reading.firstOutAt = tap.at;
         reading.firstOutIp = tap.ip;
@@ -170,10 +181,19 @@ export async function deriveDate(date: string): Promise<number> {
     byNik.set(tap.nik, list);
   }
 
+  /* An OUT at the muster is an arrival for somebody rostered to it
+     (2026-11-14). Read once per rebuild, for the people who tapped. */
+  const [windows, rostered] = await Promise.all([
+    arrivalWindows(),
+    rosteredShifts(date, [...byNik.keys()]),
+  ]);
+
   const rows = [...byNik.entries()].map(([nik, list]) => ({
     nik,
     date,
-    ...reduceTaps(list),
+    ...reduceTaps(list, (tap) =>
+      outIsArrival(tap.at, rostered.get(nik) ?? null, windows)
+    ),
     /* When we last rebuilt this row, which is what the screens call "synced". */
     syncedAt: new Date(),
   }));
@@ -201,6 +221,37 @@ export async function deriveDate(date: string): Promise<number> {
       },
     });
   return rows.length;
+}
+
+/**
+ * The shift each of these people is rostered to on `date`, from the roster
+ * in force. Anyone not rostered `D` or `N` that date is absent from the map.
+ */
+async function rosteredShifts(
+  date: string,
+  niks: string[]
+): Promise<Map<string, ShiftKind>> {
+  if (!niks.length) return new Map();
+  const rows = await db
+    .select({ nik: schema.employees.nik, code: schema.rosterDays.code })
+    .from(schema.rosterDays)
+    .innerJoin(
+      schema.employees,
+      eq(schema.employees.id, schema.rosterDays.employeeId)
+    )
+    .where(
+      and(
+        eq(schema.rosterDays.date, date),
+        inArray(schema.employees.nik, niks),
+        rosterDayInForce
+      )
+    );
+  const shifts = new Map<string, ShiftKind>();
+  for (const row of rows) {
+    const shift = rosterShift(row.code);
+    if (shift) shifts.set(row.nik, shift);
+  }
+  return shifts;
 }
 
 /**

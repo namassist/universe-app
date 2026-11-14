@@ -1872,3 +1872,123 @@ describe("a spare certain to get no unit", () => {
     expect(result).toEqual({ issued: false, reason: "held-back" });
   });
 });
+
+/**
+ * The machine left on *Pulang* at the muster (2026-11-14).
+ *
+ * The slip read the live tap as an arrival and printed the holder's unit; the
+ * pull then stored the same tap as OUT and the board dropped him. The slip and
+ * the board now read the same rule: an OUT inside the shift's muster window,
+ * by somebody rostered to that shift, is the arrival.
+ */
+describe("an OUT at the muster", () => {
+  const made = {
+    niks: [] as string[],
+    employees: [] as string[],
+    departments: [] as string[],
+    positions: [] as string[],
+    docs: [] as string[],
+  };
+
+  afterAll(async () => {
+    if (made.niks.length) {
+      await db
+        .delete(schema.deviceLiveEvents)
+        .where(inArray(schema.deviceLiveEvents.nik, made.niks));
+      await db
+        .delete(schema.deviceTaps)
+        .where(inArray(schema.deviceTaps.nik, made.niks));
+    }
+    if (made.employees.length)
+      await db
+        .delete(schema.rosterDays)
+        .where(inArray(schema.rosterDays.employeeId, made.employees));
+    if (made.docs.length)
+      await db
+        .delete(schema.rosterDocuments)
+        .where(inArray(schema.rosterDocuments.id, made.docs));
+    if (made.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, made.employees));
+    if (made.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, made.positions));
+    if (made.departments.length)
+      await db
+        .delete(schema.departments)
+        .where(inArray(schema.departments.id, made.departments));
+  });
+
+  const rosteredOn = async (date: string, code: "D" | "N") => {
+    const [company] = await db
+      .select({ id: schema.companies.id })
+      .from(schema.companies)
+      .limit(1);
+    const [dept] = await db
+      .insert(schema.departments)
+      .values({ name: `${tag} OUT ${uid()}`, companyId: company!.id })
+      .returning({ id: schema.departments.id });
+    made.departments.push(dept!.id);
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `ZZ out-muster ${crypto.randomUUID().slice(0, 8)}`,
+        departmentId: dept!.id,
+      })
+      .returning({ id: schema.positions.id });
+    made.positions.push(position!.id);
+    const who = `94${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik: who,
+        name: `${tag} ${who}`,
+        departmentId: dept!.id,
+        companyId: company!.id,
+        positionId: position!.id,
+      })
+      .returning({ id: schema.employees.id });
+    made.employees.push(employee!.id);
+    made.niks.push(who);
+    const [doc] = await db
+      .insert(schema.rosterDocuments)
+      .values({
+        departmentId: dept!.id,
+        month: `${date.slice(0, 7)}-01`,
+        fileName: `${tag}-out-${who}.xlsx`,
+      })
+      .returning({ id: schema.rosterDocuments.id });
+    made.docs.push(doc!.id);
+    await db
+      .insert(schema.rosterDays)
+      .values({ documentId: doc!.id, employeeId: employee!.id, date, code });
+    return who;
+  };
+
+  test("by a holder rostered D is his arrival, on the slip as on the board", async () => {
+    const day = "2026-01-26";
+    const who = await rosteredOn(day, "D");
+    await db
+      .insert(schema.deviceTaps)
+      .values({ ip, nik: who, at: `${day} 04:35:00`, direction: "out" });
+    await db
+      .insert(schema.deviceLiveEvents)
+      .values({ ip, nik: who, at: `${day} 04:35:00` });
+
+    expect(await firstTapOf(who, day, "day")).toBe(`${day} 04:35:00`);
+  });
+
+  test("by the day shift going home is no night arrival", async () => {
+    const day = "2026-01-27";
+    const who = await rosteredOn(day, "D");
+    await db
+      .insert(schema.deviceTaps)
+      .values({ ip, nik: who, at: `${day} 17:55:00`, direction: "out" });
+
+    expect(await firstTapOf(who, day, "night")).toBeNull();
+  });
+});

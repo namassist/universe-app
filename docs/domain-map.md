@@ -83,7 +83,10 @@ Gaps are filled from the spare pool.
 - **Finger passes** when the first IN of **that shift** is strictly before
   `finger-in`. Resolve the IN with `shiftIn(reading, shift)`, never
   `firstInAt ?? firstInPmAt`. The IN is split at 12:00. An OUT-only row is
-  `missing`.
+  `missing`, but an OUT inside the shift's muster window (`shift-start` →
+  `bus-depart` + `DEVICE_COLLECT_GRACE_MINUTES`) by somebody rostered to that
+  shift is an arrival (`arrival-window.ts`, `outIsArrival`). `deriveDate` and
+  the slip's `firstTapOf` both apply it.
 - A unit with `ftw = false` judges the tap alone.
 - The category is computed **by Universe from savera's own rules**. savera's
   word is kept in `ftw_readings.savera_category` and not shown.
@@ -151,14 +154,14 @@ Invariants:
   confirmation.
 - Failures notify with a reason from a **closed list** (never the error text).
 
-Code: `allocation.ts`, `readiness.ts`, `fleet-scope.ts`, `spare-class.ts` (SIMPER class), `routes/fleet-allocation.ts`
+Code: `allocation.ts`, `readiness.ts`, `arrival-window.ts` (OUT at the muster), `fleet-scope.ts`, `spare-class.ts` (SIMPER class), `routes/fleet-allocation.ts`
 (PLAN), `routes/fleet-actual.ts` (boards, audit, candidates, manual edit),
 `routes/allocation-priority.ts`, `routes/fleets*.ts` and
 `routes/fleet-allocation-import.ts` (the PLAN file parsed against the default; Reset lives in `routes/fleet-allocation.ts`),
 `plan-generate.ts` + `routes/fleet-allocation-generate.ts` (PLAN Generate: no FTW/finger, shift by noon, same eligibility, priority order and SIMPER class as step 5, NIK in place of the tap).
 Web: `components/menus/fleet-allocation/*`, `fleet-allocation.tsx`,
 `allocation-priority.tsx`, `fleet-setting*.tsx`, `plan-default-bar.tsx` (default line + Reset dialog), `plan-default.ts`, `plan-generate-dialog.tsx` + `plan-generate.ts` (Generate).
-Tests: `allocation.test.ts`, `readiness.test.ts`, `spare-class.test.ts`, `routes/fleet-allocation*.test.ts`,
+Tests: `allocation.test.ts`, `readiness.test.ts`, `arrival-window.test.ts`, `derive.test.ts`, `spare-class.test.ts`, `routes/fleet-allocation*.test.ts`,
 `routes/fleet-actual.test.ts`, `routes/allocation-priority.test.ts`, `routes/fleet-allocation-default.test.ts` (default + Reset), `plan-generate.test.ts`, `routes/fleet-allocation-generate.test.ts`, `crew-rows.test.ts`, `plan-default.test.ts`, web `plan-generate.test.ts`.
 PRD: _Asset & Fleet_, from _Fleet composition_ through _The Actual tab_.
 
@@ -267,7 +270,10 @@ listened to, because listening sends `enableDevice`.
   board** (engine or manual), printed as-is and never re-judged.
 - Spares print at once when they can never be seated (late first tap, or an
   FTW that is a final no on every unit they could take).
-- The printed time is always the **first tap of the shift**.
+- The printed time is always the **first tap of the shift**. A muster-window
+  OUT by somebody rostered to the shift counts as that tap, with the same rule
+  the reading uses (`arrival-window.ts`), so the slip cannot promise a seat
+  the board then refuses.
 - A repeat tap reprints **only if the slip's content changed**. Arrival time
   and booth don't count, because machine clocks disagree.
 - A printer failure is retried ~60 s, then queued for manual reprint. Nothing
