@@ -74,6 +74,7 @@ export const MOBILE_OPERATIONS = [
   "GET /v1/unit-status/",
   "GET /v1/unit-status/{code}/history",
   "GET /v1/id-card/{nik}",
+  "GET /v1/id-card/{nik}/photo",
   /* The Superadmin's (S6): a hand placement as the Actual tab makes it, the
      two account actions, and the muster monitor. */
   "GET /v1/fleet-allocation/actual/{date}/{shift}/candidates/{unitId}",
@@ -136,6 +137,7 @@ const REFUSALS: Partial<Record<(typeof MOBILE_OPERATIONS)[number], Refusals>> =
     },
     "GET /v1/unit-status/{code}/history": { "404": ["unit_not_found"] },
     "GET /v1/id-card/{nik}": { "404": ["employee_not_found"] },
+    "GET /v1/id-card/{nik}/photo": { "404": ["photo_not_found"] },
     "PATCH /v1/users/{id}": {
       "404": ["user_not_found"],
       "409": ["own_account", "last_roles_admin", "email_taken", "nik_taken"],
@@ -192,6 +194,23 @@ function successExamples(
       ];
     })
   );
+}
+
+/** Operations whose success body is an image the route streams from disk. */
+const IMAGES = new Set(["GET /v1/id-card/{nik}/photo"]);
+
+/**
+ * An image's 200 under `image/*`. Elysia files every non-object body under
+ * `text/plain`, and a client generated from that would read a face as text.
+ */
+function asImage(
+  name: string,
+  responses: Record<string, Json>
+): Record<string, Json> {
+  const ok = responses["200"] as { content?: Record<string, Json> } | undefined;
+  const body = ok?.content?.["text/plain"];
+  if (!IMAGES.has(name) || !body) return responses;
+  return { ...responses, "200": { ...ok, content: { "image/*": body } } };
 }
 
 /** No session asked for: the app reaches these before it has one. */
@@ -344,7 +363,9 @@ export async function buildMobileSpec(): Promise<Json> {
             {
               ...in30,
               responses: asOpenResponse(
-                sortedResponses(successExamples(name, in30.responses))
+                sortedResponses(
+                  asImage(name, successExamples(name, in30.responses))
+                )
               ),
             },
           ];

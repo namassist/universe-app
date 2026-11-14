@@ -46,9 +46,8 @@ describe("buildMobileSpec", () => {
       "/v1/fit-to-work/sync",
       "/v1/employees",
       /* Mounted groups whose other routes the phone never calls: the wall's
-         photo feed, a card's photo, a status change, a regenerated board. */
+         photo feed, a status change, a regenerated board. */
       "/v1/fleet-allocation/actual/display/photo/{nik}",
-      "/v1/id-card/{nik}/photo",
       "/v1/unit-status/{code}",
       "/v1/fleet-allocation/actual/{date}/{shift}/generate",
       "/v1/ops/overview",
@@ -61,6 +60,21 @@ describe("buildMobileSpec", () => {
       "/v1/reports/departments",
     ])
       expect(paths).not.toContain(internal);
+  });
+
+  /* Elysia files every non-object body under text/plain; a client generated
+     from that would try to read a face as text. */
+  test("a card's photo is an image, not text", async () => {
+    const spec = (await buildMobileSpec()) as Spec;
+    const ok = (
+      spec.paths["/v1/id-card/{nik}/photo"]?.get as {
+        responses: Record<string, { content: Record<string, unknown> }>;
+      }
+    ).responses["200"]!;
+    expect(Object.keys(ok.content)).toEqual(["image/*"]);
+    expect(ok.content["image/*"]).toMatchObject({
+      schema: { type: "string", format: "binary" },
+    });
   });
 
   test("reads the dashboard and one report at a time, view only", async () => {

@@ -17,7 +17,7 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import { Elysia, t } from "elysia";
+import { Elysia, file as elysiaFile, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
 import { scopeWhere } from "../auth/scope";
@@ -61,6 +61,9 @@ async function personOf(
       status: schema.employees.status,
       department: schema.departments.name,
       position: schema.positions.name,
+      simperNo: schema.employees.simperNo,
+      simperTypeName: schema.simperTypes.name,
+      simperExp: schema.employees.simperExp,
       /* Whether allocation is about this person at all — what decides
          between SPARE and nothing when they hold no unit. */
       fleetAllocation: schema.positions.fleetAllocation,
@@ -74,6 +77,10 @@ async function personOf(
       schema.positions,
       eq(schema.positions.id, schema.employees.positionId)
     )
+    .leftJoin(
+      schema.simperTypes,
+      eq(schema.simperTypes.id, schema.employees.simperTypeId)
+    )
     .where(
       and(
         eq(schema.employees.nik, nik),
@@ -86,6 +93,18 @@ async function personOf(
     .limit(1);
   return person ?? null;
 }
+
+/**
+ * Where the phone fetches the face from, or null when none is on file.
+ *
+ * A ready path rather than a file name to assemble: the Kotlin client should
+ * not know how this API lays out its routes. The file name rides along as
+ * `?v=` so a replaced photo is a new URL and never comes back out of cache.
+ */
+const photoUrlOf = (nik: string, photoFile: string | null) =>
+  photoFile
+    ? `/v1/id-card/${encodeURIComponent(nik)}/photo?v=${encodeURIComponent(photoFile)}`
+    : null;
 
 export const idCardRoutes = new Elysia({
   prefix: "/id-card",
@@ -112,18 +131,28 @@ export const idCardRoutes = new Elysia({
         .where(eq(schema.employeeSkills.employeeId, person.id))
         .orderBy(schema.simperCodes.name);
 
+      /* Who the card names, whatever today holds. The SIMPER card is read
+         as the Profil screen reads it: an empty number is null, not "". */
+      const card = {
+        nik: person.nik,
+        name: person.name,
+        photoFile: person.photoFile,
+        photoUrl: photoUrlOf(person.nik, person.photoFile),
+        department: person.department,
+        position: person.position,
+        simper: simperCodes(skills),
+        simperNo: person.simperNo || null,
+        simperTypeName: person.simperTypeName,
+        simperExp: person.simperExp,
+      };
+
       /* The shift the site is working now, the same boundary the walls turn
          on. With a half-configured timeline there is no answer, and the card
          says so by leaving today's half empty rather than guessing it. */
       const now = currentShift(new Date(), await shiftGates());
       if (!now)
         return {
-          nik: person.nik,
-          name: person.name,
-          photoFile: person.photoFile,
-          department: person.department,
-          position: person.position,
-          simper: simperCodes(skills),
+          ...card,
           shift: null,
           roster: null,
           unit: null,
@@ -164,12 +193,7 @@ export const idCardRoutes = new Elysia({
       });
 
       return {
-        nik: person.nik,
-        name: person.name,
-        photoFile: person.photoFile,
-        department: person.department,
-        position: person.position,
-        simper: simperCodes(skills),
+        ...card,
         shift: now.shift,
         roster: roster[0]?.code ?? null,
         ...seated,
@@ -198,23 +222,31 @@ export const idCardRoutes = new Elysia({
    */
   .get(
     "/:nik/photo",
-    async ({ params, principal, status }) => {
+    async ({ params, principal, set, status }) => {
       const person = await personOf(principal, normalizeNik(params.nik));
       if (!person?.photoFile) return status(404, photoNotFound);
 
-      const file = Bun.file(photoPath(person.photoFile));
+      const path = photoPath(person.photoFile);
       // The row can outlive the file (design D8) — a 404 the screen falls
       // back from, not a 500.
-      if (!(await file.exists())) return status(404, photoNotFound);
-      return new Response(file, {
-        headers: { "content-type": photoMimeType(person.photoFile) },
-      });
+      if (!(await Bun.file(path).exists())) return status(404, photoNotFound);
+      set.headers["content-type"] = photoMimeType(person.photoFile);
+      return elysiaFile(path);
     },
     {
       auth: { menu: "scan-id", mode: "view" },
       params: t.Object({ nik: t.String({ minLength: 1 }) }),
-      // No 200 schema: the body is an image (see the fleet photo route).
-      response: { 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema },
+      /* The 200 is the image itself, declared as `t.File` so the phone's
+         generated client reads it as binary (the mobile spec files it under
+         `image/*`). */
+      response: {
+        200: t.File({
+          description: "The photo, as stored (JPEG, PNG or WebP)",
+        }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+      },
       detail: { summary: "A scanned card's photo" },
     }
   );

@@ -284,9 +284,10 @@ with the TV or the ops console:
   `ops/muster-stages.ts`, which `/v1/ops/overview` now uses too. Nothing else
   of the Operations Center leaves through it.
 - **The Pengawas Lapangan reads what the web reads** (S5): unit status and
-  its trail (`/unit-status`), and a scanned card (`/id-card/:nik`, scoped as
-  every read of the register). The spec publishes those GETs only; a status
-  change, a card's photo and the wall's photo feed stay out (test-asserted).
+  its trail (`/unit-status`), and a scanned card (`/id-card/:nik` and its
+  photo, scoped as every read of the register; the photo's 200 is published as
+  `image/*`). The spec publishes those GETs only; a status change and the
+  wall's photo feed stay out (test-asserted).
 - **The Superadmin acts through the web's own routes** (S6): the Actual
   tab's candidates and hand placement (with its FTW acknowledgement), account
   reset and deactivation, and `/timeline/runs`. The spec leaves out deleting

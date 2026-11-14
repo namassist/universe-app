@@ -276,6 +276,7 @@ export const FIELDS: Record<string, FieldDoc> = {
   photoFile: { example: "506264337.jpg" },
   photoFileName: { example: "506264337.jpg" },
   "photo.url": { example: "/v1/integrations/employees/506264337/photo" },
+  photoUrl: { example: "/v1/id-card/506264337/photo?v=506264337.jpg" },
   "photo.version": { example: "3f9a1c0b2d4e5f61" },
   downloadUrl: { example: "https://universe.example.id/download/universe.apk" },
   uploadedByName: { example: "Admin MINING OPERATION" },

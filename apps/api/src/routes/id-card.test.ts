@@ -31,6 +31,7 @@ const made = {
   roles: [] as string[],
   devices: [] as string[],
   employees: [] as string[],
+  simperTypes: [] as string[],
 };
 
 /** Two people in two departments — the whole point of the scope test. */
@@ -79,6 +80,11 @@ beforeAll(async () => {
     })
     .from(schema.employees)
     .limit(1);
+  const [simperType] = await db
+    .insert(schema.simperTypes)
+    .values({ name: `${tag} Permanen` })
+    .returning({ id: schema.simperTypes.id });
+  made.simperTypes.push(simperType!.id);
   /* A department that is genuinely not the first one's, so "somebody else's
      card" is a real case rather than two rows that happen to share one. */
   const [otherDept] = await db
@@ -89,7 +95,15 @@ beforeAll(async () => {
   const rows = await db
     .insert(schema.employees)
     .values([
-      { ...seed!, nik: nikA, name: `${tag} A`, photoFileName: photoFile },
+      {
+        ...seed!,
+        nik: nikA,
+        name: `${tag} A`,
+        photoFileName: photoFile,
+        simperTypeId: simperType!.id,
+        simperNo: "SMP-2024-00871",
+        simperExp: "2027-03-31",
+      },
       { ...seed!, nik: nikB, name: `${tag} B`, departmentId: otherDept!.id },
     ])
     .returning({ id: schema.employees.id });
@@ -102,6 +116,10 @@ afterAll(async () => {
     await db
       .delete(schema.employees)
       .where(inArray(schema.employees.id, made.employees));
+  if (made.simperTypes.length)
+    await db
+      .delete(schema.simperTypes)
+      .where(inArray(schema.simperTypes.id, made.simperTypes));
   if (made.users.length)
     await db.delete(schema.users).where(inArray(schema.users.id, made.users));
   if (made.roles.length)
@@ -179,6 +197,51 @@ describe("what the card says", () => {
     expect(body.roster).toBeNull();
     expect(body.unit).toBeNull();
     expect(body.checkInAt).toBeNull();
+  });
+
+  /* The card itself, as the Profil screen shows it: its number, its type by
+     name, one expiry for every code on it. */
+  test("the SIMPER card the person holds", async () => {
+    const cookie = await makeUser("all");
+    const body = (await (await get(`/id-card/${nikA}`, cookie)).json()) as {
+      simperNo: string | null;
+      simperTypeName: string | null;
+      simperExp: string | null;
+    };
+    expect(body.simperNo).toBe("SMP-2024-00871");
+    expect(body.simperTypeName).toBe(`${tag} Permanen`);
+    expect(body.simperExp).toBe("2027-03-31");
+  });
+
+  test("no SIMPER card on file reads as nulls, not blanks", async () => {
+    const cookie = await makeUser("all");
+    const body = (await (await get(`/id-card/${nikB}`, cookie)).json()) as {
+      simperNo: string | null;
+      simperTypeName: string | null;
+      simperExp: string | null;
+    };
+    expect(body.simperNo).toBeNull();
+    expect(body.simperTypeName).toBeNull();
+    expect(body.simperExp).toBeNull();
+  });
+
+  /* A ready path for the phone, which has no business assembling one from a
+     stored file name; the file name rides along so a replaced photo is a new
+     URL. */
+  test("where the photo is fetched from, or null without one", async () => {
+    const cookie = await makeUser("all");
+    const withPhoto = (await (
+      await get(`/id-card/${nikA}`, cookie)
+    ).json()) as {
+      photoUrl: string | null;
+    };
+    expect(withPhoto.photoUrl).toBe(
+      `/v1/id-card/${nikA}/photo?v=${encodeURIComponent(photoFile)}`
+    );
+    const without = (await (await get(`/id-card/${nikB}`, cookie)).json()) as {
+      photoUrl: string | null;
+    };
+    expect(without.photoUrl).toBeNull();
   });
 
   test("a card is read by its digits, however the barcode wrote them", async () => {

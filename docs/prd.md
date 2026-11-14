@@ -1797,9 +1797,9 @@ those sections, not this one.
 
 A card held up to a phone at the gate answers who this is and what the muster
 gave them today (owner, 2026-09-20). The **QR code** carries the NIK; the screen
-shows photograph, name, NIK, department, position, **Simper Code**, roster,
-shift, unit, area, bus and check-in time. Anything the records do not hold
-reads "-".
+shows photograph, name, NIK, department, position, **Simper Code**, the
+**SIMPER card** (its number, its type by name, its expiry), roster, shift,
+unit, area, bus and check-in time. Anything the records do not hold reads "-".
 
 - **Its own menu**, `scan-id`, beside Attendance — read while asking about a
   person, not about a machine. Granted to **manpower** and **manajer**;
@@ -1810,6 +1810,15 @@ reads "-".
   it is, is not a screen's business. **Devices never reach it**: a kiosk that
   resolved any NIK would be a way to walk the register.
 - **Read-only.** Scanning records nothing; it is looking, not an event.
+- **The SIMPER card is read as the Profil screen reads it** (owner,
+  2026-11-14): `simperNo`, `simperTypeName` — the type's name, not its code —
+  and `simperExp`, one expiry for every code on the card; an empty number is
+  null rather than "".
+- **The photograph is a ready path** (owner, 2026-11-14): the card carries
+  `photoUrl`, `/v1/id-card/:nik/photo?v=<file>`, so a client never assembles
+  one from the stored file name, and a replaced photo is a new URL. The photo
+  route is in the mobile client's spec as an `image/*` body; the app fetches
+  it with the same bearer token as every other call.
 - **The NIK is read by what the payload calls it** (owner, 2026-09-21): a
   JSON `nik`, then a link's `nik=` parameter, then the digits themselves —
   bare, or the last segment of a path — with leading zeros and printed

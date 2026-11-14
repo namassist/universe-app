@@ -2074,10 +2074,24 @@ export const IdCardSchema = t.Object({
   name: t.String(),
   /** Cache-buster for the photo URL; null when there is none on file. */
   photoFile: t.Nullable(t.String()),
+  photoUrl: t.Nullable(
+    t.String({
+      description:
+        "Where to fetch the photo from, relative to the API origin; null when there is none on file. Send the same `Authorization: Bearer` header as every other call.",
+    })
+  ),
   department: t.Nullable(t.String()),
   position: t.Nullable(t.String()),
   /** The simper codes held, in code order; empty when there are none. */
   simper: t.Array(t.String()),
+  simperNo: t.Nullable(t.String()),
+  simperTypeName: t.Nullable(t.String()),
+  simperExp: t.Nullable(
+    t.String({
+      description:
+        "The SIMPER card's expiry, `YYYY-MM-DD`. One date for the whole card: every code in `simper` lapses with it.",
+    })
+  ),
   /** The running shift, or null when the timeline cannot name one. */
   shift: t.Nullable(ShiftKindSchema),
   /** The roster code for today — D, N, L — from the document in force. */
