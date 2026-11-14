@@ -15,7 +15,7 @@
  */
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import { deriveDate, deriveSoon, reduceTaps } from "./derive";
@@ -94,6 +94,19 @@ describe("what an OUT tap is and is not", () => {
 
     expect(r.firstInAt).toBe("2026-09-11 06:02:00");
     expect(r.firstOutAt).toBeNull();
+  });
+
+  /* The defect of 2026-11-14: the machine left on *Pulang* at the muster.
+     Whether a given OUT is an arrival is decided outside (window + roster,
+     `arrival-window.ts`); the reduction only files it in the right column. */
+  test("one the caller calls an arrival is filed as an arrival", () => {
+    const r = reduceTaps(
+      [tap("2026-09-11 04:35:00", "out"), tap("2026-09-11 17:55:00", "out")],
+      (t) => t.at === "2026-09-11 04:35:00"
+    );
+
+    expect(r.firstInAt).toBe("2026-09-11 04:35:00");
+    expect(r.firstOutAt).toBe("2026-09-11 17:55:00");
   });
 
   test("the first OUT wins too", () => {
@@ -283,6 +296,169 @@ describe("a tap only the live session heard", () => {
     await heard(`${date} 04:33:00`);
     await deriveDate(date);
     expect((await readingOf())!.firstInAt).toBe(`${date} 04:33:00`);
+  });
+});
+
+/**
+ * The machine left on *Pulang* at the muster (2026-11-14).
+ *
+ * A holder tapped at 04:35 on OUT. His slip named his unit, the reading went
+ * OUT-only, and the board handed the unit to a spare. Against the seeded
+ * timeline (day 04:00 → 05:30 + 30 min grace, night 16:00 → 17:30 + 30), an
+ * OUT inside the window of the shift the person is rostered to is an arrival.
+ */
+describe("an OUT at the muster", () => {
+  const ip = "10.99.99.3";
+  const date = "1999-03-05";
+  const made = {
+    niks: [] as string[],
+    employees: [] as string[],
+    departments: [] as string[],
+    positions: [] as string[],
+    docs: [] as string[],
+  };
+
+  const person = async (code: "D" | "N" | null) => {
+    const [company] = await db
+      .select({ id: schema.companies.id })
+      .from(schema.companies)
+      .limit(1);
+    const [dept] = await db
+      .insert(schema.departments)
+      .values({
+        name: `ZZ derive ${crypto.randomUUID().slice(0, 8)}`,
+        companyId: company!.id,
+      })
+      .returning({ id: schema.departments.id });
+    made.departments.push(dept!.id);
+    const [position] = await db
+      .insert(schema.positions)
+      .values({
+        name: `ZZ out-muster ${crypto.randomUUID().slice(0, 8)}`,
+        departmentId: dept!.id,
+      })
+      .returning({ id: schema.positions.id });
+    made.positions.push(position!.id);
+    const nik = `93${Math.floor(Math.random() * 1e7)
+      .toString()
+      .padStart(7, "0")}`;
+    const [employee] = await db
+      .insert(schema.employees)
+      .values({
+        nik,
+        name: `ZZ derive ${nik}`,
+        departmentId: dept!.id,
+        companyId: company!.id,
+        positionId: position!.id,
+      })
+      .returning({ id: schema.employees.id });
+    made.employees.push(employee!.id);
+    made.niks.push(nik);
+    if (code) {
+      const [doc] = await db
+        .insert(schema.rosterDocuments)
+        .values({
+          departmentId: dept!.id,
+          month: "1999-03-01",
+          fileName: `zz-derive-${nik}.xlsx`,
+        })
+        .returning({ id: schema.rosterDocuments.id });
+      made.docs.push(doc!.id);
+      await db
+        .insert(schema.rosterDays)
+        .values({ documentId: doc!.id, employeeId: employee!.id, date, code });
+    }
+    return nik;
+  };
+
+  const pull = (nik: string, at: string, direction: "in" | "out") =>
+    db
+      .insert(schema.deviceTaps)
+      .values({ ip, nik, at: `${date} ${at}`, direction, verified: 1 })
+      .onConflictDoNothing();
+
+  const readingOf = async (nik: string) =>
+    (
+      await db
+        .select()
+        .from(schema.fingerReadings)
+        .where(eq(schema.fingerReadings.nik, nik))
+    )[0];
+
+  afterAll(async () => {
+    await db.delete(schema.deviceTaps).where(eq(schema.deviceTaps.ip, ip));
+    if (made.niks.length)
+      await db
+        .delete(schema.fingerReadings)
+        .where(inArray(schema.fingerReadings.nik, made.niks));
+    if (made.employees.length)
+      await db
+        .delete(schema.rosterDays)
+        .where(inArray(schema.rosterDays.employeeId, made.employees));
+    if (made.docs.length)
+      await db
+        .delete(schema.rosterDocuments)
+        .where(inArray(schema.rosterDocuments.id, made.docs));
+    if (made.employees.length)
+      await db
+        .delete(schema.employees)
+        .where(inArray(schema.employees.id, made.employees));
+    if (made.positions.length)
+      await db
+        .delete(schema.positions)
+        .where(inArray(schema.positions.id, made.positions));
+    if (made.departments.length)
+      await db
+        .delete(schema.departments)
+        .where(inArray(schema.departments.id, made.departments));
+  });
+
+  test("by somebody rostered D is the morning arrival", async () => {
+    const nik = await person("D");
+    await pull(nik, "04:35:00", "out");
+    await deriveDate(date);
+
+    const reading = (await readingOf(nik))!;
+    expect(reading.firstInAt).toBe(`${date} 04:35:00`);
+    expect(reading.firstOutAt).toBeNull();
+  });
+
+  test("by somebody rostered N is the evening arrival", async () => {
+    const nik = await person("N");
+    await pull(nik, "16:40:00", "out");
+    await deriveDate(date);
+
+    expect((await readingOf(nik))!.firstInPmAt).toBe(`${date} 16:40:00`);
+  });
+
+  /* The day shift goes home inside the night window. */
+  test("by the day shift going home stays an OUT", async () => {
+    const nik = await person("D");
+    await pull(nik, "04:20:00", "in");
+    await pull(nik, "17:55:00", "out");
+    await deriveDate(date);
+
+    const reading = (await readingOf(nik))!;
+    expect(reading.firstInPmAt).toBeNull();
+    expect(reading.firstOutAt).toBe(`${date} 17:55:00`);
+  });
+
+  test("by somebody with no roster stays an OUT", async () => {
+    const nik = await person(null);
+    await pull(nik, "04:35:00", "out");
+    await deriveDate(date);
+
+    const reading = (await readingOf(nik))!;
+    expect(reading.firstInAt).toBeNull();
+    expect(reading.firstOutAt).toBe(`${date} 04:35:00`);
+  });
+
+  test("after the window stays an OUT", async () => {
+    const nik = await person("D");
+    await pull(nik, "06:20:00", "out");
+    await deriveDate(date);
+
+    expect((await readingOf(nik))!.firstInAt).toBeNull();
   });
 });
 
