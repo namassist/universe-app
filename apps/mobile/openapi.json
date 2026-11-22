@@ -2680,6 +2680,549 @@
         "operationId": "getV1MeSeats"
       }
     },
+    "/v1/me/fit-to-work": {
+      "get": {
+        "tags": ["me"],
+        "summary": "My FTW uploads, and the shifts I owed one for, over a range. No menu needed",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK: My FTW uploads, and the shifts I owed one for, over a range. No menu needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["rows", "lastSyncedAt"],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "nik",
+                          "date",
+                          "name",
+                          "company",
+                          "department",
+                          "position",
+                          "mess",
+                          "shift",
+                          "sleepMinutes",
+                          "sleepCategory",
+                          "ftwDecision",
+                          "sentAt",
+                          "late",
+                          "rosterShift",
+                          "rosterCode",
+                          "employeeStatus",
+                          "inductionHold"
+                        ],
+                        "properties": {
+                          "nik": {
+                            "type": "string",
+                            "example": "506264337"
+                          },
+                          "date": {
+                            "type": "string",
+                            "example": "2026-11-09"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "Budi Santoso"
+                          },
+                          "company": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "PT Universe Mining"
+                          },
+                          "department": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "MINING OPERATION"
+                          },
+                          "position": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "Operator OHT"
+                          },
+                          "mess": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "Mess A"
+                          },
+                          "shift": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "savera's own name for the shift the upload was filed for, as savera spells it.",
+                            "example": "Shift 1"
+                          },
+                          "sleepMinutes": {
+                            "type": "integer",
+                            "example": 405
+                          },
+                          "sleepCategory": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Values: `Dapat Bekerja`, `Tidak Boleh Bekerja`, `Istirahat Minimal 1 Jam`, `Istirahat Minimal 2 Jam`. savera's sleep category; only `Dapat Bekerja` passes. Compared without regard to case.",
+                            "example": "Dapat Bekerja"
+                          },
+                          "ftwDecision": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Values: `FTW Aman`, `Belum Mengisi FTW`, `FTW Perlu Tindak Lanjut`. savera's decision; only `FTW Aman` passes. Compared without regard to case.",
+                            "example": "FTW Aman"
+                          },
+                          "sentAt": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Site-local time, `YYYY-MM-DD HH:MM:SS`, as savera sent it.",
+                            "example": "2026-11-09 04:41:12"
+                          },
+                          "late": {
+                            "type": "boolean",
+                            "example": true
+                          },
+                          "rosterShift": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Values: `day`, `night`. An app should expect values added later.",
+                            "example": "day"
+                          },
+                          "rosterCode": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Values: `D`, `N`, `R`, `STB`, `OFF`, `CR`, `AL`, `LWP`, `LWOP`, `PH`, `PHD`, `S`, `SICK`, `A`, `MCU`, `MCR`, `MCUF`, `ISM`, `OBC`, `KRT`, `TGS`, `DNS`, `TRV`, `TR`, `TRS`, `IN`, `TERM`, `EOC`, `RSG`. An app should expect values added later.",
+                            "example": "D"
+                          },
+                          "employeeStatus": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Values: `aktif`, `standby`, `nonaktif`. An app should expect values added later.",
+                            "example": "aktif"
+                          },
+                          "inductionHold": {
+                            "type": "boolean",
+                            "example": true
+                          }
+                        }
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": "string",
+                      "nullable": true,
+                      "example": "2026-11-09T05:20:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "unauthenticated",
+                  "message": "Sesi tidak valid"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "forbidden",
+                  "message": "Akses ditolak"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "no_employee",
+                  "message": "Akun ini tidak terhubung ke data karyawan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `invalid_range`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "code": "invalid_range",
+                  "message": "Rentang tanggal terbalik atau lebih dari 62 hari"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "internal_error",
+                  "message": "Something went wrong"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1MeFit-to-work"
+      }
+    },
+    "/v1/me/attendance": {
+      "get": {
+        "tags": ["me"],
+        "summary": "My first taps, and the rostered shifts I never tapped for, over a range. No menu needed",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK: My first taps, and the rostered shifts I never tapped for, over a range. No menu needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["rows", "lastSyncedAt"],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "nik",
+                          "date",
+                          "name",
+                          "department",
+                          "position",
+                          "company",
+                          "rosterCode",
+                          "firstInAt",
+                          "firstInIp",
+                          "firstInMachine",
+                          "late"
+                        ],
+                        "properties": {
+                          "nik": {
+                            "type": "string",
+                            "example": "506264337"
+                          },
+                          "date": {
+                            "type": "string",
+                            "example": "2026-11-09"
+                          },
+                          "name": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "Budi Santoso"
+                          },
+                          "department": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "MINING OPERATION"
+                          },
+                          "position": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "Operator OHT"
+                          },
+                          "company": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "PT Universe Mining"
+                          },
+                          "rosterCode": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Values: `D`, `N`, `R`, `STB`, `OFF`, `CR`, `AL`, `LWP`, `LWOP`, `PH`, `PHD`, `S`, `SICK`, `A`, `MCU`, `MCR`, `MCUF`, `ISM`, `OBC`, `KRT`, `TGS`, `DNS`, `TRV`, `TR`, `TRS`, `IN`, `TERM`, `EOC`, `RSG`. `D` day shift, `N` night shift; every other code means not on a shift.",
+                            "example": "D"
+                          },
+                          "firstInAt": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Site-local time of the first IN tap, `YYYY-MM-DD HH:MM:SS`.",
+                            "example": "2026-11-09 05:12:40"
+                          },
+                          "firstInIp": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "192.168.151.41"
+                          },
+                          "firstInMachine": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "Finger Pos 1"
+                          },
+                          "late": {
+                            "type": "boolean",
+                            "nullable": true,
+                            "example": true
+                          }
+                        }
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": "string",
+                      "nullable": true,
+                      "example": "2026-11-09T05:20:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session: none was sent, or it has expired or ended. Codes: `unauthenticated`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "unauthenticated",
+                  "message": "Sesi tidak valid"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but this is not allowed. Codes: `forbidden`, `password_change_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "forbidden",
+                  "message": "Akses ditolak"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. Codes: `no_employee`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "no_employee",
+                  "message": "Akun ini tidak terhubung ke data karyawan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request did not match the schema; `issues` names each field. Or the route refused the values. Codes: `validation_failed`, `invalid_range`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["field", "message"],
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "code": "invalid_range",
+                  "message": "Rentang tanggal terbalik atau lebih dari 62 hari"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Something failed on the server. The detail is logged, not sent; try again later. Codes: `internal_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "internal_error",
+                  "message": "Something went wrong"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getV1MeAttendance"
+      }
+    },
     "/v1/me/notifications": {
       "get": {
         "tags": ["me"],

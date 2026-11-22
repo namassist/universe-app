@@ -3,10 +3,13 @@
  * app → User).
  *
  * Every answer is about the caller's own NIK, read from the account, never
- * from the request, so the `self` macro needs no menu. FTW and attendance
- * history are not here: the existing lists answer a `self` caller with their
- * own rows, and a second route for the same rows would be a second place to
- * get the scope wrong.
+ * from the request, so the `self` macro needs no menu.
+ *
+ * FTW and attendance history are here too, as the same rows the web lists
+ * build, narrowed to that NIK. The lists narrow by the caller's *scope*, which
+ * is only one person for a `self` role: an account that sees a department or
+ * the whole site would download all of it, up to two months, over a phone's
+ * data, to show one person (mobile team, 2026-11-22).
  */
 
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
@@ -23,11 +26,17 @@ import { requireSelf } from "../auth/macro";
 import { currentShift } from "../current-shift";
 import { db, schema } from "../db";
 import { myShift } from "../my-shift";
+import { attendanceRows, ftwListRows, lastSyncedAt } from "./ingest-sync";
 import { myNotifications } from "../person-notify";
 import { registerDevice, unregisterDevice } from "../push/devices";
 import { localDate } from "../scheduler";
 import { shiftGates } from "../stage-time";
-import { ErrorSchema, ShiftGatesSchema } from "./schemas";
+import {
+  AttendanceListSchema,
+  ErrorSchema,
+  FtwListSchema,
+  ShiftGatesSchema,
+} from "./schemas";
 
 const noEmployee = {
   code: "no_employee",
@@ -46,6 +55,24 @@ const rangeDays = (from: string, to: string) =>
     (24 * 60 * 60 * 1000) +
   1;
 const SHIFT_ORDER = { day: 0, night: 1 } as const;
+
+const RangeQuerySchema = t.Object({
+  from: t.String({ format: "date" }),
+  to: t.String({ format: "date" }),
+});
+
+/**
+ * The one-person scope the history lists take: the reading's NIK and the
+ * register's, both pinned to the caller's own. The register side is what
+ * brings in the shifts they were rostered for and filed nothing.
+ */
+const onlyMe = (
+  nik: string,
+  readingNik: typeof schema.ftwReadings.nik | typeof schema.fingerReadings.nik
+) => ({
+  readings: eq(readingNik, nik),
+  register: eq(schema.employees.nik, nik),
+});
 
 const SeatSchema = t.Object({
   unit: t.String(),
@@ -392,10 +419,7 @@ export const meRoutes = new Elysia({ prefix: "/me", tags: ["me"] })
     },
     {
       self: true,
-      query: t.Object({
-        from: t.String({ format: "date" }),
-        to: t.String({ format: "date" }),
-      }),
+      query: RangeQuerySchema,
       response: {
         200: t.Object({ seats: t.Array(PastSeatSchema) }),
         401: ErrorSchema,
@@ -404,6 +428,74 @@ export const meRoutes = new Elysia({ prefix: "/me", tags: ["me"] })
         422: ErrorSchema,
       },
       detail: { summary: "The units I held on past boards" },
+    }
+  )
+
+  .get(
+    "/fit-to-work",
+    async ({ principal, query, status }) => {
+      if (principal.kind !== "user" || !principal.nik)
+        return status(404, noEmployee);
+      const span = rangeDays(query.from, query.to);
+      if (!(span >= 1 && span <= MAX_RANGE_DAYS))
+        return status(422, invalidRange);
+      return {
+        rows: await ftwListRows(
+          query.from,
+          query.to,
+          onlyMe(principal.nik, schema.ftwReadings.nik)
+        ),
+        lastSyncedAt: await lastSyncedAt(schema.ftwReadings),
+      };
+    },
+    {
+      self: true,
+      query: RangeQuerySchema,
+      response: {
+        200: FtwListSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: {
+        summary:
+          "My FTW uploads, and the shifts I owed one for, over a range. No menu needed",
+      },
+    }
+  )
+
+  .get(
+    "/attendance",
+    async ({ principal, query, status }) => {
+      if (principal.kind !== "user" || !principal.nik)
+        return status(404, noEmployee);
+      const span = rangeDays(query.from, query.to);
+      if (!(span >= 1 && span <= MAX_RANGE_DAYS))
+        return status(422, invalidRange);
+      return {
+        rows: await attendanceRows(
+          query.from,
+          query.to,
+          onlyMe(principal.nik, schema.fingerReadings.nik)
+        ),
+        lastSyncedAt: await lastSyncedAt(schema.fingerReadings),
+      };
+    },
+    {
+      self: true,
+      query: RangeQuerySchema,
+      response: {
+        200: AttendanceListSchema,
+        401: ErrorSchema,
+        403: ErrorSchema,
+        404: ErrorSchema,
+        422: ErrorSchema,
+      },
+      detail: {
+        summary:
+          "My first taps, and the rostered shifts I never tapped for, over a range. No menu needed",
+      },
     }
   )
 

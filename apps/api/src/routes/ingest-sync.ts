@@ -216,10 +216,15 @@ function halfOf(
  *
  * `rosterDayInForce` for the usual reason — a re-uploaded month keeps its
  * archived rows, and joining on the date alone would answer with both.
+ *
+ * Narrowed by the list's own register scope: the codes only ever decorate
+ * in-scope rows, and the phone's one-person history should not read the whole
+ * site's roster to decorate one person's (review, 2026-11-22).
  */
 async function rosterCodesIn(
   from: string,
-  to: string
+  to: string,
+  scope: SQL
 ): Promise<Map<string, RosterCode>> {
   const rows = await db
     .select({
@@ -236,7 +241,8 @@ async function rosterCodesIn(
       and(
         gte(schema.rosterDays.date, from),
         lte(schema.rosterDays.date, to),
-        rosterDayInForce
+        rosterDayInForce,
+        scope
       )
     );
   const byPersonDay = new Map<string, RosterCode>();
@@ -373,11 +379,11 @@ async function employeeStatusOf(
  * flagged late or not, followed by the unfiled — newest day first, then name.
  */
 /**
- * `scope` is the caller's, as `nikInScope` builds it against the readings'
- * NIK: every query below names only the people the caller may see, so the
- * list and its export cannot answer for anyone else.
+ * `scope` is the caller's: `nikInScope` for the web list, or one NIK for
+ * `/me/fit-to-work`. Every query below names only the people it admits, so
+ * no caller can be answered for anyone else.
  */
-async function ftwListRows(
+export async function ftwListRows(
   from: string,
   to: string,
   scope: { readings: SQL; register: SQL }
@@ -415,7 +421,7 @@ async function ftwListRows(
           scope.readings
         )
       ),
-    rosterCodesIn(from, to),
+    rosterCodesIn(from, to, scope.register),
   ]);
 
   const rows: FtwListRow[] = [
@@ -487,7 +493,7 @@ const RangeQuerySchema = t.Object({
   to: t.String({ format: "date" }),
 });
 
-async function lastSyncedAt(
+export async function lastSyncedAt(
   table: typeof schema.ftwReadings | typeof schema.fingerReadings
 ): Promise<string | null> {
   const [row] = await db
@@ -670,7 +676,7 @@ export const fitToWorkSyncRoutes = new Elysia({
  * still a fact about the morning. Those rows carry a null `rosterCode`, which
  * is *not* the same claim as a roster that disagrees — see `AttendanceReading`.
  */
-async function attendanceRows(
+export async function attendanceRows(
   from: string,
   to: string,
   scope: { readings: SQL; register: SQL }

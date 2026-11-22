@@ -2966,12 +2966,19 @@ D14):
 - **`GET /v1/me/seats?from&to`**: past board seats, two months at most,
   only for shifts before the running one. The running shift and anything
   after it are `/me/shift`'s, held as the slip is.
-- **FTW and attendance history** are `GET /v1/fit-to-work` and
-  `/v1/attendance`. **Found while building this:** both answered every
-  caller for everyone, whatever their scope. The `user` role could read the
-  whole site's sleep and taps, and the `dept` roles every department's. Both
-  are now scoped, with their exports. Admin and Manajer see their own
-  department there, as they already did everywhere else.
+- **FTW and attendance history** are `GET /v1/me/fit-to-work?from&to` and
+  `GET /v1/me/attendance?from&to` (2026-11-22): the web lists' own rows and
+  shape, for the caller's NIK alone, two months at most, no menu needed. They
+  include the shifts the person was rostered for and filed or tapped nothing.
+  The Riwayat tabs read these, not the lists. The lists narrow by scope, so
+  an account that sees a department or the site would download all of it to
+  show one person (found by the mobile team). `GET /v1/fit-to-work` and
+  `/v1/attendance` stay in the mobile spec until the app stops calling them.
+  **Found while building the lists' use here (2026-10-17):** both answered
+  every caller for everyone, whatever their scope. The `user` role could
+  read the whole site's sleep and taps, and the `dept` roles every
+  department's. Both are now scoped, with their exports. Admin and Manajer
+  see their own department there, as they already did everywhere else.
 - **Profile** is `GET /v1/employees/:nik`, already self-scoped.
 - **`GET /v1/me/notifications`**, `POST …/:id/read`, `POST …/read-all`:
   the person's own notices that have come due.

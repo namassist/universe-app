@@ -472,6 +472,209 @@ describe("past seats", () => {
   });
 });
 
+/*
+ * The history tabs. The caller here sees the whole site on the web lists
+ * (scope `all`), which is the account the phone must not hand everybody's
+ * sleep and taps to: `/me` answers for its NIK alone, whatever the scope.
+ */
+describe("my FTW and attendance history", () => {
+  const HISTORY = "from=1998-04-01&to=1998-04-05";
+  /* Its own person: an account's NIK is unique, and ME already has one. */
+  const THIRD = "99090003";
+  let wide = "";
+  let rosterId = "";
+
+  beforeAll(async () => {
+    const [everyone] = await db
+      .insert(schema.roles)
+      .values({ slug: `zz-me-${uid()}`, name: `${tag} Site`, scope: "all" })
+      .returning({ id: schema.roles.id });
+    made.roles.push(everyone!.id);
+    const [third] = await db
+      .insert(schema.employees)
+      .values({
+        nik: THIRD,
+        name: `${tag} ${THIRD}`,
+        companyId: made.company,
+        departmentId: made.department,
+        positionId: made.position,
+        status: "aktif",
+      })
+      .returning({ id: schema.employees.id });
+    made.employees.push(third!.id);
+    wide = await cookieFor(await account({ nik: THIRD, roleId: everyone!.id }));
+
+    await db.insert(schema.ftwReadings).values(
+      [ME, OTHER, THIRD].map((nik) => ({
+        nik,
+        date: "1998-04-02",
+        name: `${tag} ${nik}`,
+        sleepMinutes: 361,
+        sleepCategory: "Dapat bekerja",
+        sentAt: "1998-04-02 05:04:00",
+      }))
+    );
+    await db.insert(schema.fingerReadings).values(
+      [ME, OTHER, THIRD].map((nik) => ({
+        nik,
+        date: "1998-04-02",
+        firstInAt: "1998-04-02 05:14:00",
+      }))
+    );
+
+    /* The register side: all three rostered D on the 3rd, which nobody filed
+       or tapped for, and all three owing an FTW (an allocated position and a
+       licence for a unit that asks for one). Each must see only their own
+       "Belum lapor" and "tanpa tap" row. */
+    await db
+      .update(schema.units)
+      .set({ simperCodeId: made.simperCodes[0]!, ftw: true })
+      .where(eq(schema.units.id, made.unit));
+    const people = await db
+      .select({ id: schema.employees.id })
+      .from(schema.employees)
+      .where(inArray(schema.employees.nik, [OTHER, THIRD]));
+    await db.insert(schema.employeeSkills).values(
+      people.map((p) => ({
+        employeeId: p.id,
+        simperCodeId: made.simperCodes[0]!,
+      }))
+    );
+    const [roster] = await db
+      .insert(schema.rosterDocuments)
+      .values({
+        departmentId: made.department,
+        month: "1998-04-01",
+        fileName: `${tag}.xlsx`,
+      })
+      .returning({ id: schema.rosterDocuments.id });
+    rosterId = roster!.id;
+    const everybody = await db
+      .select({ id: schema.employees.id })
+      .from(schema.employees)
+      .where(inArray(schema.employees.nik, [ME, OTHER, THIRD]));
+    await db.insert(schema.rosterDays).values(
+      everybody.map((p) => ({
+        documentId: rosterId,
+        employeeId: p.id,
+        date: "1998-04-03",
+        code: "D" as const,
+      }))
+    );
+  });
+
+  afterAll(async () => {
+    if (rosterId)
+      await db
+        .delete(schema.rosterDocuments)
+        .where(eq(schema.rosterDocuments.id, rosterId));
+    await db
+      .update(schema.units)
+      .set({ simperCodeId: null, ftw: false })
+      .where(eq(schema.units.id, made.unit));
+    await db
+      .delete(schema.ftwReadings)
+      .where(inArray(schema.ftwReadings.nik, [ME, OTHER, THIRD]));
+    await db
+      .delete(schema.fingerReadings)
+      .where(inArray(schema.fingerReadings.nik, [ME, OTHER, THIRD]));
+  });
+
+  test("FTW: my own uploads only, though my role sees the whole site", async () => {
+    const res = await get(`/me/fit-to-work?${HISTORY}`, { cookie: wide });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rows: {
+        nik: string;
+        date: string;
+        sleepMinutes: number;
+        sentAt: string | null;
+        late: boolean;
+        rosterShift: string | null;
+        rosterCode: string | null;
+      }[];
+      lastSyncedAt: string | null;
+    };
+    /* Newest first: the shift I owed and never filed, then my upload. */
+    expect(body.rows.map((r) => [r.nik, r.date])).toEqual([
+      [THIRD, "1998-04-03"],
+      [THIRD, "1998-04-02"],
+    ]);
+    expect(body.rows[0]).toMatchObject({
+      sentAt: null,
+      rosterShift: "day",
+      rosterCode: "D",
+    });
+    expect(body.rows[1]).toMatchObject({
+      sleepMinutes: 361,
+      sentAt: "1998-04-02 05:04:00",
+      late: false,
+      rosterCode: null,
+    });
+    expect(body.lastSyncedAt).not.toBeNull();
+  });
+
+  test("attendance: my own taps only, though my role sees the whole site", async () => {
+    const res = await get(`/me/attendance?${HISTORY}`, { cookie: wide });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rows: {
+        nik: string;
+        date: string;
+        rosterCode: string | null;
+        firstInAt: string | null;
+      }[];
+    };
+    const byDate = [...body.rows].sort((a, b) => a.date.localeCompare(b.date));
+    expect(byDate.map((r) => [r.nik, r.date])).toEqual([
+      [THIRD, "1998-04-02"],
+      [THIRD, "1998-04-03"],
+    ]);
+    expect(byDate[0]!.firstInAt).toStartWith("1998-04-02 05:14");
+    /* Rostered, never tapped: the row exists to say so. */
+    expect(byDate[1]).toMatchObject({ rosterCode: "D", firstInAt: null });
+  });
+
+  test("a plain operator account with no menu grant reads its own too", async () => {
+    for (const path of ["fit-to-work", "attendance"]) {
+      const res = await get(`/me/${path}?${HISTORY}`, { cookie: mine });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { rows: { nik: string }[] };
+      expect(body.rows.length).toBe(2);
+      expect(new Set(body.rows.map((r) => r.nik))).toEqual(new Set([ME]));
+    }
+  });
+
+  test("a range backwards or longer than two months is refused", async () => {
+    for (const path of ["fit-to-work", "attendance"]) {
+      expect(
+        (
+          await get(`/me/${path}?from=1998-04-05&to=1998-04-01`, {
+            cookie: mine,
+          })
+        ).status
+      ).toBe(422);
+      expect(
+        (
+          await get(`/me/${path}?from=1998-01-01&to=1998-04-01`, {
+            cookie: mine,
+          })
+        ).status
+      ).toBe(422);
+    }
+  });
+
+  test("an account with no NIK has no history, and no session gets 401", async () => {
+    const nobody = await cookieFor(await account({ nik: null }));
+    for (const path of ["fit-to-work", "attendance"]) {
+      expect(
+        (await get(`/me/${path}?${HISTORY}`, { cookie: nobody })).status
+      ).toBe(404);
+      expect((await get(`/me/${path}?${HISTORY}`)).status).toBe(401);
+    }
+  });
+});
+
 describe("my notifications", () => {
   const seen = new Date(Date.now() - 60_000);
   const notYet = new Date(Date.now() + 60 * 60_000);

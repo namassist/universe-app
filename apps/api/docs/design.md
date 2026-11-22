@@ -208,16 +208,21 @@ writes, and is mounted beside the PLAN routes under `/fleet-allocation`.
 ## D13 — `/v1/me` answers only about the caller, so it needs no menu
 
 The mobile app's operator screens (owner, 2026-10-17) are about one person:
-their coming shift (`/me/shift`), past seats (`/me/seats`) and notifications.
+their coming shift (`/me/shift`), past seats (`/me/seats`), FTW and
+attendance history (`/me/fit-to-work`, `/me/attendance`) and notifications.
 The NIK is the account's, never the request's, so no grant could widen what
 they return, and an operator whose role was trimmed still sees their own
 seat. The `self` macro (`requireSelf`) keeps the rest of the gate: a person
 and not a screen, and not before the issued password is changed.
 
-FTW and attendance history are the existing lists, which now answer a
-`self` caller with their own rows: they ignored scope entirely until
-2026-10-17 (`nikInScope`), and a second route for the same rows would be a
-second place to get scope wrong.
+FTW and attendance history are `/me/fit-to-work` and `/me/attendance`
+(2026-11-22): the rows the web lists build (`ftwListRows`,
+`attendanceRows`), with the scope pinned to the caller's NIK. The lists
+themselves narrow by the caller's _scope_ (`nikInScope`, since 2026-10-17),
+which is one person only for a `self` role. Any wider account reaching the
+Riwayat tabs downloaded its department or the whole site, up to 62 days over
+mobile data, to show one person (mobile team). The rows are built in one
+place either way, so there is still one place to get the filtering right.
 
 `/me/shift` is about the shift that matters to the person, not the running
 one: opened at 21:00 the evening before a day shift, the running shift is

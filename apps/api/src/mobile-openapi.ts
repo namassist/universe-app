@@ -57,6 +57,8 @@ export const MOBILE_OPERATIONS = [
   "GET /v1/me/shift",
   "GET /v1/me/profile",
   "GET /v1/me/seats",
+  "GET /v1/me/fit-to-work",
+  "GET /v1/me/attendance",
   "GET /v1/me/notifications",
   "POST /v1/me/notifications/{id}/read",
   "POST /v1/me/notifications/read-all",
@@ -64,7 +66,9 @@ export const MOBILE_OPERATIONS = [
   "DELETE /v1/me/push-devices",
   "GET /v1/roster/{id}/days",
   "GET /v1/employees/{nik}",
-  /* A group's own root is published with its trailing slash. */
+  /* A group's own root is published with its trailing slash. The Riwayat
+     tabs belong on `/me/fit-to-work` and `/me/attendance`: these two answer
+     with the caller's whole scope. Kept until the app no longer calls them. */
   "GET /v1/fit-to-work/",
   "GET /v1/attendance/",
   "GET /v1/roster/",
@@ -113,6 +117,8 @@ const REFUSALS: Partial<Record<(typeof MOBILE_OPERATIONS)[number], Refusals>> =
     "GET /v1/me/shift": NO_EMPLOYEE,
     "GET /v1/me/profile": NO_EMPLOYEE,
     "GET /v1/me/seats": { ...NO_EMPLOYEE, "422": ["invalid_range"] },
+    "GET /v1/me/fit-to-work": { ...NO_EMPLOYEE, "422": ["invalid_range"] },
+    "GET /v1/me/attendance": { ...NO_EMPLOYEE, "422": ["invalid_range"] },
     "GET /v1/me/notifications": NO_EMPLOYEE,
     "POST /v1/me/notifications/{id}/read": {
       "404": ["no_employee", "not_found"],
