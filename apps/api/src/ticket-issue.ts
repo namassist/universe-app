@@ -22,6 +22,7 @@
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import type { ShiftKind } from "@universe/contracts";
 
+import { arrivalWindows, outIsArrival } from "./arrival-window";
 import { db, schema } from "./db";
 import { env } from "./env";
 import { takesPartInAllocation } from "./fleet-scope";
@@ -145,6 +146,20 @@ export async function awaitsAllocation(
         rosteredTo(date, shift)
       )
     )
+    .limit(1);
+  return !!row;
+}
+
+/** Whether this person is rostered to this shift on this date, in force. */
+async function isRosteredTo(
+  nik: string,
+  date: string,
+  shift: ShiftKind
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.employees.id })
+    .from(schema.employees)
+    .where(and(eq(schema.employees.nik, nik), rosteredTo(date, shift)))
     .limit(1);
   return !!row;
 }
@@ -548,15 +563,25 @@ export async function firstTapOf(
 
   /* Sorted here rather than in two queries: the union is what has to be
      ordered, and both halves are a handful of rows for one person on one day. */
-  /* The board's own reading of the same taps (`deriveDate`, 2026-09-15): an
-     OUT the pull recorded is not an arrival, and a live tap the pull also
-     holds takes the pull's direction. Counting every tap let a wrong-button
-     OUT at 04:50 print a unit for a man whose IN came at 05:30. */
+  /* The board's own reading of the same taps (`deriveDate`): an OUT the pull
+     recorded is not an arrival, and a live tap the pull also holds takes the
+     pull's direction — unless the OUT falls inside this muster's window and
+     he is rostered to it (`arrival-window.ts`, 2026-11-14). Then the machine
+     was simply left on *Pulang*, and the slip and the board both call it his
+     arrival. */
+  /* Asked only when the pull holds an OUT: this is the live tap path, and
+     without one the answer cannot change. */
+  const [windows, rostered] = pulled.some((t) => t.direction === "out")
+    ? await Promise.all([arrivalWindows(), isRosteredTo(nik, date, shift)])
+    : [{}, false];
+  const arrives = (t: { at: string; direction: "in" | "out" }) =>
+    t.direction === "in" ||
+    outIsArrival(t.at, rostered ? shift : null, windows);
   const outs = new Set(
-    pulled.filter((t) => t.direction === "out").map((t) => `${t.at}|${t.ip}`)
+    pulled.filter((t) => !arrives(t)).map((t) => `${t.at}|${t.ip}`)
   );
   const mine = [
-    ...pulled.filter((t) => t.direction === "in"),
+    ...pulled.filter(arrives),
     ...live.filter((t) => !outs.has(`${t.at}|${t.ip}`)),
   ]
     .map((r) => r.at)

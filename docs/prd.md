@@ -587,7 +587,9 @@ fill the gap from the spare pool.
   All four verdict values observed in live data are known; comparison ignores
   casing and padding.
 - **A row carrying only an OUT tap is `missing`, not `late`** — 1,466 of 8,906
-  rows. It says nothing about arrival rather than denying it.
+  rows. It says nothing about arrival rather than denying it. An OUT pressed
+  at the muster by somebody rostered to it is not an OUT for this purpose; see
+  _An OUT at the muster is an arrival_ (2026-11-14).
 - **No deadline in code.** `fingerInDeadline(shift)` returns null when the
   stage is missing or switched off, and a caller must refuse to build a board
   rather than invent one: an early default fails everyone, a late one passes
@@ -713,6 +715,44 @@ until someone pressed Sync at 07:07 — although they were on time.
   returns. The two tap clusters — 04:00–07:00 (1,128 rows) and 15:00–18:00
   (719) — leave a six-hour gap no plausible gate crosses.
 - Only the IN is split. A shift's OUT is unambiguous and nothing judges it.
+
+### An OUT at the muster is an arrival — shipped
+
+- **The defect** (2026-11-14). A holder tapped at 04:35 with the machine
+  left on _Pulang_. The live session, which hears no direction, took the tap
+  as his arrival and the slip printed his unit. About thirty seconds later the
+  pull stored the same tap as OUT. His reading became OUT-only (`missing`), and
+  at `spare-validate` his unit went to a spare. The reports, which read the
+  same readings, said he had not arrived.
+- **The rule** (owner, 2026-11-14). An OUT tap counts as an arrival when it
+  falls inside a shift's muster window **and** the person is rostered to that
+  shift on that date (`D` for day, `N` for night, from the roster in force).
+  Every other OUT stays an OUT.
+- **The window** runs from `shift-start` up to `bus-depart` plus
+  `DEVICE_COLLECT_GRACE_MINUTES` (default 30). That is the moment the booths
+  stop being heard and pulled, so on the seeded timeline the windows are day
+  04:00–06:00 and night 16:00–18:00. The end is exclusive. A missing stage
+  means no window, never a default, and the OUT then stays an OUT.
+- **Why the roster half.** The night window is exactly when the day shift
+  goes home pressing _Pulang_. Without the roster check, every day worker
+  leaving before 18:00 would become a night arrival on the Attendance screen
+  and the dashboard. A night worker going home at 05:45 is not rostered `D`
+  that date, so their tap stays an OUT too.
+- **One rule for the slip and the board.** `deriveDate` (the reading) and
+  `firstTapOf` (the slip) both ask `outIsArrival` in `arrival-window.ts`.
+  This reverses the 2026-09-15 rule that an OUT the pull recorded is never an
+  arrival, but only inside the muster window and only for those rostered to
+  it. A late OUT is still judged `late`, so the wider window seats nobody
+  late.
+- **Out of scope.** Shifts already past are left as they are: their boards
+  and points (owner, 2026-11-14). Monitoring Tap and the Attendance wall still
+  show the button the machine recorded (Masuk/Pulang, IN/OUT).
+- **One day may read the new rule against the old board** (owner, 2026-11-14,
+  accepted). A manual Sync, or regenerating a board, rebuilds today's and
+  yesterday's readings from the taps, so the rule reaches yesterday's finger
+  column. Its board and points are not rebuilt. For that one day, the report
+  can show a holder whose finger passed who has no unit. The reading is the
+  true one, and the mismatch ends with the first muster under the rule.
 
 ### The Attendance screen is roster-driven — shipped
 
