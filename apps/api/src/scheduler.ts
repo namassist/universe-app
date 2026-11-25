@@ -39,6 +39,7 @@ import { reconcileInductionHolds } from "./induction-hold";
 import { runIngestWindow, type IngestKind } from "./ingest";
 import { notify } from "./notify";
 import { previousShift, settleShift } from "./points-settle";
+import { announceBoardNow, releaseDue } from "./person-notify";
 import { runRosterSync } from "./roster-sync";
 import { fingerInDeadline, ftwDeadline } from "./readiness";
 import { pullClosesAt, stageTimeOf } from "./stage-time";
@@ -310,6 +311,10 @@ const allocate: Hook = async (dispatch) => {
         spares,
       }
     );
+    /* Each seated person with an account is told their seat: a holder now,
+       everybody else at the second finger (`person-notify.ts`). After the
+       shared notification, and never able to fail the stage. */
+    await announceBoardNow(dispatch.date, shift);
   } catch (error) {
     console.error(`[scheduler] ${shift} board failed to generate`, error);
     await failed(
@@ -572,9 +577,14 @@ const HOOKS: Record<TimelineAction, Hook> = {
   },
   "ftw-deadline": marker,
   "finger-in": marker,
-  /* No hook: printing is driven by the tap. Its *time* is what holds a
-     spare's slip until the board exists (`ticket-issue.ts`). */
-  "finger-second": marker,
+  /* Printing is driven by the tap; its *time* is what holds a spare's slip
+     until the board exists (`ticket-issue.ts`). The same time holds a
+     spare's notification, and this releases it: whatever came due at the
+     second finger is pushed now. */
+  "finger-second": async (dispatch) => {
+    const sent = await releaseDue();
+    record(dispatch, `seats due at the second finger released, ${sent} pushed`);
+  },
   "bus-depart": marker,
   other: marker,
   "ftw-ingest": ingest("ftw"),

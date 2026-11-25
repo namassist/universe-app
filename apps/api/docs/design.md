@@ -96,6 +96,45 @@ Consequences, all deliberate:
   until someone decides otherwise.
 - Administrators are still made by hand. Raising a role is the only account
   work left in the Users screen.
+- **From outside the site, D10 does not apply** (D11): login provisions
+  nothing there, and an account still on the issued password is refused.
+
+## D11 — The login is reachable from the internet, so its budget is spent first
+
+Owner, 2026-10-17: the installation is opened through a Cloudflare Tunnel
+(`docs/deploy.md`, _Opening the installation to the internet_). Until then the
+person login had no throttle and D10's issued password was only as exposed as
+the LAN. Three rules now hold:
+
+- **Two guess budgets** (`auth/login-throttle.ts`): 10 failures per address,
+  everywhere, and 10 per account from outside the site, each per 15 minutes.
+  An attempt is reserved in Redis **before** the account is read or the
+  password verified, as the Operations Center's is. Success clears the
+  account budget and refunds its own attempt to the address, so a carrier's
+  CGNAT or an office never runs out on correct logins. It does not clear the
+  address's earlier failures, or a guesser holding one real account would
+  reset his own every ninth try. The account budget is not spent or checked
+  on site, so an outsider can exhaust it but cannot lock its owner out at the
+  muster. The price, accepted: whoever knows a NIK can keep that person's
+  off-site login refused.
+- **A first login happens on site** (`auth/site-network.ts`): provisioning, or
+  an account with `mustChangePassword`, from an address outside
+  `SITE_NETWORKS` (default: private ranges and loopback) is a 403
+  `first_login_on_site`. It is only said after the right password, so a wrong
+  one still reads as `invalid_credentials`. A missing or unreadable address
+  is outside.
+- **At most four argon2 verifications at once** (`auth/password.ts`), shared by
+  the person and Operations Center logins. A finishing call hands its slot to
+  the next waiter directly, so a newcomer cannot slip in between.
+
+The address is `clientIp`'s. Behind the proxy, a request with no
+`X-Forwarded-For` has none, rather than its socket's, which would be another
+container's private address and read as the site. The address is only the
+client's own because Caddy writes
+`X-Forwarded-For` itself on both listeners: the peer on the LAN one, Cloudflare's
+`CF-Connecting-IP` on the tunnel one (`deploy/Caddyfile`). Behind cloudflared
+without that, every request would carry cloudflared's address, and one
+person's typos would lock out everyone at once.
 
 ## D11 — The PLAN import saves a default; Reset applies it
 
@@ -165,6 +204,164 @@ writes, and is mounted beside the PLAN routes under `/fleet-allocation`.
   first, like the assign route: its history insert needs a key-share lock on
   the unit, and taking the slot first could deadlock with a commit holding
   every unit.
+
+## D13 — `/v1/me` answers only about the caller, so it needs no menu
+
+The mobile app's operator screens (owner, 2026-10-17) are about one person:
+their coming shift (`/me/shift`), past seats (`/me/seats`), FTW and
+attendance history (`/me/fit-to-work`, `/me/attendance`) and notifications.
+The NIK is the account's, never the request's, so no grant could widen what
+they return, and an operator whose role was trimmed still sees their own
+seat. The `self` macro (`requireSelf`) keeps the rest of the gate: a person
+and not a screen, and not before the issued password is changed.
+
+FTW and attendance history are `/me/fit-to-work` and `/me/attendance`
+(2026-11-22): the rows the web lists build (`ftwListRows`,
+`attendanceRows`), with the scope pinned to the caller's NIK. The lists
+themselves narrow by the caller's _scope_ (`nikInScope`, since 2026-10-17),
+which is one person only for a `self` role. Any wider account reaching the
+Riwayat tabs downloaded its department or the whole site, up to 62 days over
+mobile data, to show one person (mobile team). The rows are built in one
+place either way, so there is still one place to get the filtering right.
+
+`/me/shift` is about the shift that matters to the person, not the running
+one: opened at 21:00 the evening before a day shift, the running shift is
+tonight's. Before the board it is the plan, with the reason a holder would
+not keep the unit (breakdown, out of the fleet, the board's own
+`pairingRefusal`, a partner rostered alongside). After it, the board's seat,
+held back as the slip is.
+
+## D14 — A person's seat is pushed no earlier than the slip prints
+
+`person_notifications` rows are written at the event and wait for
+`available_at`: a holder's at once, a spare's and any hand placement's at
+`finger-second`. `deliverDue` pushes what has come due, after a board is
+stored, after a placement, and at the `finger-second` stage. Delivery never
+fails the work that caused it, and with no `FCM_SERVICE_ACCOUNT_FILE` it
+sends and marks nothing: the in-app list is the record, the push a nudge.
+
+FCM is spoken directly (HTTP v1, a WebCrypto-signed JWT), not through an SDK:
+two requests do not justify a dependency. Only `UNREGISTERED` drops a token.
+
+Hardened after review (2026-10-17):
+
+- **Claimed, then sent.** `deliverDue` claims rows with `UPDATE … WHERE
+pushed_at IS NULL RETURNING` before sending, so the `finger-second` stage
+  and a placement delivering at once send each row once. A row none of whose
+  phones took it is released again and retried inside the 12-hour window.
+- **Only an account that may still be told**: active, past its password
+  change, and only Android tokens until APNs exists. A deactivated or reset
+  account's phone may be in somebody else's hand.
+- **A regenerated board reconciles.** What each person was last told about
+  each unit is compared with the new board: a seat still waiting for the
+  second finger is taken back, one already shown is retracted with
+  `seat-removed`, one already known is not announced twice. A board for a
+  muster already over announces nothing.
+- **At most five phones per account**, the oldest dropped.
+- **`/me/seats` returns only shifts strictly before the running one**, or
+  before today when the timeline cannot say which is running: a board built
+  early for a coming shift would otherwise name a spare's unit before the
+  slip.
+
+## D14 — The phone reads what the walls and the Operations Center read
+
+The mobile app (stage 3, 2026-10-18) gets no screen-shaped routes of its
+own where one already answers the question, so the phone cannot disagree
+with the TV or the ops console:
+
+- **Papan ACTUAL is the fleet wall.** `GET /v1/fleet-allocation/actual/display`
+  accepts the `fleet-allocation` menu as well as `display-fleet`. Its photo
+  route stays the wall's own. Called with no `?device=`, it is the site:
+  every formation, then the support group (`groupIntoFleets`' `site`), so the
+  phone's empty count is the board's (2026-11-13). It carries `gates` (2026-11-13):
+  the shift's seven gate times, "HH:MM" (`rosterIngest`, `shiftStart`,
+  `ftwDeadline`, `fingerIn`, `board` = `spare-validate`, `secondFinger`,
+  `busDepart`), built by `shiftGateTimes` in `stage-time.ts` and shared with
+  `/me/shift` through `ShiftGatesSchema`, so the two never name a gate
+  differently. All null with no running shift; null per gate with no active
+  stage. A supervisor with no seat, and without the `timeline` menu, can draw
+  the shift's timeline and is told when the line-up is due to be final. Each
+  card also carries `className` (the unit's `unit_classes` name, empty on the
+  spare wall) for the Beranda's empty-units-per-class list.
+- **The timeline monitor is the Operations Center's reading.**
+  `GET /v1/timeline/runs` (menu `timeline`, view) returns the running shift,
+  each stage with its claim and last logged run, and the heartbeat, from
+  `ops/muster-stages.ts`, which `/v1/ops/overview` now uses too. Nothing else
+  of the Operations Center leaves through it.
+- **The Pengawas Lapangan reads what the web reads** (S5): unit status and
+  its trail (`/unit-status`), and a scanned card (`/id-card/:nik` and its
+  photo, scoped as every read of the register; the photo's 200 is published as
+  `image/*`). The spec publishes those GETs only; a status change and the
+  wall's photo feed stay out (test-asserted).
+- **The Superadmin acts through the web's own routes** (S6): the Actual
+  tab's candidates and hand placement (with its FTW acknowledgement), account
+  reset and deactivation, and `/timeline/runs`. The spec leaves out deleting
+  an account, the account import, timeline edits and regenerating a board.
+- **Dashboard and Laporan are the web's** (S7): `GET /v1/dashboard/`, whose
+  sections arrive only for the grants the caller holds, and
+  `GET /v1/reports/{kind}`, one report for a date and shift, scoped as on the
+  web. The workbook export and the departments list stay out (test-asserted).
+- **`/me/shift` carries its gates** (`rosterIngest`, `shiftStart`,
+  `ftwDeadline`, `fingerIn`, `board`, `secondFinger`, `busDepart`, "HH:MM" or
+  null; the first two since 2026-11-13, shared with the fleet wall), so the
+  app words "Batas 05:25" from the timeline and never from a constant.
+- **`/me/shift` says how a seat came and went** (screen audit, 2026-11-09):
+  `boardAt` (when the board was last built), `seat.source` and
+  `seat.placedAt` (the hand placement that stands, from `fleet_placements`),
+  and `withdrawn`, the seat the person was told of and has lost: its unit,
+  when and why (`cause`, now written into each `seat-removed` notice as
+  `regenerated` or `manual`), the slip that named it, and the unit's last
+  status change in the day before. `withdrawn` is read from the person's
+  own notices that have come due, so a seat given back to a spare stays
+  withdrawn until the second finger, as the slip would; it never runs ahead.
+- **`/me/profile`** (screen audit, 2026-11-09): the caller's own name, NIK,
+  department, position and company, under `self` like the rest of `/me`.
+  The staff Profil needs it because `/employees/:nik` asks for the
+  `employees` menu, which the Pengawas Lapangan does not hold; granting it
+  with scope `all` would open the whole register to read one line.
+  Since 2026-11-10 it also gives the SIMPER card (`simperNo`,
+  `simperTypeName`, `simperExp`) and the codes held (`skills`, each with the
+  catalogue's `description`, sorted by name) for the Profil "SIMPER" list.
+  The register keeps one expiry per person, not per code, and eligibility
+  reads it that way, so the card's date is given once. Empty card fields
+  are null, never `""`.
+
+The phone app lives in its own repository (2026-11-25) and generates its
+client from `/openapi`. This repo no longer commits a mobile document; the
+integration document (`integrations/openapi.ts`) is the only one, converted to
+OpenAPI 3.0 by `openapi-30.ts`. Counts and minutes are `t.Integer`, so a
+generated client reads them as integers rather than doubles.
+
+The committed document describes every answer (`openapi-responses.ts`,
+2026-11-09): each operation's success; its route's refusals with the `code`
+values it can send (named in the description, never an `enum`); the session
+gate's `unauthenticated` / `forbidden` / `password_change_required`; and the
+two the app adds around every route in `onError`, 422 `validation_failed`
+(with `issues`) wherever the operation takes input and 500 `internal_error`
+everywhere. A test fails on a placeholder description, a missing 422 or 500,
+or a documented code on a status the route does not declare.
+
+Every answer also carries a real example (`openapi-examples.ts`, 2026-11-09),
+because a viewer otherwise shows each field as `""`. Each success field gets
+a value from `FIELDS`, curated per `parent.name` (a NIK, a unit code, an ISO
+time…). Every closed set is listed in the field's description as
+"Values: …", whether it is an enum (`status`, `reason`, `seat.source`) or a
+free string with known values (`ftw.category`, `ftwDecision`, the report's
+savera cells, the `refusal` sentences).
+Every error example shows its route's first refusal code with the API's own
+message. `openapi-examples.test.ts` fails on a field left without an
+example, an error without a code, or an FTW category list that no longer
+matches `readiness.ts`.
+
+## D15 — Nobody resets, switches off or deletes their own account
+
+`POST /users/:id/reset-password`, `PATCH /users/:id` with `active: false`
+and `DELETE /users/:id` answer 409 `own_account` when `:id` is the caller
+(screen audit, 2026-11-09). Each locks the caller out, possibly mid-shift
+with no other administrator on hand. The phone's Akun screen hid the
+buttons; the rule now holds for the web and any other client. Renaming
+your own account still works, and your own password is changed through
+`/auth/change-password`. The last-roles-admin check stays as it was.
 
 ## Known debt
 

@@ -67,3 +67,29 @@ export function isAllocationFailure(value: string): value is AllocationFailure {
  */
 export const DEVICE_REPORT_MOMENTS = ["start", "end"] as const;
 export type DeviceReportMoment = (typeof DEVICE_REPORT_MOMENTS)[number];
+
+/**
+ * Notifications to one person about their own seat (docs/prd.md, Mobile app
+ * → Notifications on the phone). Unlike the kinds above, which are one
+ * shared row read by whoever runs the muster, each of these is addressed to
+ * a single employee and delivered to their phone.
+ *
+ * - `seat-assigned` — `{ unit, area, bus, fleet }` for the shift. A holder is
+ *   told when the board is built, a spare at `finger-second`, as the slip is.
+ * - `seat-removed` — `{ unit, cause }`: the seat the app was showing no
+ *   longer holds, because the board was built again (`regenerated`) or a hand
+ *   placement gave the unit to somebody else or cleared it (`manual`). Rows
+ *   written before `cause` existed carry `{ unit }` alone.
+ */
+export const SEAT_REMOVED_CAUSES = ["regenerated", "manual"] as const;
+export type SeatRemovedCause = (typeof SEAT_REMOVED_CAUSES)[number];
+
+export const PERSON_NOTIFICATION_KINDS = [
+  "seat-assigned",
+  "seat-removed",
+] as const;
+export type PersonNotificationKind = (typeof PERSON_NOTIFICATION_KINDS)[number];
+
+/** Where a phone receives a push. iOS waits for the Apple account (PRD). */
+export const PUSH_PLATFORMS = ["android", "ios"] as const;
+export type PushPlatform = (typeof PUSH_PLATFORMS)[number];

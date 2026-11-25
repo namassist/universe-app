@@ -11,11 +11,18 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+
+import {
+  SPARE_DEVICE_ID,
+  SUPPORT_DEVICE_ID,
+  type ShiftKind,
+} from "@universe/contracts";
 
 import { createSession, DEVICE_COOKIE, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
 import { redis } from "../redis";
+import { stageTimeOf } from "../stage-time";
 import {
   fleetActualRoutes,
   groupIntoFleets,
@@ -53,6 +60,7 @@ const made = {
 let admin: { cookie: string };
 let viewer: { cookie: string };
 let wall: { cookie: string };
+let outsider: { cookie: string };
 let unitA: string, unitB: string;
 let opOne: string, opTwo: string;
 let nikOne: string, nikTwo: string;
@@ -71,7 +79,8 @@ const send = (method: string, path: string, cookie?: string, body?: unknown) =>
 
 async function makeUser(
   mode: "view" | "manage",
-  menuSlug: "fleet-allocation" | "display-fleet" = "fleet-allocation"
+  menuSlug:
+    "fleet-allocation" | "display-fleet" | "unit-status" = "fleet-allocation"
 ) {
   const [role] = await db
     .insert(schema.roles)
@@ -101,6 +110,7 @@ beforeAll(async () => {
   admin = await makeUser("manage");
   viewer = await makeUser("view");
   wall = await makeUser("view", "display-fleet");
+  outsider = await makeUser("view", "unit-status");
 
   const [co] = await db
     .insert(schema.companies)
@@ -445,6 +455,85 @@ describe("correcting a board", () => {
     expect(slot.source).toBeNull();
   });
 
+  test("somebody taken off a unit they were told about is told it no longer holds", async () => {
+    // docs/prd.md, Mobile app → Notifications on the phone.
+    const [person] = await db
+      .select({ nik: schema.employees.nik })
+      .from(schema.employees)
+      .where(eq(schema.employees.id, opTwo))
+      .limit(1);
+    const [unit] = await db
+      .select({ code: schema.units.code })
+      .from(schema.units)
+      .where(eq(schema.units.id, unitB))
+      .limit(1);
+    const [role] = await db
+      .select({ id: schema.roles.id })
+      .from(schema.roles)
+      .where(eq(schema.roles.slug, "user"))
+      .limit(1);
+    const [account] = await db
+      .insert(schema.users)
+      .values({
+        nik: person!.nik,
+        name: "ZZ Uji notif",
+        passwordHash: "x",
+        roleId: role!.id,
+        mustChangePassword: false,
+      })
+      .returning({ id: schema.users.id });
+    try {
+      expect(
+        (
+          await send(
+            "PATCH",
+            `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+            admin.cookie,
+            { employeeId: opTwo }
+          )
+        ).status
+      ).toBe(200);
+      // As if the seat had already been shown to them.
+      await db.insert(schema.personNotifications).values({
+        employeeId: opTwo,
+        kind: "seat-assigned",
+        date: DATE,
+        shift: "day",
+        params: { unit: unit!.code },
+        dedupeKey: `zz-test|${opTwo}|${DATE}`,
+        availableAt: new Date(Date.now() - 60_000),
+      });
+
+      expect(
+        (
+          await send(
+            "PATCH",
+            `/fleet-allocation/actual/${DATE}/day/${unitB}`,
+            admin.cookie,
+            { employeeId: null }
+          )
+        ).status
+      ).toBe(200);
+      const removed = await db
+        .select({ params: schema.personNotifications.params })
+        .from(schema.personNotifications)
+        .where(
+          and(
+            eq(schema.personNotifications.employeeId, opTwo),
+            eq(schema.personNotifications.kind, "seat-removed")
+          )
+        );
+      expect(removed).toEqual([
+        { params: { unit: unit!.code, cause: "manual" } },
+      ]);
+    } finally {
+      await db
+        .delete(schema.personNotifications)
+        .where(eq(schema.personNotifications.employeeId, opTwo));
+      await db.delete(schema.users).where(eq(schema.users.id, account!.id));
+    }
+  });
+
   test("404s for a unit that is not on this board", async () => {
     const response = await send(
       "PATCH",
@@ -639,6 +728,7 @@ describe("candidates for a unit", () => {
 const slot = (over: Partial<WallSlot> = {}): WallSlot => ({
   unitId: crypto.randomUUID(),
   unitCode: "DT-100",
+  className: "K",
   modelName: "M",
   brandName: "B",
   fleetId: null,
@@ -804,7 +894,7 @@ describe("the support wall, before and after the board", () => {
         }),
       ],
       null,
-      true
+      "support"
     );
 
     expect(groups).toHaveLength(1);
@@ -843,7 +933,7 @@ describe("the support wall, before and after the board", () => {
         }),
       ],
       null,
-      true
+      "support"
     );
 
     expect(groups).toHaveLength(1);
@@ -867,6 +957,30 @@ describe("the support wall, before and after the board", () => {
       slot({ unitCode: "EX-22", fleetId: "f1", leaderCode: "EX-22" }),
     ]);
     expect(groups.map((g) => g.kind)).toEqual(["fleet"]);
+  });
+
+  test("the site-wide board keeps the support units, after the formations", () => {
+    /* The bug this closes (2026-11-13). A person naming no screen — the
+       phone's Papan ACTUAL, a browser previewing the site — got the formation
+       walls' rule, so the 38 empty support units fell off: the phone said 243
+       empty where the Actual board said 281. */
+    const groups = groupIntoFleets(
+      [
+        slot({ unitCode: "DZ-01", groupKind: "support" }),
+        slot({ unitCode: "EX-22", fleetId: "f1", leaderCode: "EX-22" }),
+        slot({
+          unitCode: "WT-01",
+          groupKind: "support",
+          employeeName: "Andi",
+          source: "plan",
+        }),
+      ],
+      null,
+      "site"
+    );
+    expect(groups.map((g) => g.kind)).toEqual(["fleet", "support"]);
+    expect(groups[1]).toMatchObject({ total: 2, crewed: 1, idle: 1 });
+    expect(groups.reduce((n, g) => n + g.idle, 0)).toBe(2);
   });
 });
 
@@ -1452,10 +1566,31 @@ describe("previewing one screen from a browser", () => {
 });
 
 describe("the fleet wall endpoint", () => {
-  test("refuses a caller who holds only the allocation menu", async () => {
+  test("answers a holder of the allocation menu too, as the phone reads it", async () => {
+    /* The mobile app's Papan ACTUAL is this wall, read by a Pengawas Lapangan
+       or a Superadmin (docs/prd.md, Mobile app): the phone and the TV must
+       never disagree about the board. */
     const res = await send(
       "GET",
       "/fleet-allocation/actual/display",
+      viewer.cookie
+    );
+    expect(res.status).toBe(200);
+  });
+
+  test("refuses a caller who holds neither menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display",
+      outsider.cookie
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("keeps the operator's photo to the wall's own menu", async () => {
+    const res = await send(
+      "GET",
+      "/fleet-allocation/actual/display/photo/99120000",
       viewer.cookie
     );
     expect(res.status).toBe(403);
@@ -1488,6 +1623,166 @@ describe("the fleet wall endpoint", () => {
     // Each formation's count is its own units, not the board's.
     for (const fleet of body.fleets)
       expect(fleet.total).toBe(fleet.units.length);
+  });
+
+  /* The shift's gates, from the timeline (2026-11-13): when the line-up is
+     due to be final and the rest of the Beranda's timeline, so a supervisor
+     with no seat of their own can be told them too. Which shift is running is
+     this database's timeline's answer, as in `me.test.ts`. */
+  const GATE_ACTIONS = {
+    rosterIngest: "roster-ingest",
+    shiftStart: "shift-start",
+    ftwDeadline: "ftw-deadline",
+    fingerIn: "finger-in",
+    board: "spare-validate",
+    secondFinger: "finger-second",
+    busDepart: "bus-depart",
+  } as const;
+  const gatesFor = async (shift: ShiftKind | null) =>
+    Object.fromEntries(
+      await Promise.all(
+        Object.entries(GATE_ACTIONS).map(
+          async ([key, action]) =>
+            [
+              key,
+              shift
+                ? ((await stageTimeOf(action, shift))?.slice(0, 5) ?? null)
+                : null,
+            ] as const
+        )
+      )
+    );
+  const display = async (path = "/fleet-allocation/actual/display") => {
+    const res = await send("GET", path, wall.cookie);
+    expect(res.status).toBe(200);
+    return (await res.json()) as {
+      shift: ShiftKind | null;
+      gates?: Record<string, string | null>;
+      boardDue?: unknown;
+      fleets: {
+        kind: string;
+        units: { unitCode: string; className?: string }[];
+      }[];
+    };
+  };
+
+  test("carries the shift's gates, as the timeline schedules them", async () => {
+    const body = await display();
+    // Without a running shift every branch but the blank one goes untested.
+    expect(body.shift).not.toBeNull();
+    expect(body.gates).toEqual(await gatesFor(body.shift));
+    for (const at of Object.values(body.gates!))
+      if (at) expect(at).toMatch(/^\d{2}:\d{2}$/);
+    // One field for one time: `gates.board` replaced it.
+    expect("boardDue" in body).toBe(false);
+  });
+
+  test("the spare wall carries the gates too", async () => {
+    const body = await display(
+      `/fleet-allocation/actual/display?device=${SPARE_DEVICE_ID}`
+    );
+    expect(body.gates).toEqual(await gatesFor(body.shift));
+  });
+
+  test("names each unit's class, so the phone can count empty seats by it", async () => {
+    const body = await display();
+    const ours = body.fleets
+      .flatMap((f) => f.units)
+      .filter((u) => u.unitCode.startsWith(`${tag}-`));
+    // This file's units, whichever board — plan or generated — is up.
+    expect(ours.length).toBeGreaterThanOrEqual(2);
+    const classOf = new Map(
+      (
+        await db
+          .select({ code: schema.units.code, name: schema.unitClasses.name })
+          .from(schema.units)
+          .innerJoin(
+            schema.unitClasses,
+            eq(schema.unitClasses.id, schema.units.classId)
+          )
+          .where(
+            inArray(
+              schema.units.code,
+              ours.map((u) => u.unitCode)
+            )
+          )
+      ).map((r) => [r.code, r.name])
+    );
+    for (const u of ours) expect(u.className).toBe(classOf.get(u.unitCode)!);
+  });
+
+  test("names no device, and the support group comes too, as on the support wall", async () => {
+    type Wall = {
+      fleets: { kind: string; total: number; idle: number; units: unknown[] }[];
+    };
+    const read = async (path: string) => {
+      const res = await send("GET", path, wall.cookie);
+      expect(res.status).toBe(200);
+      return (await res.json()) as Wall;
+    };
+    const site = await read("/fleet-allocation/actual/display");
+    const support = await read(
+      `/fleet-allocation/actual/display?device=${SUPPORT_DEVICE_ID}`
+    );
+    // The fixture's two units are support units, so there is a group to miss.
+    expect(support.fleets).toHaveLength(1);
+    const ours = site.fleets.filter((f) => f.kind === "support");
+    expect(ours).toHaveLength(1);
+    expect(ours[0]).toMatchObject({
+      total: support.fleets[0]!.total,
+      idle: support.fleets[0]!.idle,
+    });
+    // Last, as the support wall's leftovers always sort.
+    expect(site.fleets.at(-1)!.kind).toBe("support");
+  });
+
+  test("the support wall carries the gates too", async () => {
+    /* No branch of its own — it shares the formation walls' path and only
+       groups differently — so this pins that it keeps the field. */
+    const body = await display(
+      `/fleet-allocation/actual/display?device=${SUPPORT_DEVICE_ID}`
+    );
+    expect(body.shift).not.toBeNull();
+    expect(body.gates).toEqual(await gatesFor(body.shift));
+  });
+
+  /* Switches the site's own `spare-validate` rows off for one request and
+     back on in `finally`, as `stage-time.test.ts` suspends its stages: bun
+     runs test files one after another, so no other file reads them meanwhile. */
+  test("says null for a gate the timeline does not schedule", async () => {
+    const rows = await db
+      .select({ id: schema.timelineStages.id })
+      .from(schema.timelineStages)
+      .where(
+        and(
+          eq(schema.timelineStages.action, "spare-validate"),
+          eq(schema.timelineStages.active, true)
+        )
+      );
+    const ids = rows.map((r) => r.id);
+    if (ids.length)
+      await db
+        .update(schema.timelineStages)
+        .set({ active: false })
+        .where(inArray(schema.timelineStages.id, ids));
+    try {
+      const body = await display();
+      // A running shift, so the null is the missing stage's and not the
+      // blank payload's.
+      expect(body.shift).not.toBeNull();
+      expect(body.gates!.board).toBeNull();
+      // Only the missing stage: the rest of the shift still has its times.
+      expect(body.gates).toEqual({
+        ...(await gatesFor(body.shift)),
+        board: null,
+      });
+    } finally {
+      if (ids.length)
+        await db
+          .update(schema.timelineStages)
+          .set({ active: true })
+          .where(inArray(schema.timelineStages.id, ids));
+    }
   });
 });
 

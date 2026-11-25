@@ -39,10 +39,11 @@ import {
   shiftIn,
   type FtwVerdict,
 } from "../readiness";
-import { shiftGates } from "../stage-time";
+import { shiftGates, shiftGateTimes, type ShiftGateTimes } from "../stage-time";
 import { photoMimeType, photoPath } from "../storage";
 import { pairingRefusal } from "./fleet-allocation";
 import { localDate } from "../scheduler";
+import { announceBoardNow, announcePlacementNow } from "../person-notify";
 import { normalizeNik } from "../sources/nik";
 import {
   ActualAuditSchema,
@@ -95,6 +96,7 @@ async function boardSlots(documentId: string) {
         unitId: schema.fleetActualSlots.unitId,
         unitCode: schema.units.code,
         requiresFtw: schema.units.ftw,
+        className: schema.unitClasses.name,
         simperCodeName: schema.simperCodes.name,
         departmentName: schema.departments.name,
         modelName: schema.unitModels.name,
@@ -120,6 +122,10 @@ async function boardSlots(documentId: string) {
       .innerJoin(
         schema.unitModels,
         eq(schema.unitModels.id, schema.units.modelId)
+      )
+      .innerJoin(
+        schema.unitClasses,
+        eq(schema.unitClasses.id, schema.units.classId)
       )
       .innerJoin(
         schema.unitBrands,
@@ -167,6 +173,7 @@ export async function planSlots(date: string, shift: ShiftKind) {
       unitId: schema.units.id,
       unitCode: schema.units.code,
       requiresFtw: schema.units.ftw,
+      className: schema.unitClasses.name,
       modelName: schema.unitModels.name,
       brandName: schema.unitBrands.name,
       fleetId: schema.fleets.id,
@@ -186,6 +193,10 @@ export async function planSlots(date: string, shift: ShiftKind) {
     .innerJoin(
       schema.unitModels,
       eq(schema.unitModels.id, schema.units.modelId)
+    )
+    .innerJoin(
+      schema.unitClasses,
+      eq(schema.unitClasses.id, schema.units.classId)
     )
     .innerJoin(
       schema.unitBrands,
@@ -486,6 +497,7 @@ async function spareGroup(date: string, shift: ShiftKind): Promise<WallFleet> {
     units: crew.map((c) => ({
       unitId: `spare-${c.nik}`,
       unitCode: "SPARE",
+      className: "",
       modelName: "",
       brandName: "",
       unitArea: ride?.area ?? null,
@@ -597,10 +609,23 @@ async function fleetScreen(deviceId: string) {
   return row;
 }
 
+/** The gates of no shift: what the blank payload carries. */
+const NO_GATES: ShiftGateTimes = {
+  rosterIngest: null,
+  shiftStart: null,
+  ftwDeadline: null,
+  fingerIn: null,
+  board: null,
+  secondFinger: null,
+  busDepart: null,
+};
+
 /** One unit as the wall reads it — the board row, already named. */
 export type WallSlot = {
   unitId: string;
   unitCode: string;
+  /** The unit's class (`REARDUMP100T`) — what a supervisor counts empties by. */
+  className: string;
   modelName: string;
   brandName: string;
   /**
@@ -662,10 +687,10 @@ export type WallFleet = {
 /**
  * The board, arranged into the formations a wall rotates through.
  *
- * **Units belonging to no fleet are dropped** (owner, 2026-08-29). The wall
- * answers one question — how each formation is crewed — and a unit that is in
- * no formation has no answer to contribute. They remain on the Actual board,
- * where a supervisor sees and fills them; it is only the TV that is scoped.
+ * **A pit's wall shows no support units** (owner, 2026-08-29; support wall
+ * 2026-09-04). It answers one question — how each formation is crewed — and
+ * the support group has a screen of its own. The site-wide answer, for a
+ * person naming no screen, carries them last (`WallGroups`).
  *
  * Counts are per formation for the same reason: someone standing in front of
  * the Pit 3 screen acts on Pit 3, and a site-wide number there would be read
@@ -686,6 +711,20 @@ export type WallFleet = {
  */
 const PLAN_SUPPORT_GROUP = "plan-support";
 
+/**
+ * Which groups a wall is about.
+ *
+ * - `formations` — a pit's TV: the formations, never the support units, so a
+ *   panel does not cycle through dozers working somewhere else.
+ * - `support` — the support wall: that one group and nothing else.
+ * - `site` — a person naming no screen (the phone's Papan ACTUAL, a browser
+ *   previewing the site): every formation, then the support group. They are
+ *   looking at the site, and a site without its support units undercounted
+ *   the empty seats by every idle dozer and water truck (2026-11-13: 243
+ *   shown, 281 on the board).
+ */
+export type WallGroups = "formations" | "support" | "site";
+
 export function groupIntoFleets(
   slots: WallSlot[],
   /**
@@ -701,13 +740,12 @@ export function groupIntoFleets(
    */
   scope: readonly string[] | null = null,
   /**
-   * The support wall: show that group and nothing else.
+   * Which groups the wall is about — see `WallGroups`.
    *
    * Separate from `scope` because it is a different question. A scope names
-   * formations an admin picked; this names the one group nobody picks, on the
-   * one screen whose subject is what it is.
+   * formations an admin picked; this is about the one group nobody picks.
    */
-  supportOnly = false
+  which: WallGroups = "formations"
 ): WallFleet[] {
   const wanted = scope && scope.length ? new Set(scope) : null;
   const groups = new Map<string, WallFleet>();
@@ -738,7 +776,9 @@ export function groupIntoFleets(
        needs nothing, which is why the two are told apart by `kind` rather than
        by whether a code happens to be there. */
     if (s.groupKind === "fleet" && !s.leaderCode) continue;
-    if (supportOnly !== (s.groupKind === "support")) continue;
+    const isSupport = s.groupKind === "support";
+    if (which === "formations" && isSupport) continue;
+    if (which === "support" && !isSupport) continue;
     if (wanted && !(s.sourceFleetId && wanted.has(s.sourceFleetId))) continue;
     let group = groups.get(groupId);
     if (!group) {
@@ -808,6 +848,7 @@ function cardOf(
   return {
     unitId: s.unitId,
     unitCode: s.unitCode,
+    className: s.className,
     modelName: s.modelName,
     brandName: s.brandName,
     unitArea,
@@ -1073,6 +1114,7 @@ export const fleetActualRoutes = new Elysia({
         provisional: false,
         ftwClosed: false,
         fingerClosed: false,
+        gates: { ...NO_GATES },
         rotateSeconds: rotate,
         layout,
         cardLayout,
@@ -1088,7 +1130,10 @@ export const fleetActualRoutes = new Elysia({
       const now = currentShift(new Date(), await shiftGates());
       if (!now) return blank;
 
-      const doc = await documentOf(now.date, now.shift);
+      const [doc, gates] = await Promise.all([
+        documentOf(now.date, now.shift),
+        shiftGateTimes(now.shift),
+      ]);
 
       if (spareOnly) {
         const at = new Date();
@@ -1108,6 +1153,7 @@ export const fleetActualRoutes = new Elysia({
           provisional: false,
           ftwClosed: deadlinePassed(ftwGate, now.date, at),
           fingerClosed: deadlinePassed(fingerGate, now.date, at),
+          gates,
           fleets: [group],
         };
       }
@@ -1170,6 +1216,7 @@ export const fleetActualRoutes = new Elysia({
         return {
           unitId: s.unitId,
           unitCode: s.unitCode,
+          className: s.className,
           modelName: s.modelName,
           brandName: s.brandName,
           fleetId: s.fleetId,
@@ -1199,6 +1246,7 @@ export const fleetActualRoutes = new Elysia({
         provisional,
         ftwClosed: deadlinePassed(ftwGate, now.date, at),
         fingerClosed: deadlinePassed(fingerGate, now.date, at),
+        gates,
         rotateSeconds: rotate,
         layout,
         cardLayout,
@@ -1206,11 +1254,28 @@ export const fleetActualRoutes = new Elysia({
         deviceName,
         fleets: unitScope
           ? groupIntoUnits(wall, unitScope, screen!.id)
-          : groupIntoFleets(wall, scope, supportOnly),
+          : groupIntoFleets(
+              wall,
+              scope,
+              /* Only a person naming no screen is looking at the site; a
+                 device always answers as a wall, even one whose row is gone. */
+              supportOnly
+                ? "support"
+                : principal.kind === "user" && !screen
+                  ? "site"
+                  : "formations"
+            ),
       };
     },
     {
-      auth: { menu: "display-fleet", mode: "view", allowDevice: true },
+      /* The allocation menu reads it too: the mobile app's Papan ACTUAL is
+         this wall, so the phone and the TV cannot disagree (docs/prd.md,
+         Mobile app). The photo route below stays the wall's own. */
+      auth: {
+        menu: ["display-fleet", "fleet-allocation"],
+        mode: "view",
+        allowDevice: true,
+      },
       /** Which screen to answer as — browsers previewing a TV, nobody else. */
       query: t.Object({ device: t.Optional(t.String({ minLength: 1 })) }),
       response: {
@@ -1427,6 +1492,9 @@ export const fleetActualRoutes = new Elysia({
         uploadClose
       );
       await storeBoard(board);
+      /* As the scheduled stage does. A board for a muster already over
+         announces nothing (`announceBoard`). */
+      await announceBoardNow(params.date, params.shift);
       return { ok: true, units: board.slots.length };
     },
     {
@@ -1641,6 +1709,19 @@ export const fleetActualRoutes = new Elysia({
           });
       }
 
+      /* Who sat here before, read before the change: if it is somebody
+         else, they are told the seat no longer holds. */
+      const [before] = await db
+        .select({ employeeId: schema.fleetActualSlots.employeeId })
+        .from(schema.fleetActualSlots)
+        .where(
+          and(
+            eq(schema.fleetActualSlots.documentId, doc.id),
+            eq(schema.fleetActualSlots.unitId, params.unitId)
+          )
+        )
+        .limit(1);
+
       const [row] = await db
         .update(schema.fleetActualSlots)
         .set({
@@ -1676,6 +1757,16 @@ export const fleetActualRoutes = new Elysia({
         fingerVerdict: reading?.readiness.finger ?? null,
         overrode: unfit,
       });
+
+      const previous = before?.employeeId ?? null;
+      if (previous !== (body.employeeId ?? null))
+        await announcePlacementNow({
+          date: params.date,
+          shift: params.shift,
+          unitId: params.unitId,
+          placed: body.employeeId ?? null,
+          displaced: previous,
+        });
 
       return { ok: true };
     },

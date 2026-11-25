@@ -35,6 +35,70 @@ export async function stageTimeOf(
 }
 
 /**
+ * A stage's time as a screen names it, "HH:MM" — the one trim every gate the
+ * phone and the walls show goes through.
+ */
+export async function stageClock(
+  action: TimelineAction,
+  shift: ShiftKind
+): Promise<string | null> {
+  return (await stageTimeOf(action, shift))?.slice(0, 5) ?? null;
+}
+
+/**
+ * A shift's gates as the phone draws its timeline, "HH:MM" each, or null
+ * where the timeline has no active stage. The pulls that run in between
+ * (`ftw-ingest`, `finger-ingest`) are machinery nobody waits on, so they are
+ * not here.
+ */
+export type ShiftGateTimes = {
+  rosterIngest: string | null;
+  shiftStart: string | null;
+  ftwDeadline: string | null;
+  fingerIn: string | null;
+  /** `spare-validate`: when the board is due to be built. */
+  board: string | null;
+  secondFinger: string | null;
+  busDepart: string | null;
+};
+
+/**
+ * One reading for both `/me/shift` and the fleet wall, so the two can never
+ * name a gate differently.
+ */
+export async function shiftGateTimes(
+  shift: ShiftKind
+): Promise<ShiftGateTimes> {
+  const at = (action: TimelineAction) => stageClock(action, shift);
+  const [
+    rosterIngest,
+    shiftStart,
+    ftwDeadline,
+    fingerIn,
+    board,
+    secondFinger,
+    busDepart,
+  ] = await Promise.all([
+    at("roster-ingest"),
+    at("shift-start"),
+    at("ftw-deadline"),
+    at("finger-in"),
+    at("spare-validate"),
+    at("finger-second"),
+    at("bus-depart"),
+  ]);
+  return {
+    rosterIngest,
+    shiftStart,
+    ftwDeadline,
+    fingerIn,
+    board,
+    secondFinger,
+    busDepart,
+  };
+}
+
+/**
  * The gate each pull runs until.
  *
  * A pull window is not a duration somebody chose; it is the span between a

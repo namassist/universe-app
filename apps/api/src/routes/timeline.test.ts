@@ -26,7 +26,10 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { db, schema } from "../db";
+import { opsKey } from "../ops/keys";
+import { lastSchedulerTick, recordStageRun } from "../ops/stage-log";
 import { redis } from "../redis";
+import { localDate } from "../scheduler";
 import { timelineRoutes } from "./timeline";
 
 const app = new Elysia().use(timelineRoutes);
@@ -626,5 +629,92 @@ describe("a gate the running muster has passed", () => {
         (await send("DELETE", `/timeline/${created.id}`, admin.cookie)).status
       ).toBe(200);
     }
+  });
+});
+
+/**
+ * The running muster as the phone's Superadmin monitor reads it (docs/prd.md,
+ * Mobile app → Superadmin: "Timeline: monitor only"). The same stage log the
+ * Operations Center reads, behind the person's `timeline` view rather than
+ * the ops password.
+ *
+ * The run recorded here is today's, so it is taken out of the log afterwards,
+ * entry for entry, rather than left on the Operations Center for three days.
+ */
+describe("the running muster, for the phone's monitor", () => {
+  const recorded: string[] = [];
+  const date = localDate(new Date());
+
+  afterAll(async () => {
+    for (const line of recorded)
+      await redis.lrem(opsKey(`stages:${date}`), 0, line);
+  });
+
+  test("lists each stage on its muster's date with its last run and the scheduler's heartbeat", async () => {
+    /* A stage governing neither shift sits on today's muster. */
+    const created = (await (await create({ at: "00:01" })).json()) as Stage;
+    const at = new Date();
+    const stage = {
+      id: created.id,
+      name: created.name,
+      action: "other" as const,
+      shift: null,
+    };
+    await recordStageRun({ date, stage, note: "Uji monitor", ok: false, at });
+    recorded.push(
+      JSON.stringify({
+        at: at.toISOString(),
+        date,
+        stageId: stage.id,
+        name: stage.name,
+        action: stage.action,
+        shift: stage.shift,
+        ok: false,
+        note: "Uji monitor",
+      })
+    );
+
+    const response = await send("GET", "/timeline/runs", viewer.cookie);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      schedulerLastTick: string | null;
+      stages: Array<Record<string, unknown>>;
+    };
+    expect(body.schedulerLastTick).toBe(await lastSchedulerTick());
+    expect(body.stages.find((s) => s.id === created.id)).toMatchObject({
+      at: "00:01",
+      date,
+      due: true,
+      fired: false,
+      lastRun: { ok: false, note: "Uji monitor" },
+    });
+  });
+
+  test("needs a session and the timeline menu", async () => {
+    expect((await send("GET", "/timeline/runs")).status).toBe(401);
+
+    const [role] = await db
+      .insert(schema.roles)
+      .values({ slug: `zz-timeline-${uid()}`, name: tag, scope: "all" })
+      .returning({ id: schema.roles.id });
+    made.roles.push(role!.id);
+    const [user] = await db
+      .insert(schema.users)
+      .values({
+        email: `zz-${uid()}@uji.local`,
+        name: tag,
+        passwordHash: "x",
+        roleId: role!.id,
+        mustChangePassword: false,
+      })
+      .returning({ id: schema.users.id });
+    made.users.push(user!.id);
+    const session = await createSession("user", user!.id, "cookie");
+    const response = await send(
+      "GET",
+      "/timeline/runs",
+      `${SESSION_COOKIE}=${session.id}`
+    );
+    expect(response.status).toBe(403);
   });
 });

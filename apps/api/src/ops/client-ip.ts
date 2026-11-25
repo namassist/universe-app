@@ -6,6 +6,12 @@
  * The **last** entry is the one the nearest proxy wrote; anything before it
  * was supplied by whoever sent the request and proves nothing. Without
  * `TRUST_PROXY` the header is ignored entirely and the socket is the answer.
+ *
+ * With it, a request carrying no header has no address (security review,
+ * 2026-10-17). Caddy writes the header on every request it forwards, so one
+ * without it did not come through Caddy: its socket is some other container
+ * on the compose network, and that private address would read as the site
+ * and earn a first login (`auth/site-network.ts`).
  */
 
 import { isIP } from "node:net";
@@ -24,7 +30,7 @@ export function clientIp(
     const forwarded = request.headers.get("x-forwarded-for");
     const last = forwarded?.split(",").at(-1)?.trim();
     // Not an address is not an address: never stored, never a lockout key.
-    if (last) return isIP(last) ? last : null;
+    return last && isIP(last) ? last : null;
   }
   const socket = server?.requestIP?.(request)?.address ?? null;
   return socket && isIP(socket) ? socket : null;

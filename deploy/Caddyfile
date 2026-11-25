@@ -12,14 +12,36 @@
 #
 # The API owns three paths at the root — everything under /v1, plus /health and
 # /openapi. Everything else is the web app.
-:80 {
+#
+# Two ways in, one application behind both (docs/deploy.md, "Opening the
+# installation to the internet"):
+#
+#   * The site listener, on SITE_ADDRESS. `:80` serves plain HTTP on the LAN,
+#     as before. With SITE_TLS=cloudflare, SITE_ADDRESS is the domain and is
+#     served HTTPS instead, with a certificate obtained through Cloudflare DNS,
+#     so no inbound port is needed for it (`caddy/tls/`).
+#   * The tunnel listener, on :8080 inside the compose network only. cloudflared
+#     is its one caller. Never published on the host.
+#
+# Each writes X-Forwarded-For itself, replacing whatever the client sent, and
+# the API believes only its last entry (`apps/api/src/ops/client-ip.ts`). On the
+# site listener that is the peer. On the tunnel listener the peer is always
+# cloudflared, so it is Cloudflare's CF-Connecting-IP. Both the login lockouts
+# and the first-login rule key on this address.
+
+# The routes both listeners serve. {args[0]} is the client's address,
+# {args[1]} the scheme the browser used.
+(app) {
 	encode zstd gzip
 
 	# Uploaded photos and sounds stream through here; the default 100s write
 	# timeout is generous for a LAN but an import of several thousand rows can
 	# outrun it.
 	handle /v1/* {
-		reverse_proxy api:3001
+		reverse_proxy api:3001 {
+			header_up X-Forwarded-For {args[0]}
+			header_up X-Forwarded-Proto {args[1]}
+		}
 	}
 	handle /health {
 		reverse_proxy api:3001
@@ -28,11 +50,35 @@
 		reverse_proxy api:3001
 	}
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-For {args[0]}
+			header_up X-Forwarded-Proto {args[1]}
+		}
 	}
 
 	log {
 		output stdout
 		format console
 	}
+}
+
+{$SITE_ADDRESS::80} {
+	import tls/{$SITE_TLS:off}.caddy
+	import app {remote_host} {scheme}
+}
+
+http://:8080 {
+	# Cloudflare sets this on every request it forwards. A request without it,
+	# or with it empty, did not come through the tunnel, so it has no address
+	# to be judged by.
+	# A `handle` rather than a bare `respond`: Caddy runs `handle` blocks
+	# before `respond`, so a bare one would never be reached.
+	@untunnelled not header_regexp Cf-Connecting-Ip .
+	handle @untunnelled {
+		respond 403
+	}
+
+	# The edge answered the browser in HTTPS ("Always Use HTTPS" is on, per
+	# docs/deploy.md); the hop from cloudflared to here is the only plain one.
+	import app {http.request.header.Cf-Connecting-Ip} https
 }

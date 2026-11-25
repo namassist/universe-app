@@ -1,0 +1,2 @@
+# SITE_TLS=off: the site listener serves plain HTTP on SITE_ADDRESS (`:80`).
+# Nothing to configure. Kept as a file so the Caddyfile's import resolves.

@@ -27,14 +27,11 @@ export type IdCard = Awaited<
 /**
  * Where a card's photograph comes from, or null when there is none on file.
  *
- * The scan screen's own route rather than the employee register's: this menu
- * is granted on its own, and it carries the same scope — see the API route.
+ * The API names the path (the scan screen's own route, with the file name as
+ * a cache-buster); the browser only puts the API's origin in front of it.
  */
 export function idCardPhotoUrl(card: {
-  nik: string;
-  photoFile: string | null;
+  photoUrl: string | null;
 }): string | null {
-  if (!card.photoFile) return null;
-  const nik = encodeURIComponent(card.nik);
-  return `${API_URL}/v1/id-card/${nik}/photo?v=${card.photoFile}`;
+  return card.photoUrl ? `${API_URL}${card.photoUrl}` : null;
 }

@@ -1227,6 +1227,24 @@ export const TimelineStageSchema = t.Object({
   createdAt: t.String(),
 });
 
+/** A stage as the running muster saw it: the Operations Center and the phone's monitor. */
+export const MusterStageSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  action: TimelineActionSchema,
+  shift: t.Nullable(ShiftKindSchema),
+  at: t.String(),
+  /** The muster this stage belongs to — yesterday's for a night under way. */
+  date: t.String(),
+  /** Its time on that date has arrived. */
+  due: t.Boolean(),
+  active: t.Boolean(),
+  fired: t.Boolean(),
+  lastRun: t.Nullable(
+    t.Object({ at: t.String(), ok: t.Boolean(), note: t.String() })
+  ),
+});
+
 /* ------------------------------------------------------ actual allocation */
 
 export const ActualDocumentSchema = t.Object({
@@ -1387,12 +1405,33 @@ export const ActualCandidateSchema = t.Object({
   onAnotherUnit: t.Boolean(),
 });
 
+/**
+ * A shift's gates, "HH:MM" each, or null where the timeline has no active
+ * stage: `roster-ingest`, `shift-start`, `ftw-deadline`, `finger-in`,
+ * `spare-validate` (`board`), `finger-second`, `bus-depart`. One shape for
+ * `/me/shift` and the fleet wall, so the phone reads both alike.
+ */
+export const ShiftGatesSchema = t.Object({
+  rosterIngest: t.Nullable(t.String()),
+  shiftStart: t.Nullable(t.String()),
+  ftwDeadline: t.Nullable(t.String()),
+  fingerIn: t.Nullable(t.String()),
+  board: t.Nullable(t.String()),
+  secondFinger: t.Nullable(t.String()),
+  busDepart: t.Nullable(t.String()),
+});
+
 /* ------------------------------------------------- the fleet wall (kiosk) */
 
 /** One unit on the wall, cut down to what is legible from across a yard. */
 export const FleetDisplayUnitSchema = t.Object({
   unitId: t.String(),
   unitCode: t.String(),
+  /**
+   * The unit's class (`REARDUMP100T`, `BIGDIGGER`), what a supervisor counts
+   * empty seats by. Empty on the spare wall, whose cards are people.
+   */
+  className: t.String(),
   modelName: t.String(),
   brandName: t.String(),
   /**
@@ -1512,6 +1551,18 @@ export const FleetDisplaySchema = t.Object({
    */
   ftwClosed: t.Boolean(),
   fingerClosed: t.Boolean(),
+  /**
+   * The running shift's gates, "HH:MM" each — the same seven `/me/shift`
+   * sends, so a supervisor with no seat of their own can draw the shift's
+   * timeline and word a provisional line-up as "final after 05:26"
+   * (`gates.board`, the `spare-validate` stage).
+   *
+   * A schedule, not a promise — a manual regenerate can build the board
+   * sooner, and `provisional` still true past `board` is the alarm that nobody
+   * did. All null when no shift is running; one null where the timeline has
+   * no active stage for that gate.
+   */
+  gates: ShiftGatesSchema,
   /** Seconds one formation stays on screen — the screen's own setting. */
   rotateSeconds: t.Integer(),
   /**
@@ -2023,10 +2074,24 @@ export const IdCardSchema = t.Object({
   name: t.String(),
   /** Cache-buster for the photo URL; null when there is none on file. */
   photoFile: t.Nullable(t.String()),
+  photoUrl: t.Nullable(
+    t.String({
+      description:
+        "Where to fetch the photo from, relative to the API origin; null when there is none on file. Send the same `Authorization: Bearer` header as every other call.",
+    })
+  ),
   department: t.Nullable(t.String()),
   position: t.Nullable(t.String()),
   /** The simper codes held, in code order; empty when there are none. */
   simper: t.Array(t.String()),
+  simperNo: t.Nullable(t.String()),
+  simperTypeName: t.Nullable(t.String()),
+  simperExp: t.Nullable(
+    t.String({
+      description:
+        "The SIMPER card's expiry, `YYYY-MM-DD`. One date for the whole card: every code in `simper` lapses with it.",
+    })
+  ),
   /** The running shift, or null when the timeline cannot name one. */
   shift: t.Nullable(ShiftKindSchema),
   /** The roster code for today — D, N, L — from the document in force. */

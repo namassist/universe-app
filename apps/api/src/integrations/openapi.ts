@@ -16,6 +16,9 @@ import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { API_VERSION } from "@universe/contracts";
 
+import { as30, sortedResponses } from "../openapi-30";
+import { withExamples } from "../openapi-examples";
+import { documentResponses, INDONESIAN } from "../openapi-responses";
 import { integrationRoutes } from "../routes/integrations";
 
 /** Repo-relative, where the generated document is committed. */
@@ -38,7 +41,10 @@ const DESCRIPTION = [
   "lalu coba lagi.",
   "",
   '**Error.** Isi balasan error selalu `{ "code": "...", "message": "..." }`.',
-  "Lihat bagian respons tiap endpoint untuk arti setiap `code`.",
+  "Lihat bagian respons tiap endpoint untuk arti setiap `code`. Parameter yang",
+  "tidak sesuai aturan dibalas 422 `validation_failed`, dengan `issues` yang",
+  "menyebut setiap parameter yang salah. Kesalahan di server dibalas 500",
+  "`internal_error`; coba lagi nanti.",
 ].join("\n");
 
 type Json = Record<string, unknown>;
@@ -169,52 +175,31 @@ function complete(path: string, operation: Operation & Json): void {
   };
 }
 
-/**
- * The document says 3.0.3, but TypeBox writes two 3.1 forms into it: a
- * schema's `examples: [x]` (3.0 has `example: x`) and a nullable value as
- * `anyOf: [X, { type: "null" }]` (3.0 has `nullable: true` on X). Validators
- * and client generators reading 3.0 refuse both, so both are rewritten —
- * into a new tree, the generated one untouched.
- *
- * `additionalProperties` is dropped too. Elysia writes `false` into a route's
- * schemas when it first compiles their validators, so its presence depends on
- * whether the route has served a request yet; and a published "no extra
- * fields" would turn every field added later into a breaking change for a
- * strictly generated client.
- */
-function as30(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(as30);
-  if (!node || typeof node !== "object") return node;
-
-  const { anyOf, examples, nullable, ...rest } = node as Json & {
-    anyOf?: Json[];
-    examples?: unknown;
-    nullable?: boolean;
-  };
-  const out: Json = Object.fromEntries(
-    Object.entries(rest)
-      .filter(([key]) => key !== "additionalProperties")
-      .map(([key, value]) => [key, as30(value)])
+/** Every field of a JSON success with a real value (`openapi-examples.ts`). */
+function withSuccessExamples(
+  responses: Record<string, Json>
+): Record<string, Json> {
+  return Object.fromEntries(
+    Object.entries(responses).map(([status, response]) => {
+      const content = response.content as Record<string, Json> | undefined;
+      const media = content?.["application/json"];
+      if (!status.startsWith("2") || !media) return [status, response];
+      return [
+        status,
+        {
+          ...response,
+          content: {
+            ...content,
+            "application/json": {
+              ...media,
+              schema: withExamples(media.schema),
+            },
+          },
+        },
+      ];
+    })
   );
-
-  if (Array.isArray(examples) && examples.length) out.example = examples[0];
-  else if (examples !== undefined) out.examples = as30(examples);
-
-  if (Array.isArray(anyOf)) {
-    const real = anyOf.filter((branch) => branch.type !== "null");
-    if (real.length === 1 && real.length < anyOf.length)
-      return { ...out, ...(as30(real[0]) as Json), nullable: true };
-    out.anyOf = as30(anyOf);
-  }
-  if (nullable !== undefined) out.nullable = nullable;
-  return out;
 }
-
-/** Responses in status order, so the committed file reads top to bottom. */
-const sortedResponses = (responses: Record<string, Json>) =>
-  Object.fromEntries(
-    Object.entries(responses).sort(([a], [b]) => a.localeCompare(b))
-  );
 
 export async function buildIntegrationSpec(): Promise<Json> {
   const app = new Elysia()
@@ -257,10 +242,30 @@ export async function buildIntegrationSpec(): Promise<Json> {
     paths: Record<string, Record<string, Operation>>;
   };
 
-  for (const [path, methods] of Object.entries(spec.paths))
-    for (const operation of Object.values(methods)) {
-      complete(path, operation);
-      operation.responses = sortedResponses(operation.responses);
-    }
-  return { ...spec, paths: as30(spec.paths) };
+  const paths = Object.fromEntries(
+    Object.entries(spec.paths).map(([path, methods]) => [
+      path,
+      Object.fromEntries(
+        Object.entries(methods).map(([method, operation]) => {
+          complete(path, operation);
+          /* After `complete`, whose own words stand; this fills the rest. */
+          const documented = documentResponses(
+            as30(operation) as Operation & Json,
+            INDONESIAN,
+            path.includes("{nik}") ? { "404": ["not_found"] } : {}
+          );
+          return [
+            method,
+            {
+              ...documented,
+              responses: sortedResponses(
+                withSuccessExamples(documented.responses)
+              ),
+            },
+          ];
+        })
+      ),
+    ])
+  );
+  return { ...spec, paths };
 }

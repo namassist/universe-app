@@ -22,7 +22,9 @@ replace it (new token, the old one stops at once).
 
 Base URL on site: `http://192.168.151.23:8081/v1/integrations`. The full
 schema is `docs/openapi/integration-api.openapi.json` (OpenAPI 3.0.3, the integration
-routes only) — import it into Postman, Insomnia or a client generator. Do not
+routes only, with an example value on every field and the values of every
+closed set listed in its description) — import it into Postman, Insomnia or a
+client generator. Do not
 hand out `/openapi`: it describes the whole internal API.
 
 ## Employees
@@ -84,17 +86,22 @@ same way. `photo: null` means no photo is on file.
 
 ## Errors
 
-| Status | Meaning                                                            |
-| ------ | ------------------------------------------------------------------ |
-| 401    | no token, unknown token, or a revoked one (`unauthenticated`)      |
-| 401    | the token's first day has not come yet (`token_not_yet_valid`)     |
-| 401    | the token's last day has passed (`token_expired`)                  |
-| 403    | the token lacks this read, or the request came from another IP     |
-| 404    | no such employee / no photo                                        |
-| 422    | a bad query value (e.g. `limit` over 500)                          |
-| 429    | over the per-minute budget (120 by default) — wait `Retry-After` s |
+| Status | Meaning                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------- |
+| 401    | no token, unknown token, or a revoked one (`unauthenticated`)                                   |
+| 401    | the token's first day has not come yet (`token_not_yet_valid`)                                  |
+| 401    | the token's last day has passed (`token_expired`)                                               |
+| 403    | the token lacks this read (`forbidden`), or the request came from another IP (`ip_not_allowed`) |
+| 404    | no such employee / no photo (`not_found`)                                                       |
+| 422    | a bad query value, e.g. `limit` over 500 (`validation_failed`)                                  |
+| 429    | over the per-minute budget (120 by default) — wait `Retry-After` s                              |
+| 500    | something failed on the server (`internal_error`) — try again later                             |
 
-Every error body is `{ "code": "...", "message": "..." }`.
+Every error body is `{ "code": "...", "message": "..." }`. A 422
+`validation_failed` also carries `issues`, one `{ "field", "message" }` per
+parameter at fault. A successful read is 200 (or 304 for an unchanged photo).
+`docs/openapi/integration-api.openapi.json` describes every status per
+endpoint.
 
 ## Notes for the service's operators
 

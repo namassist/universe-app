@@ -43,7 +43,7 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 | 05:22 | `ftw-deadline`   | An upload at/after this is `late` (does not pass)                                                          |
 | 05:25 | `finger-in`      | A first IN tap at/after this is `late`                                                                     |
 | 05:26 | `spare-validate` | **The board is built** (one minute after `finger-in`, never on it)                                         |
-| 05:28 | `finger-second`  | No hook. A spare's slip is held until this time (`ticket-issue.ts`)                                        |
+| 05:28 | `finger-second`  | A spare's slip is held until this time (`ticket-issue.ts`); the hook pushes the app notices held for it    |
 | 05:30 | `bus-depart`     | Listening/collection windows end (plus grace)                                                              |
 
 - **Missing gate = refuse, never default.** No `finger-in` or `ftw-deadline`
@@ -60,6 +60,8 @@ per action × shift. Never hardcode a gate time. Read it (`stage-time.ts`,
 - Every stage run is also logged to Redis for the Operations Center
   (`ops/stage-log.ts`), with `ok: false` for a refusal or a throw; the
   scheduler's heartbeat is stamped every tick. Logging never blocks a hook.
+  The Operations Center and `GET /v1/timeline/runs` (menu `timeline`, the
+  phone's monitor) read it through the one reader, `ops/muster-stages.ts`.
 - The scheduler ticks once a minute **on second :01** (`msUntilNextTick`),
   so a stage fires about a second after its time, not wherever the last
   restart left the cycle.
@@ -274,6 +276,14 @@ listened to, because listening sends `enableDevice`.
   OUT by somebody rostered to the shift counts as that tap, with the same rule
   the reading uses (`arrival-window.ts`), so the slip cannot promise a seat
   the board then refuses.
+- **The phone never runs ahead of the slip.** `/v1/me/shift` and the
+  personal notifications (`person-notify.ts`) show a holder's board seat at
+  once and everybody else's, hand placements included, only from
+  `finger-second`. No `finger-second` stage means no spare is announced, as
+  no spare slip prints. Before the board, `/v1/me/shift` reads the plan with
+  the same rules the booth judges it by (`my-shift.ts`). A seat taken back
+  (`withdrawn`, with the cause each `seat-removed` notice records) is read
+  only from notices that have come due, so its return is not said early either.
 - A repeat tap reprints **only if the slip's content changed**. Arrival time
   and booth don't count, because machine clocks disagree.
 - A printer failure is retried ~60 s, then queued for manual reprint. Nothing
@@ -287,10 +297,12 @@ listened to, because listening sends `enableDevice`.
 Code: `ticket-rules.ts` (`ticketFor`, pure; one test per row of the PRD table),
 `ticket-issue.ts` (`issueTicket`, `seatOf`, `planSeatHolds`, `cannotBeSeated`,
 `reprintTicket`), `ticket-escpos.ts`, `ticket-printer.ts`, `spare-ride.ts`,
-`live-listener.ts`, `derive.ts`, `routes/tickets.ts`, `routes/printers.ts`.
+`live-listener.ts`, `derive.ts`, `routes/tickets.ts`, `routes/printers.ts`;
+for the phone, `my-shift.ts`, `person-notify.ts`, `routes/me.ts`.
 Web: `components/menus/tickets.tsx`, `printers.tsx`, `monitoring-tap.tsx`.
 Tests: `ticket-rules.test.ts`, `ticket-issue.test.ts`, `ticket-escpos.test.ts`,
-`live-listener.test.ts`, `routes/tickets.test.ts`.
+`live-listener.test.ts`, `routes/tickets.test.ts`, `my-shift.test.ts`,
+`my-shift-facts.test.ts`, `person-notify.test.ts`, `routes/me.test.ts`.
 PRD: _Live capture and muster tickets_ (all subsections).
 
 ## Keeping this file true

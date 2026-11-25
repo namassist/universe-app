@@ -14,20 +14,17 @@
 
 import { asc, count, desc, eq, inArray, max, sql } from "drizzle-orm";
 
-import { currentShift } from "../current-shift";
 import { db, pingDb, schema } from "../db";
 import { activeListens } from "../live-listener";
-import { pingRedis, redis } from "../redis";
-import { claimKey, localDate } from "../scheduler";
-import { shiftGates } from "../stage-time";
+import { pingRedis } from "../redis";
+import { localDate } from "../scheduler";
 import {
   pingImportStorage,
   pingPhotoStorage,
   pingSoundStorage,
 } from "../storage";
 import { readOpsMetrics } from "./metrics";
-import { stageDue, stageMusterDate } from "./muster-date";
-import { lastSchedulerTick, readStageRuns } from "./stage-log";
+import { readMusterStages } from "./muster-stages";
 
 /** A TV is online when it polled within this window — the devices route's rule. */
 const SCREEN_ONLINE_SECONDS = 3 * 60;
@@ -36,39 +33,28 @@ const iso = (value: Date | null | undefined) =>
   value ? value.toISOString() : null;
 
 export async function buildOpsOverview(now = new Date()) {
-  const date = localDate(now);
-  /* The night muster under way before dawn began yesterday, so its board and
-     its stage runs are filed under yesterday's date. */
-  const yesterday = localDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-
   const [
     database,
     cache,
     soundStorage,
     photoStorage,
     importStorage,
-    schedulerLastTick,
-    gates,
     metrics,
-    todayRuns,
-    yesterdayRuns,
+    { date, runningShift, schedulerLastTick, stageLog, stages },
   ] = await Promise.all([
     pingDb(),
     pingRedis(),
     pingSoundStorage(),
     pingPhotoStorage(),
     pingImportStorage(),
-    lastSchedulerTick(),
-    shiftGates(),
     readOpsMetrics(now.getTime()),
-    readStageRuns(date),
-    readStageRuns(yesterday),
+    readMusterStages(now),
   ]);
-  const stageLog = [...todayRuns, ...yesterdayRuns];
-  const runningShift = currentShift(now, gates);
+  /* The night muster under way before dawn began yesterday, so its board is
+     filed under yesterday's date. */
+  const yesterday = localDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
 
   const [
-    stages,
     boards,
     [ftw],
     [finger],
@@ -79,10 +65,6 @@ export async function buildOpsOverview(now = new Date()) {
     [printers],
     notifications,
   ] = await Promise.all([
-    db
-      .select()
-      .from(schema.timelineStages)
-      .orderBy(asc(schema.timelineStages.shift), asc(schema.timelineStages.at)),
     db
       .select({
         date: schema.fleetActualDocuments.date,
@@ -146,22 +128,6 @@ export async function buildOpsOverview(now = new Date()) {
       .limit(10),
   ]);
 
-  /* Each stage on the date of the muster it belongs to, and whether it fired
-     there: the scheduler's own claim, not a guess from the clock. */
-  const musterDates = stages.map((stage) =>
-    stageMusterDate(stage.shift, now, runningShift)
-  );
-  const claims = stages.length
-    ? await redis.mget(
-        ...stages.map((stage, i) => claimKey(stage.id, musterDates[i]!))
-      )
-    : [];
-  const lastRunOf = new Map<string, (typeof stageLog)[number]>();
-  for (const run of stageLog) {
-    const key = `${run.stageId}|${run.date}`;
-    if (!lastRunOf.has(key)) lastRunOf.set(key, run);
-  }
-
   const tickets = { printed: 0, failed: 0, dry: 0 };
   for (const row of ticketRows) tickets[row.status] = Number(row.n);
 
@@ -186,23 +152,9 @@ export async function buildOpsOverview(now = new Date()) {
       proberLastCheck: iso(lastProbe),
     },
     muster: {
-      stages: stages.map((stage, i) => {
-        const musterDate = musterDates[i]!;
-        const run = lastRunOf.get(`${stage.id}|${musterDate}`);
-        const at = stage.at.slice(0, 5);
-        return {
-          id: stage.id,
-          name: stage.name,
-          action: stage.action,
-          shift: stage.shift,
-          at,
-          date: musterDate,
-          due: stageDue(musterDate, at, now),
-          active: stage.active,
-          fired: claims[i] !== null && claims[i] !== undefined,
-          lastRun: run ? { at: run.at, ok: run.ok, note: run.note } : null,
-        };
-      }),
+      /* Each stage on the date of the muster it belongs to, and whether it
+         fired there: the scheduler's own claim, not a guess from the clock. */
+      stages,
       boards: boards.map((board) => ({
         date: board.date,
         shift: board.shift,
