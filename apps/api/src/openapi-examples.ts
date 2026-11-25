@@ -1,6 +1,5 @@
 /**
- * Real values in the committed OpenAPI documents (`mobile-openapi.ts`,
- * `integrations/openapi.ts`).
+ * Real values in the committed OpenAPI document (`integrations/openapi.ts`).
  *
  * Elysia publishes a response's shape and nothing of its content, so a
  * viewer drew every example as `{ "unit": "" }` and a reader had to find the
@@ -8,9 +7,7 @@
  * every success gets an `example` drawn from what the API really sends, and
  * every field with a closed set of values says what they are:
  *
- * - an `enum` (`t.UnionEnum`) lists its own members. The mobile document
- *   then drops the `enum` keyword (`asOpenResponse`), and the list stays in
- *   the description, so a sideloaded build is never broken by a new value;
+ * - an `enum` (`t.UnionEnum`) lists its own members in the description;
  * - a free string fed by a closed source names its values from that source:
  *   savera's FTW categories and decisions (`readiness.ts`), the roster codes,
  *   the employee statuses, the board's own refusal sentences.

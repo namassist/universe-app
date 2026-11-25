@@ -448,10 +448,10 @@ types from Eden and OpenAPI instead.
   ACL, so the db index in `REDIS_URL` is a convention between projects, not a
   boundary — anything on this machine can read or flush our keys. Fine for dev,
   never for production.
-- **Mobile** — `apps/mobile`, Kotlin with Compose Multiplatform, built with
-  Gradle outside `bun run build`. It consumes the OpenAPI spec, not Eden
-  (`apps/mobile/README.md`). The operator's screens are built; the Pengawas
-  Lapangan and Superadmin screens, push and iOS are not yet.
+- **Mobile** — the phone app (Kotlin, Compose Multiplatform) lives in its own
+  repository since 2026-11-25. This repo keeps the API it calls (`/v1/mobile/*`,
+  `/v1/me/*` and the routes behind its grants); the app is generated from
+  `/openapi`, not Eden.
 
 ## Deploy server on-site
 

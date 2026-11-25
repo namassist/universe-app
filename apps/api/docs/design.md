@@ -326,16 +326,13 @@ with the TV or the ops console:
   reads it that way, so the card's date is given once. Empty card fields
   are null, never `""`.
 
-The client is generated from `apps/mobile/openapi.json`, written by
-`bun run openapi:mobile` (`mobile-openapi.ts`) from only the routes the app
-calls, converted to OpenAPI 3.0 (`openapi-30.ts`, shared with the integration
-document) because the Kotlin generator does not read 3.1. Response schemas are
-published **without `enum` and `default`**: a build stays installed for weeks,
-and a generated enum would fail to read a whole answer the day the API adds a
-value. A test fails when the committed copy drifts. Counts and minutes are
-`t.Integer`, so they arrive as `Int` rather than `Double`.
+The phone app lives in its own repository (2026-11-25) and generates its
+client from `/openapi`. This repo no longer commits a mobile document; the
+integration document (`integrations/openapi.ts`) is the only one, converted to
+OpenAPI 3.0 by `openapi-30.ts`. Counts and minutes are `t.Integer`, so a
+generated client reads them as integers rather than doubles.
 
-Both committed documents describe every answer (`openapi-responses.ts`,
+The committed document describes every answer (`openapi-responses.ts`,
 2026-11-09): each operation's success; its route's refusals with the `code`
 values it can send (named in the description, never an `enum`); the session
 gate's `unauthenticated` / `forbidden` / `password_change_required`; and the
@@ -350,14 +347,11 @@ a value from `FIELDS`, curated per `parent.name` (a NIK, a unit code, an ISO
 time…). Every closed set is listed in the field's description as
 "Values: …", whether it is an enum (`status`, `reason`, `seat.source`) or a
 free string with known values (`ftw.category`, `ftwDecision`, the report's
-savera cells, the `refusal` sentences). The mobile document drops `enum`, so
-the description is the only place the app's developers can read the set.
+savera cells, the `refusal` sentences).
 Every error example shows its route's first refusal code with the API's own
-message. `GET /v1/me/shift` adds one named example per Beranda state
-(`mobile-openapi-examples.ts`). `openapi-examples.test.ts` fails on a field
-left without an example, an error without a code, an example the route's
-schema would reject, or an FTW category list that no longer matches
-`readiness.ts`.
+message. `openapi-examples.test.ts` fails on a field left without an
+example, an error without a code, or an FTW category list that no longer
+matches `readiness.ts`.
 
 ## D15 — Nobody resets, switches off or deletes their own account
 

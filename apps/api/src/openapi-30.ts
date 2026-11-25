@@ -1,7 +1,6 @@
 /**
- * Shared by the OpenAPI documents this API commits for client generators: the
- * integration API's (`integrations/openapi.ts`) and the mobile app's
- * (`mobile-openapi.ts`).
+ * Used by the OpenAPI document this API commits for client generators: the
+ * integration API's (`integrations/openapi.ts`).
  */
 
 type Json = Record<string, unknown>;

@@ -3017,8 +3017,9 @@ D14):
 
 ### The app — operator screens built (stage 3, 2026-10-18)
 
-`apps/mobile`, translated screen for screen from the approved prototype and
-`apps/mobile/DESIGN.md` (`apps/mobile/README.md`). This round was the API
+Built in `apps/mobile` at the time, now in the mobile repository (see
+_Client stack_), translated screen for screen from the approved prototype and
+its `DESIGN.md`. This round was the API
 additions, the foundation and the operator; the rest follows.
 
 - **Built:**
@@ -3098,9 +3099,11 @@ additions, the foundation and the operator; the rest follows.
 ### Client stack and distribution
 
 - **Kotlin Multiplatform with Compose Multiplatform**, one codebase for
-  Android and iOS (owner, 2026-10-17). It lives in `apps/mobile` and builds
-  with Gradle, outside `bun run build` and turbo, so it is verified
-  separately.
+  Android and iOS (owner, 2026-10-17). It lives in **its own repository**
+  (owner, 2026-11-25), built with Gradle; it began in `apps/mobile` here.
+  This repo keeps only the API it calls, and no longer commits a mobile
+  OpenAPI document (`openapi:mobile` and `mobile-openapi.ts` are gone); the
+  mobile repository takes its spec from `/openapi`.
 - **The API client is generated from `/openapi`**, which the `auth` macro
   keeps accurate for this purpose. `@universe/contracts` and the Eden types
   are TypeScript and do not reach Kotlin. The constants the app needs

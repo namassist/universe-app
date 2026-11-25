@@ -1,7 +1,6 @@
 /**
  * What a committed OpenAPI document says about each answer an operation can
- * give. Shared by the integration document (`integrations/openapi.ts`) and the
- * mobile one (`mobile-openapi.ts`).
+ * give. Used by the integration document (`integrations/openapi.ts`).
  *
  * Elysia publishes the statuses a route declares, each described only as
  * "Response for status 401". Two answers come from the app around every
@@ -218,32 +217,6 @@ export function documentResponses(
 
   return { ...operation, responses };
 }
-
-/** For the mobile document, read by the app's developers. */
-export const ENGLISH: ResponseWords = {
-  status: {
-    "304": "Not modified since the version sent.",
-    "400": "The request could not be read.",
-    "401": "No valid session: none was sent, or it has expired or ended.",
-    "403": "Signed in, but this is not allowed.",
-    "404": "Not found.",
-    "409": "Refused: it conflicts with the current state.",
-    "422": "Refused: the request is well formed but cannot be carried out.",
-    "429": "Too many attempts. Wait for `Retry-After` seconds.",
-  },
-  codes: (codes) => `Codes: ${codes.map((c) => `\`${c}\``).join(", ")}.`,
-  validation:
-    "The request did not match the schema; `issues` names each field. Or the route refused the values.",
-  internal:
-    "Something failed on the server. The detail is logged, not sent; try again later.",
-  success: (summary) => (summary ? `OK: ${summary}.` : "OK."),
-  fallbackCode: {},
-  messages: {},
-  validationIssue: {
-    field: "to",
-    message: "Expected string to match '^\\d{4}-\\d{2}-\\d{2}$'",
-  },
-};
 
 /** For the integration document, handed to other services' teams. */
 export const INDONESIAN: ResponseWords = {
