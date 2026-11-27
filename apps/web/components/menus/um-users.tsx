@@ -457,112 +457,126 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
             : t.umUserAdd}
         </DialogTitle>
         <DialogBody>{t.umUserDlgB}</DialogBody>
-        <form onSubmit={submit} noValidate>
-          <Field className="mt-4" label={t.thNama} htmlFor="um-name" required>
-            <Input
-              id="um-name"
-              value={fName}
-              onChange={(e) => {
-                setFName(e.target.value);
-                setErr(null);
-              }}
-            />
-          </Field>
-          <Field
-            className="mt-4"
-            label={t.cmEmail}
-            htmlFor="um-email"
-            helper={t.umIdentHelp}
-          >
-            <Input
-              id="um-email"
-              type="email"
-              placeholder={t.umEmailPh}
-              value={fEmail}
-              onChange={(e) => {
-                setFEmail(e.target.value);
-                setErr(null);
-              }}
-            />
-          </Field>
-          <Field className="mt-4" label={t.cmNik} htmlFor="um-nik">
-            <Input
-              id="um-nik"
-              placeholder="503220421"
-              value={fNik}
-              onChange={(e) => {
-                setFNik(e.target.value);
-                setErr(null);
-              }}
-            />
-          </Field>
-          {/* Several roles, one session each: the person chooses at login
-              which role to act as, so two roles never answer one request. */}
-          <Field
-            className="mt-4"
-            label={t.umRoles}
-            required
-            helper={t.umRolesHelp}
-          >
-            <div
-              role="group"
-              aria-label={t.umRoles}
-              className="flex max-h-44 flex-col gap-2 overflow-y-auto rounded-control border border-(--glass-1-border) bg-(--fill-subtle) p-3"
-            >
-              {(roles.data ?? []).map((r) => (
-                <ToggleRow key={r.id} htmlFor={`um-role-${r.id}`}>
-                  <Checkbox
-                    id={`um-role-${r.id}`}
-                    checked={fRoles.includes(r.id)}
-                    onChange={(e) => toggleRole(r.id, e.target.checked)}
-                  />
-                  <span>
-                    {r.name}{" "}
-                    <span className="font-mono text-[11px] text-(--text-tertiary)">
-                      · {r.scope}
-                    </span>
-                  </span>
-                </ToggleRow>
-              ))}
-            </div>
-          </Field>
-          {fRoles.length > 1 ? (
-            <Field
-              className="mt-4"
-              label={t.umDefaultRole}
-              htmlFor="um-role-default"
-              helper={t.umDefaultRoleHelp}
-            >
-              <Select
-                id="um-role-default"
-                value={fRole}
+        {/* The card caps itself at the viewport, but a flex item does not
+            shrink below its content unless told to: the form carries
+            `min-h-0` and owns the scroll area, or a tall form (several roles
+            ticked, the default picker shown) runs off a short screen with no
+            way to reach the buttons. Error and actions stay outside it. */}
+        <form
+          onSubmit={submit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {/* `pr-1` keeps the scrollbar off the inputs' focus rings. */}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <Field className="mt-4" label={t.thNama} htmlFor="um-name" required>
+              <Input
+                id="um-name"
+                value={fName}
                 onChange={(e) => {
-                  setFRole(e.target.value);
+                  setFName(e.target.value);
                   setErr(null);
                 }}
-              >
-                {fRoles.map((id) => (
-                  <option key={id} value={id}>
-                    {roleName(id)}
-                  </option>
-                ))}
-              </Select>
+              />
             </Field>
-          ) : null}
-          <ToggleRow className="mt-4" htmlFor="um-active">
-            <Checkbox
-              id="um-active"
-              checked={fActive}
-              onChange={(e) => setFActive(e.target.checked)}
-            />
-            {t.stAktif}
-          </ToggleRow>
+            <Field
+              className="mt-4"
+              label={t.cmEmail}
+              htmlFor="um-email"
+              helper={t.umIdentHelp}
+            >
+              <Input
+                id="um-email"
+                type="email"
+                placeholder={t.umEmailPh}
+                value={fEmail}
+                onChange={(e) => {
+                  setFEmail(e.target.value);
+                  setErr(null);
+                }}
+              />
+            </Field>
+            <Field className="mt-4" label={t.cmNik} htmlFor="um-nik">
+              <Input
+                id="um-nik"
+                placeholder="503220421"
+                value={fNik}
+                onChange={(e) => {
+                  setFNik(e.target.value);
+                  setErr(null);
+                }}
+              />
+            </Field>
+            {/* Several roles, one session each: the person chooses at login
+              which role to act as, so two roles never answer one request. */}
+            <Field
+              className="mt-4"
+              label={t.umRoles}
+              required
+              helper={t.umRolesHelp}
+            >
+              <div
+                role="group"
+                aria-label={t.umRoles}
+                className="flex max-h-44 flex-col gap-2 overflow-y-auto rounded-control border border-(--glass-1-border) bg-(--fill-subtle) p-3"
+              >
+                {(roles.data ?? []).map((r) => (
+                  <ToggleRow key={r.id} htmlFor={`um-role-${r.id}`}>
+                    <Checkbox
+                      id={`um-role-${r.id}`}
+                      checked={fRoles.includes(r.id)}
+                      onChange={(e) => toggleRole(r.id, e.target.checked)}
+                    />
+                    <span>
+                      {r.name}{" "}
+                      <span className="font-mono text-[11px] text-(--text-tertiary)">
+                        · {r.scope}
+                      </span>
+                    </span>
+                  </ToggleRow>
+                ))}
+              </div>
+            </Field>
+            {fRoles.length > 1 ? (
+              <Field
+                className="mt-4"
+                label={t.umDefaultRole}
+                htmlFor="um-role-default"
+                helper={t.umDefaultRoleHelp}
+              >
+                <Select
+                  id="um-role-default"
+                  value={fRole}
+                  onChange={(e) => {
+                    setFRole(e.target.value);
+                    setErr(null);
+                  }}
+                >
+                  {fRoles.map((id) => (
+                    <option key={id} value={id}>
+                      {roleName(id)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
+            <ToggleRow className="mt-4" htmlFor="um-active">
+              <Checkbox
+                id="um-active"
+                checked={fActive}
+                onChange={(e) => setFActive(e.target.checked)}
+              />
+              {t.stAktif}
+            </ToggleRow>
+            {!editing ? (
+              <p className="mt-3 text-xs text-(--text-tertiary)">
+                {t.umDefaultPwNote}
+              </p>
+            ) : null}
+          </div>
           {err ? (
-            <p className="mt-3 text-xs text-(--color-danger-text)">{err}</p>
-          ) : null}
-          {!editing ? (
-            <p className="mt-3 text-xs text-(--text-tertiary)">
-              {t.umDefaultPwNote}
+            <p className="mt-3 flex-none text-xs text-(--color-danger-text)">
+              {err}
             </p>
           ) : null}
           <DialogActions>
