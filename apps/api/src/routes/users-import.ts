@@ -41,7 +41,48 @@ export type ExistingAccount = {
   email: string | null;
   roleId: string;
   roleName: string;
+  /** Every role the account holds, the default first — ids and names alike. */
+  roleIds: string[];
+  roleNames: string[];
 };
+
+/** Separates the roles in one `role` cell: `Superadmin, Pengawas Lapangan`. */
+const ROLE_SEPARATOR = ",";
+/** The same bound the account routes put on `roleIds`. */
+const MAX_ROLES_IN_CELL = 20;
+
+/**
+ * The roles a cell names, in the order written, each once. The first is the
+ * account's default. Or the issue that fails the row.
+ */
+function rolesInCell(
+  cell: string,
+  roleByName: Map<string, { id: string; name: string }>
+): { id: string; name: string }[] | { issue: string } {
+  const names = cell
+    .split(ROLE_SEPARATOR)
+    .map((n) => n.trim())
+    .filter((n) => n.length > 0);
+  if (!names.length) return { issue: 'Role "—" tidak terdaftar' };
+  if (names.length > MAX_ROLES_IN_CELL)
+    return { issue: `Lebih dari ${MAX_ROLES_IN_CELL} role dalam satu baris` };
+  const roles: { id: string; name: string }[] = [];
+  for (const name of names) {
+    const role = roleByName.get(name.toLowerCase());
+    if (!role) return { issue: `Role "${name}" tidak terdaftar` };
+    if (!roles.some((r) => r.id === role.id)) roles.push(role);
+  }
+  return roles;
+}
+
+/** Same default, same set — the extras' order is not a change. */
+function sameRoles(existing: ExistingAccount, roleIds: string[]): boolean {
+  if (existing.roleId !== roleIds[0]) return false;
+  const held = new Set(existing.roleIds);
+  return (
+    held.size === new Set(roleIds).size && roleIds.every((id) => held.has(id))
+  );
+}
 
 function danger(
   row: number,
@@ -170,13 +211,13 @@ export async function validateWorkbook(
       continue;
     }
 
-    const role = roleByName.get(roleName.toLowerCase());
-    if (!role) {
-      errors.push(
-        danger(n, nik, nama, `Role "${roleName || "—"}" tidak terdaftar`)
-      );
+    const roles = rolesInCell(roleName, roleByName);
+    if ("issue" in roles) {
+      errors.push(danger(n, nik, nama, roles.issue));
       continue;
     }
+    const roleNames = roles.map((r) => r.name);
+    const role = roleNames.join(", ");
 
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errors.push(danger(n, nik, nama, `Email "${email}" tidak valid`));
@@ -236,7 +277,8 @@ export async function validateWorkbook(
         nik,
         nama,
         email: email || null,
-        role: role.name,
+        role,
+        roles: roleNames,
         changes: [],
       });
       continue;
@@ -253,8 +295,17 @@ export async function validateWorkbook(
         from: existing.email,
         to: email || null,
       });
-    if (existing.roleId !== role.id)
-      changes.push({ field: "role", from: existing.roleName, to: role.name });
+    if (
+      !sameRoles(
+        existing,
+        roles.map((r) => r.id)
+      )
+    )
+      changes.push({
+        field: "role",
+        from: existing.roleNames.join(", "),
+        to: role,
+      });
 
     rows.push({
       row: n,
@@ -262,7 +313,8 @@ export async function validateWorkbook(
       nik,
       nama,
       email: email || null,
-      role: role.name,
+      role,
+      roles: roleNames,
       changes,
     });
   }

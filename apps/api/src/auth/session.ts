@@ -26,6 +26,15 @@ export type SessionRecord = {
   /** Epoch seconds. The absolute expiry is measured from here, not the clock. */
   issuedAt: number;
   transport: SessionTransport;
+  /**
+   * The role this session acts as, for an account that holds several. Absent
+   * means the account's default role — which is also what every session
+   * written before multi-role accounts carries. It is a *choice among roles
+   * the account holds*, never a grant: each request re-checks it against the
+   * account's current roles (`actingAs` in principal.ts), so a role taken away
+   * ends the session acting as it.
+   */
+  roleId?: string;
 };
 
 const key = (id: string) => `session:${id}`;
@@ -63,11 +72,18 @@ function ttlFor(record: SessionRecord, now: number): number {
 export async function createSession(
   kind: "user" | "device",
   subjectId: string,
-  transport: SessionTransport
+  transport: SessionTransport,
+  roleId?: string
 ): Promise<{ id: string; record: SessionRecord; maxAge: number }> {
   const id = crypto.randomUUID();
   const now = Math.floor(Date.now() / 1000);
-  const record: SessionRecord = { kind, subjectId, issuedAt: now, transport };
+  const record: SessionRecord = {
+    kind,
+    subjectId,
+    issuedAt: now,
+    transport,
+    ...(roleId ? { roleId } : {}),
+  };
   const ttl = ttlFor(record, now);
   await redis.set(key(id), JSON.stringify(record), "EX", ttl);
   // The cookie outlives the idle window on purpose: expiry is Redis's call, not
@@ -107,6 +123,37 @@ export async function resolveSession(
   // its absolute expiry.
   await redis.expire(key(id), ttlFor(record, now));
   return record;
+}
+
+/**
+ * Point a live session at another role (the topbar's "Ganti role").
+ *
+ * Rewrites the record in place and keeps its TTL: switching is not activity
+ * that should extend the session, and `issuedAt` is untouched so the absolute
+ * expiry still runs from the login. The caller has already checked that the
+ * account holds the role. Returns false when the session is gone, including
+ * when it ends while this runs.
+ */
+export async function setSessionRole(
+  id: string,
+  roleId: string
+): Promise<boolean> {
+  const raw = await redis.get(key(id));
+  if (!raw) return false;
+  let record: SessionRecord;
+  try {
+    record = JSON.parse(raw) as SessionRecord;
+  } catch {
+    return false;
+  }
+  if (record.kind !== "user") return false;
+  const next: SessionRecord = { ...record, roleId };
+  // `XX`: only if the session still exists. A logout or an idle expiry between
+  // the read above and this write must not bring the session back — and with
+  // `KEEPTTL` on a missing key it would come back with no expiry at all.
+  return (
+    (await redis.set(key(id), JSON.stringify(next), "KEEPTTL", "XX")) === "OK"
+  );
 }
 
 export async function deleteSession(id: string): Promise<void> {

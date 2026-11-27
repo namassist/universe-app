@@ -349,6 +349,13 @@ export const PermissionsSchema = t.Partial(
  */
 export const PermissionsInputSchema = t.Record(t.String(), AccessModeSchema);
 
+/** One role an account holds. */
+export const RoleOptionSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  scope: ScopeSchema,
+});
+
 /**
  * The account shape every endpoint returns. There is deliberately no
  * `passwordHash` member — the schema, not a convention, is what guarantees a
@@ -362,11 +369,17 @@ export const UserSchema = t.Object({
   roleId: t.String(),
   roleName: t.String(),
   scope: ScopeSchema,
+  /** Every role the account holds, the default (`roleId`) first. */
+  roles: t.Array(RoleOptionSchema),
   active: t.Boolean(),
   mustChangePassword: t.Boolean(),
   createdAt: t.String(),
 });
 
+/**
+ * `roleId` / `roleName` / `scope` are the session's *active* role; `roles` is
+ * every role the account holds, default first.
+ */
 export const UserPrincipalSchema = t.Object({
   kind: t.Literal("user"),
   id: t.String(),
@@ -376,6 +389,7 @@ export const UserPrincipalSchema = t.Object({
   roleId: t.String(),
   roleName: t.String(),
   scope: ScopeSchema,
+  roles: t.Array(RoleOptionSchema),
   mustChangePassword: t.Boolean(),
 });
 

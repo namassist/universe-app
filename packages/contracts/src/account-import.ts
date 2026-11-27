@@ -34,7 +34,13 @@ export type AccountImportPreviewRow = {
   nik: string;
   nama: string;
   email: string | null;
+  /** Every role the row names, joined for display — `Superadmin, Pengawas`. */
   role: string;
+  /**
+   * The same roles as names, in the order written. The first is the account's
+   * default role; together they are the account's whole role set.
+   */
+  roles: string[];
   /** Empty for `new` rows. */
   changes: AccountImportChange[];
 };

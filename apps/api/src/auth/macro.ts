@@ -16,15 +16,23 @@ import {
   type EffectivePermissions,
   type MenuSlug,
   type SessionPrincipal,
+  type UserPrincipal,
 } from "@universe/contracts";
 
 import {
+  actingAs,
   loadDevice,
   loadPermissions,
   loadUser,
   type CachedUser,
 } from "./principal";
-import { DEVICE_COOKIE, resolveSession, SESSION_COOKIE } from "./session";
+import {
+  deleteSession,
+  DEVICE_COOKIE,
+  resolveSession,
+  SESSION_COOKIE,
+  type SessionRecord,
+} from "./session";
 
 export type AuthOptions = {
   /**
@@ -79,7 +87,8 @@ function presentedIds({ cookie, headers }: SessionSource): {
 const unauthorized = { code: "unauthenticated", message: "Sesi tidak valid" };
 const forbidden = { code: "forbidden", message: "Akses ditolak" };
 
-export function toPrincipal(user: CachedUser): SessionPrincipal {
+/** The account as login and switch-role answer it: always a person. */
+export function toUserPrincipal(user: CachedUser): UserPrincipal {
   return {
     kind: "user",
     id: user.id,
@@ -89,8 +98,35 @@ export function toPrincipal(user: CachedUser): SessionPrincipal {
     roleId: user.roleId,
     roleName: user.roleName,
     scope: user.scope,
+    roles: user.roles,
     mustChangePassword: user.mustChangePassword,
   };
+}
+
+/**
+ * The same, widened for the macros: their resolve answers a person or a
+ * device, and inference needs the union to keep `principal.kind` narrowable.
+ */
+export const toPrincipal = (user: CachedUser): SessionPrincipal =>
+  toUserPrincipal(user);
+
+/**
+ * The account a user session speaks for, acting as the session's role — or
+ * null when it must be refused: the account is gone or switched off, or it no
+ * longer holds the role the session acts as. All three take effect on the
+ * next request rather than at expiry.
+ */
+export async function sessionUser(
+  sessionId: string,
+  record: SessionRecord
+): Promise<CachedUser | null> {
+  const user = await loadUser(record.subjectId);
+  if (!user || !user.active) return null;
+  const acting = actingAs(user, record.roleId);
+  // A session acting as a role taken away is over, not merely refused: drop
+  // it, or it lingers in Redis until its TTL — logout itself would 401 on it.
+  if (!acting) await deleteSession(sessionId);
+  return acting;
 }
 
 /**
@@ -112,9 +148,8 @@ export const requireSession = new Elysia({ name: "auth/session" }).macro({
         if (ids.user) {
           const record = await resolveSession(ids.user);
           if (record?.kind === "user") {
-            const user = await loadUser(record.subjectId);
-            // Deactivation takes effect on the next request, not at expiry.
-            if (!user || !user.active) return status(401, unauthorized);
+            const user = await sessionUser(ids.user, record);
+            if (!user) return status(401, unauthorized);
             return {
               sessionId: ids.user,
               principal: toPrincipal(user),
@@ -164,8 +199,8 @@ export const requireSelf = new Elysia({ name: "auth/self" }).macro({
         if (ids.user) {
           const record = await resolveSession(ids.user);
           if (record?.kind === "user") {
-            const user = await loadUser(record.subjectId);
-            if (!user || !user.active) return status(401, unauthorized);
+            const user = await sessionUser(ids.user, record);
+            if (!user) return status(401, unauthorized);
             if (user.mustChangePassword)
               return status(403, {
                 code: PASSWORD_CHANGE_REQUIRED,
@@ -200,8 +235,8 @@ export const requireAuth = new Elysia({ name: "auth/macro" }).macro({
         if (ids.user) {
           const record = await resolveSession(ids.user);
           if (record?.kind === "user") {
-            const user = await loadUser(record.subjectId);
-            if (!user || !user.active) return status(401, unauthorized);
+            const user = await sessionUser(ids.user, record);
+            if (!user) return status(401, unauthorized);
 
             // Authenticates fine, refused everywhere but logout / session /
             // change-password — which do not carry this macro.
