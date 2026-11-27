@@ -1,4 +1,4 @@
-import { asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
@@ -236,9 +236,17 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
   .get(
     "/",
     async () =>
-      (await withRoles(await baseQuery().orderBy(schema.users.createdAt))).map(
-        toUser
-      ),
+      (
+        await withRoles(
+          // Active accounts first, the switched-off ones last, so the people
+          // an admin actually works with are on the first page; oldest first
+          // within each, as before.
+          await baseQuery().orderBy(
+            desc(schema.users.active),
+            asc(schema.users.createdAt)
+          )
+        )
+      ).map(toUser),
     {
       auth: { menu: "users", mode: "view" },
       response: {

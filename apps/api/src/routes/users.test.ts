@@ -150,3 +150,30 @@ describe("somebody else's account", () => {
     expect(await stored(other)).toBeUndefined();
   });
 });
+
+describe("the list", () => {
+  test("puts every active account first and the switched-off ones last, oldest first within each", async () => {
+    const offOld = await account(`${tag} off lama`);
+    const onA = await account(`${tag} on a`);
+    const offNew = await account(`${tag} off baru`);
+    const onB = await account(`${tag} on b`);
+    await db
+      .update(schema.users)
+      .set({ active: false })
+      .where(inArray(schema.users.id, [offOld, offNew]));
+
+    const list = (await (await send("GET", "")).json()) as {
+      id: string;
+      active: boolean;
+    }[];
+
+    // Once the first switched-off account appears, no active one follows.
+    const firstOff = list.findIndex((u) => !u.active);
+    expect(list.slice(firstOff).some((u) => u.active)).toBe(false);
+
+    const ours = list
+      .map((u) => u.id)
+      .filter((id) => [offOld, onA, offNew, onB].includes(id));
+    expect(ours).toEqual([onA, onB, offOld, offNew]);
+  });
+});

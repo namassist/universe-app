@@ -2160,7 +2160,8 @@ both carry. Now the account holds both, and **a session acts as exactly one**:
 - **Users screen:** the dialog ticks every role the person holds and, when
   there is more than one, picks the default. The list shows every role, the
   default highlighted. The CSV export writes them comma separated, the import's
-  format.
+  format. The list (`GET /v1/users`, the phone's Akun list too) puts active
+  accounts first and switched-off ones last, oldest first within each.
 - **Import:** the `role` column takes one name or several separated by commas
   (`Superadmin, Pengawas Lapangan`). The first is the default and together they
   are the account's whole role set, so a re-upload replaces the extras. The
@@ -2168,7 +2169,10 @@ both carry. Now the account holds both, and **a session acts as exactly one**:
   only the order of the extras does. An unknown name fails its row and names
   the role.
 - **Not done:** accounts already duplicated for this reason are not merged.
-  Add the role to the account the person keeps, then delete the other one.
+  Add the role to the account the person keeps, then switch the other one off
+  (**Nonaktifkan**). The Users screen has no delete, on purpose: an account
+  that uploaded or decided a roster, or created an integration client, is
+  referenced by that record and could not be removed anyway.
 
 **API.** `POST /v1/auth/login` takes an optional `roleId` (a role the account
 holds; anything else is 403 `role_not_held`, and no session is issued).
