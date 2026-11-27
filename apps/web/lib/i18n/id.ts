@@ -222,6 +222,8 @@ export const id = {
   helpNik: "9 digit angka, unik per karyawan.",
   errNama: "Nama wajib diisi.",
   errNik: "NIK harus 9 digit angka.",
+  efEmailHelp: "Opsional. Hanya alamat @{domain}.",
+  efEmailErr: "Email harus alamat @{domain}.",
   helpExp: "Kosongkan untuk karyawan tetap.",
   errExp: "Expired harus setelah join date.",
   optNone: "Tidak ada",
@@ -1369,6 +1371,8 @@ export const id = {
   umErrRequired: "Nama wajib diisi.",
   umErrIdentifier: "Akun harus punya email atau NIK.",
   umIdentHelp: "Isi email, NIK, atau keduanya. Minimal salah satu.",
+  umSuggestHelp: "Ketik NIK atau email untuk memilih dari data karyawan.",
+  umSuggestHasAccount: "Sudah punya akun",
   umMustChange: "Wajib ganti password",
   umDefaultPwNote:
     "Akun baru memakai password awal dari konfigurasi dan wajib menggantinya saat login pertama.",

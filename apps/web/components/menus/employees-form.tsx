@@ -20,6 +20,8 @@ import {
 
 import {
   BLOOD_TYPES,
+  EMPLOYEE_EMAIL_DOMAIN,
+  isEmployeeEmail,
   MCU_RESULTS,
   type BloodType,
   type EmployeeStatus,
@@ -107,6 +109,7 @@ function isStorablePhoto(file: File): boolean {
 type Fields = {
   nama: string;
   nik: string;
+  email: string;
   companyId: string;
   positionId: string;
   departmentId: string;
@@ -136,6 +139,7 @@ type Fields = {
 const EMPTY: Fields = {
   nama: "",
   nik: "",
+  email: "",
   companyId: "",
   positionId: "",
   departmentId: "",
@@ -164,6 +168,7 @@ function fieldsOf(record: EmployeeRow): Fields {
   return {
     nama: record.name,
     nik: record.nik,
+    email: record.email ?? "",
     companyId: record.companyId,
     positionId: record.positionId,
     departmentId: record.departmentId,
@@ -287,6 +292,7 @@ function EmployeeFields({
   const [errors, setErrors] = React.useState<{
     nama?: boolean;
     nik?: boolean;
+    email?: boolean;
   }>({});
   const [dirtyDlg, setDirtyDlg] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -471,9 +477,15 @@ function EmployeeFields({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const errs = { nama: !f.nama.trim(), nik: !f.nik.trim() };
+    const email = f.email.trim();
+    const errs = {
+      nama: !f.nama.trim(),
+      nik: !f.nik.trim(),
+      // Optional, but only ever a company address; the API refuses the rest.
+      email: email !== "" && !isEmployeeEmail(email),
+    };
     setErrors(errs);
-    if (errs.nama || errs.nik) {
+    if (errs.nama || errs.nik || errs.email) {
       pushToast("error", t.toastFormErrT, t.toastFormErrD);
       return;
     }
@@ -485,6 +497,7 @@ function EmployeeFields({
     const name = f.nama.trim();
     const body = {
       name,
+      email: email ? email.toLowerCase() : null,
       // Sent even by a scoped caller, whose values these already are: the API
       // resolves the department from that caller's own record and never reads
       // the field, so what travels here is what the server would have chosen.
@@ -706,6 +719,24 @@ function EmployeeFields({
                     value={f.nik}
                     disabled={!!nik}
                     onChange={(e) => up("nik", e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label={t.cmEmail}
+                  htmlFor="ef-email"
+                  helper={fmt(t.efEmailHelp, { domain: EMPLOYEE_EMAIL_DOMAIN })}
+                  error={errors.email}
+                  errorMessage={fmt(t.efEmailErr, {
+                    domain: EMPLOYEE_EMAIL_DOMAIN,
+                  })}
+                >
+                  <Input
+                    id="ef-email"
+                    type="email"
+                    autoComplete="off"
+                    placeholder={`nama@${EMPLOYEE_EMAIL_DOMAIN}`}
+                    value={f.email}
+                    onChange={(e) => up("email", e.target.value)}
                   />
                 </Field>
                 {/* A catalogue now, not two hardcoded options (design D5).
