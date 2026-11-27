@@ -1,13 +1,29 @@
-import { and, eq, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import type { MenuSlug } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
 import { hashPassword } from "../auth/password";
 import { invalidateUser } from "../auth/principal";
-import { db, isUniqueViolation, schema } from "../db";
+import {
+  db,
+  isForeignKeyViolation,
+  isUniqueViolation,
+  schema,
+  type Transaction,
+} from "../db";
 import { env } from "../env";
-import { scopeNeedsNik } from "./roles";
+import {
+  extraRolesOf,
+  isRoleSetFailure,
+  lastRolesAdmin,
+  lockRolesAdmin,
+  Refusal,
+  resolveRoleSet,
+  ROLE_NOT_FOUND,
+  rolesAdminExists,
+  withRoles,
+  writeExtras,
+} from "./user-roles";
 import {
   ErrorSchema,
   ImportPreviewSchema,
@@ -20,8 +36,6 @@ import {
   validateWorkbook,
   type ExistingAccount,
 } from "./users-import";
-
-const ROLES_MENU: MenuSlug = "roles";
 
 /**
  * Resetting, switching off or deleting the account you are signed in with
@@ -37,6 +51,9 @@ const ownAccount = (action: string) => ({
 /** A uuid in capitals is still the same row to Postgres, so to this too. */
 const isOwn = (principal: { kind: string; id: string }, id: string) =>
   principal.kind === "user" && principal.id.toLowerCase() === id.toLowerCase();
+
+/** Far more than any person holds; a bound so a body cannot be unbounded. */
+const MAX_ROLES = 20;
 
 const userColumns = {
   id: schema.users.id,
@@ -58,20 +75,11 @@ function toUser<T extends { createdAt: Date }>(
   return { ...row, createdAt: row.createdAt.toISOString() };
 }
 
-const baseQuery = () =>
-  db
+const baseQuery = (ex: typeof db | Transaction = db) =>
+  ex
     .select(userColumns)
     .from(schema.users)
     .innerJoin(schema.roles, eq(schema.roles.id, schema.users.roleId));
-
-async function roleOrNull(roleId: string) {
-  const [role] = await db
-    .select()
-    .from(schema.roles)
-    .where(eq(schema.roles.id, roleId))
-    .limit(1);
-  return role ?? null;
-}
 
 /**
  * Whether a NIK names an employee.
@@ -115,27 +123,56 @@ const nikNotRegistered = (nik: string) => ({
 });
 
 /**
- * The last account that can still administer roles must not be removable —
- * losing it locks everyone out of the screen that would restore access.
+ * Roles by lowercase name, for the import. Slug is accepted too, so a file
+ * written against the seed still loads.
  */
-async function isLastRolesAdmin(userId: string): Promise<boolean> {
-  const holders = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .innerJoin(
-      schema.rolePermissions,
-      eq(schema.rolePermissions.roleId, schema.users.roleId)
-    )
-    .where(
-      and(
-        eq(schema.users.active, true),
-        eq(schema.rolePermissions.menuSlug, ROLES_MENU),
-        eq(schema.rolePermissions.mode, "manage"),
-        ne(schema.users.id, userId)
-      )
-    )
-    .limit(1);
-  return holders.length === 0;
+async function rolesByName(): Promise<
+  Map<string, { id: string; name: string }>
+> {
+  const roles = await db.select().from(schema.roles);
+  const byName = new Map(
+    roles.map((r) => [r.name.toLowerCase(), { id: r.id, name: r.name }])
+  );
+  for (const r of roles)
+    if (!byName.has(r.slug)) byName.set(r.slug, { id: r.id, name: r.name });
+  return byName;
+}
+
+/** Existing accounts with a NIK, keyed for the import's two uniqueness checks. */
+async function existingAccounts() {
+  const rows = await withRoles(
+    await db
+      .select({
+        id: schema.users.id,
+        nik: schema.users.nik,
+        name: schema.users.name,
+        email: schema.users.email,
+        roleId: schema.users.roleId,
+        roleName: schema.roles.name,
+        scope: schema.roles.scope,
+      })
+      .from(schema.users)
+      .innerJoin(schema.roles, eq(schema.roles.id, schema.users.roleId))
+  );
+  const accounts: ExistingAccount[] = rows
+    .filter((r): r is typeof r & { nik: string } => r.nik !== null)
+    .map(({ roles, ...r }) => ({
+      id: r.id,
+      nik: r.nik,
+      name: r.name,
+      email: r.email,
+      roleId: r.roleId,
+      roleName: r.roleName,
+      roleIds: roles.map((x) => x.id),
+      roleNames: roles.map((x) => x.name),
+    }));
+  return {
+    existingByNik: new Map(accounts.map((a) => [a.nik, a])),
+    /** Keyed lowercase — an operator varying the case means the same mailbox. */
+    existingByEmail: new Map(
+      accounts.filter((a) => !!a.email).map((a) => [a.email!.toLowerCase(), a])
+    ),
+  };
 }
 
 export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
@@ -143,7 +180,10 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
 
   .get(
     "/",
-    async () => (await baseQuery().orderBy(schema.users.createdAt)).map(toUser),
+    async () =>
+      (await withRoles(await baseQuery().orderBy(schema.users.createdAt))).map(
+        toUser
+      ),
     {
       auth: { menu: "users", mode: "view" },
       response: {
@@ -199,36 +239,9 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
           message: `File melebihi ${Math.round(MAX_IMPORT_BYTES / 1024 / 1024)} MB`,
         });
 
-      const roles = await db.select().from(schema.roles);
-      const roleByName = new Map(
-        roles.map((r) => [r.name.toLowerCase(), { id: r.id, name: r.name }])
-      );
-      // Slug is accepted too, so a file written against the seed still loads.
-      for (const r of roles)
-        if (!roleByName.has(r.slug))
-          roleByName.set(r.slug, { id: r.id, name: r.name });
+      const roleByName = await rolesByName();
 
-      const existing = await db
-        .select({
-          id: schema.users.id,
-          nik: schema.users.nik,
-          name: schema.users.name,
-          email: schema.users.email,
-          roleId: schema.users.roleId,
-          roleName: schema.roles.name,
-        })
-        .from(schema.users)
-        .innerJoin(schema.roles, eq(schema.roles.id, schema.users.roleId));
-      const existingByNik = new Map<string, ExistingAccount>(
-        existing
-          .filter((e): e is ExistingAccount => e.nik !== null)
-          .map((e) => [e.nik, e])
-      );
-      const existingByEmail = new Map<string, ExistingAccount>(
-        existing
-          .filter((e): e is ExistingAccount => e.nik !== null && !!e.email)
-          .map((e) => [e.email!.toLowerCase(), e])
-      );
+      const { existingByNik, existingByEmail } = await existingAccounts();
 
       const result = await validateWorkbook(
         await file.arrayBuffer(),
@@ -266,36 +279,12 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
           message: `File melebihi ${Math.round(MAX_IMPORT_BYTES / 1024 / 1024)} MB`,
         });
 
-      const roles = await db.select().from(schema.roles);
-      const roleByName = new Map(
-        roles.map((r) => [r.name.toLowerCase(), { id: r.id, name: r.name }])
+      const roleByName = await rolesByName();
+      const roleIdByName = new Map(
+        [...roleByName.values()].map((r) => [r.name, r.id])
       );
-      for (const r of roles)
-        if (!roleByName.has(r.slug))
-          roleByName.set(r.slug, { id: r.id, name: r.name });
-      const roleIdByName = new Map(roles.map((r) => [r.name, r.id]));
 
-      const existing = await db
-        .select({
-          id: schema.users.id,
-          nik: schema.users.nik,
-          name: schema.users.name,
-          email: schema.users.email,
-          roleId: schema.users.roleId,
-          roleName: schema.roles.name,
-        })
-        .from(schema.users)
-        .innerJoin(schema.roles, eq(schema.roles.id, schema.users.roleId));
-      const existingByNik = new Map<string, ExistingAccount>(
-        existing
-          .filter((e): e is ExistingAccount => e.nik !== null)
-          .map((e) => [e.nik, e])
-      );
-      const existingByEmail = new Map<string, ExistingAccount>(
-        existing
-          .filter((e): e is ExistingAccount => e.nik !== null && !!e.email)
-          .map((e) => [e.email!.toLowerCase(), e])
-      );
+      const { existingByNik, existingByEmail } = await existingAccounts();
 
       const preview = await validateWorkbook(
         await file.arrayBuffer(),
@@ -325,19 +314,30 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         // before it already written — the exact partial state the validation
         // gate exists to prevent.
         await db.transaction(async (tx) => {
+          // A sheet replaces role sets wholesale, so it can strip the last
+          // roles administrator as surely as the edit dialog can.
+          await lockRolesAdmin(tx);
+          const adminBefore = await rolesAdminExists(tx);
           for (const row of preview.rows) {
-            const roleId = roleIdByName.get(row.role)!;
+            // The first role written is the default; the rest are extras.
+            const [roleId, ...extraIds] = row.roles.map((name) =>
+              roleIdByName.get(name)!
+            );
             if (row.kind === "new") {
-              await tx.insert(schema.users).values({
-                nik: row.nik,
-                email: row.email,
-                name: row.nama,
-                passwordHash: defaultHash,
-                // Authenticates, then is refused everywhere until it sets its own.
-                mustChangePassword: true,
-                roleId,
-                active: true,
-              });
+              const [inserted] = await tx
+                .insert(schema.users)
+                .values({
+                  nik: row.nik,
+                  email: row.email,
+                  name: row.nama,
+                  passwordHash: defaultHash,
+                  // Authenticates, then is refused everywhere until it sets its own.
+                  mustChangePassword: true,
+                  roleId: roleId!,
+                  active: true,
+                })
+                .returning({ id: schema.users.id });
+              await writeExtras(tx, inserted!.id, extraIds, { fresh: true });
               created++;
               continue;
             }
@@ -346,13 +346,22 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
               .update(schema.users)
               // Password deliberately untouched: an update must not reset the
               // credential of someone already using the system.
-              .set({ name: row.nama, email: row.email, roleId })
+              .set({ name: row.nama, email: row.email, roleId: roleId! })
               .where(eq(schema.users.id, account.id));
+            // The file states the whole set, so the extras are replaced.
+            await writeExtras(tx, account.id, extraIds);
             touched.push(account.id);
             updated++;
           }
+          if (adminBefore && !(await rolesAdminExists(tx)))
+            throw lastRolesAdmin(
+              "file ini akan melepas akses kelola role darinya"
+            );
         });
       } catch (error) {
+        if (error instanceof Refusal) return status(409, error.body); // last_roles_admin, the only one thrown here
+        // A role the file names was deleted after validation.
+        if (isForeignKeyViolation(error)) return status(422, ROLE_NOT_FOUND);
         // Validation checks both unique columns, but it reads the database a
         // moment before the write: another administrator can take an email or
         // a NIK in between. Answer with the conflict rather than a 500.
@@ -404,7 +413,7 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
           code: "user_not_found",
           message: `Akun ${params.id} tidak ditemukan`,
         });
-      return toUser(row);
+      return toUser((await withRoles([row]))[0]!);
     },
     {
       auth: { menu: "users", mode: "view" },
@@ -428,52 +437,69 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
           message: "Akun harus punya email atau NIK",
         });
 
-      const role = await roleOrNull(body.roleId);
-      if (!role)
-        return status(422, {
-          code: "role_not_found",
-          message: "Role tidak ditemukan",
-        });
-      // The scope a role carries is a promise about the account holding it.
-      if (scopeNeedsNik(role.scope) && !body.nik)
-        return status(422, {
-          code: "scope_requires_nik",
-          message: `Lingkup "${role.scope}" memerlukan NIK`,
-        });
+      // The scope a role carries is a promise about every account holding it,
+      // so each role in the set is checked, not only the default.
+      const set = await resolveRoleSet(
+        body.roleId,
+        body.roleIds,
+        [],
+        body.nik ?? null
+      );
+      if (isRoleSetFailure(set)) return status(422, set);
+      const role = set.defaultRole;
       if (body.nik && !(await employeeExists(body.nik)))
         return status(422, nikNotRegistered(body.nik));
+      // Hashed before the transaction: argon2 is slow on purpose, and a pooled
+      // connection should not wait on it.
+      const passwordHash = await hashPassword(env.DEFAULT_USER_PASSWORD);
 
       try {
-        const [row] = await db
-          .insert(schema.users)
-          .values({
-            email: body.email ?? null,
-            nik: body.nik ?? null,
-            name: body.name.trim(),
-            passwordHash: await hashPassword(env.DEFAULT_USER_PASSWORD),
-            mustChangePassword: true,
-            roleId: role.id,
-            active: body.active ?? true,
-          })
-          // Named columns, not `.returning()` — the row Drizzle hands back
-          // carries password_hash, and spreading it is exactly how a hash
-          // reaches a response.
-          .returning({
-            id: schema.users.id,
-            email: schema.users.email,
-            nik: schema.users.nik,
-            name: schema.users.name,
-            roleId: schema.users.roleId,
-            active: schema.users.active,
-            mustChangePassword: schema.users.mustChangePassword,
-            createdAt: schema.users.createdAt,
-          });
+        const row = await db.transaction(async (tx) => {
+          const [inserted] = await tx
+            .insert(schema.users)
+            .values({
+              email: body.email ?? null,
+              nik: body.nik ?? null,
+              name: body.name.trim(),
+              passwordHash,
+              mustChangePassword: true,
+              roleId: role.id,
+              active: body.active ?? true,
+            })
+            // Named columns, not `.returning()` — the row Drizzle hands back
+            // carries password_hash, and spreading it is exactly how a hash
+            // reaches a response.
+            .returning({
+              id: schema.users.id,
+              email: schema.users.email,
+              nik: schema.users.nik,
+              name: schema.users.name,
+              roleId: schema.users.roleId,
+              active: schema.users.active,
+              mustChangePassword: schema.users.mustChangePassword,
+              createdAt: schema.users.createdAt,
+            });
+          await writeExtras(
+            tx,
+            inserted!.id,
+            set.extras.map((r) => r.id),
+            { fresh: true }
+          );
+          return inserted!;
+        });
         return status(201, {
-          ...toUser(row!),
+          ...toUser(row),
           roleName: role.name,
           scope: role.scope,
+          roles: [role, ...set.extras].map(({ id, name, scope }) => ({
+            id,
+            name,
+            scope,
+          })),
         });
       } catch (error) {
+        // A role in the set was deleted between the check and the write.
+        if (isForeignKeyViolation(error)) return status(422, ROLE_NOT_FOUND);
         if (isUniqueViolation(error, "users_email_unique"))
           return status(409, {
             code: "email_taken",
@@ -496,7 +522,12 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         email: t.Optional(t.String({ format: "email" })),
         nik: t.Optional(t.String({ minLength: 1 })),
         name: t.String({ minLength: 1 }),
+        /** The default role — what a login acts as unless told otherwise. */
         roleId: t.String({ format: "uuid" }),
+        /** Every role the account holds, the default among them. */
+        roleIds: t.Optional(
+          t.Array(t.String({ format: "uuid" }), { maxItems: MAX_ROLES })
+        ),
         active: t.Optional(t.Boolean()),
       }),
       response: {
@@ -515,64 +546,83 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
     async ({ params, body, status, principal }) => {
       if (body.active === false && isOwn(principal, params.id))
         return status(409, ownAccount("dinonaktifkan"));
-      const [current] = await baseQuery()
-        .where(eq(schema.users.id, params.id))
-        .limit(1);
-      if (!current)
-        return status(404, {
-          code: "user_not_found",
-          message: "Akun tidak ditemukan",
-        });
-
-      const roleId = body.roleId ?? (current.roleId as string);
-      const role = await roleOrNull(roleId);
-      if (!role)
-        return status(422, {
-          code: "role_not_found",
-          message: "Role tidak ditemukan",
-        });
-
-      const nik =
-        body.nik !== undefined ? body.nik : (current.nik as string | null);
-      const email =
-        body.email !== undefined
-          ? body.email
-          : (current.email as string | null);
-      if (!email && !nik)
-        return status(422, {
-          code: "identifier_required",
-          message: "Akun harus punya email atau NIK",
-        });
-      if (scopeNeedsNik(role.scope) && !nik)
-        return status(422, {
-          code: "scope_requires_nik",
-          message: `Lingkup "${role.scope}" memerlukan NIK`,
-        });
       // Checked when the caller *supplies* one, not on every edit: an account
       // predating this rule should still be renameable, and one that keeps its
       // NIK is not being "edited with a NIK".
       if (body.nik && !(await employeeExists(body.nik)))
         return status(422, nikNotRegistered(body.nik));
 
-      if (body.active === false && (await isLastRolesAdmin(params.id)))
-        return status(409, {
-          code: "last_roles_admin",
-          message:
-            "Akun ini satu-satunya yang masih bisa mengelola role — tidak bisa dinonaktifkan",
-        });
-
+      let email: string | null = null;
+      let nik: string | null = null;
       try {
-        await db
-          .update(schema.users)
-          .set({
-            email,
+        // Read, decide and write in one transaction, the account row locked:
+        // an edit that read the role set before another edit committed would
+        // otherwise write its stale extras back over it.
+        await db.transaction(async (tx) => {
+          await lockRolesAdmin(tx);
+          const [locked] = await tx
+            .select({ id: schema.users.id })
+            .from(schema.users)
+            .where(eq(schema.users.id, params.id))
+            .for("update");
+          if (!locked)
+            throw new Refusal(404, {
+              code: "user_not_found",
+              message: "Akun tidak ditemukan",
+            });
+          const [current] = await baseQuery(tx)
+            .where(eq(schema.users.id, params.id))
+            .limit(1);
+
+          nik = body.nik !== undefined ? body.nik : current!.nik;
+          email = body.email !== undefined ? body.email : current!.email;
+          if (!email && !nik)
+            throw new Refusal(422, {
+              code: "identifier_required",
+              message: "Akun harus punya email atau NIK",
+            });
+
+          const currentExtras = (await extraRolesOf([params.id], tx)).get(
+            params.id
+          )!;
+          const set = await resolveRoleSet(
+            body.roleId ?? current!.roleId,
+            body.roleIds,
+            currentExtras.map((r) => r.id),
             nik,
-            ...(body.name !== undefined ? { name: body.name.trim() } : {}),
-            roleId: role.id,
-            ...(body.active !== undefined ? { active: body.active } : {}),
-          })
-          .where(eq(schema.users.id, params.id));
+            tx
+          );
+          if (isRoleSetFailure(set)) throw new Refusal(422, set);
+
+          const adminBefore = await rolesAdminExists(tx);
+          await tx
+            .update(schema.users)
+            .set({
+              email,
+              nik,
+              ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+              roleId: set.defaultRole.id,
+              ...(body.active !== undefined ? { active: body.active } : {}),
+            })
+            .where(eq(schema.users.id, params.id));
+          await writeExtras(
+            tx,
+            params.id,
+            set.extras.map((r) => r.id)
+          );
+          // Switching the account off and taking a role away can both leave
+          // nobody able to administer roles — more easily now that an account
+          // holds several. Asked after the write, under the lock.
+          if (adminBefore && !(await rolesAdminExists(tx)))
+            throw lastRolesAdmin(
+              body.active === false
+                ? "tidak bisa dinonaktifkan"
+                : "role tersebut tidak bisa dilepas"
+            );
+        });
       } catch (error) {
+        if (error instanceof Refusal) return status(error.status, error.body);
+        if (isForeignKeyViolation(error)) return status(422, ROLE_NOT_FOUND);
         if (isUniqueViolation(error, "users_email_unique"))
           return status(409, {
             code: "email_taken",
@@ -586,12 +636,13 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         throw error;
       }
 
-      // Role reassignment applies on the next request, not at re-login.
+      // Role reassignment applies on the next request, not at re-login — and a
+      // session acting as a role taken away is refused from then on.
       await invalidateUser(params.id);
       const [row] = await baseQuery()
         .where(eq(schema.users.id, params.id))
         .limit(1);
-      return toUser(row!);
+      return toUser((await withRoles([row!]))[0]!);
     },
     {
       auth: { menu: "users", mode: "manage" },
@@ -601,6 +652,10 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         nik: t.Optional(t.Nullable(t.String({ minLength: 1 }))),
         name: t.Optional(t.String({ minLength: 1 })),
         roleId: t.Optional(t.String({ format: "uuid" })),
+        /** Replaces the whole set; omitted keeps the extras as they are. */
+        roleIds: t.Optional(
+          t.Array(t.String({ format: "uuid" }), { maxItems: MAX_ROLES })
+        ),
         active: t.Optional(t.Boolean()),
       }),
       response: {
@@ -630,14 +685,18 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
           code: "user_not_found",
           message: "Akun tidak ditemukan",
         });
-      if (await isLastRolesAdmin(params.id))
-        return status(409, {
-          code: "last_roles_admin",
-          message:
-            "Akun ini satu-satunya yang masih bisa mengelola role — tidak bisa dihapus",
+      try {
+        await db.transaction(async (tx) => {
+          await lockRolesAdmin(tx);
+          const adminBefore = await rolesAdminExists(tx);
+          await tx.delete(schema.users).where(eq(schema.users.id, params.id));
+          if (adminBefore && !(await rolesAdminExists(tx)))
+            throw lastRolesAdmin("tidak bisa dihapus");
         });
-
-      await db.delete(schema.users).where(eq(schema.users.id, params.id));
+      } catch (error) {
+        if (error instanceof Refusal) return status(409, error.body); // last_roles_admin, the only one thrown here
+        throw error;
+      }
       await invalidateUser(params.id);
       return { ok: true };
     },

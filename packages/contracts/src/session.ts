@@ -195,6 +195,21 @@ export const SLIDE_ROWS_OF: Record<SlideGrid, number> = {
 export const SESSION_TRANSPORTS = ["cookie", "bearer"] as const;
 export type SessionTransport = (typeof SESSION_TRANSPORTS)[number];
 
+/** One role an account holds, as offered on "Masuk sebagai…". */
+export type RoleOption = {
+  id: string;
+  name: string;
+  scope: Scope;
+};
+
+/**
+ * An account may hold several roles; a session acts as exactly one of them.
+ *
+ * `roleId`, `roleName` and `scope` are the session's **active** role — the one
+ * every permission and scope check answers to — so a route never has to ask
+ * which of several roles applies. `roles` is everything the account holds,
+ * default first, and is what the login picker and the topbar switcher offer.
+ */
 export type UserPrincipal = {
   kind: "user";
   id: string;
@@ -204,6 +219,7 @@ export type UserPrincipal = {
   roleId: string;
   roleName: string;
   scope: Scope;
+  roles: RoleOption[];
   mustChangePassword: boolean;
 };
 
@@ -223,7 +239,20 @@ export type LoginRequest = {
   password: string;
   /** Omitted means cookie; a non-browser client asks for `bearer`. */
   transport?: SessionTransport;
+  /**
+   * Which of the account's roles to act as. Omitted means its default role —
+   * which is what a client that predates multi-role accounts gets.
+   */
+  roleId?: string;
 };
+
+/** Act as another role the account holds, without logging in again. */
+export type SwitchRoleRequest = {
+  roleId: string;
+};
+
+/** Refused when a login or a switch names a role the account does not hold. */
+export const ROLE_NOT_HELD = "role_not_held" as const;
 
 export type LoginResponse = {
   principal: UserPrincipal;

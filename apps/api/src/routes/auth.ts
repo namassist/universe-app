@@ -1,12 +1,18 @@
 import { eq, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
+import { ROLE_NOT_HELD } from "@universe/contracts";
 
 import {
   reserveLoginAttempt,
   settleLoginSuccess,
 } from "../auth/login-throttle";
-import { requireSession } from "../auth/macro";
-import { invalidateUser, loadPermissions, loadUser } from "../auth/principal";
+import { requireSession, toUserPrincipal } from "../auth/macro";
+import {
+  actingAs,
+  invalidateUser,
+  loadPermissions,
+  loadUser,
+} from "../auth/principal";
 import {
   checkPasswordPolicy,
   DUMMY_HASH,
@@ -23,6 +29,7 @@ import {
   createSession,
   deleteSession,
   SESSION_COOKIE,
+  setSessionRole,
 } from "../auth/session";
 import { onSiteNetwork } from "../auth/site-network";
 import { forgetSessionDevices } from "../push/devices";
@@ -53,6 +60,15 @@ const FIRST_LOGIN_ON_SITE = {
   code: "first_login_on_site",
   message:
     "Login pertama harus dari jaringan site. Setelah password diganti, akun bisa dipakai dari mana saja.",
+};
+
+/**
+ * Only ever said after the password was right, so it tells nobody without the
+ * password which roles an account holds.
+ */
+const ROLE_REFUSED = {
+  code: ROLE_NOT_HELD,
+  message: "Akun ini tidak memiliki role tersebut",
 };
 
 export const authRoutes = new Elysia({ prefix: "/auth", tags: ["auth"] })
@@ -122,12 +138,31 @@ export const authRoutes = new Elysia({ prefix: "/auth", tags: ["auth"] })
           : null;
       if (!id) return status(401, LOGIN_FAILED);
 
-      const user = await loadUser(id);
-      if (!user) return status(401, LOGIN_FAILED);
+      const account = await loadUser(id);
+      if (!account) return status(401, LOGIN_FAILED);
+      // The password was right whatever role was asked for, so the attempt
+      // counts as a success either way; the refusal below is not a guess.
       await settleLoginSuccess(identifier, ip);
 
+      // A role the account does not hold is refused outright, rather than
+      // quietly falling back to the default: the caller asked to act as
+      // something specific, and the answer to that is no.
+      //
+      // Except on the login that just created the account: it holds one role,
+      // and refusing now would answer "no" to a request that already made an
+      // account — so that login acts as the role it was given.
+      const user = actingAs(account, row ? body.roleId : undefined);
+      if (!user) return status(403, ROLE_REFUSED);
+
       const transport = body.transport ?? "cookie";
-      const session = await createSession("user", user.id, transport);
+      // The role is pinned, canonical id and all: an administrator changing
+      // the account's default later does not move a session already working.
+      const session = await createSession(
+        "user",
+        user.id,
+        transport,
+        user.roleId
+      );
       const permissions = await loadPermissions(user.roleId);
 
       if (transport === "cookie") {
@@ -138,17 +173,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", tags: ["auth"] })
       }
 
       return {
-        principal: {
-          kind: "user" as const,
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          nik: user.nik,
-          roleId: user.roleId,
-          roleName: user.roleName,
-          scope: user.scope,
-          mustChangePassword: user.mustChangePassword,
-        },
+        principal: toUserPrincipal(user),
         permissions,
         // Only a bearer client is told the identifier; a browser gets the
         // httpOnly cookie and never sees it.
@@ -162,6 +187,9 @@ export const authRoutes = new Elysia({ prefix: "/auth", tags: ["auth"] })
         transport: t.Optional(
           t.Union([t.Literal("cookie"), t.Literal("bearer")])
         ),
+        // A choice among roles the account already holds, checked above —
+        // never a grant. Omitted acts as the default role.
+        roleId: t.Optional(t.String({ format: "uuid" })),
       }),
       response: {
         200: t.Object({
@@ -192,6 +220,54 @@ export const authRoutes = new Elysia({ prefix: "/auth", tags: ["auth"] })
       session: true,
       response: { 200: t.Object({ ok: t.Boolean() }), 401: ErrorSchema },
       detail: { summary: "End the current session" },
+    }
+  )
+
+  /**
+   * The topbar's "Ganti role", and the login picker's second step: act as
+   * another role this account holds, in the same session, without a password.
+   * The person already proved who they are; which of their roles they are
+   * working as right now is theirs to choose.
+   *
+   * Behind `session` rather than `auth`, like change-password: the picker runs
+   * before the change-password screen, so it must work while that gate holds.
+   */
+  .post(
+    "/switch-role",
+    async ({ body, principal, sessionId, status }) => {
+      if (principal.kind !== "user")
+        return status(403, {
+          code: "forbidden",
+          message: "Perangkat display tidak punya role",
+        });
+
+      const account = await loadUser(principal.id);
+      const user = account ? actingAs(account, body.roleId) : null;
+      if (!user) return status(403, ROLE_REFUSED);
+
+      if (!(await setSessionRole(sessionId, user.roleId)))
+        return status(401, {
+          code: "unauthenticated",
+          message: "Sesi tidak valid",
+        });
+
+      return {
+        principal: toUserPrincipal(user),
+        permissions: await loadPermissions(user.roleId),
+      };
+    },
+    {
+      session: true,
+      body: t.Object({ roleId: t.String({ format: "uuid" }) }),
+      response: {
+        200: t.Object({
+          principal: UserPrincipalSchema,
+          permissions: PermissionsSchema,
+        }),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: { summary: "Act as another role the account holds" },
     }
   )
 

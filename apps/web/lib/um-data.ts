@@ -23,26 +23,6 @@ export type UmRole = {
   perms: Record<MenuSlug, UmPerm>;
 };
 
-/**
- * An account holds exactly one role. It was `roleIds: string[]`, which the
- * screen rendered as a multi-select — but two simultaneous roles have no
- * meaning once scope is enforced, since the two could disagree about how much
- * of the workforce the account may see.
- */
-export type UmUser = {
-  id: string;
-  email: string | null;
-  name: string;
-  nik: string | null;
-  roleId: string;
-  active: boolean;
-};
-
-/** Jumlah pemakai per role. */
-export function roleUserCount(users: UmUser[], roleId: string): number {
-  return users.filter((u) => u.roleId === roleId).length;
-}
-
 export type PageSection = {
   key: string;
   label: string;

@@ -105,6 +105,18 @@ export const FIELDS: Record<string, FieldDoc> = {
   "principal.id": { example: UUID.user },
   "users.id": { example: UUID.user },
   roleId: { example: UUID.role },
+  "principal.roleId": {
+    example: UUID.role,
+    note: "The session's active role, the one permissions and scope answer to. Login and switch-role take one the account holds (else 403 `role_not_held`).",
+  },
+  roleIds: {
+    example: [UUID.role],
+    note: "Every role the account holds, the default `roleId` among them.",
+  },
+  roles: {
+    example: [{ id: UUID.role, name: "User", scope: "self" }],
+    note: "Every role the account holds, default first. Offer a choice when there is more than one; switch with `POST /v1/auth/switch-role`.",
+  },
   unitId: { example: UUID.unit },
   companyId: { example: UUID.generic },
   departmentId: { example: UUID.generic },

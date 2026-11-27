@@ -363,6 +363,64 @@ buttons; the rule now holds for the web and any other client. Renaming
 your own account still works, and your own password is changed through
 `/auth/change-password`. The last-roles-admin check stays as it was.
 
+## D16 — Several roles per account, one per session
+
+An account holds a default role (`users.role_id`) plus extras
+(`user_roles`), so one person need not have two accounts (owner,
+2026-11-27, `docs/prd.md` → Accounts and roles). A request still answers to
+**one** role: the session's.
+
+- **The session record carries the active role** (`roleId` in
+  `session:<id>`). This bends the "nothing about identity travels in the
+  session" rule from the session design on purpose. The value is a
+  _choice among roles the account holds_, never a grant. `actingAs`
+  (`auth/principal.ts`) re-checks it against the account's current roles on
+  every request, so a role taken away fails the next request with 401, as
+  deactivation does. The session is then deleted, not just refused, so it
+  does not linger until its TTL (logout itself would 401 on it). Login pins
+  the role it acts as, the canonical id, compared case-insensitively. An
+  administrator changing the default later does not move a working session.
+  A record without `roleId`, which every session from before this change is,
+  acts as the default. No one is signed out by the deploy.
+- **Extras only, not every role, in `user_roles`.** Provisioning, the seed and
+  the import keep writing `users.role_id` alone and stay correct, and the
+  migration needed no backfill. The cost is that "who holds role X" reads two
+  places. `roleHolderIds` (principal.ts) and `userCounts` (roles.ts) do that
+  reading, and invalidation, deletion and scope narrowing go through them.
+- **The cached principal moved to `princ:user:v2:<id>`.** An entry cached by the
+  previous build has no `roles`. A new key misses, and the old entries age out
+  on the backstop TTL.
+- `POST /auth/switch-role` sits behind `session`, not `auth`, like
+  change-password. The login picker runs before the change-password screen.
+  It rewrites the record with `KEEPTTL XX`, and `issuedAt` is untouched, so
+  switching never extends a session. `XX` matters: a logout landing between
+  the read and the write must not recreate the key, which under `KEEPTTL`
+  would come back with no expiry.
+- Login with a `roleId` the account does not hold is 403 `role_not_held`
+  rather than a silent fallback to the default. It is said only after the
+  password was right. The login that provisions an account ignores
+  `roleId` (that account holds one role), so a refusal never follows an
+  account having been made.
+- **Role-set writes read inside their transaction.** `PATCH /users/:id` locks
+  the account row (`FOR UPDATE`) and reads its current set with `tx`.
+  Otherwise an edit that read the extras before another committed writes
+  them back over it.
+- **The last roles administrator** is guarded on `PATCH`, `DELETE` and the
+  import commit alike, under one advisory lock (`ROLES_ADMIN_LOCK`,
+  `user-roles.ts`). Each path asks `rolesAdminExists` before and after its
+  write and refuses only when the write removed the last one. An
+  installation that already has none is not frozen. The lock is what stops
+  two administrators removing each other at once.
+- **A role deleted mid-write** fails the write on the foreign key. It is
+  answered 422 `role_not_found` on the account routes and import, and 409
+  `role_in_use` on the role delete, never 500.
+- **Role names may not contain a comma** (422 `role_name_comma`). The import
+  splits its `role` cell on commas, and the Users screen exports that way.
+- **Known window:** a request that read the account just before an edit
+  committed can cache the pre-edit roles after the edit's invalidation, for
+  up to the 300 s backstop TTL. Deactivation has always had the same window.
+  A version counter would close both, if it is ever worth it.
+
 ## Known debt
 
 - `users` links to employees by NIK string; renaming a NIK orphans the

@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 import {
   isMenuSlug,
@@ -8,8 +8,14 @@ import {
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
-import { invalidateRoleHolders } from "../auth/principal";
-import { db, isUniqueViolation, schema, type RoleRow } from "../db";
+import { invalidateRoleHolders, roleHolderIds } from "../auth/principal";
+import {
+  db,
+  isForeignKeyViolation,
+  isUniqueViolation,
+  schema,
+  type RoleRow,
+} from "../db";
 import {
   ErrorSchema,
   OptionalScopeSchema,
@@ -17,6 +23,16 @@ import {
   RoleSchema,
   ScopeSchema,
 } from "./schemas";
+
+/**
+ * The account import writes several roles in one cell, comma separated, so a
+ * role whose name holds a comma could never be named there — nor survive the
+ * Users screen's export being re-imported.
+ */
+const NAME_WITH_COMMA = {
+  code: "role_name_comma",
+  message: "Nama role tidak boleh mengandung koma",
+};
 
 /** Both non-trivial scopes resolve through the employee record a NIK names. */
 const NEEDS_NIK: Scope[] = ["dept", "self"];
@@ -42,16 +58,32 @@ async function permissionsOf(roleIds: string[]) {
   return map;
 }
 
+/**
+ * Accounts holding each role, as their default or as an extra one. Counted
+ * per distinct account: the API never stores a default as an extra too, but a
+ * hand-written row must not count one person twice.
+ */
 async function userCounts(roleIds: string[]) {
   if (!roleIds.length) return new Map<string, number>();
-  const rows = await db
-    .select({ roleId: schema.users.roleId, n: count() })
-    .from(schema.users)
-    .where(inArray(schema.users.roleId, roleIds))
-    .groupBy(schema.users.roleId);
-  const map = new Map<string, number>(roleIds.map((id) => [id, 0]));
-  for (const r of rows) map.set(r.roleId, Number(r.n));
-  return map;
+  const [byDefault, byExtra] = await Promise.all([
+    db
+      .select({ roleId: schema.users.roleId, userId: schema.users.id })
+      .from(schema.users)
+      .where(inArray(schema.users.roleId, roleIds)),
+    db
+      .select({
+        roleId: schema.userRoles.roleId,
+        userId: schema.userRoles.userId,
+      })
+      .from(schema.userRoles)
+      .where(inArray(schema.userRoles.roleId, roleIds)),
+  ]);
+  const holders = new Map<string, Set<string>>(
+    roleIds.map((id) => [id, new Set()])
+  );
+  for (const r of [...byDefault, ...byExtra])
+    holders.get(r.roleId)?.add(r.userId);
+  return new Map([...holders].map(([id, set]) => [id, set.size]));
 }
 
 function toRole(
@@ -129,6 +161,7 @@ export const rolesRoutes = new Elysia({ prefix: "/roles", tags: ["roles"] })
   .post(
     "/",
     async ({ body, status }) => {
+      if (body.name.includes(",")) return status(422, NAME_WITH_COMMA);
       const unknown = invalidSlugs(body.permissions);
       if (unknown.length)
         return status(422, {
@@ -180,6 +213,7 @@ export const rolesRoutes = new Elysia({ prefix: "/roles", tags: ["roles"] })
   .patch(
     "/:id",
     async ({ params, body, status }) => {
+      if (body.name?.includes(",")) return status(422, NAME_WITH_COMMA);
       const [row] = await db
         .select()
         .from(schema.roles)
@@ -208,13 +242,17 @@ export const rolesRoutes = new Elysia({ prefix: "/roles", tags: ["roles"] })
         body.scope !== row.scope &&
         NEEDS_NIK.includes(body.scope)
       ) {
-        // A NIK is the sole prerequisite for both dept and self.
-        const invalid = await db
-          .select({ id: schema.users.id, name: schema.users.name })
-          .from(schema.users)
-          .where(
-            and(eq(schema.users.roleId, row.id), isNull(schema.users.nik))
-          );
+        // A NIK is the sole prerequisite for both dept and self. Every holder
+        // counts — an extra role is held just as much as a default one.
+        const holders = await roleHolderIds(row.id);
+        const invalid = holders.length
+          ? await db
+              .select({ id: schema.users.id, name: schema.users.name })
+              .from(schema.users)
+              .where(
+                and(inArray(schema.users.id, holders), isNull(schema.users.nik))
+              )
+          : [];
         if (invalid.length)
           return status(409, {
             code: "scope_unsatisfiable",
@@ -303,11 +341,7 @@ export const rolesRoutes = new Elysia({ prefix: "/roles", tags: ["roles"] })
           message: `Role "${row.name}" terkunci dan tidak bisa dihapus`,
         });
 
-      const [held] = await db
-        .select({ n: count() })
-        .from(schema.users)
-        .where(eq(schema.users.roleId, row.id));
-      const holders = Number(held?.n ?? 0);
+      const holders = (await roleHolderIds(row.id)).length;
       if (holders > 0)
         return status(409, {
           code: "role_in_use",
@@ -315,7 +349,18 @@ export const rolesRoutes = new Elysia({ prefix: "/roles", tags: ["roles"] })
           holders,
         });
 
-      await db.delete(schema.roles).where(eq(schema.roles.id, row.id));
+      try {
+        await db.delete(schema.roles).where(eq(schema.roles.id, row.id));
+      } catch (error) {
+        // Somebody was given the role between the count above and the delete.
+        if (isForeignKeyViolation(error))
+          return status(409, {
+            code: "role_in_use",
+            message: `Role "${row.name}" baru saja diberikan ke user`,
+            holders: 1,
+          });
+        throw error;
+      }
       await invalidateRoleHolders(row.id);
       return { ok: true };
     },

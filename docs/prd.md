@@ -2116,6 +2116,70 @@ unit, area, bus and check-in time. Anything the records do not hold reads "-".
     `GET /v1/leaderboard/operators/:employeeId` takes the board's `from`,
     `to`, `unitType` and `department`; an unknown unit type is a 422.
 
+## Accounts and roles
+
+### One account, several roles — shipped
+
+**A person holds one account however many roles they work in** (owner,
+2026-11-27). Somebody who is both Superadmin and Pengawas Lapangan used to
+need two accounts, which their one email and one NIK (both unique) could not
+both carry. Now the account holds both, and **a session acts as exactly one**:
+
+- **Login asks every time.** After the password is accepted, an account with
+  more than one role is shown **Masuk sebagai…**, one button per role with the
+  default marked, plus **Gunakan akun lain**. An account with one role goes
+  straight in as before. The choice comes after the password, so it never
+  tells a stranger what an account holds.
+- **Switching is from the topbar, without a password.** The account menu lists
+  the roles under **Masuk sebagai**; choosing one moves the same session to it
+  and starts again from the dashboard, since the page on screen may not exist
+  for the new role.
+- **Permissions and scope follow the active role and nothing else.** Two roles
+  never answer one request: the grants of the role not chosen do not come
+  along. This is why several roles are safe where they were once refused.
+  Two roles can disagree about scope, but a session only ever has one.
+- **Every account has a default role.** A login that does not choose acts as
+  it. That covers the phone app until it gets a picker of its own. A session
+  keeps the role it entered with, even if an administrator later changes the
+  default. Reloading the login page while the picker shows leaves the person
+  signed in as the default, a role they hold.
+- **Taking a role away ends the sessions acting as it** on their next request
+  (401, sign in again), the same way deactivating an account does. Sessions
+  acting as another role the account keeps are untouched.
+- **A NIK is needed if any of the roles needs one** (`dept` or `self` scope),
+  not only the default.
+- **A role held as an extra is held.** It counts in the Roles screen's user
+  count, it cannot be deleted while held (`role_in_use`), and it cannot be
+  narrowed to a scope a holder cannot meet (`scope_unsatisfiable`).
+- **The last account that can administer roles keeps that ability.** Removing
+  the role that gives it is refused (409 `last_roles_admin`), as switching the
+  account off and deleting it already were. The import is held to the same
+  rule.
+- **A role name may not contain a comma** (422 `role_name_comma`). The import
+  separates roles with commas.
+- **Users screen:** the dialog ticks every role the person holds and, when
+  there is more than one, picks the default. The list shows every role, the
+  default highlighted. The CSV export writes them comma separated, the import's
+  format.
+- **Import:** the `role` column takes one name or several separated by commas
+  (`Superadmin, Pengawas Lapangan`). The first is the default and together they
+  are the account's whole role set, so a re-upload replaces the extras. The
+  preview reports a change when the set or the default differs, but not when
+  only the order of the extras does. An unknown name fails its row and names
+  the role.
+- **Not done:** accounts already duplicated for this reason are not merged.
+  Add the role to the account the person keeps, then delete the other one.
+
+**API.** `POST /v1/auth/login` takes an optional `roleId` (a role the account
+holds; anything else is 403 `role_not_held`, and no session is issued).
+`POST /v1/auth/switch-role { roleId }` moves the current session, and works
+before the issued password is changed, because the picker comes first. Both answer
+the principal with `roles` (every role held, default first). `roleId`,
+`roleName` and `scope` are the active role. `POST`/`PATCH /v1/users` take
+`roleIds` (the whole set, the default `roleId` among them; omitted on `PATCH`,
+the extras stay). Stored as `users.role_id` (the default) plus `user_roles`
+(the extras).
+
 ## Kiosk access
 
 **A kiosk admits two kinds of viewer, because it has two.** A wall-mounted TV
@@ -2889,6 +2953,10 @@ walking to a wall, and the people who run it can watch it from the pit
   Roles screen edits. "User / Pengawas Lapangan / Superadmin" are three sets of
   grants, not three apps, so another role given a slug gets its screen without
   a release.
+- **A person with several roles** (see _Accounts and roles_) signs in on the
+  phone as their **default** role, because the app does not send `roleId`
+  yet. Offering the same choice as the web takes `roles` from the login
+  response and `POST /v1/auth/switch-role`. The API already serves both.
 - **The app judges nothing.** Readiness, eligibility, the board and the slip
   come from the API exactly as the walls and the booth printer get them.
   A phone that worked a seat out for itself would one day disagree with the

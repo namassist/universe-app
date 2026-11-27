@@ -180,6 +180,39 @@ export const users = pgTable(
 );
 
 /**
+ * The roles an account holds **beyond** its default (`users.role_id`).
+ *
+ * One person can be both Superadmin and Pengawas Lapangan; before this table
+ * that took two accounts, which their one email and one NIK — both unique —
+ * could not both carry. A session still acts as exactly one role (chosen at
+ * login, switchable from the topbar), so scope and permissions stay single per
+ * request and the reason the system once refused several roles does not apply.
+ *
+ * Extra roles only, by design: `users.role_id` keeps meaning "the default", so
+ * every path that creates an account — provisioning, the seed, the import —
+ * stays correct without writing here, and the set an account holds is the
+ * default plus these rows. The API never stores the default here as well.
+ *
+ * `restrict` on the role: deleting a role somebody holds is refused by the
+ * route (`role_in_use`) exactly as it is for a default role.
+ */
+export const userRoles = pgTable(
+  "user_roles",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "restrict" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.roleId] }),
+    index("user_roles_role_id_idx").on(table.roleId),
+  ]
+);
+
+/**
  * A display device is a principal, not a user: no role, no scope, no NIK, no
  * password. Its authorization is fixed in code — read-only, /display/* only.
  * `id` is the human-assigned tag ("DSP-A01") the registry already used.

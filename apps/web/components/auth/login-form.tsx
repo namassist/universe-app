@@ -15,6 +15,8 @@ import {
   Truck,
 } from "lucide-react";
 
+import type { RoleOption } from "@universe/contracts";
+
 import { api, errorMessage } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { sessionKey } from "@/lib/queries/session";
@@ -24,6 +26,8 @@ import { Spinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UniverseLogo } from "@/components/ui/logo";
 import { LogoBadge3D } from "@/components/ui/logo-3d";
+
+import { RolePicker } from "./role-picker";
 
 /**
  * `?next=` is attacker-supplied — the proxy only ever writes a real pathname
@@ -77,6 +81,64 @@ export function LoginForm() {
   const [showPw, setShowPw] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  /* Set once the password was right and the account holds several roles: the
+     session exists (as the default role) and waits for the choice. */
+  const [pick, setPick] = React.useState<{
+    roles: RoleOption[];
+    defaultRoleId: string;
+    mustChangePassword: boolean;
+  } | null>(null);
+  const [pendingRole, setPendingRole] = React.useState<string | null>(null);
+
+  async function enter(mustChangePassword: boolean) {
+    // The layout reads the session server-side on the next navigation; drop the
+    // cached copy so a stale anonymous result cannot win the race.
+    await queryClient.invalidateQueries({ queryKey: sessionKey });
+
+    if (mustChangePassword) {
+      router.replace("/change-password");
+      return;
+    }
+    router.replace(safeNext(params.get("next")) ?? "/dashboard");
+  }
+
+  async function chooseRole(roleId: string) {
+    if (!pick || pendingRole) return;
+    setError(null);
+    setPendingRole(roleId);
+    try {
+      // The session already acts as the default; switching to it is a no-op.
+      if (roleId !== pick.defaultRoleId) {
+        const { error: failure } = await api.v1.auth["switch-role"].post({
+          roleId,
+        });
+        if (failure) {
+          setPendingRole(null);
+          setError(errorMessage(failure, t.shSwitchFailed));
+          return;
+        }
+      }
+      await enter(pick.mustChangePassword);
+    } catch {
+      // Navigation failing must not leave every button waiting forever.
+      setPendingRole(null);
+      setError(t.shSwitchFailed);
+    }
+  }
+
+  async function switchAccount() {
+    if (pendingRole) return;
+    setPendingRole("logout");
+    const { error: failure } = await api.v1.auth.logout.post();
+    setPendingRole(null);
+    if (failure) {
+      setError(errorMessage(failure, t.authLoginErr));
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: sessionKey });
+    setPick(null);
+    setError(null);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -98,15 +160,21 @@ export function LoginForm() {
       return;
     }
 
-    // The layout reads the session server-side on the next navigation; drop the
-    // cached copy so a stale anonymous result cannot win the race.
-    await queryClient.invalidateQueries({ queryKey: sessionKey });
-
-    if (data.principal.mustChangePassword) {
-      router.replace("/change-password");
+    // Several roles: ask which one before entering — every time, so nobody
+    // lands in the wrong role's screens by habit.
+    if (data.principal.roles.length > 1) {
+      setBusy(false);
+      // Done with it: the picker needs no password, and none should sit in
+      // memory while it waits.
+      setPassword("");
+      setPick({
+        roles: data.principal.roles,
+        defaultRoleId: data.principal.roleId,
+        mustChangePassword: data.principal.mustChangePassword,
+      });
       return;
     }
-    router.replace(safeNext(params.get("next")) ?? "/dashboard");
+    await enter(data.principal.mustChangePassword);
   }
 
   const features = [
@@ -216,75 +284,85 @@ export function LoginForm() {
             <span>{error}</span>
           </div>
 
-          <form onSubmit={submit} noValidate className="flex flex-col gap-8">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="identifier" className="text-sm font-medium">
-                {t.authIdentLabel}
-              </label>
-              <div className="relative">
-                <IdCard className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-(--text-tertiary)" />
-                <Input
-                  id="identifier"
-                  name="identifier"
-                  autoComplete="username"
-                  autoFocus
-                  placeholder={t.authIdentPh}
-                  value={identifier}
-                  onChange={(e) => {
-                    setIdentifier(e.target.value);
-                    setError(null);
-                  }}
-                  className="h-13 pl-12"
-                />
+          {pick ? (
+            <RolePicker
+              roles={pick.roles}
+              defaultRoleId={pick.defaultRoleId}
+              pendingRoleId={pendingRole}
+              onPick={chooseRole}
+              onOther={switchAccount}
+            />
+          ) : (
+            <form onSubmit={submit} noValidate className="flex flex-col gap-8">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="identifier" className="text-sm font-medium">
+                  {t.authIdentLabel}
+                </label>
+                <div className="relative">
+                  <IdCard className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-(--text-tertiary)" />
+                  <Input
+                    id="identifier"
+                    name="identifier"
+                    autoComplete="username"
+                    autoFocus
+                    placeholder={t.authIdentPh}
+                    value={identifier}
+                    onChange={(e) => {
+                      setIdentifier(e.target.value);
+                      setError(null);
+                    }}
+                    className="h-13 pl-12"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="flex flex-col gap-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                {t.pwLabel}
-              </label>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-(--text-tertiary)" />
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPw ? "text" : "password"}
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setError(null);
-                  }}
-                  className="h-13 pr-13 pl-12"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw((v) => !v)}
-                  aria-pressed={showPw}
-                  aria-label={t.pwToggle}
-                  className="absolute top-1/2 right-2.5 grid size-8 -translate-y-1/2 cursor-pointer place-items-center rounded-lg text-(--text-tertiary) hover:bg-(--fill-hover) hover:text-(--text-primary) focus-visible:outline-2 focus-visible:outline-primary"
-                >
-                  {showPw ? (
-                    <EyeOff className="size-4.25" />
-                  ) : (
-                    <Eye className="size-4.25" />
-                  )}
-                </button>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="password" className="text-sm font-medium">
+                  {t.pwLabel}
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-(--text-tertiary)" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPw ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError(null);
+                    }}
+                    className="h-13 pr-13 pl-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((v) => !v)}
+                    aria-pressed={showPw}
+                    aria-label={t.pwToggle}
+                    className="absolute top-1/2 right-2.5 grid size-8 -translate-y-1/2 cursor-pointer place-items-center rounded-lg text-(--text-tertiary) hover:bg-(--fill-hover) hover:text-(--text-primary) focus-visible:outline-2 focus-visible:outline-primary"
+                  >
+                    {showPw ? (
+                      <EyeOff className="size-4.25" />
+                    ) : (
+                      <Eye className="size-4.25" />
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={busy}
-              className="mt-3 inline-flex h-13 w-full cursor-pointer items-center justify-center gap-2 rounded-control bg-(image:--gradient-cta) text-base font-bold text-on-cta shadow-(--glow-cta) transition-[box-shadow,background-color,transform] duration-150 hover:-translate-y-px hover:bg-(image:--gradient-cta-hover) hover:shadow-[0_10px_28px_rgba(0,212,255,.5)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:translate-y-0 disabled:cursor-progress"
-            >
-              {busy ? (
-                <Spinner className="size-4 border-[rgba(1,4,22,.3)] border-t-on-cta" />
-              ) : null}
-              {busy ? t.loginChecking : t.loginBtn}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={busy}
+                className="mt-3 inline-flex h-13 w-full cursor-pointer items-center justify-center gap-2 rounded-control bg-(image:--gradient-cta) text-base font-bold text-on-cta shadow-(--glow-cta) transition-[box-shadow,background-color,transform] duration-150 hover:-translate-y-px hover:bg-(image:--gradient-cta-hover) hover:shadow-[0_10px_28px_rgba(0,212,255,.5)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:translate-y-0 disabled:cursor-progress"
+              >
+                {busy ? (
+                  <Spinner className="size-4 border-[rgba(1,4,22,.3)] border-t-on-cta" />
+                ) : null}
+                {busy ? t.loginChecking : t.loginBtn}
+              </button>
+            </form>
+          )}
         </div>
 
         <p className="flex items-center justify-center gap-2 text-center text-[12px] text-(--text-tertiary)">
