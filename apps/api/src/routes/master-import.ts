@@ -32,9 +32,11 @@
 import ExcelJS from "exceljs";
 import {
   BLOOD_TYPES,
+  EMPLOYEE_EMAIL_DOMAIN,
   EMPLOYEE_IMPORT_COLUMNS,
   EMPLOYEE_STATUSES,
   MASTER_IMPORT_COLUMNS,
+  isEmployeeEmail,
   MASTER_IMPORT_PARENT_COLUMNS,
   MCU_RESULTS,
   SKILL_SEPARATOR,
@@ -1165,6 +1167,7 @@ export type EmployeeExisting = {
   room: string;
   phone: string;
   emergency: string;
+  email: string | null;
 };
 
 /**
@@ -1204,6 +1207,7 @@ export type ParsedEmployee = {
   room: string;
   phone: string;
   emergency: string;
+  email: string | null;
   pending: PendingRef[];
 };
 
@@ -1327,6 +1331,18 @@ export function employeeTarget(
       if (!nik) return { issue: "NIK kosong", key: "", label: "" };
       const name = read("nama") || current?.name || "";
       if (!name) return { issue: "Nama kosong", key: nik, label: "" };
+
+      // Blank keeps what the record has, as every optional column does.
+      const rawEmail = read("email");
+      const email = rawEmail
+        ? employeeEmail(rawEmail)
+        : (current?.email ?? null);
+      if (email === false)
+        return {
+          issue: `Email "${rawEmail}" bukan alamat @${EMPLOYEE_EMAIL_DOMAIN}`,
+          key: nik,
+          label: name,
+        };
 
       /** Resolve one catalogue reference — the same shape `unitTarget` uses. */
       const resolve = (
@@ -1590,6 +1606,7 @@ export function employeeTarget(
         room: read("kamar") || (current?.room ?? ""),
         phone: read("telepon") || (current?.phone ?? ""),
         emergency: read("kontak_darurat") || (current?.emergency ?? ""),
+        email,
         pending,
       };
     },
@@ -1608,6 +1625,7 @@ export function employeeTarget(
         if ((from ?? "") !== (to ?? "")) changes.push({ field, from, to });
       };
       compare("nama", current.name, parsed.name);
+      compare("email", current.email, parsed.email);
       compare("perusahaan", current.companyName, parsed.companyName);
       compare("jabatan", current.positionName, parsed.positionName);
       compare("departemen", current.departmentName, parsed.departmentName);
@@ -1637,6 +1655,17 @@ export function employeeTarget(
   };
 }
 
+/**
+ * An employee's email as typed: blank is `null`, a company address is stored
+ * lowercased, anything else is `false` — the caller names the failure, since
+ * a form answers 422 and a sheet fails the row.
+ */
+export function employeeEmail(raw: string): string | null | false {
+  const value = raw.trim();
+  if (!value) return null;
+  return isEmployeeEmail(value) ? value.toLowerCase() : false;
+}
+
 /** The cell a set of qualification codes is written to and read back from. */
 export const skillText = (codes: string[]) =>
   [...codes].sort().join(`${SKILL_SEPARATOR} `);
@@ -1648,7 +1677,10 @@ function employeeSheet(): [ExcelJS.Workbook, ExcelJS.Worksheet] {
     header: key,
     key,
     width:
-      key === "kontak_darurat" || key === "kode_simper" || key === "nama"
+      key === "kontak_darurat" ||
+      key === "kode_simper" ||
+      key === "nama" ||
+      key === "email"
         ? 32
         : 18,
   }));
@@ -1662,6 +1694,7 @@ export async function employeeTemplate(): Promise<Buffer> {
   ws.addRow({
     nik: "503220421",
     nama: "Budi Santoso",
+    email: `budi.santoso@${EMPLOYEE_EMAIL_DOMAIN}`,
     perusahaan: "PT Unggul Dinamika Utama",
     jabatan: "Driver OHT",
     departemen: "Mining Operation",
@@ -1693,6 +1726,7 @@ export async function employeeWorkbook(
     ws.addRow({
       nik: row.nik,
       nama: row.name,
+      email: row.email ?? "",
       perusahaan: row.companyName,
       jabatan: row.positionName,
       departemen: row.departmentName,

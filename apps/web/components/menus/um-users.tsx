@@ -20,7 +20,13 @@ import { api, errorMessage } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv";
 import { useI18n } from "@/lib/i18n";
 import { rolesQueryOptions } from "@/lib/queries/roles";
-import { usersKey, usersQueryOptions, type UserRow } from "@/lib/queries/users";
+import {
+  loadEmployeeSuggestions,
+  usersKey,
+  usersQueryOptions,
+  type UserRow,
+} from "@/lib/queries/users";
+import { AsyncSuggest, type AsyncOption } from "@/components/ui/async-select";
 import { Badge } from "@/components/ui/badge";
 import { Button, IconButton } from "@/components/ui/button";
 import { Checkbox, ToggleRow } from "@/components/ui/checkbox";
@@ -56,6 +62,12 @@ import {
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useToast } from "@/components/ui/toast";
+
+import {
+  applySuggestion,
+  suggestionOption,
+  type SuggestedEmployee,
+} from "./um-user-suggest";
 
 export function UmUsersMenu({ mode }: { mode: AccessMode }) {
   const { t } = useI18n();
@@ -208,6 +220,22 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
     setErr(null);
     setDlgOpen(true);
   }
+  const suggest = async (q: string) =>
+    (await loadEmployeeSuggestions(q)).map((e) =>
+      suggestionOption(e, t.umSuggestHasAccount)
+    );
+  function pickSuggestion(opt: AsyncOption<SuggestedEmployee>) {
+    if (!opt.row) return;
+    const next = applySuggestion(
+      { nik: fNik, name: fName, email: fEmail },
+      opt.row
+    );
+    setFNik(next.nik);
+    setFName(next.name);
+    setFEmail(next.email);
+    setErr(null);
+  }
+
   /** Tick or untick a role; the default follows when it is the one removed. */
   function toggleRole(roleId: string, on: boolean) {
     setErr(null);
@@ -479,32 +507,44 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
                 }}
               />
             </Field>
+            {/* Both offer the employee register as you type: a pick fills
+                NIK, Nama and Email at once (um-user-suggest.ts). */}
             <Field
               className="mt-4"
               label={t.cmEmail}
               htmlFor="um-email"
               helper={t.umIdentHelp}
             >
-              <Input
+              <AsyncSuggest
                 id="um-email"
                 type="email"
                 placeholder={t.umEmailPh}
                 value={fEmail}
-                onChange={(e) => {
-                  setFEmail(e.target.value);
+                onChange={(v) => {
+                  setFEmail(v);
                   setErr(null);
                 }}
+                load={suggest}
+                onPick={pickSuggestion}
               />
             </Field>
-            <Field className="mt-4" label={t.cmNik} htmlFor="um-nik">
-              <Input
+            <Field
+              className="mt-4"
+              label={t.cmNik}
+              htmlFor="um-nik"
+              helper={t.umSuggestHelp}
+            >
+              <AsyncSuggest
                 id="um-nik"
+                className="font-mono"
                 placeholder="503220421"
                 value={fNik}
-                onChange={(e) => {
-                  setFNik(e.target.value);
+                onChange={(v) => {
+                  setFNik(v);
                   setErr(null);
                 }}
+                load={suggest}
+                onPick={pickSuggestion}
               />
             </Field>
             {/* Several roles, one session each: the person chooses at login

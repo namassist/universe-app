@@ -376,6 +376,9 @@ export function EmployeeDetail({ nik }: { nik: string }) {
             <KvRow label={t.kPhone} mono>
               {emp.phone}
             </KvRow>
+            <KvRow label={t.cmEmail} mono>
+              {emp.email}
+            </KvRow>
             <KvRow label={t.kEmergency}>{emp.emergency}</KvRow>
           </Kv>
         </Panel>

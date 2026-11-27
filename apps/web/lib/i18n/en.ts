@@ -225,6 +225,8 @@ export const en: Dict = {
   helpNik: "9 digits, unique per employee.",
   errNama: "Name is required.",
   errNik: "NIK must be 9 digits.",
+  efEmailHelp: "Optional. Only an @{domain} address.",
+  efEmailErr: "The email must be an @{domain} address.",
   helpExp: "Leave empty for permanent employees.",
   errExp: "Expiry must be after the join date.",
   optNone: "None",
@@ -1372,6 +1374,8 @@ export const en: Dict = {
   umErrRequired: "Name is required.",
   umErrIdentifier: "An account must have an email or a NIK.",
   umIdentHelp: "Fill in an email, a NIK, or both. At least one is required.",
+  umSuggestHelp: "Type a NIK or an email to pick from the employee register.",
+  umSuggestHasAccount: "Has an account",
   umMustChange: "Must change password",
   umDefaultPwNote:
     "A new account uses the configured initial password and must set its own on first login.",
