@@ -14,6 +14,11 @@ the definition — when they disagree, the code wins. Change flow: edit
   from the UM menus.
 - `users` — login accounts. Linked to an employee by **NIK** (string), not by
   FK id — see known-issues: renaming an employee's NIK orphans the account.
+  `role_id` is the account's **default** role.
+- `user_roles` — the roles an account holds **beyond** its default
+  (`user_id` cascade, `role_id` restrict; PK on the pair, index on `role_id`).
+  An account's role set is `users.role_id` plus these rows; a session acts as
+  one of them (design D16).
 - `devices` — kiosk displays (all four kinds) with their own auth.
 - `integration_clients` — other services that read from Universe: name,
   sha256 of the token (never the token), its shown prefix, `scopes text[]`,

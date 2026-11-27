@@ -47,6 +47,15 @@ a device is still refused on writes and on any route not marked `allowDevice`.
 browser darkens that screen: the session wins, fails the grant check, and the
 device cookie beside it is never consulted. Pair TVs and leave them logged out.
 
+**An account with several roles chooses one per session.** `login-form.tsx`
+renders `auth/role-picker.tsx` after the password is accepted when
+`principal.roles` has more than one entry (every time), and the topbar's account
+menu lists the same roles under **Masuk sebagai**. Both call
+`POST /v1/auth/switch-role`. The topbar then goes to `/dashboard` with
+`router.refresh()`, because the shell's grants are read from the session in
+`app/(app)/layout.tsx`, and the page on screen may not exist for the new role.
+`principal.roleId` / `scope` / the permissions are always the **active** role.
+
 The device cookie is set by the API and read by the web app. Cookies ignore
 ports, so a dev cookie set on :3001 is sent to the web app on :3000; a
 **split-origin deployment breaks that** and needs the `sameSite`/`secure` pair
