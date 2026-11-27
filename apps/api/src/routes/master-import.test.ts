@@ -1039,6 +1039,7 @@ describe("employee import", () => {
     id: "e1",
     nik: "503220421",
     name: "Budi Santoso",
+    email: "budi.santoso@ungguldinamika.co.id",
     companyName: "PT Unggul Dinamika Utama",
     positionName: "Driver OHT",
     departmentName: "Mining Operation",
@@ -1066,6 +1067,7 @@ describe("employee import", () => {
     id: "e2",
     nik: "505200233",
     name: "Sari Lestari",
+    email: null,
     messName: null,
     simperTypeName: null,
     simperNo: "",
@@ -1415,6 +1417,85 @@ describe("employee import", () => {
     expect(result.preview.rows[0]!.changes).toEqual([
       { field: "kamar", from: "A-12", to: "A-15" },
     ]);
+  });
+
+  describe("the email column", () => {
+    const withBudi = () =>
+      employeeTarget(
+        new Map([[budi.nik.toLowerCase(), budi]]),
+        catalogues,
+        mayCreate
+      );
+
+    test("takes a company address, stored lowercased", async () => {
+      const wb = await sheet(
+        [...HEADERS, "email"],
+        [[...row("610", "Operator Email"), " Op.Email@UnggulDinamika.co.id "]]
+      );
+      const result = validateWorkbook(
+        "k.xlsx",
+        employeeTarget(empty, catalogues, mayCreate),
+        wb
+      );
+      if ("code" in result) throw new Error(result.message);
+      expect(result.preview.errorCount).toBe(0);
+      expect(result.accepted[0]!.parsed.email).toBe(
+        "op.email@ungguldinamika.co.id"
+      );
+    });
+
+    test("is optional: a new row without it has no email", async () => {
+      const wb = await sheet(HEADERS, [row("611", "Tanpa Email")]);
+      const result = validateWorkbook(
+        "k.xlsx",
+        employeeTarget(empty, catalogues, mayCreate),
+        wb
+      );
+      if ("code" in result) throw new Error(result.message);
+      expect(result.preview.errorCount).toBe(0);
+      expect(result.accepted[0]!.parsed.email).toBeNull();
+    });
+
+    test("fails the row for another domain", async () => {
+      const wb = await sheet(
+        [...HEADERS, "email"],
+        [[...row("612", "Email Pribadi"), "budi@gmail.com"]]
+      );
+      const result = validateWorkbook(
+        "k.xlsx",
+        employeeTarget(empty, catalogues, mayCreate),
+        wb
+      );
+      if ("code" in result) throw new Error(result.message);
+      expect(result.preview.errorCount).toBe(1);
+      expect(result.preview.errors[0]!.issue).toBe(
+        'Email "budi@gmail.com" bukan alamat @ungguldinamika.co.id'
+      );
+    });
+
+    test("a blank cell on an existing row keeps the email it has", async () => {
+      const wb = await sheet(["nik", "email"], [[budi.nik, ""]]);
+      const result = validateWorkbook("k.xlsx", withBudi(), wb);
+      if ("code" in result) throw new Error(result.message);
+      expect(result.accepted[0]!.parsed.email).toBe(budi.email);
+      expect(result.preview.rows[0]!.kind).toBe("unchanged");
+    });
+
+    test("a new address on an existing row is a change, case aside", async () => {
+      const wb = await sheet(
+        ["nik", "email"],
+        [[budi.nik, "Budi.S@ungguldinamika.co.id"]]
+      );
+      const result = validateWorkbook("k.xlsx", withBudi(), wb);
+      if ("code" in result) throw new Error(result.message);
+      expect(result.preview.rows[0]!.changes).toEqual([
+        {
+          field: "email",
+          from: "budi.santoso@ungguldinamika.co.id",
+          to: "budi.s@ungguldinamika.co.id",
+        },
+      ]);
+    });
   });
 });
 

@@ -97,7 +97,7 @@ export const FIELDS: Record<string, FieldDoc> = {
   /* Identity */
   nik: { example: "506264337" },
   name: { example: "Budi Santoso" },
-  email: { example: "budi.santoso@universe.local" },
+  email: { example: "budi.santoso@ungguldinamika.co.id" },
   phone: { example: "081234567890" },
   emergency: { example: "Siti (istri) 081298765432" },
   id: { example: UUID.generic },

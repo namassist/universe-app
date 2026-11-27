@@ -209,6 +209,7 @@ export const MASTER_IMPORT_PARENT_COLUMNS: Partial<
 export const EMPLOYEE_IMPORT_COLUMNS = [
   "nik",
   "nama",
+  "email",
   "perusahaan",
   "jabatan",
   "departemen",

@@ -36,6 +36,35 @@ export function isEmployeeStatus(value: string): value is EmployeeStatus {
 }
 
 /**
+ * The only domain an employee's email may have (owner, 2026-11-27).
+ *
+ * The register holds company addresses, nothing private: an employee's email
+ * is what an admin copies into that person's account, and an account's email
+ * is a login. The account's own email is not held to it — a Superadmin may
+ * sign in with any address — only the register is.
+ */
+export const EMPLOYEE_EMAIL_DOMAIN = "ungguldinamika.co.id";
+
+/**
+ * Whether `value` (already trimmed) is a company address: one `@`, a local
+ * part of word characters, dots, plus or hyphens, and exactly
+ * `EMPLOYEE_EMAIL_DOMAIN` after it, in any case. A subdomain does not pass.
+ */
+export function isEmployeeEmail(value: string): boolean {
+  const at = value.lastIndexOf("@");
+  if (at <= 0 || value.indexOf("@") !== at) return false;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1).toLowerCase();
+  return (
+    domain === EMPLOYEE_EMAIL_DOMAIN &&
+    /^[A-Za-z0-9._+-]+$/.test(local) &&
+    !local.startsWith(".") &&
+    !local.endsWith(".") &&
+    !local.includes("..")
+  );
+}
+
+/**
  * MCU outcome and blood type (design D6).
  *
  * Enums rather than catalogues: neither is something an admin adds without a

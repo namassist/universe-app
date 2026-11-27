@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { requireAuth } from "../auth/macro";
@@ -25,6 +25,7 @@ import {
   writeExtras,
 } from "./user-roles";
 import {
+  EmployeeSuggestionSchema,
   ErrorSchema,
   ImportPreviewSchema,
   ImportResultSchema,
@@ -175,6 +176,60 @@ async function existingAccounts() {
   };
 }
 
+/** Below this a NIK prefix matches half the register; above it, nobody types. */
+const SUGGEST_MIN = 2;
+const SUGGEST_MAX = 100;
+const SUGGEST_LIMIT = 8;
+
+/** `%`, `_` and the escape itself read as themselves in an ILIKE pattern. */
+const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+/**
+ * Employees whose NIK starts with `q` or whose email contains it, NIK matches
+ * first. Unscoped like every `/users` read: an account admin sees everyone.
+ */
+async function employeeSuggestions(q: string) {
+  const emp = schema.employees;
+  const users = schema.users;
+  const needle = escapeLike(q);
+  const byNik = ilike(emp.nik, `${needle}%`);
+  const found = await db
+    .select({ nik: emp.nik, name: emp.name, email: emp.email })
+    .from(emp)
+    .where(or(byNik, ilike(emp.email, `%${needle}%`)))
+    .orderBy(sql`case when ${byNik} then 0 else 1 end`, asc(emp.nik))
+    .limit(SUGGEST_LIMIT);
+  if (!found.length) return [];
+
+  // A second query rather than a correlated subquery: eight rows at most, and
+  // two plain `in` lists cannot confuse one table's `nik` with the other's.
+  // `users.email` is compared lowercased because an account's email keeps the
+  // case it was typed in, while the register's is stored lowercased.
+  const emails = found.flatMap((e) => (e.email ? [e.email] : []));
+  const held = await db
+    .select({
+      nik: users.nik,
+      email: sql<string | null>`lower(${users.email})`,
+    })
+    .from(users)
+    .where(
+      or(
+        inArray(
+          users.nik,
+          found.map((e) => e.nik)
+        ),
+        emails.length ? inArray(sql`lower(${users.email})`, emails) : undefined
+      )
+    );
+  const heldNiks = new Set(held.map((h) => h.nik));
+  const heldEmails = new Set(held.map((h) => h.email));
+  return found.map((e) => ({
+    ...e,
+    hasAccount:
+      heldNiks.has(e.nik) || (e.email !== null && heldEmails.has(e.email)),
+  }));
+}
+
 export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
   .use(requireAuth)
 
@@ -192,6 +247,35 @@ export const usersRoutes = new Elysia({ prefix: "/users", tags: ["users"] })
         403: ErrorSchema,
       },
       detail: { summary: "List accounts" },
+    }
+  )
+
+  /* ----------------------------------------------------------- suggestions
+     Declared before /:id, like the import routes below. */
+
+  .get(
+    "/employee-suggestions",
+    async ({ query }) => {
+      const q = query.q?.trim() ?? "";
+      return q.length < SUGGEST_MIN ? [] : employeeSuggestions(q);
+    },
+    {
+      // `manage`, not `view`: it exists to fill the add/edit form, and it
+      // reads the employee register for someone who may hold no employee
+      // grant at all — so only for those who may write an account.
+      auth: { menu: "users", mode: "manage" },
+      query: t.Object({
+        q: t.Optional(t.String({ maxLength: SUGGEST_MAX })),
+      }),
+      response: {
+        200: t.Array(EmployeeSuggestionSchema),
+        401: ErrorSchema,
+        403: ErrorSchema,
+      },
+      detail: {
+        summary:
+          "Employees matching a typed NIK (from its start) or email (anywhere)",
+      },
     }
   )
 

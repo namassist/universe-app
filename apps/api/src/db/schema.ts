@@ -1171,6 +1171,12 @@ export const employees = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     nik: text("nik").notNull().unique(),
     name: text("name").notNull(),
+    /**
+     * A company address (`EMPLOYEE_EMAIL_DOMAIN`), lowercased, or null. Not
+     * unique and not a login: it is what an admin copies into the person's
+     * account, whose own `users.email` is the unique credential.
+     */
+    email: text("email"),
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "restrict" }),

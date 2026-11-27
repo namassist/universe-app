@@ -361,6 +361,18 @@ export const RoleOptionSchema = t.Object({
  * `passwordHash` member — the schema, not a convention, is what guarantees a
  * hash cannot leave the API.
  */
+/**
+ * An employee the Users form offers while an admin types a NIK or an email —
+ * only what an account copies, nothing else from the register.
+ */
+export const EmployeeSuggestionSchema = t.Object({
+  nik: t.String(),
+  name: t.String(),
+  email: t.Nullable(t.String()),
+  /** An account already holds this NIK or this email. */
+  hasAccount: t.Boolean(),
+});
+
 export const UserSchema = t.Object({
   id: t.String(),
   email: t.Nullable(t.String()),
@@ -1118,6 +1130,8 @@ export const EmployeeSchema = t.Object({
   id: t.String(),
   nik: t.String(),
   name: t.String(),
+  /** A company address, lowercased; null when none is on record. */
+  email: t.Nullable(t.String()),
   companyId: t.String(),
   companyName: t.String(),
   positionId: t.String(),

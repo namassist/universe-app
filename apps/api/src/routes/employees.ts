@@ -26,10 +26,11 @@
 
 import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
-import type {
-  EffectivePermissions,
-  PendingMaster,
-  SessionPrincipal,
+import {
+  EMPLOYEE_EMAIL_DOMAIN,
+  type EffectivePermissions,
+  type PendingMaster,
+  type SessionPrincipal,
 } from "@universe/contracts";
 
 import { requireAuth } from "../auth/macro";
@@ -53,6 +54,7 @@ import {
 } from "../storage";
 import { holds } from "./master";
 import {
+  employeeEmail,
   employeeTarget,
   employeeTemplate,
   employeeWorkbook,
@@ -85,6 +87,7 @@ const employeeColumns = {
   id: emp.id,
   nik: emp.nik,
   name: emp.name,
+  email: emp.email,
   companyId: emp.companyId,
   companyName: cmp.name,
   positionId: emp.positionId,
@@ -419,6 +422,7 @@ async function toExistingRows(
     room: r.room,
     phone: r.phone,
     emergency: r.emergency,
+    email: r.email,
   }));
 }
 
@@ -624,6 +628,8 @@ const employeeBody = {
   room: t.Optional(t.String()),
   phone: t.Optional(t.String()),
   emergency: t.Optional(t.String()),
+  /** A company address; blank or null clears it (`EMPLOYEE_EMAIL_DOMAIN`). */
+  email: t.Optional(t.Nullable(t.String({ maxLength: 254 }))),
   status: OptionalEmployeeStatusSchema,
   /**
    * Qualification code *ids*, never names (design D4). A name on the wire would
@@ -631,6 +637,18 @@ const employeeBody = {
    */
   skillIds: t.Optional(t.Array(t.String({ format: "uuid" }))),
 };
+
+const emailError = validationError({
+  field: "email",
+  message: `Email harus alamat @${EMPLOYEE_EMAIL_DOMAIN}`,
+});
+
+/**
+ * The body's email as stored: absent stays absent (an edit leaves it alone),
+ * null or blank clears it, `false` is an address outside the company domain.
+ */
+const bodyEmail = (value: string | null | undefined) =>
+  value === undefined ? undefined : employeeEmail(value ?? "");
 
 /** A blank date cell is `null`, not the empty string Postgres would refuse. */
 const dateOrNull = (value: string | null | undefined) =>
@@ -664,6 +682,7 @@ export const employeesRoutes = new Elysia({
           ? or(
               ilike(emp.nik, `%${needle}%`),
               ilike(emp.name, `%${needle}%`),
+              ilike(emp.email, `%${needle}%`),
               ilike(cmp.name, `%${needle}%`),
               ilike(pos.name, `%${needle}%`),
               ilike(dpt.name, `%${needle}%`)
@@ -855,6 +874,7 @@ export const employeesRoutes = new Elysia({
             room: p.room,
             phone: p.phone,
             emergency: p.emergency,
+            email: p.email,
           };
           if (row.current) {
             // An unchanged row is skipped rather than rewritten, which is what
@@ -978,6 +998,8 @@ export const employeesRoutes = new Elysia({
           422,
           validationError({ field: "nik", message: "NIK tidak boleh kosong" })
         );
+      const email = bodyEmail(body.email);
+      if (email === false) return status(422, emailError);
 
       try {
         const id = await db.transaction(async (tx) => {
@@ -986,6 +1008,7 @@ export const employeesRoutes = new Elysia({
             .values({
               nik,
               name: body.name.trim(),
+              email: email ?? null,
               companyId: placement.companyId,
               positionId: body.positionId,
               departmentId: placement.departmentId,
@@ -1069,6 +1092,9 @@ export const employeesRoutes = new Elysia({
         .limit(1);
       if (!current) return status(404, employeeNotFound);
 
+      const email = bodyEmail(body.email);
+      if (email === false) return status(422, emailError);
+
       // A scoped caller does not move anyone in or out — the department and its
       // company are read from the record as it stands, whatever the body says.
       // Handing away one of your own people, or claiming one of somebody
@@ -1138,6 +1164,7 @@ export const employeesRoutes = new Elysia({
             .set({
               ...(body.nik !== undefined ? { nik: body.nik.trim() } : {}),
               ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+              ...(email !== undefined ? { email } : {}),
               companyId: placement.companyId,
               departmentId: placement.departmentId,
               ...(body.positionId !== undefined
