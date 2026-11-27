@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { isMenuSlug } from "@/lib/access";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { menuLabel, useI18n, type Dict, type Lang } from "@/lib/i18n";
 import { NAV } from "@/lib/nav";
 import { notifText, notifTime, notifToneDot } from "@/lib/notifications-data";
@@ -81,6 +81,42 @@ export function Topbar() {
         : principal.id,
   };
   const userShort = account.name.trim().split(/\s+/).slice(0, 2).join(" ");
+  /* Offered only when there is something to switch to. */
+  const roles = principal.kind === "user" ? principal.roles : [];
+  const [switching, setSwitching] = React.useState(false);
+  /* The state above disables the radios only from the next render; this
+     stops a second click landing before then. */
+  const switchingRef = React.useRef(false);
+
+  async function switchRole(roleId: string) {
+    if (
+      principal.kind !== "user" ||
+      roleId === principal.roleId ||
+      switchingRef.current
+    ) {
+      close();
+      return;
+    }
+    switchingRef.current = true;
+    setSwitching(true);
+    const { error } = await api.v1.auth["switch-role"].post({ roleId });
+    if (error) {
+      switchingRef.current = false;
+      setSwitching(false);
+      close();
+      pushToast(
+        "error",
+        t.shSwitchFailed,
+        errorMessage(error, t.shSwitchFailed)
+      );
+      return;
+    }
+    // A full load, not a client navigation: every cached query was fetched
+    // under the previous role's grants and scope, and the shell itself is
+    // rendered from the session on the server. Reloading drops all of it at
+    // once, so nothing the old role could see survives into the new one.
+    window.location.assign("/dashboard");
+  }
 
   async function signOut() {
     close();
@@ -309,6 +345,26 @@ export function Topbar() {
                 {account.identifier}
               </span>
             </div>
+            {roles.length > 1 && principal.kind === "user" ? (
+              <div
+                role="group"
+                aria-label={t.shSwitchRole}
+                aria-busy={switching}
+                className="mb-2 border-b border-(--divider) pb-2"
+              >
+                <DropMenuHeading aria-hidden>{t.shSwitchRole}</DropMenuHeading>
+                {roles.map((role) => (
+                  <DropMenuRadio
+                    key={role.id}
+                    checked={role.id === principal.roleId}
+                    disabled={switching}
+                    onClick={() => switchRole(role.id)}
+                  >
+                    {role.name}
+                  </DropMenuRadio>
+                ))}
+              </div>
+            ) : null}
             <DropMenuItem
               onClick={() => {
                 close();

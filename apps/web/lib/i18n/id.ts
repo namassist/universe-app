@@ -1349,11 +1349,26 @@ export const id = {
   cpDone: "Password diperbarui",
   cpBackToLogin: "Keluar dan masuk sebagai akun lain",
 
-  /* --- user management: single role, reset, import --- */
-  umErrRequired: "Nama dan role wajib diisi.",
+  /* --- several roles per account: login picker, topbar switch, form --- */
+  authPickT: "Masuk sebagai",
+  authPickB:
+    "Akun ini memiliki beberapa role. Pilih role untuk sesi ini. Role bisa diganti kapan saja dari menu akun.",
+  authPickDefault: "Default",
+  authPickOther: "Gunakan akun lain",
+  shSwitchRole: "Masuk sebagai",
+  shSwitchFailed: "Role tidak bisa diganti",
+  umRoles: "Role",
+  umRolesHelp:
+    "Centang semua role yang dipegang orang ini. Saat login, ia memilih masuk sebagai role yang mana.",
+  umDefaultRole: "Role default",
+  umDefaultRoleHelp:
+    "Dipakai bila login tidak memilih role, misalnya dari aplikasi HP.",
+  umErrRoles: "Pilih minimal satu role.",
+
+  /* --- user management: accounts, reset, import --- */
+  umErrRequired: "Nama wajib diisi.",
   umErrIdentifier: "Akun harus punya email atau NIK.",
   umIdentHelp: "Isi email, NIK, atau keduanya. Minimal salah satu.",
-  umPickRole: "Pilih role",
   umMustChange: "Wajib ganti password",
   umDefaultPwNote:
     "Akun baru memakai password awal dari konfigurasi dan wajib menggantinya saat login pertama.",
@@ -1389,7 +1404,8 @@ export const id = {
   umImpErr: "error, import diblokir",
   umImpAccounts: "akun",
   umImpDoneT: "Akun diimpor",
-  umImpTplD: "template_akun.xlsx, kolom nik, nama, email, role.",
+  umImpTplD:
+    "template_akun.xlsx, kolom nik, nama, email, role. Beberapa role dipisah koma; yang pertama menjadi default.",
   umImpFoot:
     "Setiap baris diperiksa di server sebelum ada yang ditulis ke database.",
   umImpBlocked: "Perbaiki baris bermasalah sebelum melakukan import.",

@@ -1352,11 +1352,26 @@ export const en: Dict = {
   cpDone: "Password updated",
   cpBackToLogin: "Sign out and use a different account",
 
-  /* --- user management: single role, reset, import --- */
-  umErrRequired: "Name and role are required.",
+  /* --- several roles per account: login picker, topbar switch, form --- */
+  authPickT: "Sign in as",
+  authPickB:
+    "This account holds several roles. Choose one for this session. You can switch any time from the account menu.",
+  authPickDefault: "Default",
+  authPickOther: "Use a different account",
+  shSwitchRole: "Signed in as",
+  shSwitchFailed: "Could not switch role",
+  umRoles: "Roles",
+  umRolesHelp:
+    "Tick every role this person holds. At login they choose which one to act as.",
+  umDefaultRole: "Default role",
+  umDefaultRoleHelp:
+    "Used when a login does not choose a role, such as from the phone app.",
+  umErrRoles: "Select at least one role.",
+
+  /* --- user management: accounts, reset, import --- */
+  umErrRequired: "Name is required.",
   umErrIdentifier: "An account must have an email or a NIK.",
   umIdentHelp: "Fill in an email, a NIK, or both. At least one is required.",
-  umPickRole: "Select a role",
   umMustChange: "Must change password",
   umDefaultPwNote:
     "A new account uses the configured initial password and must set its own on first login.",
@@ -1392,7 +1407,8 @@ export const en: Dict = {
   umImpErr: "errors, import is blocked",
   umImpAccounts: "accounts",
   umImpDoneT: "Accounts imported",
-  umImpTplD: "template_akun.xlsx, columns nik, nama, email, role.",
+  umImpTplD:
+    "template_akun.xlsx, columns nik, nama, email, role. Separate several roles with commas; the first is the default.",
   umImpFoot:
     "Every row is checked on the server before anything is written to the database.",
   umImpBlocked: "Fix the failing rows before importing.",

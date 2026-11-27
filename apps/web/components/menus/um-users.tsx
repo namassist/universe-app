@@ -77,7 +77,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
   const rows = (users.data ?? []).filter((u) => {
     if (statusF === "on" && !u.active) return false;
     if (statusF === "off" && u.active) return false;
-    if (roleF !== "all" && u.roleId !== roleF) return false;
+    if (roleF !== "all" && !u.roles.some((r) => r.id === roleF)) return false;
     const needle = q.trim().toLowerCase();
     if (!needle) return true;
     return (
@@ -100,7 +100,10 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
       email: string | null;
       nik: string | null;
       name: string;
+      /** The default role. */
       roleId: string;
+      /** Every role the account holds, the default among them. */
+      roleIds: string[];
       active: boolean;
     }) => {
       const { id, ...body } = input;
@@ -111,6 +114,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
             nik: body.nik ?? undefined,
             name: body.name,
             roleId: body.roleId,
+            roleIds: body.roleIds,
             active: body.active,
           });
       if (result.error) throw result.error;
@@ -172,6 +176,9 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
   const [fEmail, setFEmail] = React.useState("");
   const [fNik, setFNik] = React.useState("");
   const [fName, setFName] = React.useState("");
+  /* Every role the account holds, in the order ticked; `fRole` is the
+     default among them. */
+  const [fRoles, setFRoles] = React.useState<string[]>([]);
   const [fRole, setFRole] = React.useState("");
   const [fActive, setFActive] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
@@ -183,7 +190,9 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
     setFEmail("");
     setFNik("");
     setFName("");
-    setFRole(roles.data?.[0]?.id ?? "");
+    const first = roles.data?.[0]?.id;
+    setFRoles(first ? [first] : []);
+    setFRole(first ?? "");
     setFActive(true);
     setErr(null);
     setDlgOpen(true);
@@ -193,16 +202,28 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
     setFEmail(u.email ?? "");
     setFNik(u.nik ?? "");
     setFName(u.name);
+    setFRoles(u.roles.map((r) => r.id));
     setFRole(u.roleId);
     setFActive(u.active);
     setErr(null);
     setDlgOpen(true);
   }
+  /** Tick or untick a role; the default follows when it is the one removed. */
+  function toggleRole(roleId: string, on: boolean) {
+    setErr(null);
+    const next = on
+      ? [...fRoles.filter((id) => id !== roleId), roleId]
+      : fRoles.filter((id) => id !== roleId);
+    setFRoles(next);
+    if (!next.includes(fRole)) setFRole(next[0] ?? "");
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const email = fEmail.trim();
     const nik = fNik.trim();
-    if (!fName.trim() || !fRole) return setErr(t.umErrRequired);
+    if (!fName.trim()) return setErr(t.umErrRequired);
+    if (!fRoles.length || !fRole) return setErr(t.umErrRoles);
     // An account is credentialed by email or NIK; the database enforces this
     // too, but saying so here beats a 422 round trip.
     if (!email && !nik) return setErr(t.umErrIdentifier);
@@ -212,6 +233,7 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
       nik: nik || null,
       name: fName.trim(),
       roleId: fRole,
+      roleIds: fRoles,
       active: fActive,
     });
   }
@@ -224,7 +246,9 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
           u.email ?? "",
           u.nik ?? "",
           u.name,
-          roleName(u.roleId),
+          // The import's own format: several roles comma separated, the
+          // default first — so an export can be edited and re-imported.
+          u.roles.map((r) => r.name).join(", "),
           u.active ? "aktif" : "nonaktif",
         ].join(";")
       )
@@ -336,7 +360,17 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
                     {u.nik ?? <span className="text-(--text-tertiary)">—</span>}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="info">{roleName(u.roleId)}</Badge>
+                    {/* Default first and highlighted; the rest are extras. */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {u.roles.map((r) => (
+                        <Badge
+                          key={r.id}
+                          variant={r.id === u.roleId ? "info" : "neutral"}
+                        >
+                          {r.name}
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant={u.active ? "success" : "danger"} dot>
@@ -462,27 +496,59 @@ export function UmUsersMenu({ mode }: { mode: AccessMode }) {
               }}
             />
           </Field>
-          {/* Single-select: an account holds exactly one role. Two roles could
-              disagree about scope, so the question has no coherent answer. */}
-          <Field className="mt-4" label={t.cmRole} htmlFor="um-role" required>
-            <Select
-              id="um-role"
-              value={fRole}
-              onChange={(e) => {
-                setFRole(e.target.value);
-                setErr(null);
-              }}
+          {/* Several roles, one session each: the person chooses at login
+              which role to act as, so two roles never answer one request. */}
+          <Field
+            className="mt-4"
+            label={t.umRoles}
+            required
+            helper={t.umRolesHelp}
+          >
+            <div
+              role="group"
+              aria-label={t.umRoles}
+              className="flex max-h-44 flex-col gap-2 overflow-y-auto rounded-control border border-(--glass-1-border) bg-(--fill-subtle) p-3"
             >
-              <option value="" disabled>
-                {t.umPickRole}
-              </option>
               {(roles.data ?? []).map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} · {r.scope}
-                </option>
+                <ToggleRow key={r.id} htmlFor={`um-role-${r.id}`}>
+                  <Checkbox
+                    id={`um-role-${r.id}`}
+                    checked={fRoles.includes(r.id)}
+                    onChange={(e) => toggleRole(r.id, e.target.checked)}
+                  />
+                  <span>
+                    {r.name}{" "}
+                    <span className="font-mono text-[11px] text-(--text-tertiary)">
+                      · {r.scope}
+                    </span>
+                  </span>
+                </ToggleRow>
               ))}
-            </Select>
+            </div>
           </Field>
+          {fRoles.length > 1 ? (
+            <Field
+              className="mt-4"
+              label={t.umDefaultRole}
+              htmlFor="um-role-default"
+              helper={t.umDefaultRoleHelp}
+            >
+              <Select
+                id="um-role-default"
+                value={fRole}
+                onChange={(e) => {
+                  setFRole(e.target.value);
+                  setErr(null);
+                }}
+              >
+                {fRoles.map((id) => (
+                  <option key={id} value={id}>
+                    {roleName(id)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           <ToggleRow className="mt-4" htmlFor="um-active">
             <Checkbox
               id="um-active"
