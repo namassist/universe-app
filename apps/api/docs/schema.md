@@ -36,7 +36,10 @@ the definition — when they disagree, the code wins. Change flow: edit
 **People**
 
 - `employees` — the personnel record (photo on disk under `PHOTO_DIR`, path in
-  the row), status, department, position, mess, blood type, MCU result.
+  the row), status, department, position, mess, blood type, MCU result, and
+  an optional `email` (a company `@ungguldinamika.co.id` address, lowercased,
+  not unique; the Users form copies it into an account, docs/prd.md →
+  _Accounts and roles_).
 - `employee_skills` — employee × SIMPER code; what units they may operate.
 
 **Fleet**

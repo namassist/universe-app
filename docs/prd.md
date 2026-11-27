@@ -2180,6 +2180,39 @@ the principal with `roles` (every role held, default first). `roleId`,
 the extras stay). Stored as `users.role_id` (the default) plus `user_roles`
 (the extras).
 
+### The account form suggests from the employee register — shipped
+
+**An admin creating an account for someone already in the register picks them
+instead of retyping them** (owner, 2026-11-27).
+
+- **The employee register carries an email**, optional, on the employee form,
+  the detail page and the employee import/export (column `email`, after
+  `nama`; a blank cell keeps what is stored, an old file without the column
+  still imports). **It must be a company address, `…@ungguldinamika.co.id`**:
+  anything else is refused on the form and fails its row in the import. It is
+  stored lowercased and is **not unique**, being contact data rather than a
+  login. The rule is the register's only: an account's own email is not held
+  to it, so a Superadmin may still sign in with another address.
+- **Tambah User / Edit User:** typing two or more characters into **NIK** or
+  **Email** lists up to eight matching employees (a NIK from its start, an
+  email anywhere). Each row shows the name, the email beneath, the NIK aside.
+  Picking one fills **NIK, Nama and Email** at once, replacing what was typed;
+  an employee with no email leaves the email field as it was.
+- **An employee who already has an account** (by NIK or by email) is marked
+  **Sudah punya akun**, so the admin sees the duplicate before saving is
+  refused.
+- **The suggestions are a shortcut, never a requirement.** The fields stay
+  free text, so an account with no employee record behind it is still made by
+  typing.
+
+**API.** `GET /v1/users/employee-suggestions?q=` (`users:manage`) answers
+`{ nik, name, email, hasAccount }[]`, nothing else from the register, so an
+account admin needs no employee grant to use it. It is unscoped like the rest
+of `/users`. Fewer than two characters answers `[]`. `%` and `_` match
+themselves. The employee routes take and answer `email` (422 `validation_failed`
+on field `email` for another domain), and the employee list search reaches it.
+Stored as `employees.email` (nullable).
+
 ## Kiosk access
 
 **A kiosk admits two kinds of viewer, because it has two.** A wall-mounted TV
