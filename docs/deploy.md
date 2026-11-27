@@ -247,8 +247,12 @@ answers therefore means a rebuild, not a restart:
 ```sh
 # edit PUBLIC_ORIGIN in .env, then
 docker compose build web
-docker compose up -d web
+docker compose up -d
 ```
+
+`up -d` without a service name recreates the API too. The API reads the same
+value as `CORS_ORIGINS`, and a TV's pairing link sends it on to the first of
+those origins. With only `web` restarted, pairing lands on the old address.
 
 A container started with the right value but built with the wrong one boots
 perfectly and fails every request. If the app loads but nothing works, this is
@@ -356,21 +360,74 @@ Pick an hour outside both musters: every TV is re-paired at the new address.
    and need nothing.
 5. **Tell people.** Accounts that have never logged in, and accounts reset
    by an administrator, can only make their first login on site.
+6. **List everything that calls the old address.** The old `http://<IP>`
+   stops serving the application (_Keeping the old address as a redirect_,
+   below, softens that for people, not for programs):
+   - **Integration clients.** Each one's base URL changes to the domain:
+     ```sh
+     docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+     select name, allowed_ips, last_used_at from integration_clients where revoked_at is null;
+     SQL
+     ```
+     An allow-list holding a LAN address stops matching while site traffic
+     still comes in through the tunnel (_On the site network_, below): the
+     request then carries the site's public address.
+   - **Monitors on the server itself**, such as a cron job that checks
+     `/health` or logs in to read the Operations Center. Point them at
+     `https://<domain>`, not `http://`: once `COOKIE_SECURE=true`, a session
+     cookie is never sent back over plain HTTP. Then add
+     `127.0.0.1 <domain>` to the server's `/etc/hosts`, so the check stays
+     local instead of going out to Cloudflare and back.
 
 ### In the Cloudflare dashboard
 
-1. **API token** (My Profile → API Tokens): template _Edit zone DNS_,
-   restricted to this one zone. It goes in `CLOUDFLARE_API_TOKEN`; Caddy uses
-   it only to prove it owns the domain for the certificate.
-2. **Tunnel** (Zero Trust → Networks → Tunnels → Create, type _Cloudflared_).
-   Copy its token into `TUNNEL_TOKEN`. Add a **public hostname**: the domain,
-   service `HTTP`, URL `proxy:8080`.
-3. **SSL/TLS → Edge Certificates:** _Always Use HTTPS_ on. The tunnel listener
+Everything below except the tunnel itself belongs to the domain's zone.
+Moving to another domain means doing each of these again on the new zone.
+
+1. **API token** (My Profile → API Tokens → Create Token → _Create Custom
+   Token_). Two permissions, both needed: **Zone → DNS → Edit** and **Zone →
+   Zone → Read**. Limit _Zone Resources_ to this one zone. The _Edit zone
+   DNS_ template gives only the first. Without the second, the Cloudflare
+   module cannot look the zone up, and the certificate is never obtained.
+   Leave _Client IP Address Filtering_ empty unless the server's public
+   address is fixed. The token goes in `CLOUDFLARE_API_TOKEN`, and Caddy uses
+   it only to prove it owns the domain. Check it from the server without
+   leaving it in the shell history:
+   ```sh
+   read -rsp "Token: " CF; echo
+   curl -s -H "Authorization: Bearer $CF" \
+     "https://api.cloudflare.com/client/v4/zones?name=<domain>" \
+     | grep -oE '"name":"<domain>"|"status":"active"|"success":(true|false)'
+   unset CF
+   ```
+   It should print three lines: the zone's name, `"status":"active"` and
+   `"success":true`.
+2. **Tunnel** (Networks → Tunnels → _Create a tunnel_, type _Cloudflared_;
+   older dashboards: Zero Trust → Networks → Tunnels). Copy the `eyJ…` token
+   from the install command into `TUNNEL_TOKEN`. On the tunnel's **Routes**
+   tab, _Add route → Published application_: the domain, service
+   `http://proxy:8080`. If a DNS record for the domain already exists,
+   Cloudflare will not replace it. A fresh domain often carries the
+   registrar's parking `A` record. Delete it first, or turn it into a proxied
+   `CNAME` to `<tunnel-id>.cfargotunnel.com`. Remove the route of any
+   hostname you stop using: the tunnel listener does not check the host, so
+   a leftover route would serve the application on an origin the API
+   refuses.
+3. **`www`, when the domain is the apex.** If `www` reaches the tunnel too,
+   redirect it: Rules → Redirect Rules → template _Redirect from WWW to
+   root_, 301, preserve the query string. Without the redirect, `www.` serves
+   the application on an origin the API does not accept, and login fails.
+4. **SSL/TLS → Edge Certificates:** _Always Use HTTPS_ on. The tunnel listener
    tells the app the browser used HTTPS, which is only true with this on.
-4. **Security → WAF → Rate limiting rules:** one rule for
-   `URI Path equals /v1/auth/login` (and `/v1/ops/session`, the Operations Center's), 20 requests per
-   minute per IP, action _Block_ for 10 minutes. It drops a flood at the edge
-   before it costs the server an argon2 verify per request.
+5. **Rate limiting** (Security → Security rules → _Create rule_ → _Rate
+   limiting rule_; older dashboards: Security → WAF). Use one rule for
+   `URI Path is in {/v1/auth/login /v1/ops/session}`, counted per IP, 20
+   requests per 10 seconds, action _Block_ for 10 seconds. The free plan
+   offers only that period and duration. A paid plan can count per minute
+   and block for longer. The rule drops a flood at the edge before each
+   request costs the server an argon2 verify. Do not set it below 20: when
+   site traffic comes in through the tunnel, every device behind one of the
+   site's public addresses counts against one budget.
 
 ### On the site network
 
@@ -380,6 +437,35 @@ server's LAN address. Check from a PC on site: `nslookup <domain>` answers the
 LAN address. Off site, it answers Cloudflare. Without this, every screen on
 site goes out to the internet and back, and the walls go dark when the
 uplink does.
+
+The server's certificate is valid on the LAN as well. Before the record
+exists, check that the LAN path will work:
+`curl --resolve <domain>:443:<server LAN IP> https://<domain>/health`
+should answer `200`. A firewall between the client networks and the server
+must allow 443, not only the old HTTP port.
+
+**Before split DNS exists**, or for a device that brings its own DNS (a
+phone with Android's _Private DNS_, a browser with DNS over HTTPS), site
+traffic comes in through the tunnel. It then carries the address the site
+goes out to the internet with, not a private one:
+
+- **Add those addresses to `SITE_NETWORKS`**, or nobody on site can make a
+  first login. Open `https://www.cloudflare.com/cdn-cgi/trace` once from
+  each network (every Wi-Fi SSID, every wired segment) and read its `ip=`
+  line. A site with several uplinks has several addresses. `SITE_NETWORKS`
+  replaces the default rather than adding to it, so list the private ranges
+  too:
+  ```sh
+  SITE_NETWORKS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7,203.0.113.10/32,198.51.100.7/32
+  ```
+  List only addresses that are fixed and belong to the site alone. A
+  carrier-grade NAT address is shared with strangers, and it would let them
+  make first logins. Ask whoever runs the network, and ask about failover
+  uplinks too.
+- **Every device behind one address shares one login budget**: 10 failed
+  attempts in 15 minutes, from anyone on that network, refuse login to all of
+  them until the window passes. Split DNS ends this for the LAN. Phones that
+  bypass it keep sharing.
 
 ### On the server
 
@@ -393,29 +479,76 @@ COOKIE_SECURE=true
 HTTPS_PORT=443
 CLOUDFLARE_API_TOKEN=...
 TUNNEL_TOKEN=...
-# SITE_NETWORKS=192.168.0.0/16   # only if the default private ranges are wrong
+# SITE_NETWORKS=...   # the site's public addresses until split DNS: see above
 ```
 
-Then rebuild the web bundle (it carries `PUBLIC_ORIGIN`) and the proxy, and
-start with the tunnel:
+Paste the two tokens with an editor, not on a command line that the shell
+history keeps. Then check that each key appears once. A second copy further
+down the file is the one that counts:
 
 ```sh
-docker build --network=host -t universe-proxy:latest deploy/caddy
-docker build --network=host -f apps/web/Dockerfile \
-  --build-arg NEXT_PUBLIC_API_URL=https://universe.example.co.id \
-  -t universe-web:latest .
-cd deploy && docker compose --profile tunnel up -d
+for k in PUBLIC_ORIGIN SITE_ADDRESS SITE_TLS COOKIE_SECURE HTTPS_PORT SITE_NETWORKS CLOUDFLARE_API_TOKEN TUNNEL_TOKEN; do
+  echo "$k: $(grep -c "^$k=" .env)x"
+done
 ```
+
+Then rebuild the web bundle, which carries `PUBLIC_ORIGIN`, and the proxy,
+which carries the Cloudflare module. Start with the tunnel:
+
+```sh
+docker tag universe-web:latest universe-web:pre-domain   # for going back
+docker compose build web proxy
+docker compose --profile tunnel up -d
+```
+
+If the build hangs at `Resolving dependencies`, see _If `bun install` hangs_,
+below.
 
 `COOKIE_SECURE=true` goes with `SITE_TLS=cloudflare` and never before it: a
 browser silently discards a `Secure` cookie sent over plain HTTP, and login
 then fails with no error message anywhere. That is why the flag is explicit
 configuration instead of something derived from `NODE_ENV`.
 
+### Keeping the old address as a redirect
+
+This step is optional. Bookmarks, TVs and scripts still open
+`http://<IP>:<HTTP_PORT>`. Instead of leaving them to a dead address, move
+Caddy's plain-HTTP port to loopback (`HTTP_PORT=127.0.0.1:18081`), since it
+only redirects to HTTPS once the domain is served. Then let a web server on
+the host answer the old port. With nginx:
+
+```nginx
+# /etc/nginx/sites-available/universe-old-address.conf, linked into sites-enabled
+server {
+    listen 8081 default_server;   # the old HTTP_PORT
+    server_name _;
+    return 302 https://<domain>$request_uri;
+}
+```
+
+Enable it after `docker compose up -d` has released the port. Use 302 until
+the switch has settled: a browser keeps a 301 even after going back. The
+host's firewall applies to nginx, though it never applied to the port Docker
+published, so open the port to the site's networks with
+`sudo ufw allow from 192.168.0.0/16 to any port 8081 proto tcp`. The path is
+kept, so an old wall link lands on the same wall. Programs are another
+matter: many HTTP clients drop the `Authorization` header when they are
+redirected to another host, so an integration still needs its base URL
+changed.
+
 ### Check it
 
 - `docker compose logs proxy | grep -i certificate` shows the certificate
   obtained. The first one can take a minute.
+- From the server, both ways in answer:
+  ```sh
+  curl -s -o /dev/null -w 'local          %{http_code}\n' https://<domain>/health
+  curl -s -o /dev/null -w 'via Cloudflare %{http_code}\n' \
+    --resolve <domain>:443:$(dig +short @1.1.1.1 <domain> | head -1) https://<domain>/health
+  docker compose logs --tail 20 tunnel | grep 'Registered tunnel connection'
+  ```
+  The first `curl` relies on the `/etc/hosts` entry from _Before the switch_.
+  It verifies the certificate as well.
 - On site, `https://<domain>` opens with a valid padlock, and login works.
 - Off site, on mobile data, the same. Then log into the Operations Center
   from each: the API log's `[ops] session opened from …` line shows the LAN
@@ -425,16 +558,28 @@ configuration instead of something derived from `NODE_ENV`.
 - An account still on the issued password is refused off site and accepted
   on site.
 - **Re-pair every TV** at `https://<domain>`. The old `http://<IP>` address no
-  longer answers, and a TV's pairing belonged to that origin. An old TV
+  longer serves the application (at most it redirects), and a TV's pairing
+  belonged to that origin. An old TV
   browser that does not trust Let's Encrypt's root shows a certificate
   error; that box needs a newer browser.
 
 ### Going back
 
-Set `SITE_ADDRESS`, `SITE_TLS` and `COOKIE_SECURE` back (or delete them),
-`PUBLIC_ORIGIN` back to the `http://` address, rebuild the web image, and
-`docker compose up -d` without the profile. Then
-`docker compose stop tunnel`, or delete the tunnel in the dashboard.
+Keep a copy of `.env` from before the switch (`cp .env .env.bak-pre-domain`).
+Going back is then mostly undoing:
+
+```sh
+sudo rm /etc/nginx/sites-enabled/universe-old-address.conf   # if you made it
+sudo systemctl reload nginx                                  # frees the old port first
+docker compose stop tunnel
+cp .env.bak-pre-domain .env
+docker tag universe-web:pre-domain universe-web:latest       # the old bundle, no rebuild
+docker compose up -d
+sudo sed -i '/<domain>/d' /etc/hosts
+```
+
+Point any monitor you moved back at the old address too. The tunnel can stay
+in the dashboard. With cloudflared stopped, the domain answers 530.
 
 ## If `bun install` hangs during the build
 
